@@ -92,6 +92,11 @@ and axe counts show them. A result passes only if all four checks hold:
   own theme font.
 - The page throws no uncaught error, at desktop or phone size.
 
+Runs are graded while other runs build and other agents work, but their
+browser probes take turns: a probe starts when the one before it has finished.
+Each step waits at most 5 seconds, so a step that waits on another run's probe
+would fail for a reason outside the app.
+
 The grader also records screenshots (desktop 1280×800 before and after the
 probe, phone 390×844), axe WCAG 2 A/AA counts and console errors. Those are
 evidence only and never change pass or fail.

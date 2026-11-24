@@ -15,8 +15,6 @@
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawn} from 'node:child_process';
-import * as os from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -53,6 +51,7 @@ import {
   themeFiles,
   APP_COPY_BUILT,
   appCopyNames,
+  groupsOf,
 } from './_settings.mjs';
 import {readRegularFile, writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
@@ -60,7 +59,6 @@ import {importPathOf, installLine} from './_project.mjs';
 import {
   COLOR_PROP_PARTS,
   DIRECT,
-  FAMILIES,
   P,
   SHOWCASE_GROUPS,
   wordTable,
@@ -72,9 +70,17 @@ import {fontFaces} from '../../foundation/fonts/font-stylesheet.mjs';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
-import {PICTURE_TAKEN} from '../../foundation/render/picture-window.mjs';
-import {FONT_PROBE_PREFIX} from '../../foundation/render/font-probe.mjs';
-import {CUT_SHORT_PREFIX} from '../../foundation/render/cut-short.mjs';
+import {
+  newPictureRun,
+  takePictures,
+} from '../../foundation/pictures/pictures.mjs';
+
+export {
+  meaningfulLine,
+  newPictureRun,
+  pictureFontNotes,
+  runBrowser,
+} from '../../foundation/pictures/pictures.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -177,21 +183,41 @@ export function familyOf(project, name) {
 }
 
 /**
+ * Whether a section's own page draws a component in a cell of its own. On
+ * the overlays section's page, a part of an overlay (a dialog's header, a
+ * command palette's list) shows inside the overlay it belongs to, never
+ * alone beside it, and inside it only while the overlay is open: that page
+ * stays one or two screens. The whole sheet draws it alone.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @param {string | null | undefined} group the section drawn, none for the whole sheet
+ */
+export function shownOnSection(project, name, group) {
+  return !(
+    group === 'overlays' &&
+    familyOf(project, name) === 'overlays' &&
+    project.components[name]?.subComponentOf
+  );
+}
+
+/**
  * The sections of the theme-building page whose parts the theme's settings
  * set on their own (`--on badge`, or a group of parts such as `--on
  * inputs`): the components each part names a class of, each in its section. A setting for the whole theme (a color, the
  * corners) sets no section here: the sample page and the open states show
  * it.
- * @param {import('./_project.mjs').ThemeProject} project
+ * A family role (`--on option-rows`) is read from the census, as the
+ * change itself reads it, so the pictured set is what the change touched.
+ * @param {{project: import('./_project.mjs').ThemeProject, C?: any}} ctx
  * @param {import('./_settings.mjs').ThemeData} data
  * @returns {string[]}
  */
-export function touchedFamilies(project, data) {
-  // A group (`--on inputs`) sets each of its parts.
+export function touchedFamilies(ctx, data) {
+  const {project} = ctx;
+  // A group (`--on inputs`, `--on option-rows`) sets each of its parts.
+  const groups = groupsOf(ctx);
   const parts = new Set(
-    (data.settings ?? []).flatMap(s =>
-      s.on ? (FAMILIES[s.on] ?? [s.on]) : [],
-    ),
+    (data.settings ?? []).flatMap(s => (s.on ? (groups[s.on] ?? [s.on]) : [])),
   );
   /** @type {Set<string>} */
   const out = new Set();
@@ -202,6 +228,71 @@ export function touchedFamilies(project, data) {
     if (family) out.add(family);
   }
   return [...out];
+}
+
+/** The Astryx control each plain HTML text control is drawn as. */
+const ASTRYX_CONTROLS = Object.freeze({
+  input: 'TextInput',
+  textarea: 'TextArea',
+});
+
+/** The input types a text input draws. */
+const TEXT_TYPES = new Set([
+  '',
+  'text',
+  'email',
+  'search',
+  'url',
+  'tel',
+  'password',
+]);
+
+/**
+ * A value with each plain HTML text control in a doc's sample (a field's
+ * `<input>`) drawn as the Astryx control for it, its label hidden, so the
+ * sheet shows the theme's own control where an app would use one: a bare
+ * browser control shows nothing of the theme. Every other value is the same
+ * object.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function withAstryxControls(project, v) {
+  if (Array.isArray(v)) {
+    const out = v.map(x => withAstryxControls(project, x));
+    return out.every((x, i) => x === v[i]) ? v : out;
+  }
+  if (!v || typeof v !== 'object') return v;
+  if (isElement(v)) {
+    const own = /** @type {Record<string, string>} */ (ASTRYX_CONTROLS)[
+      v.__element
+    ];
+    const p = /** @type {Record<string, unknown>} */ (v.props ?? {});
+    if (
+      own &&
+      project.components[own] &&
+      (v.__element !== 'input' || TEXT_TYPES.has(String(p.type ?? '')))
+    )
+      return {
+        __element: own,
+        props: {
+          label: String(p['aria-label'] ?? p.placeholder ?? 'Text'),
+          isLabelHidden: true,
+          ...(p.placeholder != null ? {placeholder: p.placeholder} : {}),
+          ...(p.id != null ? {id: p.id} : {}),
+        },
+      };
+    const props = withAstryxControls(project, v.props);
+    const children = withAstryxControls(project, v.children);
+    return props === v.props && children === v.children
+      ? v
+      : {...v, props, children};
+  }
+  const entries = Object.entries(v);
+  const out = entries.map(([k, x]) => [k, withAstryxControls(project, x)]);
+  return out.every(([, x], i) => x === entries[i][1])
+    ? v
+    : {...v, ...Object.fromEntries(out)};
 }
 
 /**
@@ -231,6 +322,7 @@ const itemsByFile = new Map();
  */
 function cachedComponentItems(project, group) {
   itemsKey ??= codeFingerprint(import.meta.url);
+  if (!project.cacheDir) return componentItems(project, group);
   const file = path.join(project.cacheDir, 'items.json');
   let kept = itemsByFile.get(file);
   if (!kept) {
@@ -306,22 +398,13 @@ function componentItems(project, group) {
     // so it would draw an empty cell: it gets none.
     if (!importPathOf(project, name)) continue;
     const info = project.components[name];
-    // On the overlays section's own page, a part of an overlay (a dialog's
-    // header, a command palette's list) shows inside the overlay it belongs
-    // to, never alone beside it: that page stays one or two screens.
-    if (group === 'overlays' && g === 'overlays' && info?.subComponentOf)
-      continue;
+    if (!shownOnSection(project, name, group)) continue;
     // A deprecated part is not drawn: a theme styles the part that replaces
     // it. An overlay whose playground opens it over the page draws nothing
     // closed (a phone's navigation drawer, slid out of the window): where
-    // the open states draw it open (below), that is its only cell.
+    // the open states draw it open, that is its only cell, on every page.
     if (info?.deprecated) continue;
-    if (
-      (!group || group === 'overlays') &&
-      info?.overlay &&
-      OPEN_SCENES.some(s => s.name === name)
-    )
-      continue;
+    if (info?.overlay && OPEN_SCENES.some(s => s.name === name)) continue;
     catalogVariants(project, name, 12, {shown: true}).forEach((v, i) =>
       items.push({
         group: g,
@@ -332,7 +415,13 @@ function componentItems(project, group) {
           // A doc's sample children may name a part by an older name (a
           // stack, a heading): each is drawn by the name Core exports.
           props: /** @type {Record<string, unknown>} */ (
-            withCoreAliases(project, withSampleContent(project, name, v.props))
+            withAstryxControls(
+              project,
+              withCoreAliases(
+                project,
+                withSampleContent(project, name, v.props),
+              ),
+            )
           ),
         }),
         // An overlay shown open is drawn open: Core places a popover,
@@ -1431,22 +1520,36 @@ const CONTROLLED = new Set([
 
 /**
  * A copy of an element tree in which every controlled part with a value and
- * no onChange gets one that does nothing, so a click on it never throws.
+ * no onChange gets one that does nothing, so a click on it never throws. A
+ * callback the part's doc requires (a toast's onDismiss) that the sample
+ * leaves out gets one that does nothing too, so the part never calls a
+ * missing function (a toast's timer).
  * @param {unknown} v
+ * @param {import('./_project.mjs').ThemeProject} [project]
  * @returns {unknown}
  */
-function withHandlers(v) {
-  if (Array.isArray(v)) return v.map(withHandlers);
+export function withHandlers(v, project) {
+  if (Array.isArray(v)) return v.map(x => withHandlers(x, project));
   if (isElement(v)) {
     const props = Object.fromEntries(
-      Object.entries(v.props ?? {}).map(([k, x]) => [k, withHandlers(x)]),
+      Object.entries(v.props ?? {}).map(([k, x]) => [
+        k,
+        withHandlers(x, project),
+      ]),
     );
     if (CONTROLLED.has(v.__element) && 'value' in props && !props.onChange)
       props.onChange = {__code: '() => {}'};
+    // Written without an arrow, so this no-op adds no `>` inside a tag.
+    const docProps = project?.components[v.__element]?.props ?? {};
+    for (const [name, doc] of Object.entries(docProps))
+      if (/^on[A-Z]/.test(name) && doc?.required && !(name in props))
+        props[name] = {__code: 'function () {}'};
     return {
       ...v,
       props,
-      ...(v.children === undefined ? {} : {children: withHandlers(v.children)}),
+      ...(v.children === undefined
+        ? {}
+        : {children: withHandlers(v.children, project)}),
     };
   }
   return v;
@@ -1584,7 +1687,10 @@ function componentsPage(project, {theme = null, C}) {
     )
     .map(it => ({
       ...it,
-      tree: withHandlers(withSources(project, withCoreNames(project, it.tree))),
+      tree: withHandlers(
+        withSources(project, withCoreNames(project, it.tree)),
+        project,
+      ),
     }))
     .filter(it => it.tree !== undefined);
   /** @type {Map<string, Map<string, import('./_catalog.mjs').CatalogItem[]>>} */
@@ -1670,7 +1776,7 @@ function overviewPage(project, {theme = null, colors = false}) {
   const sections = OVERVIEW_SECTIONS.map(x => ({
     title: x.title,
     tree: /** @type {import('./_catalog.mjs').Tree | undefined} */ (
-      withHandlers(withCoreNames(project, x.tree))
+      withHandlers(withCoreNames(project, x.tree), project)
     ),
   })).filter(x => x.tree !== undefined);
   const body = sections
@@ -2050,36 +2156,6 @@ export function previewRouteSource({
 /** @param {string} slug */
 const camelName = camel;
 
-/** The script that takes one picture through the project's Playwright. */
-const PLAYWRIGHT_PICTURE = fileURLToPath(
-  new URL('../../foundation/render/picture-playwright.mjs', import.meta.url),
-);
-
-/** The script that takes one picture through a Chrome or Chromium. */
-const CHROME_PICTURE = fileURLToPath(
-  new URL('../../foundation/render/picture-chrome.mjs', import.meta.url),
-);
-
-/** How long a stopped browser may take to close before it is killed. */
-const STOP_GRACE_MS = 5_000;
-
-/** The signals that stop a picture run, the terminal closing among them. */
-const STOP_SIGNALS = /** @type {const} */ (['SIGINT', 'SIGTERM', 'SIGHUP']);
-
-/** How long a browser may take for one picture before it is stopped. */
-const BROWSER_BOUND_MS = 60_000;
-
-/**
- * What the pictures of one run share: the browsers that failed or hung,
- * each with its reason, so a later picture does not wait on them again.
- * @typedef {{failed: Map<string, string>}} PictureRun
- */
-
-/** A new picture run. @returns {PictureRun} */
-export function newPictureRun() {
-  return {failed: new Map()};
-}
-
 /**
  * A whole-page PNG of an HTML file: {@link screenshots} with one picture.
  * @param {import('./_project.mjs').ThemeProject} project
@@ -2100,155 +2176,35 @@ export async function screenshot(
   return /** @type {PictureResult} */ (r);
 }
 
+/** @typedef {import('../../foundation/pictures/pictures.mjs').PictureRun} PictureRun */
+
 /**
- * @typedef {{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean}>} | {ok: false, reason: string, stopped?: string}} PictureResult
+ * @typedef {{ok: true, file: string, notes?: string[], boxes?: Record<string, Array<[number, number]>>, cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>, lowContrast?: Array<{part: string, text: string, ratio: number, fg: string, bg: string}>} | {ok: false, reason: string, stopped?: string}} PictureResult
  */
 
-/** The time a batch adds to its browser's bound for each page after the first. */
-const PAGE_BOUND_MS = 20_000;
-
 /**
- * Whole-page PNGs of HTML files, all with one browser: a Playwright the
- * project has installed, else a Chrome or Chromium found on the machine.
- * One browser start for the whole batch, a few pages drawn at once, so a
- * run of many pictures costs about one start. Each browser gets its own
- * time bound, and the next one the pictures still to take when one fails
- * or hangs. A result for each picture, in order, up to the first that was
- * not taken: that one not ok with a reason (naming each browser's real
- * error, or that none is there), and none after it. When a later browser
- * took a picture, its `notes` say why an earlier one did not. `cutShort` is
- * the text the page draws cut short, measured in it by the browser that
- * took the picture, each with whether its part keeping its width draws it
- * whole; absent when that browser's script measured nothing.
+ * The editor's pictures ({@link takePictures}), each taken one named by its
+ * path in the project, and the first not taken with the editor's advice:
+ * how to give Playwright its browser or install it, or which Chrome to
+ * check, and that the HTML preview needs neither.
  * @param {import('./_project.mjs').ThemeProject} project
- * @param {Array<{html: string, png: string, mode: 'light' | 'dark'}>} jobs
- *   absolute paths
+ * @param {Array<{html: string, png: string, mode: 'light' | 'dark', boxes?: string[]}>} jobs
+ *   absolute paths; `boxes`: parts whose drawn sizes the picture measures
+ *   (its result's `boxes`)
  * @param {PictureRun} [run] what earlier pictures of the same run learned:
  *   a browser that failed or hung there is not tried again
  * @returns {Promise<PictureResult[]>}
  */
 export async function screenshots(project, jobs, run = newPictureRun()) {
-  /** @type {PictureResult[]} */
-  const results = [];
-  if (!jobs.length) return results;
-  /** What was tried and why it could not take the picture. @type {string[]} */
-  const failed = [...run.failed.values()];
-  /** Whether a Playwright was found without its own browser installed. */
-  let pwMissing = false;
-  /** Whether a Playwright was found at all. */
-  let pwFound = false;
-  /** A line with no path of this machine. @param {string} line */
-  const local = line => line.split(project.cwd).join('.');
-  /**
-   * Why a browser did not take the picture: Playwright's first line names
-   * only the call ("browserType.launch: Target … closed"); the cause, such
-   * as a missing library, is in a later line, so that line comes too.
-   * Chrome's startup warnings (dbus, GPU) are not a cause.
-   * @param {string} text
-   */
-  const causeOf = text => {
-    const lines = String(text ?? '')
-      .split('\n')
-      .map(l => l.replace(/^[\s=<>-]+/, '').trim())
-      .filter(Boolean);
-    const head =
-      meaningfulLine(lines.join('\n')) || 'it stopped with no message';
-    const rest = lines
-      .slice(lines.indexOf(head) + 1)
-      .find(l =>
-        /error|cannot|can't|missing|not found|while loading|no such|failed|denied/i.test(
-          l,
-        ),
-      );
-    return local(rest ? `${head} (${rest})` : head);
-  };
-  /** The browsers to try, in order: each a picture script and its first argument. */
-  /** @type {Array<{who: string, script: string, first: string}>} */
-  const tries = [];
-  for (const pkg of ['playwright', 'playwright-core']) {
-    try {
-      const entry = project.req.resolve(pkg);
-      pwFound = true;
-      tries.push({
-        who: `${pkg}'s own browser`,
-        script: PLAYWRIGHT_PICTURE,
-        first: entry,
-      });
-      break;
-    } catch {
-      // Not installed here.
+  const taken = await takePictures(project, jobs, run);
+  return taken.map(r => {
+    if (r.ok) {
+      const {ok, png, ...more} = r;
+      return {ok, file: shown(project.cwd, png), ...more};
     }
-  }
-  const chrome = chromeBinary();
-  if (chrome) tries.push({who: chrome, script: CHROME_PICTURE, first: chrome});
-  for (const t of tries) {
-    if (run.failed.has(t.who)) continue;
-    const rest = jobs.slice(results.length);
-    const r = await runBrowser(
-      t.script,
-      [t.first, JSON.stringify(rest)],
-      BROWSER_BOUND_MS + (rest.length - 1) * PAGE_BOUND_MS,
-      {drop: rest.map(j => j.png)},
-    );
-    if (r.stoppedBy) {
-      results.push({
-        ok: false,
-        stopped: r.stoppedBy,
-        reason: `the pictures were stopped (${r.stoppedBy}) before the browser finished`,
-      });
-      return results;
-    }
-    if (r.noTemp) {
-      results.push({
-        ok: false,
-        reason: `no browser was started: the system temp folder cannot be written (${r.noTemp}), and a browser needs a profile folder of its own there; fix the temp folder (TMPDIR), then run the command again`,
-      });
-      return results;
-    }
-    // Each picture's own lines, by its place in this browser's share.
-    /** @type {Map<number, string[]>} */
-    const said = new Map();
-    for (const line of String(r.stdout ?? '').split('\n')) {
-      const tab = line.indexOf('\t');
-      const i = Number(line.slice(0, tab));
-      if (tab < 1 || !Number.isInteger(i)) continue;
-      said.set(i, [...(said.get(i) ?? []), line.slice(tab + 1)]);
-    }
-    // The pictures it took whole, in order, up to the first it did not.
-    for (const [i, job] of rest.entries()) {
-      const lines = said.get(i) ?? [];
-      if (!lines.includes(PICTURE_TAKEN) || !fs.existsSync(job.png)) break;
-      const out = lines.join('\n');
-      results.push({
-        ok: true,
-        file: shown(project.cwd, job.png),
-        notes: [
-          ...(failed.length
-            ? [`the picture was taken with ${t.who}; ${failed.join('; ')}`]
-            : []),
-          ...pictureFontNotes(out),
-        ],
-        ...measuredCutShort(out),
-      });
-    }
-    if (results.length === jobs.length) return results;
-    // A share it did not finish is the next browser's.
-    for (const job of jobs.slice(results.length))
-      fs.rmSync(job.png, {force: true});
-    const text = r.error ? String(r.error.message) : r.stderr;
-    if (
-      t.script === PLAYWRIGHT_PICTURE &&
-      /Executable doesn't exist|playwright install/i.test(text)
-    )
-      pwMissing = true;
-    const why = r.timedOut
-      ? `${t.who} did not finish within ${(BROWSER_BOUND_MS + (rest.length - 1) * PAGE_BOUND_MS) / 1000} seconds, so it was stopped`
-      : `${t.who} could not take it: ${causeOf(text || (r.status === 0 ? 'it stopped before every picture was taken' : ''))}`;
-    run.failed.set(t.who, why);
-    failed.push(why);
-  }
-  results.push(
-    failed.length
+    if (!('failed' in r)) return r;
+    const {failed, pwFound, pwMissing, chrome} = r;
+    return failed.length
       ? {
           ok: false,
           // Advice that can change the result: Playwright's browser only when
@@ -2264,122 +2220,105 @@ export async function screenshots(project, jobs, run = newPictureRun()) {
       : {
           ok: false,
           reason: `No browser was found to take the picture. Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or install Google Chrome or Chromium. The HTML preview needs neither.`,
-        },
-  );
-  return results;
-}
-
-/** The generic families any font of a common kind stands in for. */
-const PLAIN_GENERICS = ['sans-serif', 'system-ui', 'ui-sans-serif'];
-
-/**
- * What a picture shows in place of a font stack: a role whose stack ends in
- * a generic of a kind (serif, monospace, cursive) and none of whose named
- * families this machine has is drawn in this machine's font for that
- * generic, which may be of another kind (a system with no serif font draws
- * serif in a sans-serif one). A stack that ends in sans-serif falls back
- * to a font of its own kind, so it is not named.
- * @param {string} stdout what the picture script printed
- * @returns {string[]}
- */
-export function pictureFontNotes(stdout) {
-  const line = stdout.split('\n').find(l => l.startsWith(FONT_PROBE_PREFIX));
-  if (!line) return [];
-  /** @type {Record<string, {stack: string[], shown: string | null} | null>} */
-  let probe;
-  try {
-    probe = JSON.parse(line.slice(FONT_PROBE_PREFIX.length));
-  } catch {
-    return [];
-  }
-  /** @type {string[]} */
-  const out = [];
-  for (const [role, label] of /** @type {const} */ ([
-    ['heading', 'headings'],
-    ['body', 'body text'],
-  ])) {
-    const r = probe?.[role];
-    const generic = r?.stack.at(-1)?.toLowerCase();
-    if (!r?.shown || !generic || PLAIN_GENERICS.includes(generic)) continue;
-    const named = r.stack.slice(0, -1);
-    const drawn = r.shown.toLowerCase();
-    if (!named.length || named.some(f => f.toLowerCase() === drawn)) continue;
-    out.push(
-      `this machine has none of ${named.join(', ')}, so the pictures draw the ${label} in ${r.shown}, its font for ${generic}; a system with ${named[0]} shows them as set (an open font with its package installed shows everywhere, the pictures included)`,
-    );
-  }
-  return out;
+        };
+  });
 }
 
 /**
- * The text a picture script measured cut short, from the line it prints
- * after `CUT_SHORT_PREFIX`; nothing when it printed none that reads.
- * @param {string} stdout what the picture script printed
- * @returns {{cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean}>}}
+ * How much each part's drawn size changes from one page to another (the
+ * sheet before a change and after it): both pictured in one browser run,
+ * each part's boxes measured, and the largest growth of a box at the same
+ * place in the page taken, in px. A part not drawn on both pages is
+ * counted as not drawn. The pictures themselves are not kept.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} before absolute path of the page before
+ * @param {string} after absolute path of the page after
+ * @param {string[]} parts
+ * @param {'light' | 'dark'} mode
+ * @returns {Promise<{changes: Array<{part: string, width: number, height: number, drawn: number}>} | {problem: string}>}
  */
-function measuredCutShort(stdout) {
-  const line = stdout.split('\n').find(l => l.startsWith(CUT_SHORT_PREFIX));
-  if (!line) return {};
-  /** @type {unknown} */
-  let found;
+export async function partSizeChanges(project, before, after, parts, mode) {
+  const pngs = [before, after].map(h => h.replace(/\.html$/, '.png'));
+  /** @type {PictureResult[]} */
+  let shots;
   try {
-    found = JSON.parse(line.slice(CUT_SHORT_PREFIX.length));
-  } catch {
-    return {};
+    shots = await screenshots(project, [
+      {html: before, png: pngs[0], mode, boxes: parts},
+      {html: after, png: pngs[1], mode, boxes: parts},
+    ]);
+  } finally {
+    for (const p of pngs) fs.rmSync(p, {force: true});
   }
-  if (!Array.isArray(found)) return {};
-  return {
-    cutShort: found
-      .filter(x => x && typeof x.text === 'string')
-      .map(x => ({
-        part: typeof x.part === 'string' ? x.part : null,
-        text: x.text,
-        whole: x.whole === true,
-        ...(x.broken === true ? {broken: true} : {}),
-      })),
-  };
+  const [a, b] = shots;
+  if (!a?.ok || !b?.ok)
+    return {
+      problem:
+        (a && !a.ok ? a.reason : b && !b.ok ? b.reason : null) ??
+        'no picture was taken',
+    };
+  return {changes: boxChanges(parts, a.boxes ?? {}, b.boxes ?? {})};
 }
 
-/** A Chrome or Chromium on this machine, at a usual place or on PATH. */
-function chromeBinary() {
-  const names = [
-    'google-chrome',
-    'google-chrome-stable',
-    'chromium',
-    'chromium-browser',
-    'chrome',
-  ];
-  const fixed = [
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-  ];
-  // Only a file that runs: a folder or a file with no execute permission
-  // by a browser's name is passed over, and the search goes on.
-  /** @param {string} f */
-  const runs = f => {
-    try {
-      if (!fs.statSync(f).isFile()) return false;
-      if (process.platform !== 'win32') fs.accessSync(f, fs.constants.X_OK);
-      return true;
-    } catch {
-      return false;
+/**
+ * How much each part's drawn boxes grow from one measurement to another:
+ * the largest growth in width and in height of a box at the same place in
+ * the page, in px, to a hundredth (0 when none grows; a box that shrinks
+ * does not count), and how many boxes both measurements draw.
+ * @param {string[]} parts
+ * @param {Record<string, Array<[number, number]>>} was
+ * @param {Record<string, Array<[number, number]>>} now
+ * @returns {Array<{part: string, width: number, height: number, drawn: number}>}
+ */
+export function boxChanges(parts, was, now) {
+  const round = (/** @type {number} */ n) => Math.round(n * 100) / 100;
+  return parts.map(part => {
+    const a = was[part] ?? [];
+    const b = now[part] ?? [];
+    const drawn = Math.min(a.length, b.length);
+    let width = 0;
+    let height = 0;
+    for (let i = 0; i < drawn; i++) {
+      width = Math.max(width, b[i][0] - a[i][0]);
+      height = Math.max(height, b[i][1] - a[i][1]);
     }
-  };
-  for (const f of fixed) if (runs(f)) return f;
-  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
-    for (const n of names) {
-      const f = path.join(dir, n);
-      if (dir && runs(f)) return f;
-    }
-  }
-  return null;
+    return {part, width: round(width), height: round(height), drawn};
+  });
+}
+
+/**
+ * What a change of size says about the parts it measured: how much each
+ * part that grows grows, else that they keep their size; null when none
+ * of them is drawn.
+ * @param {Array<{part: string, width: number, height: number, drawn: number}>} changes
+ * @param {string} cause what grew them ("the added border")
+ * @returns {string | null}
+ */
+export function sizeChangeNote(changes, cause) {
+  const drawn = changes.filter(x => x.drawn);
+  if (!drawn.length) return null;
+  const grows = drawn.filter(x => x.width > 0 || x.height > 0);
+  if (!grows.length)
+    return `${drawn.map(x => x.part).join(', ')} keeps its size with ${cause} (measured on the sheet, at rest and in each state it draws)`;
+  return grows
+    .map(
+      x =>
+        `${x.part} grows by ${[
+          ...(x.height > 0 ? [`${x.height}px in height`] : []),
+          ...(x.width > 0 ? [`${x.width}px in width`] : []),
+        ].join(' and ')} (${cause}; measured on the sheet)`,
+    )
+    .join('; ');
 }
 
 /** The first line of every file the editor writes into a theme's app copy. */
 export {APP_COPY_MARK} from './_marks.mjs';
-import {APP_COPY_MARK, appCopyMark} from './_marks.mjs';
+import {
+  appCopyDescriptor,
+  appCopyHead,
+  appCopyMarkedNames,
+  carriesAppCopyMark,
+} from './_marks.mjs';
+import {readThemeDescriptorValue} from '../../foundation/discovery/theme-discovery.mjs';
 import {builtColorMode} from '../../foundation/discovery/theme-imports.mjs';
 
 /**
@@ -2492,6 +2431,31 @@ export function themeLocalModules(cwd, slug) {
 }
 
 /**
+ * The display name and description an app copy's descriptor gives now, read
+ * without running it as discovery reads it; none when it does not read.
+ * @param {string} doc
+ * @returns {{displayName?: string, description?: string}}
+ */
+function copyWords(doc) {
+  if (!fs.existsSync(doc)) return {};
+  try {
+    const value = /** @type {any} */ (
+      readThemeDescriptorValue(doc, path.basename(doc))
+    );
+    return {
+      ...(typeof value?.displayName === 'string'
+        ? {displayName: value.displayName}
+        : {}),
+      ...(typeof value?.description === 'string'
+        ? {description: value.description}
+        : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
  * The files of a theme's app copy as the editor would write them now, by
  * name; null with no build to copy. Font stylesheets as given, or null for
  * the copy's own.
@@ -2507,7 +2471,7 @@ function appCopyFiles(cwd, slug, fontsCss) {
   if (!fs.existsSync(f.js) || !fs.existsSync(f.css)) return null;
   const source = `src/themes/${slug}/${name}.ts`;
   const head = (/** @type {string} */ open, /** @type {string} */ close) =>
-    `${open} ${appCopyMark(slug)} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
+    appCopyHead(slug, open, close);
   const keptFonts = path.join(dir, `${slug}.fonts.css`);
   const fonts =
     fontsCss ??
@@ -2533,8 +2497,11 @@ function appCopyFiles(cwd, slug, fontsCss) {
   // (`colorModes`); the copy's source re-exports it, so a build of the copy
   // writes it too and `theme add` reads it.
   const oneMode = builtColorMode(f.js).mode;
+  // (The copy's display name and description stay as they are: a shared
+  // theme added with its editor state keeps its own.)
+  const doc = path.join(dir, `${name}.doc.mjs`);
   const files = {
-    [`${name}.doc.mjs`]: `${head('//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(slug)},\n  description: ${JSON.stringify(`The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`,
+    [`${name}.doc.mjs`]: appCopyDescriptor(slug, copyWords(doc)),
     [`${name}.ts`]: `${head('//', '')}export {${name}${oneMode ? ', colorModes' : ''}} from './${slug}';\n`,
     ...built,
     // The theme folder's own modules the build imports, as they are, under
@@ -2552,6 +2519,36 @@ function appCopyFiles(cwd, slug, fontsCss) {
       : `${head('/*', '*/')}/* No font stylesheets: no installed package loads the theme's fonts. A font the system does not have shows only once its package is installed (experimental theme editor show ${slug} names it). */\n`,
   };
   return files;
+}
+
+/**
+ * The built files of a theme's app copy (its entry, its built module and
+ * stylesheets, or a module of the theme folder) that hold exactly what the
+ * editor writes there from the theme's build now. Never the descriptor or
+ * the font stylesheet, whose text the copy itself gives.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Set<string>}
+ */
+export function appCopyBuiltCurrent(cwd, slug) {
+  const files = appCopyFiles(cwd, slug, []);
+  /** @type {Set<string>} */
+  const current = new Set();
+  if (!files) return current;
+  const lf = (/** @type {string} */ x) => x.replace(/\r\n/g, '\n');
+  for (const [name, want] of Object.entries(files)) {
+    if (name.endsWith('.doc.mjs') || name === `${slug}.fonts.css`) continue;
+    try {
+      const now = fs.readFileSync(
+        path.join(cwd, 'src', 'themes', slug, name),
+        'utf8',
+      );
+      if (lf(now) === lf(want)) current.add(name);
+    } catch {
+      // A file that cannot be read is not the editor's output.
+    }
+  }
+  return current;
 }
 
 /**
@@ -2713,7 +2710,7 @@ export function appCopyBlocker(cwd, slug) {
     } catch {
       text = '';
     }
-    if (!text.includes(APP_COPY_MARK))
+    if (!carriesAppCopyMark(text))
       return `${rel}/${r} is a file the editor did not write, at a name the copy carries themes/${slug}/${r} to; move it, then any set or show writes the copy`;
   }
   // Nothing is written through a link on the way from the app to the copy
@@ -2749,7 +2746,7 @@ export function appCopyBlocker(cwd, slug) {
   /** @param {string} n */
   const marked = n => {
     try {
-      return fs.readFileSync(path.join(dir, n), 'utf8').includes(APP_COPY_MARK);
+      return carriesAppCopyMark(fs.readFileSync(path.join(dir, n), 'utf8'));
     } catch {
       return false;
     }
@@ -2770,7 +2767,7 @@ export function appCopyBlocker(cwd, slug) {
   // The copy is the editor's when any of its marked files carries the
   // mark (one of them deleted is written back); then only a marked name
   // without the mark is yours.
-  const markedNames = [`${name}.doc.mjs`, `${name}.ts`, `${slug}.fonts.css`];
+  const markedNames = appCopyMarkedNames(name, slug);
   // A build output of the copy's source carries the build's own header.
   const generated = (/** @type {string} */ n) => {
     try {
@@ -2839,173 +2836,4 @@ export function takeFirstAppCopy(cwd, slug) {
   const wrote = FIRST_COPIES.get(key) ?? null;
   FIRST_COPIES.delete(key);
   return wrote;
-}
-
-/**
- * Run a picture script (one browser, one picture) as its own process group,
- * without blocking this process. The one owner of every browser run:
- * - a temp folder of its own (TMPDIR, TMP, TEMP), where the browser keeps
- *   its profile; with none to make, nothing runs (`noTemp`);
- * - a time bound (`timedOut`);
- * - a stop (SIGINT, SIGTERM, SIGHUP) that reaches the run stops it
- *   (`stoppedBy`), then ends this process as the stop would have.
- * A stop or the bound asks the whole group to close, waits for it (killing
- * it past a short grace), then removes the temp folder and the `drop` files
- * (a picture part a stopped run leaves); a run that ends on its own removes
- * the temp folder only, and gives what the script wrote on its standard
- * output (`stdout`: what it measured in the page).
- * @param {string} script a picture script
- * @param {string[]} args
- * @param {number} [bound] milliseconds before the run is stopped
- * @param {{drop?: string[]}} [opts]
- * @returns {Promise<{status: number | null, signal: string | null, stderr: string, stdout?: string, error?: Error, stoppedBy?: string, timedOut?: boolean, noTemp?: string}>}
- */
-export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
-  const drop = opts.drop ?? [];
-  /** @type {string} */
-  let temp;
-  try {
-    temp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-browser-'));
-  } catch (e) {
-    return Promise.resolve({
-      status: null,
-      signal: null,
-      stderr: '',
-      noTemp: String(/** @type {any} */ (e)?.code ?? e),
-    });
-  }
-  return new Promise(resolve => {
-    let stderr = '';
-    let stdout = '';
-    const posix = process.platform !== 'win32';
-    const child = spawn(process.execPath, [script, ...args], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {...process.env, TMPDIR: temp, TMP: temp, TEMP: temp},
-      // A group of its own, so a stop reaches the browser it starts too.
-      detached: posix,
-    });
-    /** @param {NodeJS.Signals} sig */
-    const signalAll = sig => {
-      try {
-        if (posix && child.pid) process.kill(-child.pid, sig);
-        else child.kill(sig);
-      } catch {
-        // Gone already.
-      }
-    };
-    const closed = new Promise(done => child.once('close', done));
-    /** @param {string[]} files */
-    const remove = files => {
-      for (const f of files)
-        try {
-          fs.rmSync(f, {recursive: true, force: true});
-        } catch {
-          // Gone already.
-        }
-    };
-    /** The temp folder goes on every way out; `drop` only with a stop. */
-    const clean = () => remove([temp]);
-    /** Close the group (killed past the grace), then clean up. */
-    const finish = async () => {
-      signalAll('SIGTERM');
-      const grace = new Promise(done =>
-        setTimeout(done, STOP_GRACE_MS).unref(),
-      );
-      if ((await Promise.race([closed.then(() => true), grace])) !== true) {
-        signalAll('SIGKILL');
-        await closed;
-      }
-      remove([temp, ...drop]);
-    };
-    // This process ending some other way: the group is killed, and the temp
-    // folder and the unfinished files removed, as far as an exit allows.
-    const onExit = () => {
-      signalAll('SIGKILL');
-      remove([temp, ...drop]);
-    };
-    process.once('exit', onExit);
-    child.stderr?.setEncoding('utf8');
-    child.stderr?.on('data', d => {
-      if (stderr.length < 8000) stderr += d;
-    });
-    child.stdout?.setEncoding('utf8');
-    child.stdout?.on('data', d => {
-      // Room for every line the script prints: the fonts, and the text cut
-      // short on a page of every component.
-      if (stdout.length < 64_000) stdout += d;
-    });
-    /** Set once the run is being stopped (bound, signal): it ends there. */
-    let stopping = false;
-    let settled = false;
-    /** @param {Awaited<ReturnType<typeof runBrowser>>} out */
-    const settle = out => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      process.removeListener('exit', onExit);
-      for (const sig of STOP_SIGNALS) process.removeListener(sig, onStop);
-      resolve(out);
-    };
-    const timer = setTimeout(() => {
-      stopping = true;
-      void finish().then(() =>
-        settle({status: null, signal: null, stderr, timedOut: true}),
-      );
-    }, bound);
-    /** @param {NodeJS.Signals} sig */
-    const onStop = async sig => {
-      stopping = true;
-      for (const s of STOP_SIGNALS) process.removeListener(s, onStop);
-      // A second stop during the grace does not wait for it: the group is
-      // killed and the files removed at once, then the process ends.
-      /** @param {NodeJS.Signals} again */
-      const onAgain = again => {
-        for (const s of STOP_SIGNALS) process.removeListener(s, onAgain);
-        signalAll('SIGKILL');
-        remove([temp, ...drop]);
-        if (process.listenerCount(again) === 0)
-          process.kill(process.pid, again);
-      };
-      for (const s of STOP_SIGNALS) process.once(s, onAgain);
-      await finish();
-      for (const s of STOP_SIGNALS) process.removeListener(s, onAgain);
-      settle({status: null, signal: null, stderr, stoppedBy: sig});
-      // Nothing else listening: the stop ends this process, as it would
-      // have without this listener.
-      if (process.listenerCount(sig) === 0) process.kill(process.pid, sig);
-    };
-    for (const sig of STOP_SIGNALS) process.once(sig, onStop);
-    child.once('error', error => {
-      clean();
-      settle({status: null, signal: null, stderr, error});
-    });
-    child.once('close', (status, signal) => {
-      if (stopping) return;
-      clean();
-      settle({status, signal, stderr, stdout});
-    });
-  });
-}
-
-/**
- * The first stderr line that says something about the picture: Chrome's
- * startup warnings (dbus, GPU, sandbox notices) come first on Linux and
- * say nothing about why no picture was written.
- * @param {string} text
- */
-export function meaningfulLine(text) {
-  const lines = String(text ?? '')
-    .split(/\r?\n/)
-    .map(l => l.trim())
-    .filter(Boolean);
-  return (
-    lines.find(
-      l =>
-        !/dbus|bus\.cc|gpu_|gl_|sandbox|fontconfig|crashpad|DevTools listening|WARNING:/i.test(
-          l,
-        ),
-    ) ??
-    lines[0] ??
-    ''
-  );
 }

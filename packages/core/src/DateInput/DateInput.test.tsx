@@ -1508,6 +1508,7 @@ describe('DateInput', () => {
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
         expect(tooltip).toHaveAttribute('popover-open');
       });
@@ -3045,6 +3046,23 @@ describe('DateInput rejected entries', () => {
     fireEvent.click(getButton(/March 15, 2026/));
     expect(statusText(container)).toBe('');
     expect(input).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('clears rejected text when the caller clears its value to undefined', () => {
+    const {container, rerender} = render(
+      <DateInput label="Due" value="2026-03-20" onChange={() => {}} />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    fireEvent.blur(input);
+    expect(input).toHaveValue('tomorrowish');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+
+    rerender(<DateInput label="Due" value={undefined} onChange={() => {}} />);
+
+    expect(input).toHaveValue('');
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBe('');
   });
 
   it.each([

@@ -554,6 +554,31 @@ describe('SideNavHeading', () => {
       );
     });
 
+    it("holds a NavHeadingMenu's items in its own named menu, with no menu inside it", async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="Docs" href="/docs" />
+              <NavHeadingMenuItem label="Status" href="/status" />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
+      const menus = screen.getAllByRole('menu', {hidden: true});
+      expect(menus).toHaveLength(1);
+      expect(menus[0]).toHaveAccessibleName('My App');
+      for (const name of ['Docs', 'Status']) {
+        expect(menus[0]).toContainElement(
+          screen.getByRole('menuitem', {name, hidden: true}),
+        );
+      }
+    });
+
     it('moves focus one item per arrow key in a NavHeadingMenu (APG menu)', async () => {
       __resetMenuPressForTest();
       const user = userEvent.setup();
@@ -1912,7 +1937,10 @@ describe('SideNavItem (collapsed)', () => {
       </SideNavItem>,
     );
     await user.click(screen.getByTestId('parent'));
-    expect(screen.getByText('Settings')).toBeInTheDocument();
+    // The trigger's label tooltip holds the label too; read the flyout's.
+    expect(
+      within(screen.getByRole('dialog', {hidden: true})).getByText('Settings'),
+    ).toBeInTheDocument();
   });
 
   it('does not render children without icon when collapsed', () => {
@@ -1983,6 +2011,77 @@ describe('SideNavItem — collapsed submenu hover intent', () => {
     act(() => {
       vi.advanceTimersByTime(ms);
     });
+
+  /** The element the trigger's `aria-describedby` names. */
+  function labelTooltipOf(trigger: HTMLElement) {
+    const id = trigger.getAttribute('aria-describedby');
+    return id == null ? null : document.getElementById(id);
+  }
+
+  /** jsdom does not model `:focus-visible`; stand in for a keyboard focus. */
+  function asKeyboardFocusable(element: HTMLElement) {
+    const realMatches = element.matches.bind(element);
+    vi.spyOn(element, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
+  }
+
+  it('shows its label on keyboard focus, closes it when the flyout opens, and shows it again when Escape returns focus', async () => {
+    stubPointerModality('fine');
+    const showPopover = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    const hidePopover = vi.spyOn(HTMLElement.prototype, 'hidePopover');
+    try {
+      const user = userEvent.setup();
+      const trigger = renderFlyout();
+      asKeyboardFocusable(trigger);
+
+      // A key press first: script focus right after a pointer press reads as
+      // pointer focus, and earlier cases in this file click.
+      fireEvent.keyDown(trigger, {key: 'Tab'});
+      act(() => {
+        trigger.focus();
+      });
+      const label = labelTooltipOf(trigger);
+      expect(label).toHaveAttribute('role', 'tooltip');
+      expect(label).toHaveTextContent('Settings');
+      expect(showPopover.mock.contexts).toContain(label);
+
+      await user.keyboard('{Enter}');
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      await waitFor(() =>
+        expect(
+          screen.getByRole('link', {name: 'General', hidden: true}),
+        ).toHaveFocus(),
+      );
+      expect(hidePopover.mock.contexts).toContain(label);
+
+      showPopover.mockClear();
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(trigger).toHaveFocus());
+      await waitFor(() =>
+        expect(showPopover.mock.contexts).toContain(labelTooltipOf(trigger)),
+      );
+    } finally {
+      showPopover.mockRestore();
+      hidePopover.mockRestore();
+    }
+  });
+
+  it('opens its flyout on hover and shows no label tooltip', () => {
+    stubPointerModality('fine');
+    vi.useFakeTimers();
+    const showPopover = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    try {
+      const trigger = renderFlyout();
+      const label = labelTooltipOf(trigger);
+      fireEvent.mouseEnter(trigger);
+      advance(1000);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(showPopover.mock.contexts).not.toContain(label);
+    } finally {
+      showPopover.mockRestore();
+    }
+  });
 
   it('opens the flyout only after the hover-intent delay', () => {
     stubPointerModality('fine');
@@ -4302,6 +4401,7 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     expect(layer).toHaveTextContent('Analytics (Coming Soon)');
 
     fireEvent.mouseEnter(row);
+    fireEvent.pointerMove(row);
     act(() => {
       vi.advanceTimersByTime(200);
     });
@@ -4428,6 +4528,7 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     const layer = railTooltipFor(link);
     expect(layer).toHaveTextContent('Dashboard');
     fireEvent.mouseEnter(link);
+    fireEvent.pointerMove(link);
     act(() => {
       vi.advanceTimersByTime(200);
     });
@@ -4490,6 +4591,7 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     const {rerender} = render(rail(true));
     const link = screen.getByRole('link', {name: 'Dashboard'});
     fireEvent.mouseEnter(link);
+    fireEvent.pointerMove(link);
     act(() => {
       vi.advanceTimersByTime(200);
     });

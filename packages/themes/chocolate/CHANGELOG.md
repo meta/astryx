@@ -1,4 +1,26 @@
-# @xds/theme-chocolate
+# @astryxdesign/theme-chocolate
+
+# 0.7.17
+
+#### New Features
+
+- Chat surfaces now default to the container radius: `--radius-chat` defaults to `var(--radius-container)` instead of `28px`, a theme that sets `--radius-container` but not `--radius-chat` declares the alias at its root, and a radius scale no longer sets `--radius-chat` (it set the page step), so chat follows the theme's container, also where the theme sets its container over the scale. This changes the corners of ChatComposer, its drawer and status bar, and ChatMessageBubble, and the buttons inside the composer take their normal corners. The send button stays circular inside a composer, as it is outside one: a theme whose composer corner made the send button a rounded square (controls taller than 32px, or a chat corner under 28px) now draws a circle, unless it sets the `chat-send-button` radius. Butter, Chocolate, Gothic, Matcha, Neutral and Stone set `--radius-chat: 28px`, and Butter keeps its 16px send-button corner, so they look the same; Y2K sets `--radius-chat: 0px` and stays square. A theme that extends one of them keeps that chat radius. To keep the 28px chat corners in another theme, add `--radius-chat: 28px` to its tokens. Set the token in the theme rather than on an ancestor such as `:root`: a theme scope that declares it now replaces an inherited value.
+- The chocolate theme exports `colorModes`: `['light', 'dark']`.
+
+#### Fixes
+
+- In light mode, secondary text and icons, links on the cool tinted cards, green, orange, red and yellow category text, and code comments and operators take deeper stops of their own colours, so they meet WCAG AA (4.5:1). Secondary text on the blue, purple, red and teal cards, and in dark mode on the green, teal and yellow cards, takes the next stop, so it also reads on the accent tint of a selected row or a numbered citation there, on the page and on a surface. Each value is a stop of the palette generator's ramp grown from the earlier colour.
+- Light-mode category text (cyan, green, orange, pink, red, yellow on Badges and Tokens) reads at 4.5:1 (WCAG AA) on its tinted fill over a card, not only over the page: each takes the next deeper shade of its own hue.
+- Each built-in theme ships its open-licensed fonts. `fonts.css` loads every face from a woff2 file in the package (licenses in `fonts/`), with `font-display: fallback` (served from the same machine or a fast connection, a face arrives before the text first draws, so there is no fallback flash; a face that takes more than about 3 s leaves that page in the fallback font), instead of a Google Fonts `@import` that held the page until the request answered (chocolate's Fraunces as its variable face, keeping its optical size), so an app or screenshot offline (a sandbox, CI) draws at once and shows the theme's real fonts.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @josephfarina
+- @kentonquatman
+
+---
 
 # 0.7.16
 
@@ -380,4 +402,4 @@ Thanks to everyone who contributed to this release:
 
 #### Changes
 
-- Tracks `@xds/core@0.0.15` (bare-name migration + data-attribute selector surface).
+- Tracks `@astryxdesign/core@0.0.15` (bare-name migration + data-attribute selector surface).

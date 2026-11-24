@@ -3,8 +3,14 @@
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import {renderHook} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type * as CoreHooks from '@astryxdesign/core/hooks';
+import {
+  colorVars,
+  sizeVars,
+  spacingVars,
+} from '@astryxdesign/core/theme/tokens.stylex';
 import {AudioPlayer} from './AudioPlayer';
 import {MediaPlayer} from './MediaPlayer';
 import {useMediaPlaybackTime, useMediaPlayer} from './MediaPlayerContext';
@@ -147,6 +153,106 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// jsdom lays out nothing and matches no container query. So these probes
+// check the declarations that make the compact bar and its track color.
+// StyleX gives a declaration the same atomic classes in every file. Thus an
+// element carries the classes of a probe when it has that declaration. The
+// browser spec measures the painted result.
+const COMPACT_PLAYER = '@container (max-width: 360px)';
+
+const probe = stylex.create({
+  barInset: {
+    '--_media-bar-inset': {
+      default: spacingVars['--spacing-2'],
+      [COMPACT_PLAYER]: spacingVars['--spacing-1'],
+    },
+  },
+  insetFromBarInset: {
+    insetInlineStart: 'var(--_media-bar-inset)',
+    insetInlineEnd: 'var(--_media-bar-inset)',
+    insetBlockEnd: 'var(--_media-bar-inset)',
+  },
+  barGap: {
+    gap: {
+      default: spacingVars['--spacing-2'],
+      [COMPACT_PLAYER]: spacingVars['--spacing-1'],
+    },
+  },
+  barPadding: {
+    padding: {
+      default: spacingVars['--spacing-1'],
+      [COMPACT_PLAYER]: `calc(${spacingVars['--spacing-1']} / 2)`,
+    },
+  },
+  dropByBarInset: {
+    translate: '0 var(--_media-bar-inset)',
+  },
+  smallControl: {
+    '--size-element-md': {
+      default: null,
+      [COMPACT_PLAYER]: sizeVars['--size-element-sm'],
+    },
+  },
+  frostedTrack: {
+    '--_media-timeline-track': `color-mix(in srgb, ${colorVars['--color-accent']} 24%, transparent)`,
+  },
+  trackFromSurface: {
+    backgroundColor: `var(--_media-timeline-track, ${colorVars['--color-track']})`,
+  },
+});
+
+type Probe = (typeof probe)[keyof typeof probe];
+
+function atomicClasses(style: Probe): string[] {
+  const {className = ''} = stylex.props(style);
+  // The dev runtime adds a debug class that names the source file.
+  const classes = className
+    .split(' ')
+    .filter(name => name !== '' && !name.includes('__'));
+  // A probe with no classes would make every assertion on it vacuous.
+  expect(classes.length).toBeGreaterThan(0);
+  return classes;
+}
+
+function hasDeclaration(element: Element, style: Probe): boolean {
+  return atomicClasses(style).every(name => element.classList.contains(name));
+}
+
+/** The element and its ancestors up to `root` that carry the declaration. */
+function declaringAncestors(
+  element: Element,
+  root: Element,
+  style: Probe,
+): Element[] {
+  const found: Element[] = [];
+  for (
+    let node: Element | null = element;
+    node != null && root.contains(node);
+    node = node.parentElement
+  ) {
+    if (hasDeclaration(node, style)) {
+      found.push(node);
+    }
+  }
+  return found;
+}
+
+/** Lets jsdom report element fullscreen, so the fullscreen control renders. */
+function allowFullscreen() {
+  Object.defineProperty(document, 'fullscreenEnabled', {
+    configurable: true,
+    value: true,
+  });
+  Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+    configurable: true,
+    value: () => Promise.resolve(),
+  });
+  return () => {
+    Reflect.deleteProperty(document, 'fullscreenEnabled');
+    Reflect.deleteProperty(HTMLElement.prototype, 'requestFullscreen');
+  };
+}
+
 describe('VideoPlayer', () => {
   it('renders a named, focusable group around the native video without its controls', () => {
     const {player, video} = renderVideoPlayer({poster: '/poster.jpg'});
@@ -242,9 +348,12 @@ describe('VideoPlayer', () => {
     act(() => screen.getByRole('button', {name: 'Play'}).focus());
     await user.keyboard('{Enter}');
     expect(onPlay).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole('button', {name: 'Pause'}));
+    // The same toggle keeps focus, so the keyboard drives each change. A
+    // pointer click could land after the 2 s idle hide on a slow run, when
+    // the hidden bar refuses pointer input.
+    await user.keyboard('{Enter}');
     expect(onPause).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole('button', {name: 'Play'}));
+    await user.keyboard('{Enter}');
     playback.end();
     expect(onEnded).toHaveBeenCalledTimes(1);
     expect(onPause).toHaveBeenCalledTimes(1);
@@ -257,13 +366,17 @@ describe('VideoPlayer', () => {
 
   it('keeps the bar behind the large play control until playback starts, in reach of the keyboard', async () => {
     const user = userEvent.setup();
-    const {video} = renderVideoPlayer();
+    const {video, player} = renderVideoPlayer();
     fakePlayback(video);
     const barPlay = screen.getByRole('button', {name: 'Play'});
     await expect(user.click(barPlay)).rejects.toThrow(/pointer-events/);
     act(() => barPlay.focus());
     await user.keyboard('{Enter}');
-    await user.click(screen.getByRole('button', {name: 'Pause'}));
+    const pause = screen.getByRole('button', {name: 'Pause'});
+    // A person moves the pointer to the bar before clicking, which shows it
+    // again if a slow run has passed the 2 s idle hide.
+    fireEvent.pointerMove(player, {pointerType: 'mouse'});
+    await user.click(pause);
     expect(screen.getByRole('button', {name: 'Play'})).toBeInTheDocument();
   });
 
@@ -334,7 +447,11 @@ describe('VideoPlayer', () => {
       void video.play();
     });
     const bar = () => container.querySelector('[data-visible]');
-    await user.click(screen.getByRole('slider', {name: 'Seek'}));
+    const seek = screen.getByRole('slider', {name: 'Seek'});
+    // The pointer reaches the timeline before the click, which shows the bar
+    // again if a slow run has passed the 2 s idle hide.
+    fireEvent.pointerMove(player, {pointerType: 'mouse'});
+    await user.click(seek);
     expect(screen.getByRole('slider', {name: 'Seek'})).toHaveFocus();
     fireEvent.pointerLeave(player, {pointerType: 'mouse'});
     expect(bar()).toHaveAttribute('data-visible', 'false');
@@ -433,6 +550,160 @@ describe('VideoPlayer', () => {
       'aria-pressed',
       'true',
     );
+  });
+});
+
+describe('VideoPlayer control bar', () => {
+  const captionTrack: FakeTrack = {
+    id: '',
+    kind: 'captions',
+    label: 'English',
+    language: 'en',
+    mode: 'disabled',
+  };
+  let restoreFullscreen: () => void = () => {};
+
+  beforeEach(() => {
+    restoreFullscreen = allowFullscreen();
+  });
+
+  afterEach(() => {
+    restoreFullscreen();
+  });
+
+  function renderBar() {
+    const result = renderVideoPlayer();
+    fakePlayback(result.video, {tracks: [{...captionTrack}]});
+    const bar = result.container.querySelector('[data-visible]');
+    if (bar == null) {
+      throw new Error('VideoPlayer rendered no control bar');
+    }
+    return {...result, bar};
+  }
+
+  it('narrows its inset, gap, and padding in a player 360px wide or narrower', () => {
+    const {bar} = renderBar();
+    expect(hasDeclaration(bar, probe.barInset)).toBe(true);
+    expect(hasDeclaration(bar, probe.insetFromBarInset)).toBe(true);
+    expect(hasDeclaration(bar, probe.barGap)).toBe(true);
+    expect(hasDeclaration(bar, probe.barPadding)).toBe(true);
+  });
+
+  it('keeps the controls through two idle seconds of playback while a marker popover opened from the keyboard is open', async () => {
+    // jsdom has no popover API.
+    vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, 'hidePopover').mockImplementation(() => {});
+    const user = userEvent.setup({
+      advanceTimers: ms => vi.advanceTimersByTime(ms),
+    });
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    const {video, container} = renderVideoPlayer({
+      markers: [
+        {
+          time: 20,
+          label: 'Lin: hold on this',
+          content: <input aria-label="Reply" />,
+        },
+      ],
+    });
+    fakePlayback(video, {duration: 60});
+    const bar = () => container.querySelector('[data-visible]');
+    act(() => {
+      void video.play();
+    });
+    const marker = screen.getByRole('button', {name: 'Lin: hold on this'});
+    act(() => marker.focus());
+    await user.keyboard('{Enter}');
+    const reply = await screen.findByRole('textbox', {
+      name: 'Reply',
+      hidden: true,
+    });
+    act(() => reply.focus());
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(bar()).toHaveAttribute('data-visible', 'true');
+  });
+
+  it('lets the controls idle-hide again after a marker is removed while its popover is open', async () => {
+    // jsdom has no popover API.
+    vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, 'hidePopover').mockImplementation(() => {});
+    const user = userEvent.setup({
+      advanceTimers: ms => vi.advanceTimersByTime(ms),
+    });
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    const marker = {
+      time: 20,
+      label: 'Lin: hold on this',
+      content: <input aria-label="Reply" />,
+    };
+    const {video, container, rerender} = renderVideoPlayer({
+      markers: [marker],
+    });
+    fakePlayback(video, {duration: 60});
+    const bar = () => container.querySelector('[data-visible]');
+    act(() => {
+      void video.play();
+    });
+    await user.click(screen.getByRole('button', {name: marker.label}));
+    await screen.findByRole('textbox', {name: 'Reply', hidden: true});
+    // The host removes the marker while its popover is open.
+    rerender(<VideoPlayer src="/clip.mp4" label="Product tour" markers={[]} />);
+    act(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(bar()).toHaveAttribute('data-visible', 'false');
+  });
+
+  it('drops by its own inset while hidden, so a compact bar drops less', () => {
+    vi.useFakeTimers();
+    const {bar, video} = renderBar();
+    act(() => {
+      void video.play();
+    });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(bar).toHaveAttribute('data-visible', 'false');
+    expect(hasDeclaration(bar, probe.dropByBarInset)).toBe(true);
+  });
+
+  it('gives each of its buttons the small element size in a compact player, on the button itself', () => {
+    const {bar, container} = renderBar();
+    const controls = [
+      within(bar as HTMLElement).getByRole('button', {name: 'Play'}),
+      within(bar as HTMLElement).getByRole('button', {name: 'Captions'}),
+      within(bar as HTMLElement).getByRole('button', {name: 'Full screen'}),
+    ];
+    // The volume control leaves the bar at 480px, before the bar compacts.
+    const shownButtons = Array.from(
+      bar.querySelectorAll('.astryx-button'),
+    ).filter(button => button.closest('.astryx-media-volume') == null);
+    expect(shownButtons).toHaveLength(controls.length);
+    for (const control of controls) {
+      expect(shownButtons).toContain(control);
+      expect(hasDeclaration(control, probe.smallControl)).toBe(true);
+    }
+    // Tooltips open beside each button, and marker popovers open inside the
+    // timeline. Neither the bar nor the timeline may carry the small size.
+    expect(declaringAncestors(bar, container, probe.smallControl)).toEqual([]);
+    const timeline = within(bar as HTMLElement).getByRole('slider', {
+      name: 'Seek',
+    });
+    expect(declaringAncestors(timeline, container, probe.smallControl)).toEqual(
+      [],
+    );
+  });
+
+  it('paints the empty part of its timeline in its own accent color at 24 percent', () => {
+    const {bar} = renderBar();
+    expect(hasDeclaration(bar, probe.frostedTrack)).toBe(true);
+    const [trackClass] = atomicClasses(probe.trackFromSurface);
+    expect(bar.querySelectorAll(`.${trackClass}`).length).toBeGreaterThan(0);
   });
 });
 
@@ -544,7 +815,10 @@ describe('MediaTimeSlider', () => {
     });
     await user.click(screen.getByRole('button', {name: 'Lin: hold on this'}));
     expect(playback.getCurrentTime()).toBe(20);
-    const reply = screen.getByRole('textbox', {name: 'Reply', hidden: true});
+    const reply = await screen.findByRole('textbox', {
+      name: 'Reply',
+      hidden: true,
+    });
     act(() => reply.focus());
     await user.keyboard('{ArrowRight}{PageUp}');
     expect(playback.getCurrentTime()).toBe(20);
@@ -573,7 +847,10 @@ describe('MediaTimeSlider', () => {
     const playback = fakePlayback(video, {duration: 60});
     await user.click(screen.getByRole('button', {name: 'Lin: hold on this'}));
     expect(playback.getCurrentTime()).toBe(20);
-    const reply = screen.getByRole('button', {name: 'Reply', hidden: true});
+    const reply = await screen.findByRole('button', {
+      name: 'Reply',
+      hidden: true,
+    });
     act(() => reply.focus());
     await user.keyboard('{ArrowRight}{ArrowLeft}jl5{ArrowUp}{ArrowDown}mk');
     expect(playback.getCurrentTime()).toBe(20);
@@ -711,6 +988,13 @@ describe('AudioPlayer', () => {
     });
     expect(container.querySelector('.astryx-section')).toContainElement(player);
     expect(screen.getByRole('slider', {name: 'Volume'})).toBeInTheDocument();
+  });
+
+  it('keeps the theme track color on its timeline', () => {
+    const {container} = renderAudioPlayer();
+    const [frostedClass] = atomicClasses(probe.frostedTrack);
+    expect(screen.getByRole('slider', {name: 'Seek'})).toBeInTheDocument();
+    expect(container.querySelector(`.${frostedClass}`)).toBeNull();
   });
 
   it('skips back 15 seconds and forward 30 seconds by default', () => {

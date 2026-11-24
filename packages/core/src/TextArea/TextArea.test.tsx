@@ -448,7 +448,7 @@ describe('TextArea', () => {
       const describedBy = textarea.getAttribute('aria-describedby');
       expect(describedBy).toBeTruthy();
       // The status message should be reachable via the described-by ID
-      const messageElement = screen.getByText('Too short');
+      const messageElement = screen.getByText('Too short').parentElement!;
       expect(messageElement).toHaveAttribute('id');
       expect(describedBy).toContain(messageElement.id);
     });
@@ -1247,6 +1247,7 @@ describe('TextArea', () => {
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
         expect(tooltip).toHaveAttribute('popover-open');
       });

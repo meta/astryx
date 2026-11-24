@@ -1014,8 +1014,9 @@ describe('Tokenizer', () => {
       // A popover element should exist for the top-layer expanded content
       const popover = container.querySelector('[popover]');
       expect(popover).toBeInTheDocument();
-      // Only one group role (the wrapper)
-      expect(container.querySelectorAll('[role="group"]').length).toBe(1);
+      // Two groups: the collapsed placeholder (the field's tab stop) and the
+      // wrapper in the layer.
+      expect(container.querySelectorAll('[role="group"]').length).toBe(2);
     });
 
     it('unfocusedLayer: shows expanded content in popover on focus', () => {
@@ -1039,6 +1040,53 @@ describe('Tokenizer', () => {
       expect(screen.getByText('Bob')).toBeInTheDocument();
       expect(screen.getByText('Charlie')).toBeInTheDocument();
     });
+
+    it('unfocusedLayer: the collapsed placeholder is a named tab stop that opens the field', () => {
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={() => {}}
+          tokenOverflowBehavior="unfocusedLayer"
+        />,
+      );
+      const placeholder = screen.getAllByRole('group', {name: 'Members'})[0];
+      expect(placeholder).toHaveAttribute('tabindex', '0');
+      act(() => placeholder.focus());
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+      expect(document.activeElement).toBe(
+        screen.getByRole('combobox', {name: 'Members', hidden: true}),
+      );
+      // While open, the placeholder is no tab stop.
+      expect(placeholder).toHaveAttribute('tabindex', '-1');
+    });
+
+    it.each([undefined, 'You need edit access'])(
+      'unfocusedLayer, disabled (message %s): the placeholder keeps its stop, announces disabled, and opens nothing',
+      disabledMessage => {
+        const {container} = render(
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+            tokenOverflowBehavior="unfocusedLayer"
+            isDisabled
+            disabledMessage={disabledMessage}
+          />,
+        );
+        const placeholder = screen.getAllByRole('group', {name: 'Members'})[0];
+        expect(placeholder).toHaveAttribute('tabindex', '0');
+        expect(placeholder).toHaveAttribute('aria-disabled', 'true');
+        vi.mocked(HTMLElement.prototype.showPopover).mockClear();
+        act(() => placeholder.focus());
+        fireEvent.keyDown(placeholder, {key: 'Enter'});
+        expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+        expect(document.activeElement).toBe(placeholder);
+        expect(container.querySelector('[disabled]')).toBeNull();
+      },
+    );
 
     it('unfocusedLayer: RTL emits no justify-self into the inset-positioned popover', () => {
       // The popover positions itself with explicit anchor() insets
@@ -2543,6 +2591,7 @@ describe('Tokenizer', () => {
       );
       const wrapper = screen.getByRole('group', {name: 'Members'});
       fireEvent.mouseEnter(wrapper);
+      fireEvent.pointerMove(wrapper);
       await waitFor(() => expect(isOpen(tooltip)).toBe(true));
       fireEvent.mouseLeave(wrapper);
       await waitFor(() => expect(isOpen(tooltip)).toBe(false));

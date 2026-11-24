@@ -472,7 +472,7 @@ describe('NumberInput', () => {
       expect(input).toHaveAttribute('aria-valuetext', '$4,200');
     });
 
-    it('shows the raw numeric value while focused and restores formatting on blur', () => {
+    it('shows the plain number while focused and restores formatting on blur', () => {
       render(
         <NumberInput
           label="Revenue"
@@ -1841,6 +1841,7 @@ describe('NumberInput', () => {
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
         expect(tooltip).toHaveAttribute('popover-open');
       });
@@ -2154,6 +2155,29 @@ describe('NumberInput stepping', () => {
     );
     fireEvent.keyDown(screen.getByRole('spinbutton'), {key: 'ArrowDown'});
     expect(onChange).toHaveBeenLastCalledWith(8);
+  });
+
+  it('steps an emptied draft from empty, not from the committed value', () => {
+    const onChange = vi.fn();
+    const {rerender} = render(
+      <NumberInput label="Amount" value={5} onChange={onChange} min={2} />,
+    );
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, {target: {value: ''}});
+    fireEvent.keyDown(input, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith(2);
+
+    rerender(
+      <NumberInput label="Amount" value={5} onChange={onChange} max={8} />,
+    );
+    fireEvent.change(input, {target: {value: ''}});
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(onChange).toHaveBeenLastCalledWith(8);
+
+    rerender(<NumberInput label="Amount" value={5} onChange={onChange} />);
+    fireEvent.change(input, {target: {value: ''}});
+    fireEvent.keyDown(input, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith(0);
   });
 
   it('keeps generated values integral when isIntegerOnly is set', () => {

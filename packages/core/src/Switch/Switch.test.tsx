@@ -720,6 +720,7 @@ describe('Switch', () => {
         'Notifications are turned off org-wide',
       );
       fireEvent.mouseEnter(getRow());
+      fireEvent.pointerMove(getRow());
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(getRow());
       await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
@@ -1109,7 +1110,9 @@ describe('Switch', () => {
         </>,
       );
       const control = screen.getByRole('switch');
-      const description = screen.getByText('Sends a daily digest');
+      const description = screen.getByText(
+        'Sends a daily digest',
+      ).parentElement!;
       expect(control.getAttribute('aria-describedby')?.split(' ')).toEqual([
         'external-hint',
         description.id,

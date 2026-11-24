@@ -26,6 +26,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   plainDateFromISO,
@@ -43,7 +44,6 @@ import {
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {
   colorVars,
-  sizeVars,
   radiusVars,
   spacingVars,
   typographyVars,
@@ -90,6 +90,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {useLocale} from '../i18n';
 import type {Locale} from '../i18n/types';
+import type {TranslatorFn} from '../i18n/useTranslator';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -262,15 +263,12 @@ const styles = stylex.create({
 
 const sizeStyles = stylex.create({
   sm: {
-    height: sizeVars['--size-element-sm'],
     minWidth: 180,
   },
   md: {
-    height: sizeVars['--size-element-md'],
     minWidth: 180,
   },
   lg: {
-    height: sizeVars['--size-element-lg'],
     minWidth: 180,
   },
 });
@@ -280,6 +278,7 @@ function formatRangeDisplay(
   locale: Locale,
   calendar: CalendarSystem,
   today: PlainDate | null,
+  t: TranslatorFn,
 ): string {
   if (!range) {
     return '';
@@ -295,7 +294,10 @@ function formatRangeDisplay(
     yearOf(start) === yearOf(today);
 
   const fmt = sameYear ? DATE_FORMAT_SHORT : DATE_FORMAT_SHORT_WITH_YEAR;
-  return `${formatCalendarDate(calendar, start, fmt, locale)} – ${formatCalendarDate(calendar, end, fmt, locale)}`;
+  return t('@astryx.dateRangeInput.rangeValue', {
+    start: formatCalendarDate(calendar, start, fmt, locale),
+    end: formatCalendarDate(calendar, end, fmt, locale),
+  });
 }
 
 function isRangeEqual(a: DateRange | null, b: DateRange | null): boolean {
@@ -685,8 +687,8 @@ export function DateRangeInput({
 
   const today = useToday();
   const displayValue = useMemo(
-    () => formatRangeDisplay(optimisticValue, locale, calendar, today),
-    [optimisticValue, locale, calendar, today],
+    () => formatRangeDisplay(optimisticValue, locale, calendar, today, t),
+    [optimisticValue, locale, calendar, today, t],
   );
 
   const popover = usePopover({
@@ -763,9 +765,10 @@ export function DateRangeInput({
     [fireChange],
   );
 
-  const triggerAriaLabel = optimisticValue
-    ? `${label}: ${displayValue}`
-    : `${label}: ${placeholder}`;
+  const triggerAriaLabel = t('@astryx.dateRangeInput.triggerLabel', {
+    label,
+    value: optimisticValue ? displayValue : placeholder,
+  });
 
   return (
     <Field
@@ -808,6 +811,7 @@ export function DateRangeInput({
             inputWrapperStyles.base,
             inputWrapperStyles.textField,
             sizeStyles[size],
+            inputRowSizeStyles[size],
             isEffectivelyDisabled && inputWrapperStyles.disabled,
             isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
             status && inputStatusBorderStyles[status.type],

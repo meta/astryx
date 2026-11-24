@@ -32,6 +32,7 @@
 // layout px. A layer that opens from a smaller scale then keeps the insets of
 // the size it settles at.
 
+import {stableClassName} from '../naming';
 import {subscribeInput} from './inputStream';
 import {isElement} from './nodeType';
 import {sharedState} from './sharedRealm';
@@ -296,6 +297,10 @@ export const INTERACTIVE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
+const FIELD_FRAME_SELECTOR = ['text-input', 'number-input', 'selector']
+  .map(name => `.${stableClassName(name)}`)
+  .join(',');
+
 const TOUCH_QUERY = '(pointer: coarse)';
 
 /**
@@ -351,7 +356,7 @@ interface Watch {
     toLayout: (rect: HitRect) => HitRect,
   ) => HitInsets;
   readonly checkAtPress: boolean;
-  readonly onInsets: (insets: HitInsets) => void;
+  readonly onInsets: (insets: HitInsets, readSettling?: SettlingRead) => void;
   isVisible: boolean;
   last: HitInsets;
   /** The ancestor animations the watch waits out before a pass reads it. */
@@ -415,12 +420,16 @@ function sameInsets(a: HitInsets, b: HitInsets): boolean {
   );
 }
 
-function deliver(watch: Watch, insets: HitInsets): void {
+function deliver(
+  watch: Watch,
+  insets: HitInsets,
+  readSettling: SettlingRead,
+): void {
   if (sameInsets(watch.last, insets)) {
     return;
   }
   watch.last = insets;
-  watch.onInsets(insets);
+  watch.onInsets(insets, readSettling);
 }
 
 /** Whether `candidate` is the control itself, or part of it. */
@@ -709,17 +718,66 @@ function ungroup(element: Element): void {
 
 /** The page's interactive elements and their rects: one read. */
 function readCandidates(doc: Document): Candidate[] {
-  return interactiveElements(doc).map(element => ({
-    element,
-    rect: plainRect(element),
-  }));
+  const targets = interactiveElements(doc);
+  const elements = new Set(targets);
+  // Keep inner targets: their shared frame cannot separate their hit areas.
+  // Resolve frames on each read so cached targets follow their current frame.
+  for (const element of targets) {
+    const frame = element.closest(FIELD_FRAME_SELECTOR);
+    if (frame != null) {
+      elements.add(watchedOwner(frame) ?? frame);
+    }
+  }
+  return [...elements].map(element => ({element, rect: plainRect(element)}));
+}
+
+/**
+ * Whether a tap can reach `element`. A touch nearer a neighbour that no tap
+ * reaches is still the control's. Only the touch check asks. The measuring
+ * pass reads no style, so such a neighbour still stops a hit area halfway.
+ * That strip takes no tap from anyone. Opacity does not count: a control
+ * drawn at opacity 0, such as a native input over its own drawn box, takes
+ * the tap.
+ */
+function takesTaps(element: Element): boolean {
+  if (element.matches(':disabled') || element.closest('[inert]') != null) {
+    return false;
+  }
+  const view = element.ownerDocument.defaultView;
+  if (view == null) {
+    return true;
+  }
+  const style = view.getComputedStyle(element);
+  if (style.pointerEvents === 'none') {
+    return false;
+  }
+  if (typeof element.checkVisibility === 'function') {
+    return element.checkVisibility({checkVisibilityCSS: true});
+  }
+  // Without `checkVisibility`, its two checks are read from the styles.
+  if (style.visibility === 'hidden' || style.visibility === 'collapse') {
+    return false;
+  }
+  for (
+    let node = element.parentElement;
+    node != null;
+    node = node.parentElement
+  ) {
+    if (
+      view.getComputedStyle(node).getPropertyValue('content-visibility') ===
+      'hidden'
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** A control's rect and clamped insets, from candidates already read. */
 function measureOne(
   watch: Watch,
   candidates: ReadonlyArray<Candidate>,
-): {target: HitRect; insets: HitInsets; neighbours: HitRect[]} {
+): {target: HitRect; insets: HitInsets; neighbours: Candidate[]} {
   const target = plainRect(watch.element);
   const scale = screenScale(watch.element, target, HIT_AREA_TOLERANCE);
   // Two targets each growing up to half the minimum reach each other from a
@@ -731,15 +789,13 @@ function measureOne(
     bottom: reach * scale.y,
     left: reach * scale.x,
   });
-  const neighbours = candidates
-    .filter(
-      ({element, rect}) =>
-        rect.right > rect.left &&
-        rect.bottom > rect.top &&
-        intersects(band, rect) &&
-        !isOwn(watch, element),
-    )
-    .map(({rect}) => rect);
+  const neighbours = candidates.filter(
+    ({element, rect}) =>
+      rect.right > rect.left &&
+      rect.bottom > rect.top &&
+      intersects(band, rect) &&
+      !isOwn(watch, element),
+  );
   return {
     target,
     // The insets are in the control's layout px. The returned rects stay in
@@ -749,7 +805,7 @@ function measureOne(
     // still counts that neighbour.
     insets: clampedHitInsets(
       inLayout(target, target, scale),
-      neighbours.map(rect => inLayout(rect, target, scale)),
+      neighbours.map(({rect}) => inLayout(rect, target, scale)),
       watch.minSize,
       watch.growth?.(inLayout(target, target, scale), rect =>
         inLayout(rect, target, scale),
@@ -779,6 +835,27 @@ export function settlingAnimations(root: Element | Document): Animation[] {
     const end = animation.effect?.getComputedTiming().endTime;
     return typeof end === 'number' && Number.isFinite(end);
   });
+}
+
+/** Reads `settlingAnimations` of a root. */
+export type SettlingRead = (root: Element) => Animation[];
+
+/**
+ * A `settlingAnimations` read for one loop of writes, which reads each root
+ * once. Each read recalculates the styles that the loop's earlier writes
+ * changed, so one read per root also prevents those recalculations. A write
+ * of hit insets starts no animation, so a root's list stays true for the loop.
+ */
+function readOncePerRoot(): SettlingRead {
+  const reads = new Map<Element, Animation[]>();
+  return root => {
+    let animations = reads.get(root);
+    if (animations === undefined) {
+      animations = settlingAnimations(root);
+      reads.set(root, animations);
+    }
+    return animations;
+  };
 }
 
 /** The properties whose animation moves or resizes a box on screen. */
@@ -885,8 +962,9 @@ function measure(): void {
     results.push({watch, insets: measureOne(watch, candidates).insets});
   }
   // Writes.
+  const readSettling = readOncePerRoot();
   for (const {watch, insets} of results) {
-    deliver(watch, insets);
+    deliver(watch, insets, readSettling);
   }
   if (pending.size > 0) {
     requestFrame();
@@ -1107,7 +1185,8 @@ function isNearerNeighbour(
       press.y,
     );
     isNearer ||= neighbours.some(
-      rect => distanceTo(rect, press.x, press.y) < own,
+      ({element: neighbour, rect}) =>
+        distanceTo(rect, press.x, press.y) < own && takesTaps(neighbour),
     );
     // The press still scales the control, so these insets read a scaled box.
     // A pass after the press's motion ends takes the insets instead.
@@ -1325,8 +1404,9 @@ function onPointerChange(): void {
     return;
   }
   stopObserving();
+  const readSettling = readOncePerRoot();
   for (const entry of watched.values()) {
-    entry.watches.forEach(watch => deliver(watch, NO_HIT_INSETS));
+    entry.watches.forEach(watch => deliver(watch, NO_HIT_INSETS, readSettling));
   }
 }
 
@@ -1382,6 +1462,7 @@ export function resetHitAreaForTests(): void {
 /**
  * Keeps `element`'s hit insets live until the returned function runs:
  * `onInsets` hears each change (typically `writeHitInsets` on the control).
+ * A pass also gives it a read of settling animations that its writes share.
  * Where the primary pointer is not coarse, the insets are 0, and only the
  * pointer query is listened to. Where it is, the shared per-frame pass
  * measures the element while it is on screen. It measures again on a resize
@@ -1391,7 +1472,7 @@ export function resetHitAreaForTests(): void {
  */
 export function watchHitArea(
   element: Element,
-  onInsets: (insets: HitInsets) => void,
+  onInsets: (insets: HitInsets, readSettling?: SettlingRead) => void,
   {
     minSize = MIN_TOUCH_TARGET,
     ownsDescendantTouches = false,

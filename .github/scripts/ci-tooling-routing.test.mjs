@@ -352,10 +352,16 @@ describe('Node-tooling CI routing', () => {
     expect(ungated(ci.jobs['test-build'].if)).toBe(
       "github.event_name != 'workflow_dispatch'",
     );
+    // Two parts, each inside ten minutes on its runner: the Build package's
+    // contracts, and the vibe-tests fixtures that share its Playwright setup.
+    expect(ci.jobs['test-build'].strategy).toEqual({
+      'fail-fast': false,
+      matrix: {part: ['contracts', 'fixtures']},
+    });
     expect(
       step(ci.jobs['test-build'], 'Run Build package contracts'),
     ).toMatchObject({
-      if: BROAD_NOT_LAB,
+      if: `${BROAD_NOT_LAB} && matrix.part == 'contracts'`,
       run: 'pnpm test:build',
     });
     // The Build package's owner keeps its contracts. The list lives once, in
@@ -377,12 +383,14 @@ describe('Node-tooling CI routing', () => {
         packageScripts: JSON.parse(read('packages/build/package.json')).scripts,
       }),
     ).toEqual([]);
-    // The vibe-tests fixtures share test-build's Playwright runner.
+    // The vibe-tests fixtures run in test-build's fixtures part.
     for (const name of [
       'Verify canonical setup compositions',
       'Verify guest fixture contrast',
     ]) {
-      expect(step(ci.jobs['test-build'], name).if).toBe(BROAD_NOT_LAB);
+      expect(step(ci.jobs['test-build'], name).if).toBe(
+        `${BROAD_NOT_LAB} && matrix.part == 'fixtures'`,
+      );
     }
     // No size-base job: Main keeps the merge base's sizes, and build-storybook
     // builds the base only when Main kept no record.
