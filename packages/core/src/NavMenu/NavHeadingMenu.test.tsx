@@ -814,7 +814,10 @@ describe('NavHeadingMenu focus ring', () => {
     );
     for (const item of screen.getAllByRole('menuitem')) {
       const ring = itemDeclarations(item);
-      expect(ring).toContain('outline-width: var(--focus-outline-width)');
+      // The shared ring scales its width by Core's keyboard-only switch.
+      expect(ring).toContain(
+        'outline-width: calc(var(--focus-outline-width) * var(--_focus-ring,1))',
+      );
       expect(ring).toContain('outline-style: var(--focus-outline-style)');
       expect(ring).toContain('outline-color: var(--focus-outline-color)');
       expect(itemDeclarations(item, '').replace(/\s+/g, '')).toContain(

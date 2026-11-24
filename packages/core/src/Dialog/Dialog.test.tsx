@@ -1235,7 +1235,9 @@ describe('Dialog', () => {
             (_call, index) => focus.mock.contexts[index] === field,
           ),
         ).toEqual([[{preventScroll: true}]]);
-        expect(blur.mock.contexts).not.toContain(field);
+        // A boolean, so a failure never asks chai to print the second
+        // document's element.
+        expect(blur.mock.contexts.includes(field)).toBe(false);
         focus.mockRestore();
         blur.mockRestore();
       });

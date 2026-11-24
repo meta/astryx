@@ -28,6 +28,15 @@ const FOCUS_OUTLINE_COLOR = focusVars['--focus-outline-color'];
 
 const FOCUS_OUTLINE_OFFSET = focusVars['--focus-outline-offset'];
 
+// Core's private `--_focus-ring` switch is 0 after a pointer press. Browsers
+// match `:focus-visible` on a text field, or after focus by script, even right
+// after a tap or a click, so each ring scales its width by the switch. The
+// store in `interactionModality.ts` sets it on each document's root. Unset, as
+// in server markup or before any input, it reads as 1.
+const RING_ON = 'var(--_focus-ring, 1)';
+const GATED_OUTLINE_WIDTH = `calc(${FOCUS_OUTLINE_WIDTH} * ${RING_ON})`;
+const GATED_OUTLINE = `${GATED_OUTLINE_WIDTH} ${FOCUS_OUTLINE_STYLE} ${FOCUS_OUTLINE_COLOR}`;
+
 /**
  * The ring as a single `outline` value, for reading it at runtime — an
  * assertion, or an element styled imperatively.
@@ -93,11 +102,52 @@ export const FOCUS_OUTLINE_PARTS_NONE = {
   outlineOffset: '',
 } as const;
 
+type RingClass<P extends string, V> = stylex.StyleXClassNameFor<P, V>;
+type RingStyles = Readonly<{
+  readonly outlineWidth: RingClass<'outlineWidth', '0' | '2px'>;
+  readonly outlineStyle: RingClass<'outlineStyle', 'none' | 'solid'>;
+  readonly outlineColor: RingClass<
+    'outlineColor',
+    'var(--color-accent)' | null
+  >;
+  readonly outlineOffset: RingClass<'outlineOffset', '0' | '3px'>;
+}>;
+
+/**
+ * The public type the ring styles had before the keyboard gate: the gate is
+ * private protocol, so the widths' `calc()` does not change it.
+ */
+type FocusOutlineStyles = Readonly<{
+  readonly focusVisible: RingStyles;
+  readonly focusWithin: RingStyles;
+  readonly focusWithinFirstChild: RingStyles;
+  readonly focusWithinCombobox: RingStyles;
+  readonly suppressed: Readonly<{
+    readonly outlineWidth: RingClass<'outlineWidth', '0'>;
+    readonly outlineStyle: RingClass<'outlineStyle', 'none'>;
+    readonly outlineOffset: RingClass<'outlineOffset', '0'>;
+  }>;
+  readonly publishFocusVisibleVars: Readonly<{
+    readonly '--_focus-outline': RingClass<'--_focus-outline', string>;
+    readonly '--_focus-outline-offset': RingClass<
+      '--_focus-outline-offset',
+      '0' | '3px'
+    >;
+  }>;
+  readonly focusWithinOrPublished: Readonly<{
+    readonly outline: RingClass<'outline', string>;
+    readonly outlineOffset: RingClass<
+      'outlineOffset',
+      '3px' | 'var(--_focus-outline-offset, 0)'
+    >;
+  }>;
+}>;
+
 export const focusOutlineStyles = stylex.create({
   focusVisible: {
     outlineWidth: {
       default: '0',
-      ':focus-visible': focusOutlineLonghands.outlineWidth,
+      ':focus-visible': GATED_OUTLINE_WIDTH,
     },
     outlineStyle: {
       default: 'none',
@@ -112,7 +162,7 @@ export const focusOutlineStyles = stylex.create({
   focusWithin: {
     outlineWidth: {
       default: '0',
-      ':has(:focus-visible)': focusOutlineLonghands.outlineWidth,
+      ':has(:focus-visible)': GATED_OUTLINE_WIDTH,
     },
     outlineStyle: {
       default: 'none',
@@ -141,7 +191,7 @@ export const focusOutlineStyles = stylex.create({
   focusWithinFirstChild: {
     outlineWidth: {
       default: '0',
-      ':has(> :first-child:focus-visible)': focusOutlineLonghands.outlineWidth,
+      ':has(> :first-child:focus-visible)': GATED_OUTLINE_WIDTH,
     },
     outlineStyle: {
       default: 'none',
@@ -165,8 +215,7 @@ export const focusOutlineStyles = stylex.create({
   focusWithinCombobox: {
     outlineWidth: {
       default: '0',
-      ':has(> [role="combobox"]:focus-visible)':
-        focusOutlineLonghands.outlineWidth,
+      ':has(> [role="combobox"]:focus-visible)': GATED_OUTLINE_WIDTH,
     },
     outlineStyle: {
       default: 'none',
@@ -200,7 +249,7 @@ export const focusOutlineStyles = stylex.create({
   publishFocusVisibleVars: {
     '--_focus-outline': {
       default: 'none',
-      ':focus-visible': FOCUS_OUTLINE,
+      ':focus-visible': GATED_OUTLINE,
     },
     '--_focus-outline-offset': {
       default: '0',
@@ -210,14 +259,14 @@ export const focusOutlineStyles = stylex.create({
   focusWithinOrPublished: {
     outline: {
       default: 'var(--_focus-outline, none)',
-      ':has(:focus-visible)': FOCUS_OUTLINE,
+      ':has(:focus-visible)': GATED_OUTLINE,
     },
     outlineOffset: {
       default: 'var(--_focus-outline-offset, 0)',
       ':has(:focus-visible)': FOCUS_OUTLINE_OFFSET,
     },
   },
-});
+}) as unknown as FocusOutlineStyles;
 
 // StyleX does not expose a stable public input type for stylex.props();
 // keep this helper permissive so it mirrors stylex.props() itself.

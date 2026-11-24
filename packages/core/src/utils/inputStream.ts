@@ -3,7 +3,8 @@
 /**
  * @file inputStream.ts
  * @input A window, and subscribers to its input events (the press feedback
- *   controller, the gesture host, the keyboard module)
+ *   controller, the gesture host, the keyboard module, the interaction
+ *   modality store)
  * @output subscribeInput. Its readers: getLastPointerType, the latest
  *   pointer's type; getLastMousePoint, the latest mouse point; getDownPresses,
  *   each finger and pen press that is down; getTouches, the fingers on the

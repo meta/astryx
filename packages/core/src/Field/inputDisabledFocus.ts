@@ -11,6 +11,15 @@
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 
+// A tap or a click on a disabled field moves focus in. Browsers match
+// `:focus-visible` on a text field whatever the input. So the ring follows
+// Core's private `--_focus-ring` switch, which is 0 after a pointer press and
+// 1 when unset: its border mixes back to the rest color, and its inset shadow
+// loses its width.
+const RING_ON = 'var(--_focus-ring, 1)';
+const RING_BORDER = `color-mix(in srgb, ${colorVars['--color-accent']} calc(${RING_ON} * 100%), ${colorVars['--color-border-emphasized']})`;
+const RING_SHADOW = `inset 0px 0px 0px calc(2px * ${RING_ON}) ${colorVars['--color-accent-muted']}`;
+
 export const inputDisabledFocusStyles = stylex.create({
   // The shared disabled style drops the focus ring; restore it while the field's
   // own control, a direct child, has keyboard focus (`spec:AST-085` FR6), so a
@@ -19,7 +28,7 @@ export const inputDisabledFocusStyles = stylex.create({
     borderColor: {
       default: colorVars['--color-border-emphasized'],
       ':has(> [aria-disabled="true"]:focus-visible)': {
-        default: colorVars['--color-accent'],
+        default: RING_BORDER,
         // Forced colors repaint author borders in one system color and drop
         // the inset shadow; Highlight keeps the focused field visible.
         '@media (forced-colors: active)': 'Highlight',
@@ -27,7 +36,7 @@ export const inputDisabledFocusStyles = stylex.create({
     },
     boxShadow: {
       default: 'none',
-      ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+      ':has(> [aria-disabled="true"]:focus-visible)': RING_SHADOW,
     },
   },
   // The same ring for a field whose input sits deeper than the wrapper's
@@ -37,7 +46,7 @@ export const inputDisabledFocusStyles = stylex.create({
     borderColor: {
       default: colorVars['--color-border-emphasized'],
       ':has(input[aria-disabled="true"]:focus-visible)': {
-        default: colorVars['--color-accent'],
+        default: RING_BORDER,
         // Forced colors repaint author borders in one system color and drop
         // the inset shadow; Highlight keeps the focused field visible.
         '@media (forced-colors: active)': 'Highlight',
@@ -45,7 +54,7 @@ export const inputDisabledFocusStyles = stylex.create({
     },
     boxShadow: {
       default: 'none',
-      ':has(input[aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+      ':has(input[aria-disabled="true"]:focus-visible)': RING_SHADOW,
     },
   },
 
@@ -73,7 +82,7 @@ export const inputDisabledFocusStyles = stylex.create({
     borderColor: {
       default: colorVars['--color-border-emphasized'],
       ':focus-within': {
-        default: colorVars['--color-accent'],
+        default: RING_BORDER,
         // Forced colors repaint author borders in one system color and drop
         // the inset shadow; Highlight keeps the focused field visible.
         '@media (forced-colors: active)': 'Highlight',
@@ -81,7 +90,7 @@ export const inputDisabledFocusStyles = stylex.create({
     },
     boxShadow: {
       default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+      ':focus-within': RING_SHADOW,
     },
   },
   // The same ring for a field that restores it while its text input has focus
@@ -90,7 +99,7 @@ export const inputDisabledFocusStyles = stylex.create({
     borderColor: {
       default: colorVars['--color-border-emphasized'],
       ':has(input:focus)': {
-        default: colorVars['--color-accent'],
+        default: RING_BORDER,
         // Forced colors repaint author borders in one system color and drop
         // the inset shadow; Highlight keeps the focused field visible.
         '@media (forced-colors: active)': 'Highlight',
@@ -98,7 +107,7 @@ export const inputDisabledFocusStyles = stylex.create({
     },
     boxShadow: {
       default: 'none',
-      ':has(input:focus)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+      ':has(input:focus)': RING_SHADOW,
     },
   },
 });

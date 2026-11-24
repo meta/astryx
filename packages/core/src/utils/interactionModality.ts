@@ -4,7 +4,8 @@
 
 /**
  * @file interactionModality.ts
- * @input Global pointerdown/keydown events
+ * @input Global pointerdown/keydown events, and focus and the window's blur
+ *   through the input stream
  * @output useInteractionModalityTracking, useInteractionModalityTrackingFor,
  *   and getInteractionModality, which reads how the user last interacted in a
  *   document, and isTextEntrySincePointer, which reads whether every key
@@ -34,6 +35,7 @@ import {
   type RefObject,
 } from 'react';
 import {isTextEntryControl} from '../keyboard/keyboardHeight';
+import {subscribeInput} from './inputStream';
 
 export type InteractionModality = 'keyboard' | 'pointer';
 
@@ -49,7 +51,88 @@ type InteractionModalityStore = {
   consumers?: number;
   onPointerDown: () => void;
   onKeyDown: (event: KeyboardEvent) => void;
+  /**
+   * Where focus went when it left this document's own elements: into a child
+   * frame, or out of the window. Undefined in a store that an older bundle
+   * made.
+   */
+  focusAway?: 'frame' | 'window' | null;
+  /** The element that had focus when it left the window. */
+  focusLeftFrom?: Element | null;
+  onFocusIn?: (event: FocusEvent) => void;
+  onWindowBlur?: (event: FocusEvent) => void;
+  /** Whether the window's blur is heard: from the first pointer press on. */
+  isHearingWindow?: boolean;
+  /** Ends the input-stream subscription for focus that comes in. */
+  stopFocusIn?: (() => void) | null;
+  /** Ends the input-stream subscription for the window's blur. */
+  stopWindowBlur?: (() => void) | null;
+  /** The frame request that turns the rings back on, while one waits. */
+  ringsOnFrame?: number | null;
 };
+
+// Core's private ring switch. The shared rings read it as
+// `var(--_focus-ring, 1)`.
+const FOCUS_RING_PROPERTY = '--_focus-ring';
+
+/**
+ * Turn the shared focus rings off after a pointer press, and back on (by
+ * dropping the override) when a key makes the modality keyboard again.
+ */
+function setFocusRings(targetDocument: Document, isOn: boolean): void {
+  const root = targetDocument.documentElement as HTMLElement | null;
+  if (root?.style == null) {
+    return;
+  }
+  const store = getStore(targetDocument);
+  const view = targetDocument.defaultView;
+  if (store.ringsOnFrame != null) {
+    view?.cancelAnimationFrame(store.ringsOnFrame);
+    store.ringsOnFrame = null;
+  }
+  if (!isOn) {
+    root.style.setProperty(FOCUS_RING_PROPERTY, '0');
+    return;
+  }
+  if (root.style.getPropertyValue(FOCUS_RING_PROPERTY) === '') {
+    return;
+  }
+  // The rings come back at the start of the next frame, so they still show
+  // in the first frame painted after the key. A change to the root's style
+  // in the key's own task makes the browser lay out again when that key
+  // also closes a layer and moves focus.
+  if (view?.requestAnimationFrame == null) {
+    root.style.removeProperty(FOCUS_RING_PROPERTY);
+    return;
+  }
+  store.ringsOnFrame = view.requestAnimationFrame(() => {
+    store.ringsOnFrame = null;
+    root.style.removeProperty(FOCUS_RING_PROPERTY);
+  });
+}
+
+/**
+ * Hear the window's blur while the rings are off: only then can focus that
+ * leaves and comes back need them turned on again.
+ */
+function hearWindow(
+  targetDocument: Document,
+  store: InteractionModalityStore,
+): void {
+  if (
+    !store.isListening ||
+    store.isHearingWindow === true ||
+    store.onWindowBlur == null
+  ) {
+    return;
+  }
+  const view = targetDocument.defaultView;
+  if (view == null) {
+    return;
+  }
+  store.isHearingWindow = true;
+  store.stopWindowBlur = subscribeInput(view, 'blur', store.onWindowBlur);
+}
 
 const interactionModalityStoreKey = Symbol.for(
   '@astryxdesign/core/interaction-modality/v1',
@@ -74,17 +157,58 @@ function getStore(targetDocument: Document): InteractionModalityStore {
     onPointerDown: () => {
       store.modality = 'pointer';
       store.isTextEntrySincePointer = true;
+      store.focusAway = null;
+      setFocusRings(targetDocument, false);
+      hearWindow(targetDocument, store);
     },
     onKeyDown: event => {
-      // Modifier-only presses are not navigation — holding Shift before a
-      // click must not turn that click into "keyboard".
+      // A key with Meta, Alt or Control held is a shortcut, so it leaves the
+      // modality alone. Tab with them still moves focus (Safari's Option+Tab),
+      // so it shows the rings.
       if (event.metaKey || event.altKey || event.ctrlKey) {
+        if (event.key === 'Tab') {
+          setFocusRings(targetDocument, true);
+        }
         return;
       }
       store.modality = 'keyboard';
+      setFocusRings(targetDocument, true);
       if (!isTextEntryKey(event)) {
         store.isTextEntrySincePointer = false;
       }
+    },
+    // Focus that leaves for a child frame or the browser's own interface can
+    // come back by keyboard, with no key event in this document. Coming back
+    // with no pointer press here first shows the rings. The window giving
+    // focus back to the element it left from is a restore, not a move.
+    onWindowBlur: event => {
+      if (event.target !== targetDocument.defaultView) {
+        return;
+      }
+      const left = targetDocument.activeElement;
+      store.focusAway =
+        left != null && (left.tagName === 'IFRAME' || left.tagName === 'FRAME')
+          ? 'frame'
+          : 'window';
+      store.focusLeftFrom = left;
+    },
+    onFocusIn: event => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        (target.tagName === 'IFRAME' || target.tagName === 'FRAME')
+      ) {
+        store.focusAway = 'frame';
+        return;
+      }
+      if (
+        store.focusAway === 'frame' ||
+        (store.focusAway === 'window' && target !== store.focusLeftFrom)
+      ) {
+        setFocusRings(targetDocument, true);
+      }
+      store.focusAway = null;
+      store.focusLeftFrom = null;
     },
   };
   Object.defineProperty(singletonDocument, interactionModalityStoreKey, {
@@ -148,6 +272,17 @@ function setListening(
       capture: true,
       passive: true,
     });
+    // A store an older bundle made has no focus listener.
+    const view = targetDocument.defaultView;
+    if (store.onFocusIn != null && view != null) {
+      store.stopFocusIn = subscribeInput(view, 'focusin', store.onFocusIn);
+    }
+    // Listening that resumes while a press has the rings off, as when a
+    // consumer releases and holds again in one commit, hears the window too.
+    const root = targetDocument.documentElement as HTMLElement | null;
+    if (root?.style?.getPropertyValue(FOCUS_RING_PROPERTY) === '0') {
+      hearWindow(targetDocument, store);
+    }
   } else {
     targetDocument.removeEventListener('pointerdown', store.onPointerDown, {
       capture: true,
@@ -155,6 +290,13 @@ function setListening(
     targetDocument.removeEventListener('keydown', store.onKeyDown, {
       capture: true,
     });
+    store.stopFocusIn?.();
+    store.stopFocusIn = null;
+    if (store.isHearingWindow === true) {
+      store.isHearingWindow = false;
+      store.stopWindowBlur?.();
+      store.stopWindowBlur = null;
+    }
   }
 }
 
@@ -193,6 +335,14 @@ function trackInteractionModalityIn(targetDocument: Document): () => void {
     store.consumers = (store.consumers ?? 1) - 1;
     if (store.consumers === 0) {
       setListening(targetDocument, store, false);
+      // With no listener left, nothing could turn the rings back on, so drop
+      // the override. A consumer that releases and holds again in one commit
+      // keeps it.
+      queueMicrotask(() => {
+        if ((store.consumers ?? 0) === 0) {
+          setFocusRings(targetDocument, true);
+        }
+      });
     }
   };
 }

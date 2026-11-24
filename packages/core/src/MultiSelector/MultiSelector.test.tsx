@@ -353,7 +353,7 @@ describe('MultiSelector', () => {
           ring: {
             boxShadow: {
               default: null,
-              ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+              ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * var(--_focus-ring, 1)) ${colorVars['--color-accent-muted']}`,
             },
           },
         }).ring,
