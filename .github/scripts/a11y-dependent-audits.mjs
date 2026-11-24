@@ -281,7 +281,7 @@ function planEverything(specs, seconds) {
 export function deferredMessage(plan, {repo, pr, head}) {
   const command = `gh workflow run audits-at-head.yml -R ${repo} -f pr=${pr} -f head=${head}`;
   return {
-    annotation: `::warning title=Audits not yet run::${plan.deferred.length} owed audit spec files do not fit four legs of ten minutes. Dispatch audits-at-head for this head: it runs only the audits this change owes, at this head, and merge-guard accepts its record. ${command}`,
+    annotation: `::warning title=Audits not yet run::${plan.deferred.length} owed audit spec files did not run: four legs of ten minutes cannot hold every owed audit. Dispatch audits-at-head for this head: it runs only the audits this change owes, at this head, and merge-guard accepts its record. ${command}`,
     summary: `Not yet run (${plan.deferred.length}). Dispatch audits-at-head for this head; it runs only the audits this change owes, at this head:\n\n\`${command}\``,
   };
 }

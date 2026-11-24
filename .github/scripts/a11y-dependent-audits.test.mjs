@@ -320,7 +320,7 @@ describe('an undecided scope', () => {
     const command =
       'gh workflow run audits-at-head.yml -R owner/repo -f pr=42 -f head=abc123';
     expect(message.annotation).toBe(
-      `::warning title=Audits not yet run::2 owed audit spec files do not fit four legs of ten minutes. Dispatch audits-at-head for this head: it runs only the audits this change owes, at this head, and merge-guard accepts its record. ${command}`,
+      `::warning title=Audits not yet run::2 owed audit spec files did not run: four legs of ten minutes cannot hold every owed audit. Dispatch audits-at-head for this head: it runs only the audits this change owes, at this head, and merge-guard accepts its record. ${command}`,
     );
     expect(message.summary).toBe(
       `Not yet run (2). Dispatch audits-at-head for this head; it runs only the audits this change owes, at this head:\n\n\`${command}\``,
