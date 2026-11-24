@@ -6,7 +6,7 @@
  * @input Controlled family member records
  * @output A three-field ListInput (name, relationship, date of birth) whose
  *   records stack their fields when the list is narrow
- * @position Copyable Lab ListInput example
+ * @position Copyable ListInput example
  */
 
 import {useState} from 'react';
@@ -16,7 +16,7 @@ import {VStack} from '@astryxdesign/core/Layout';
 import {Selector} from '@astryxdesign/core/Selector';
 import {pixel, proportional} from '@astryxdesign/core/Table';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {ListInput, type ListInputColumn} from '@astryxdesign/lab';
+import {ListInput, type ListInputColumn} from '@astryxdesign/core/ListInput';
 
 type FamilyMember = {
   id: string;

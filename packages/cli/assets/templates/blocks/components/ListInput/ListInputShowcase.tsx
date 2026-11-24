@@ -6,7 +6,7 @@
  * @input Controlled tag records and blur-tracked fields
  * @output A reorderable ListInput of tag options with field, record, and list
  *   validation
- * @position Lab ListInput's docsite showcase and copyable CLI block
+ * @position ListInput's docsite showcase and copyable CLI block
  */
 
 import {useMemo, useState} from 'react';
@@ -15,7 +15,7 @@ import {createReorderable} from '@astryxdesign/core';
 import {Selector} from '@astryxdesign/core/Selector';
 import {proportional} from '@astryxdesign/core/Table';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {ListInput, type ListInputColumn} from '@astryxdesign/lab';
+import {ListInput, type ListInputColumn} from '@astryxdesign/core/ListInput';
 
 type TagOption = {id: string; color: string; label: string};
 

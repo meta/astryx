@@ -14,7 +14,7 @@ import {useMemo, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {createReorderable} from '@astryxdesign/core';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {ListInput, type ListInputColumn} from '@astryxdesign/lab';
+import {ListInput, type ListInputColumn} from '@astryxdesign/core/ListInput';
 
 const meta: Meta = {
   title: 'A11y/ListInput',

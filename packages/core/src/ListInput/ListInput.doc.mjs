@@ -5,6 +5,8 @@
 export const docs = {
   name: 'ListInput',
   displayName: 'List Input',
+  // Keeps the registry route ListInput had as a canary-only Lab component.
+  registry: {aliases: ['lab/list-input']},
   group: 'ListInput',
   category: 'Form Controls',
   keywords: [

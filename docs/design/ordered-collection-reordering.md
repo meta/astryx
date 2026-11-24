@@ -24,7 +24,11 @@ deciding_specs: [spec:AST-103]
 
 ```json
 {
-  "paths": ["packages/lab/src/ListInput/**", "packages/lab/src/TransferList/**"]
+  "paths": [
+    "packages/core/src/ListInput/**",
+    "packages/lab/src/ListInput/**",
+    "packages/lab/src/TransferList/**"
+  ]
 }
 ```
 
