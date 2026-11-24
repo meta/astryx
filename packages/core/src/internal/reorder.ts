@@ -9,8 +9,8 @@
  *   as a staged selector that aims them at its draft. The owner's `start`
  *   still finds its list. Neither loads the reorder engine: it comes with the
  *   owner's object.
- *   It also gives List's reorder session for rows that are not ListItems,
- *   for Lab's ListInput: `useListReorderScope` and `ListReorderScope`. The
+ *   It also gives List's reorder session for rows that are not ListItems:
+ *   `useListReorderScope` and `ListReorderScope`. The
  *   handle each row ends with is the session's `Handle`: it comes with the
  *   owner's object, so this entry loads no reorder code. A Lab collection
  *   tells the handle from its own controls with `isReorderHandle`

@@ -6,7 +6,7 @@
  * @input Controlled team allocation records
  * @output A ListInput pairing a team Selector with a fixed-width percentage
  *   NumberInput, checking that teams are unique and the total is 100%
- * @position Copyable Lab ListInput example
+ * @position Copyable ListInput example
  */
 
 import {useState} from 'react';
@@ -14,7 +14,7 @@ import {VStack} from '@astryxdesign/core/Layout';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
 import {Selector} from '@astryxdesign/core/Selector';
 import {pixel, proportional} from '@astryxdesign/core/Table';
-import {ListInput, type ListInputColumn} from '@astryxdesign/lab';
+import {ListInput, type ListInputColumn} from '@astryxdesign/core/ListInput';
 
 type Allocation = {id: string; team: string; percent: number | null};
 

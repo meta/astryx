@@ -633,11 +633,6 @@
       "aliases": []
     },
     {
-      "name": "component-lab-list-input",
-      "path": "components/lab/list-input",
-      "aliases": []
-    },
-    {
       "name": "component-lab-log-stream",
       "path": "components/lab/log-stream",
       "aliases": []
@@ -856,6 +851,13 @@
       "name": "component-list",
       "path": "components/list",
       "aliases": []
+    },
+    {
+      "name": "component-list-input",
+      "path": "components/list-input",
+      "aliases": [
+        "components/lab/list-input"
+      ]
     },
     {
       "name": "component-list-item",

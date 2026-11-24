@@ -210,7 +210,7 @@
     "reason": "Toolbar start, center, and end slots use CSS flex/grid flow, margin-inline-start, and logical container padding, so visual placement follows document direction without component branching. Its horizontal ArrowLeft/ArrowRight handling means previous/next control in the ARIA toolbar pattern rather than locale-specific content direction; owned glyphs are caller content."
   },
   {
-    "component": "lab/ListInput",
+    "component": "core/ListInput",
     "reason": "ListInput is a vertical record editor. Keyboard reordering uses ArrowUp/ArrowDown/Home/End, pointer dragging follows the physical pointer while preserving source direction in the preview, and add/remove motion is block-axis. Its grid and controls follow CSS direction with no component-owned horizontal semantic to mirror."
   },
   {

@@ -3118,6 +3118,14 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(83.7 77% 25%)',
       },
     },
+    'list-input': {
+      base: {
+        backgroundColor: 'hsl(225.6 75% 53%)',
+        color: 'hsl(97.9 78% 12%)',
+        borderColor: 'hsl(245.8 86% 25%)',
+        outlineColor: 'hsl(94.7 75% 25%)',
+      },
+    },
     'list-item': {
       base: {
         backgroundColor: 'hsl(335.4 90% 53%)',

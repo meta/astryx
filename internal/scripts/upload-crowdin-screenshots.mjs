@@ -856,7 +856,7 @@ const TARGETS = [
   },
   {
     name: 'listinput-loading',
-    storyId: 'lab-listinput--loading',
+    storyId: 'core-listinput--loading',
     viewport: {width: 1200, height: 800},
     interact: async () => {},
     selector: null,
@@ -905,7 +905,7 @@ const TARGETS = [
   },
   {
     name: 'listinput-empty-mailing-list',
-    storyId: 'lab-listinput--empty-mailing-list',
+    storyId: 'core-listinput--empty-mailing-list',
     viewport: {width: 1200, height: 800},
     interact: async () => {},
     selector: null,

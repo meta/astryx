@@ -5,6 +5,8 @@
 export const docs = {
   name: 'ListInput',
   displayName: 'List Input',
+  // Keeps the registry route ListInput had as a canary-only Lab component.
+  registry: {aliases: ['lab/list-input']},
   group: 'ListInput',
   category: 'Form Controls',
   keywords: [
@@ -58,7 +60,7 @@ export const docs = {
       name: 'columns',
       type: 'ListInputColumn<T>[]',
       description:
-        'Consistent simple fields shown for every record. Use each column width with proportional() or pixel() from @astryxdesign/core/Table to tune the width spread. ListInput owns the visible primary-tone column labels while renderer labels remain semantically available to assistive technology. At 640px or narrower, fields stack, every record shows its field labels, record groups use 32px vertical separation, and row actions align beside the first field. Renderers receive isLabelHidden, complete scoped validation status, statusVariant, and updateItem.',
+        "Consistent simple fields shown for every record. Use each column width with proportional() or pixel() from @astryxdesign/core/Table to tune the width spread. ListInput owns the visible primary-tone column labels while renderer labels remain semantically available to assistive technology. At 640px or narrower, fields stack, every record shows its field labels, record groups use 32px vertical separation, and row actions align beside the first field. Renderers receive isLabelHidden, complete scoped validation status (type 'error' | 'warning' | 'success', with an optional message), statusVariant, and updateItem.",
       required: true,
     },
     {
@@ -75,19 +77,19 @@ export const docs = {
     },
     {
       name: 'status',
-      type: 'InputStatus',
+      type: "{type: 'error' | 'warning' | 'success', message?: string}",
       description:
         'List-level validation status displayed for the complete collection. An error marks the collection invalid and associates its message with the input.',
     },
     {
       name: 'getItemStatus',
-      type: '(item: T, index: number) => InputStatus | undefined',
+      type: "(item: T, index: number) => {type: 'error' | 'warning' | 'success', message?: string} | undefined",
       description:
         'Returns validation status for a complete record, such as an invalid combination of otherwise valid fields.',
     },
     {
       name: 'getFieldStatus',
-      type: '(item: T, columnKey: string, index: number) => InputStatus | undefined',
+      type: "(item: T, columnKey: string, index: number) => {type: 'error' | 'warning' | 'success', message?: string} | undefined",
       description:
         'Returns validation status for one field. The renderer receives the complete status plus statusVariant="tooltip" and should forward both to its Astryx input so the native status affordance owns styling, description, keyboard access, and tooltip behavior without changing row height.',
     },

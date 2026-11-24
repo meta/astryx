@@ -2,7 +2,7 @@
 
 /**
  * @file ListInputReorder.a11y.chromium.spec.ts
- * @input The Lab/ListInput › Tag Options story and the A11y/ListInput ›
+ * @input The Core/ListInput › Tag Options story and the A11y/ListInput ›
  *   Fixed record fixture in a built Storybook. Real Chromium touch input
  *   (CDP) and keys on a phone viewport
  * @output Browser evidence that on a touch screen a keyboard move slides the
@@ -65,7 +65,7 @@ async function movingRecords(page: Page) {
       ),
   );
 }
-const STORY = 'lab-listinput--tag-options';
+const STORY = 'core-listinput--tag-options';
 
 test('on a touch screen a keyboard move slides the two records it swaps', async ({
   page,

@@ -62,8 +62,8 @@ describe('brands a swizzled copy shares with the package', () => {
     const pkg = await import('../List/listReorderContext');
     vi.resetModules();
     const copy = await import('../internal/reorder');
-    // A swizzled TransferList or ListInput carries Core's internal reorder
-    // entry and adapts the owner's object with it, for the package List.
+    // A swizzled TransferList carries Core's internal reorder entry and
+    // adapts the owner's object with it, for the package List.
     const reorderable = createReorderable({onReorder: () => {}});
     const adapted = copy.adaptReorderable(reorderable, {onReorder: () => {}});
     expect(

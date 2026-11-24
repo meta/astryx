@@ -244,6 +244,17 @@ const FIXTURES: Readonly<Record<string, (probe: Probe) => ReactElement>> = {
       {...probe}
     />
   ),
+  ListInput: probe => (
+    <Core.ListInput<{id: string}>
+      label="Guests"
+      value={[{id: 'ada'}]}
+      onChange={noop}
+      getItemKey={item => item.id}
+      createItem={() => ({id: 'new'})}
+      columns={[]}
+      {...probe}
+    />
+  ),
   Markdown: probe => <Core.Markdown {...probe}>Text</Core.Markdown>,
   MoreMenu: probe => (
     <Core.MoreMenu items={[{label: 'Edit', onClick: noop}]} {...probe} />
