@@ -11,6 +11,7 @@
 
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type FocusEvent,
@@ -229,6 +230,54 @@ export function useSelectorPresentation({
 
   // The open's failed sheet load closes the open through the latest hide.
   const hideRef = useRef<() => void>(() => {});
+  // Stops the listeners that end a held sheet open: an open made before the
+  // sheet's frame has rendered its list.
+  const stopHeldOpenRef = useRef<(() => void) | null>(null);
+  const stopHeldOpen = useCallback(() => {
+    stopHeldOpenRef.current?.();
+    stopHeldOpenRef.current = null;
+  }, []);
+  // A held open ends when the person moves on: a press outside the trigger,
+  // or focus moving to another element. No sheet then appears later, over
+  // what they turned to. Focus stays where they put it.
+  const holdOpenUntilShown = useCallback(() => {
+    stopHeldOpen();
+    const trigger = triggerRef.current;
+    if (trigger == null) {
+      return;
+    }
+    const drop = () => {
+      stopHeldOpen();
+      if (!isSheetOpenRef.current) {
+        return;
+      }
+      isSheetOpenRef.current = false;
+      setIsSheetOpen(false);
+      onHideRef.current();
+    };
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!event.composedPath().includes(trigger)) {
+        drop();
+      }
+    };
+    const handleFocusOut = (event: {
+      readonly relatedTarget: EventTarget | null;
+    }) => {
+      const next = event.relatedTarget;
+      if (next instanceof Node && !trigger.contains(next)) {
+        drop();
+      }
+    };
+    const doc = trigger.ownerDocument;
+    doc.addEventListener('pointerdown', handlePointerDown, true);
+    trigger.addEventListener('focusout', handleFocusOut);
+    stopHeldOpenRef.current = () => {
+      doc.removeEventListener('pointerdown', handlePointerDown, true);
+      trigger.removeEventListener('focusout', handleFocusOut);
+    };
+  }, [onHideRef, stopHeldOpen, triggerRef]);
+  // Syncs the held-open listeners on the document with unmount.
+  useEffect(() => stopHeldOpen, [stopHeldOpen]);
   const show = useCallback((): boolean => {
     activePresentationHold.take(resolvedPresentation);
     if (resolvedPresentation === 'bottom-sheet') {
@@ -236,6 +285,9 @@ export function useSelectorPresentation({
       onShowRef.current();
       isSheetOpenRef.current = true;
       setIsSheetOpen(true);
+      if (listboxRef.current == null) {
+        holdOpenUntilShown();
+      }
       // A sheet that cannot load drops the open, so the trigger does not
       // report a list that never shows.
       void loadSelectorBottomSheet().then(isLoaded => {
@@ -251,6 +303,8 @@ export function useSelectorPresentation({
     return didShowPopoverRef.current;
   }, [
     activePresentationHold,
+    holdOpenUntilShown,
+    listboxRef,
     onShowRef,
     releaseSheet,
     resetFocusReturn,
@@ -259,6 +313,7 @@ export function useSelectorPresentation({
   ]);
 
   const hide = useCallback(() => {
+    stopHeldOpen();
     if (isSheetOpenRef.current) {
       prepareFocusReturn();
       isSheetOpenRef.current = false;
@@ -267,7 +322,7 @@ export function useSelectorPresentation({
     } else {
       hidePopover();
     }
-  }, [hidePopover, onHideRef, prepareFocusReturn]);
+  }, [hidePopover, onHideRef, prepareFocusReturn, stopHeldOpen]);
   useCommittedRefInto(hideRef, hide);
 
   const handleTriggerFocus = useCallback(
@@ -322,8 +377,12 @@ export function useSelectorPresentation({
       // eslint-disable-next-line react-compiler/react-compiler -- the caller hands over its own ref so that this callback writes it
       listboxRef.current = node;
       setIsListboxMounted(node != null);
+      // The list is shown: the open is no longer held.
+      if (node != null) {
+        stopHeldOpen();
+      }
     },
-    [listboxRef],
+    [listboxRef, stopHeldOpen],
   );
 
   const isOpen = popover.isOpen || isSheetOpen;
