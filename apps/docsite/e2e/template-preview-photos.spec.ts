@@ -49,13 +49,15 @@ for (const {path, width, min} of CASES) {
         (await tile.evaluate(
           (iframe: HTMLIFrameElement) => iframe.offsetWidth,
         ));
-      // A tile's frame loads when it comes near the screen. A frame that has
-      // not loaded has no photos to read, so wait for its page.
+      // A tile's frame loads when it comes near the screen. A frame that is
+      // not complete does not have all of its photos, so wait for its page.
       await tile.scrollIntoViewIfNeeded();
       const tilePage = tile.contentFrame();
-      await expect(
-        tilePage.locator('[data-astryx-theme]').first(),
-      ).toBeAttached();
+      await expect
+        .poll(() =>
+          tilePage.locator('html').evaluate(() => document.readyState),
+        )
+        .toBe('complete');
       const images = tilePage.locator('img[src*="/_next/image"]');
       for (const image of await images.all()) {
         await expect
