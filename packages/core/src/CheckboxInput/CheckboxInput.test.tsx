@@ -616,6 +616,7 @@ describe('CheckboxInput', () => {
       expect(holders()).toHaveLength(1);
       expect(checkbox).toHaveAccessibleDescription(REASON);
       fireEvent.mouseEnter(getRow());
+      fireEvent.pointerMove(getRow());
       await waitFor(() =>
         expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
       );
@@ -736,6 +737,7 @@ describe('CheckboxInput', () => {
         'Terms are managed by your administrator',
       );
       fireEvent.mouseEnter(getRow());
+      fireEvent.pointerMove(getRow());
       await waitFor(() =>
         expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
       );

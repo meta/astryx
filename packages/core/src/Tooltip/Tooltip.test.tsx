@@ -1082,6 +1082,7 @@ describe('Tooltip layer mounts at its first show', () => {
       );
       const trigger = screen.getByRole('button', {name: 'Save'});
       fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
       act(() => {
         vi.advanceTimersByTime(199);
       });
@@ -1128,6 +1129,7 @@ describe('Tooltip layer mounts at its first show', () => {
 
       // Shown: the layer's content alone holds the text and describes it.
       fireEvent.mouseEnter(trigger());
+      fireEvent.pointerMove(trigger());
       act(() => {
         vi.advanceTimersByTime(0);
       });
@@ -1267,6 +1269,7 @@ describe('Tooltip layer mounts at its first show', () => {
     );
     const trigger = screen.getByRole('button', {name: 'Save'});
     fireEvent.mouseEnter(trigger);
+    fireEvent.pointerMove(trigger);
     await waitFor(() => {
       expect(layers()).toHaveLength(1);
     });
@@ -1281,6 +1284,7 @@ describe('Tooltip layer mounts at its first show', () => {
     expect(layers()).toEqual([layer]);
     expect(describedBy(trigger)).toHaveTextContent('Save changes');
     fireEvent.mouseEnter(trigger);
+    fireEvent.pointerMove(trigger);
     await waitFor(() => {
       expect(popoverOpenState.get(layer)).toBe(true);
     });

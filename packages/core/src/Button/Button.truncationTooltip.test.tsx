@@ -264,6 +264,7 @@ describe('Button label truncation tooltip', () => {
       fireEvent.pointerEnter(button, {pointerType: 'mouse'});
       fireEvent.mouseOver(button);
       fireEvent.mouseEnter(button);
+      fireEvent.pointerMove(button);
     });
     await waitFor(() => {
       expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(

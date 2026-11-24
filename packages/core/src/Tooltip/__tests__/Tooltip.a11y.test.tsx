@@ -78,6 +78,7 @@ async function renderState(state: TooltipBindingState): Promise<void> {
   }
   const trigger = triggerFor(state);
   fireEvent.mouseEnter(trigger);
+  fireEvent.pointerMove(trigger);
   await waitFor(() => {
     expect(screen.getByRole('tooltip', {hidden: true})).toBeTruthy();
   });

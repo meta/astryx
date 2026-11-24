@@ -1345,7 +1345,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       // A fresh module graph, so the Tooltip module has not loaded yet.
       vi.resetModules();
       const {Text: FirstText} = await import('./Text');
-      render(
+      const {container} = render(
         <FirstText type="body" maxLines={1}>
           {LABEL}
         </FirstText>,
@@ -1355,10 +1355,10 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       fireEvent.pointerMove(text, {pointerType: 'mouse'});
       fireEvent.pointerDown(text, {pointerType: 'mouse'});
       fireEvent.pointerMove(text, {pointerType: 'mouse'});
-      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+      expect(tooltipMarkerIn(container)).toBeNull();
       await waitFor(
         () => {
-          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+          expect(tooltipMarkerIn(container)).not.toBeNull();
         },
         {timeout: 3000},
       );

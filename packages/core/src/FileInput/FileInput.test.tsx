@@ -1732,6 +1732,9 @@ describe('FileInput status tooltip press', () => {
       const openPicker = vi.spyOn(fileInputEl(), 'click');
       // The status tooltip's layer mounts at its first show.
       fireEvent.mouseEnter(screen.getByRole('button', {name: 'Error details'}));
+      fireEvent.pointerMove(
+        screen.getByRole('button', {name: 'Error details'}),
+      );
       const tooltip = await screen.findByRole('tooltip', h);
       fireEvent.click(within(tooltip).getByText('File must be under 10MB'));
       expect(openPicker).not.toHaveBeenCalled();
