@@ -18,6 +18,8 @@ verified_by:
     packages/core/src/hooks/useFocusTrap.test.tsx,
     packages/core/src/Popover/PopoverPresentation.test.tsx,
     packages/core/src/Popover/__tests__/PopoverTouchMotion.interaction.browser.spec.ts,
+    packages/core/src/Popover/__tests__/OverlayEdges.forcedColors.a11y.chromium.spec.ts,
+    packages/core/src/Popover/usePopover.forcedColorsEdge.test.tsx,
     packages/cli/foundation/discovery/theming-targets.mjs,
     packages/cli/foundation/discovery/theming-targets.test.mjs,
     scripts/check-knowledge.mjs,
