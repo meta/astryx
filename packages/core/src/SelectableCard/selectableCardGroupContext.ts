@@ -7,8 +7,8 @@
  * @input The selection, input and disabled state of a group of cards
  * @output SelectableCardGroupContext: what a group gives each SelectableCard
  *   that its `value` makes a member
- * @position Internal: Lab's SelectableCardGroup provides it through
- *   `@astryxdesign/core/internal/selectable-card`. It is not public API.
+ * @position Private: SelectableCardGroup provides it to its cards. It is not
+ *   public API.
  */
 
 import {createLayerScopedContext} from '../Layer/layerScopedContext';

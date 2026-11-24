@@ -5,10 +5,10 @@ import {useState} from 'react';
 import {Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
 import {SelectableCard} from '@astryxdesign/core/SelectableCard';
-import {SelectableCardGroup} from '@astryxdesign/lab/SelectableCardGroup';
+import {SelectableCardGroup} from '@astryxdesign/core/SelectableCardGroup';
 
 const meta: Meta<typeof SelectableCardGroup> = {
-  title: 'Lab/SelectableCardGroup',
+  title: 'Core/SelectableCardGroup',
   component: SelectableCardGroup,
   tags: ['autodocs'],
   parameters: {

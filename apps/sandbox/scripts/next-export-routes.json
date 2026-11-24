@@ -536,6 +536,8 @@
     "/templates/SegmentedControlShowcase/",
     "/templates/SegmentedControlWithIcons/",
     "/templates/SelectableCardElevated/",
+    "/templates/SelectableCardGroupShippingSpeed/",
+    "/templates/SelectableCardGroupShowcase/",
     "/templates/SelectableCardMulti/",
     "/templates/SelectableCardShowcase/",
     "/templates/SelectorBottomSheet/",

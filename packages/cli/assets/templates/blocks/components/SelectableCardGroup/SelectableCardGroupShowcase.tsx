@@ -5,12 +5,12 @@
 /**
  * @input Three plans, one chosen at a time
  * @output A SelectableCardGroup of plan cards: a radio group with one tab stop
- * @position Lab SelectableCardGroup's docsite showcase and copyable CLI block
+ * @position SelectableCardGroup's docsite showcase and copyable CLI block
  */
 
 import {useState} from 'react';
-import {SelectableCardGroup} from '@astryxdesign/lab';
 import {SelectableCard} from '@astryxdesign/core/SelectableCard';
+import {SelectableCardGroup} from '@astryxdesign/core/SelectableCardGroup';
 import {VStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
 

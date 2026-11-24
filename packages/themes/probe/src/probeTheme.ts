@@ -4355,6 +4355,38 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(50.2 93% 25%)',
       },
     },
+    'selectable-card-group': {
+      base: {
+        backgroundColor: 'hsl(104.2 78% 53%)',
+        color: 'hsl(258.0 78% 12%)',
+        borderColor: 'hsl(184.2 73% 25%)',
+        outlineColor: 'hsl(40.8 79% 25%)',
+      },
+      'orientation:horizontal': {
+        backgroundColor: 'hsl(54.1 83% 59%)',
+        color: 'hsl(353.8 81% 12%)',
+        borderColor: 'hsl(104.9 76% 25%)',
+        outlineColor: 'hsl(30.1 88% 25%)',
+      },
+      'orientation:vertical': {
+        backgroundColor: 'hsl(103.7 84% 48%)',
+        color: 'hsl(3.2 75% 12%)',
+        borderColor: 'hsl(116.2 80% 25%)',
+        outlineColor: 'hsl(23.5 79% 25%)',
+      },
+      'type:single': {
+        backgroundColor: 'hsl(104.0 89% 45%)',
+        color: 'hsl(220.7 92% 12%)',
+        borderColor: 'hsl(184.8 83% 25%)',
+        outlineColor: 'hsl(181.2 94% 25%)',
+      },
+      'type:multiple': {
+        backgroundColor: 'hsl(219.3 77% 55%)',
+        color: 'hsl(123.6 79% 12%)',
+        borderColor: 'hsl(101.0 93% 25%)',
+        outlineColor: 'hsl(268.1 72% 25%)',
+      },
+    },
     selector: {
       base: {
         backgroundColor: 'hsl(242.1 74% 46%)',

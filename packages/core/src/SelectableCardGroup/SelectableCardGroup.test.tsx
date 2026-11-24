@@ -2,7 +2,7 @@
 
 /**
  * @file SelectableCardGroup.test.tsx
- * @input Uses SelectableCardGroup, core SelectableCard, Testing Library
+ * @input Uses SelectableCardGroup, SelectableCard, Testing Library
  * @output Tests the group's semantics and selection
  * @position A single choice is a radio group of native radios sharing a name;
  * several choices are a named group of checkboxes.
@@ -11,7 +11,7 @@
 import {useState} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
-import {SelectableCard} from '@astryxdesign/core/SelectableCard';
+import {SelectableCard} from '../SelectableCard/SelectableCard';
 import {SelectableCardGroup} from './SelectableCardGroup';
 
 const PLANS = ['Basic', 'Pro', 'Team'];

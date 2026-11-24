@@ -4,6 +4,8 @@
 export const docs = {
   name: 'SelectableCardGroup',
   displayName: 'Selectable Card Group',
+  // Keeps the registry route SelectableCardGroup had as a canary-only Lab component.
+  registry: {aliases: ['lab/selectable-card-group']},
   category: 'Form Controls',
   keywords: [
     'card',
@@ -102,6 +104,23 @@ export const docs = {
       type: 'CSSProperties',
       description:
         'Inline styles for the Field box. Same targeting as containerXstyle.',
+    },
+    {
+      name: 'controlXstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles for the group element (role="radiogroup" or role="group") that lays out the cards. Never a card or its input.',
+    },
+    {
+      name: 'controlClassName',
+      type: 'string',
+      description: 'Class name for the group element that lays out the cards.',
+    },
+    {
+      name: 'controlStyle',
+      type: 'CSSProperties',
+      description:
+        'Inline styles for the group element that lays out the cards.',
     },
   ],
   theming: {
@@ -225,6 +244,22 @@ export const docsZh = {
       type: 'CSSProperties',
       description: 'Field 容器的内联样式，作用范围与 containerXstyle 相同。',
     },
+    {
+      name: 'controlXstyle',
+      type: 'StyleXStyles',
+      description:
+        '作用于排列卡片的组元素（role="radiogroup" 或 role="group"）的 StyleX 样式。从不作用于卡片或其输入控件。',
+    },
+    {
+      name: 'controlClassName',
+      type: 'string',
+      description: '排列卡片的组元素的类名。',
+    },
+    {
+      name: 'controlStyle',
+      type: 'CSSProperties',
+      description: '排列卡片的组元素的内联样式。',
+    },
   ],
   theming: {
     targets: [
@@ -258,5 +293,56 @@ export const docsZh = {
         description: '用于导航或操作；这些场景请使用 ClickableCard。',
       },
     ],
+  },
+};
+
+/** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
+export const docsDense = {
+  description:
+    'Set of selectable cards w/ the semantics of its selection: one choice = radio group (one tab stop, arrow keys, position spoken); several = named group of checkboxes. Its cards are SelectableCards, each w/ a `value`.',
+  usage: {
+    description:
+      'Choice among a few rich options shown as cards: plan, appearance, layout. One choice gets the radio-group keyboard; use `multiple` when several cards can be on.',
+    bestPractices: [
+      {
+        guidance: true,
+        description:
+          'Give every card a `label` that names its option; screen readers speak it.',
+      },
+      {
+        guidance: true,
+        description:
+          'Start a single choice w/ a value when there is a sensible default, so Tab lands on it.',
+      },
+      {
+        guidance: false,
+        description:
+          'Put buttons or links inside the cards; the whole card is the radio or checkbox target.',
+      },
+      {
+        guidance: false,
+        description: 'Use for navigation or actions; use ClickableCard.',
+      },
+    ],
+  },
+  propDescriptions: {
+    label: "group's visible label and accessible name",
+    type: "'single' (radio group, default) | 'multiple' (checkboxes)",
+    value: 'chosen value (single, null while none) or values (multiple)',
+    onChange: 'called w/ the chosen value (single) or the new list (multiple)',
+    isLabelHidden: 'hides the label visually; it still names the group',
+    description: 'helper text under the label, linked to the group',
+    htmlName: 'name the value submits under; default: generated',
+    isDisabled: 'disables every card; they stay focusable',
+    orientation: "'horizontal' (wrapping rows, default) | 'vertical'",
+    children: 'SelectableCards, each w/ a `value`',
+    containerXstyle:
+      'StyleX styles for the Field box; no root xstyle/className/style',
+    containerClassName: 'class name for the Field box',
+    containerStyle: 'inline styles for the Field box',
+    controlXstyle:
+      'StyleX styles for the group element that lays out the cards',
+    controlClassName: 'class name for the group element',
+    controlStyle: 'inline styles for the group element',
   },
 };

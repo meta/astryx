@@ -5,12 +5,12 @@
 /**
  * @input Three shipping speeds, each with its delivery time and price
  * @output A vertical SelectableCardGroup whose cards carry a description
- * @position Lab SelectableCardGroup's docsite example and copyable CLI block
+ * @position SelectableCardGroup's docsite example and copyable CLI block
  */
 
 import {useState} from 'react';
-import {SelectableCardGroup} from '@astryxdesign/lab';
 import {SelectableCard} from '@astryxdesign/core/SelectableCard';
+import {SelectableCardGroup} from '@astryxdesign/core/SelectableCardGroup';
 import {HStack, StackItem, VStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
 

@@ -67,6 +67,7 @@ export * from './Grid';
 export * from './Section';
 export * from './SegmentedControl';
 export * from './SelectableCard';
+export * from './SelectableCardGroup';
 export * from './Selector';
 export * from './MultiSelector';
 export * from './Icon';
