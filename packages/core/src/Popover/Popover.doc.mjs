@@ -251,6 +251,11 @@ export const docs = {
       {
         guidance: false,
         description:
+          'Assume the popover rises above the page in a browser without the Popover API. It then opens in place, where content with a higher `z-index`, or a transformed ancestor, can cover or clip it.',
+      },
+      {
+        guidance: false,
+        description:
           "Assume input complexity alone determines the presentation; evaluate the task's focus, space, and interaction requirements.",
       },
       {
@@ -474,6 +479,11 @@ export const docsZh = {
       {
         guidance: false,
         description:
+          'Assume the popover rises above the page in a browser without the Popover API. It then opens in place, where content with a higher `z-index`, or a transformed ancestor, can cover or clip it.',
+      },
+      {
+        guidance: false,
+        description:
           "Assume input complexity alone determines the presentation; evaluate the task's focus, space, and interaction requirements.",
       },
       {
@@ -543,6 +553,11 @@ export const docsDense = {
         guidance: false,
         description:
           'Nest popovers inside other popovers; it creates confusing focus and navigation.',
+      },
+      {
+        guidance: false,
+        description:
+          'Assume popover rises above page without Popover API: it opens in place; higher `z-index` or transformed ancestor can cover/clip it.',
       },
       {
         guidance: false,

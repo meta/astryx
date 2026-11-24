@@ -106,7 +106,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Rely on the Popover API top layer to escape ancestor clipping and stacking, and host the layer near its trigger rather than in the body so it inherits the trigger's theme cascade and keeps a natural focus order.",
+          "Rely on the Popover API top layer to escape ancestor clipping and stacking, and host the layer near its trigger rather than in the body so it inherits the trigger's theme cascade and keeps a natural focus order. Without the Popover API there is no top layer. The layer then opens in place, where content with a higher `z-index`, or a transformed ancestor, can cover or clip it.",
       },
       {
         guidance: false,
@@ -160,7 +160,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Rely on the Popover API top layer to escape clipping/stacking; host the layer near its trigger (not in the body) to inherit the trigger theme cascade and natural focus order.',
+          'Rely on the Popover API top layer to escape clipping/stacking; host the layer near its trigger (not in the body) to inherit the trigger theme cascade and natural focus order. No Popover API: no top layer; the layer opens in place, so a higher `z-index` or a transformed ancestor can cover or clip it.',
       },
       {
         guidance: false,

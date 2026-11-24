@@ -138,6 +138,7 @@ export const docs = {
           style: 'dont',
           items: [
             'Astryx does not guarantee correct layer positioning below Tier 1 (anchor positioning). Closing that gap for a Tier 2 audience is a consumer choice; see below.',
+            'Astryx does not guarantee top-layer stacking without the `Popover` API. A layer then opens in place, where content with a higher `z-index`, or a transformed ancestor, can cover or clip it.',
             'Astryx does not ship a `light-dark()` fallback, so theme colors are not guaranteed below Tier 2.',
           ],
         },
