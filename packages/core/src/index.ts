@@ -33,6 +33,7 @@ export * from './Calendar';
 export * from './Center';
 export * from './CodeBlock';
 export * from './CommentPin';
+export * from './Comments';
 export * from './CommandPalette';
 export * from './ComplexSelector';
 export * from './Chat';

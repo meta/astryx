@@ -329,6 +329,7 @@ const GESTURE_USERS = new Set([
   'AppShell',
   'BottomSheet',
   'CommandPalette',
+  'Comments',
   'ContextMenu',
   'DateInput',
   'Dialog',

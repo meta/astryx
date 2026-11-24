@@ -6,19 +6,19 @@ import {VStack} from '@astryxdesign/core/Layout';
 import {Popover} from '@astryxdesign/core/Popover';
 import {Button} from '@astryxdesign/core/Button';
 import {
-  ChatTypingIndicator,
   CommentThread,
   Comments,
   type CommentThreadData,
   type CommentUser,
-} from '@astryxdesign/lab';
-import CommentComposerShowcase from '../../../packages/lab/blocks/CommentComposerShowcase';
-import CommentThreadInPopover from '../../../packages/lab/blocks/CommentThreadInPopover';
-import CommentThreadShowcase from '../../../packages/lab/blocks/CommentThreadShowcase';
-import CommentsShowcase from '../../../packages/lab/blocks/CommentsShowcase';
+} from '@astryxdesign/core/Comments';
+import {ChatTypingIndicator} from '@astryxdesign/lab';
+import CommentComposerShowcase from '../../../packages/cli/assets/templates/blocks/components/CommentComposer/CommentComposerShowcase';
+import CommentThreadInPopover from '../../../packages/cli/assets/templates/blocks/components/CommentThread/CommentThreadInPopover';
+import CommentThreadShowcase from '../../../packages/cli/assets/templates/blocks/components/CommentThread/CommentThreadShowcase';
+import CommentsShowcase from '../../../packages/cli/assets/templates/blocks/components/Comments/CommentsShowcase';
 
 const meta: Meta = {
-  title: 'Lab/Comments',
+  title: 'Core/Comments',
   tags: ['autodocs'],
   parameters: {
     layout: 'centered',

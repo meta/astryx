@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "delete",
-    "matchCount": 23,
+    "matchCount": 24,
     "results": [
       {
         "domain": "component",
@@ -204,6 +204,19 @@
       },
       {
         "domain": "template",
+        "name": "CommentsShowcase",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template CommentsShowcase --type block",
+        "isReady": true,
+        "mentions": []
+      },
+      {
+        "domain": "template",
         "name": "PopoverConfirmAction",
         "package": "@astryxdesign/core",
         "score": "<text>",
@@ -239,17 +252,6 @@
         "kind": "block",
         "command": "astryx template useContainerRevealHookUsage --type block",
         "isReady": true,
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "Button",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/Button",
-        "command": "astryx component Button",
         "mentions": []
       }
     ]

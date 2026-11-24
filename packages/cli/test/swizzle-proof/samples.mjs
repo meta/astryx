@@ -222,6 +222,23 @@ export const samples = {
       participants: [{id: 'ada', name: 'Ada Lovelace'}],
       onClick: noop,
     }),
+  core__CommentComposer: ({C, React}) =>
+    React.createElement(C, {value: '', onChange: noop, onSubmit: noop}),
+  core__CommentThread: ({C, React}) =>
+    React.createElement(
+      'div',
+      {style: {width: 320}},
+      React.createElement(C, {
+        comment: {
+          id: 'margin',
+          author: {id: 'maya', name: 'Maya Chen'},
+          body: 'Should this say three days?',
+          createdAt: '2026-09-30T19:00:00Z',
+        },
+        currentUser: {id: 'avery', name: 'Avery Kim'},
+        onSubmit: noop,
+      }),
+    ),
   core__Heading: ({C, React}) =>
     React.createElement(C, {level: 2}, 'Section title'),
   core__Kbd: ({C, React}) => React.createElement(C, {keys: 'mod+k'}),
@@ -388,23 +405,6 @@ export const samples = {
       language: 'typescript',
       label: 'Edit snippet',
     }),
-  lab__CommentComposer: ({C, React}) =>
-    React.createElement(C, {value: '', onChange: noop, onSubmit: noop}),
-  lab__CommentThread: ({C, React}) =>
-    React.createElement(
-      'div',
-      {style: {width: 320}},
-      React.createElement(C, {
-        comment: {
-          id: 'margin',
-          author: {id: 'maya', name: 'Maya Chen'},
-          body: 'Should this say three days?',
-          createdAt: '2026-09-30T19:00:00Z',
-        },
-        currentUser: {id: 'avery', name: 'Avery Kim'},
-        onSubmit: noop,
-      }),
-    ),
   lab__DiffViewer: ({C, React, mod, Pkg}) => {
     const parse = mod.parseUnifiedDiff ?? Pkg.parseUnifiedDiff;
     const patch = [

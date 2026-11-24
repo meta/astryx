@@ -1702,6 +1702,14 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(274.2 86% 25%)',
       },
     },
+    'comment-composer': {
+      base: {
+        backgroundColor: 'hsl(298.6 80% 56%)',
+        color: 'hsl(25.1 79% 12%)',
+        borderColor: 'hsl(121.3 76% 25%)',
+        outlineColor: 'hsl(18.3 86% 25%)',
+      },
+    },
     'comment-pin': {
       base: {
         backgroundColor: 'hsl(97.4 74% 64%)',
@@ -1726,6 +1734,22 @@ export const probeTheme = defineTheme({
         color: 'hsl(354.3 94% 12%)',
         borderColor: 'hsl(353.0 83% 25%)',
         outlineColor: 'hsl(188.2 90% 25%)',
+      },
+    },
+    'comment-thread': {
+      base: {
+        backgroundColor: 'hsl(262.9 87% 63%)',
+        color: 'hsl(307.1 86% 12%)',
+        borderColor: 'hsl(285.6 93% 25%)',
+        outlineColor: 'hsl(39.2 89% 25%)',
+      },
+    },
+    comments: {
+      base: {
+        backgroundColor: 'hsl(135.0 82% 58%)',
+        color: 'hsl(351.8 84% 12%)',
+        borderColor: 'hsl(42.5 92% 25%)',
+        outlineColor: 'hsl(265.6 78% 25%)',
       },
     },
     'complex-selector': {

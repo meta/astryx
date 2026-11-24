@@ -210,10 +210,30 @@ const FIXTURES: Readonly<Record<string, (probe: Probe) => ReactElement>> = {
       <Core.Collapsible trigger="Section">Body</Core.Collapsible>
     </Core.CollapsibleGroup>
   ),
+  CommentComposer: probe => (
+    <Core.CommentComposer
+      value=""
+      onChange={() => {}}
+      onSubmit={() => {}}
+      {...probe}
+    />
+  ),
   CommentPin: probe => (
     <Core.CommentPin
       label="Open annotation from Ada"
       participants={[{id: 'ada', name: 'Ada Lovelace'}]}
+      {...probe}
+    />
+  ),
+  Comments: probe => <Core.Comments comments={[]} {...probe} />,
+  CommentThread: probe => (
+    <Core.CommentThread
+      comment={{
+        id: 'thread',
+        author: {id: 'ada', name: 'Ada Lovelace'},
+        body: 'Should this say three days?',
+        createdAt: '2026-09-30T19:00:00Z',
+      }}
       {...probe}
     />
   ),

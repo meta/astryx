@@ -3,9 +3,9 @@
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {useEffect, useState} from 'react';
+import {CommentThread} from '@astryxdesign/core/Comments';
 import {
   AudioPlayer,
-  CommentThread,
   MediaPlayButton,
   MediaPlayer,
   MediaPlaybackRate,

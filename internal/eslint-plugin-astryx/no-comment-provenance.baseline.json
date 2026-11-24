@@ -2277,34 +2277,6 @@
     "DR2",
     "design:bidirectionality"
   ],
-  "packages/lab/src/Comments/CommentActions.tsx": [
-    "architecture:react-component-runtime/INV2"
-  ],
-  "packages/lab/src/Comments/CommentComposer.tsx": ["AST-086", "FR6"],
-  "packages/lab/src/Comments/CommentParts.tsx": [
-    "FR1",
-    "FR2",
-    "FR2",
-    "FR3",
-    "FR4",
-    "FR4",
-    "FR5",
-    "FR6",
-    "spec:AST-085",
-    "spec:AST-086",
-    "spec:AST-086",
-    "spec:AST-086"
-  ],
-  "packages/lab/src/Comments/CommentRow.tsx": ["INV1"],
-  "packages/lab/src/Comments/Comments.tsx": ["FR2", "FR5", "spec:AST-086"],
-  "packages/lab/src/Comments/CommentsContext.tsx": [
-    "AST-086",
-    "FR1",
-    "FR6",
-    "INV2",
-    "INV2",
-    "INV3"
-  ],
   "packages/lab/src/DiffViewer/DiffViewer.tsx": ["FR13", "FR3", "FR3"],
   "packages/lab/src/LogStream/LogStream.tsx": ["FR3"],
   "packages/lab/src/Sankey/SankeyLabel.tsx": ["#0", "#1"],

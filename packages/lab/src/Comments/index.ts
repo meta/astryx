@@ -3,21 +3,25 @@
 'use client';
 
 /**
- * @file Comments barrel export
- * @input Imports Comments, CommentThread, CommentComposer, and their types
- * @output Exports the lab Comments family
- * @position Lab Comments entry point; re-exported by packages/lab/src/index.ts
+ * @file Comments re-export
+ * @input `@astryxdesign/core/Comments`
+ * @output Re-exports Comments, CommentThread, CommentComposer, their constants,
+ *   and their types from Core
+ * @position Lab entry for callers that import the family from Lab; consumed by
+ *   packages/lab/src/index.ts
  */
 
-export {Comments} from './Comments';
-export type {CommentsProps} from './Comments';
-export {CommentThread} from './CommentThread';
-export type {CommentThreadProps} from './CommentThread';
-export {CommentComposer} from './CommentComposer';
-export type {CommentComposerProps} from './CommentComposer';
-export {COMMENT_ICON_KEYS} from './icons';
-export {DEFAULT_COMMENT_REACTIONS} from './types';
+export {
+  Comments,
+  CommentThread,
+  CommentComposer,
+  DEFAULT_COMMENT_REACTIONS,
+  COMMENT_ICON_KEYS,
+} from '@astryxdesign/core/Comments';
 export type {
+  CommentsProps,
+  CommentThreadProps,
+  CommentComposerProps,
   CommentAgentCommand,
   CommentAnchor,
   CommentComposerContext,
@@ -38,4 +42,4 @@ export type {
   CommentUser,
   CommentVersion,
   CommentActivityEvent,
-} from './types';
+} from '@astryxdesign/core/Comments';

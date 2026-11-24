@@ -302,10 +302,31 @@
       "aliases": []
     },
     {
+      "name": "component-comment-composer",
+      "path": "components/comment-composer",
+      "aliases": [
+        "components/lab/comment-composer"
+      ]
+    },
+    {
       "name": "component-comment-pin",
       "path": "components/comment-pin",
       "aliases": [
         "components/lab/comment-pin"
+      ]
+    },
+    {
+      "name": "component-comment-thread",
+      "path": "components/comment-thread",
+      "aliases": [
+        "components/lab/comment-thread"
+      ]
+    },
+    {
+      "name": "component-comments",
+      "path": "components/comments",
+      "aliases": [
+        "components/lab/comments"
       ]
     },
     {
@@ -597,21 +618,6 @@
     {
       "name": "component-lab-code-editor",
       "path": "components/lab/code-editor",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-comment-composer",
-      "path": "components/lab/comment-composer",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-comment-thread",
-      "path": "components/lab/comment-thread",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-comments",
-      "path": "components/lab/comments",
       "aliases": []
     },
     {

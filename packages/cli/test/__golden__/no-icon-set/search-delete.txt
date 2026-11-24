@@ -1,4 +1,4 @@
-Results for "delete" (20 of 23)
+Results for "delete" (20 of 24)
 name:        AlertDialog
 domain:      component
 package:     @astryxdesign/core
@@ -83,6 +83,10 @@ name:        ButtonWithIcon
 domain:      template
 package:     @astryxdesign/core
 command:     pnpm exec astryx template ButtonWithIcon --type block
+name:        CommentsShowcase
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template CommentsShowcase --type block
 name:        PopoverConfirmAction
 domain:      template
 package:     @astryxdesign/core
@@ -95,8 +99,3 @@ name:        useContainerRevealHookUsage
 domain:      template
 package:     @astryxdesign/core
 command:     pnpm exec astryx template useContainerRevealHookUsage --type block
-name:        Button
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/Button
-command:     pnpm exec astryx component Button

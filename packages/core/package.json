@@ -299,6 +299,11 @@
       "types": "./dist/CommentPin/index.d.ts",
       "default": "./dist/CommentPin/index.js"
     },
+    "./Comments": {
+      "source": "./src/Comments/index.ts",
+      "types": "./dist/Comments/index.d.ts",
+      "default": "./dist/Comments/index.js"
+    },
     "./ComplexSelector": {
       "source": "./src/ComplexSelector/index.ts",
       "types": "./dist/ComplexSelector/index.d.ts",

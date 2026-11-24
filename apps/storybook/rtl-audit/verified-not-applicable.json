@@ -395,15 +395,15 @@
     "reason": "CommentPin sets its fixed 2px speech-bubble corner with the logical border-end-start-radius longhand (the other corners use logical longhands too), so it mirrors under RTL by construction, and switches transform origin from left-bottom to right-bottom. Absolute examples place the inline-start edge at the anchor and translate only on the block axis, so bottom-start placement mirrors without a physical inline offset. Its flex row, avatar overlap, and padding use logical properties; avatars and the numeric count have no directional glyph or keyboard semantics to reverse."
   },
   {
-    "component": "lab/CommentComposer",
+    "component": "core/CommentComposer",
     "reason": "CommentComposer stacks an optional quoted passage, the core ChatComposer input, and a footer row of attach, emoji, product controls, and the core ChatSendButton. Every inset, gap, and corner is a logical property or a flex gap, its glyphs (attach, emoji, close) are non-directional, and its only positioned affordances are core Popover and typeahead menus, which the core audit covers. Nothing it owns has a horizontal semantic to mirror."
   },
   {
-    "component": "lab/CommentThread",
+    "component": "core/CommentThread",
     "reason": "CommentThread is one Card or Section holding comment rows: an avatar column and a content column in a flex row whose order follows CSS direction, a block-axis avatar rail, header metadata and actions in wrap-capable flex rows, and a reply composer. Insets and the actions' negative bleed use logical properties, its glyphs (reply, resolve, add reaction, copy link, more) are non-directional, and its menus and tooltips are core overlays. Keyboard navigation is Tab order plus the core DropdownMenu, with no component-owned arrow-key semantics."
   },
   {
-    "component": "lab/Comments",
+    "component": "core/Comments",
     "reason": "Comments is a block-axis timeline of CommentThread rows and activity events inside the core ChatLayout and ChatMessageList, with the composer docked on the block axis. It adds no horizontal positioning, directional glyphs, or arrow-key behavior of its own: rows, rails, and dividers use logical properties, and the load-earlier control and error Banners are centered or full width."
   },
   {
