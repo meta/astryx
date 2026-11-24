@@ -175,6 +175,17 @@ interface PendingFocus {
   target: 'first-field' | 'remove' | 'add';
 }
 
+/** A change that ListInput asked its owner for, until a value applies it. */
+interface PendingChange {
+  type: 'add' | 'remove';
+  itemKey: string;
+  keysBefore: string[];
+  announcement: (keys: string[]) => string;
+  focusedBefore: Element | null;
+  /** Null when the Add anchor moved it. */
+  focus: PendingFocus | null;
+}
+
 interface PendingAddScrollAnchor {
   addTop: number;
   expectedKeys: string[];
@@ -462,6 +473,13 @@ function resolveColumnTrack(width?: ColumnWidth): string {
   return `minmax(${minWidth}px, ${proportion}fr)`;
 }
 
+function hasSameKeys(keys: string[], otherKeys: string[]): boolean {
+  return (
+    keys.length === otherKeys.length &&
+    keys.every((key, index) => key === otherKeys[index])
+  );
+}
+
 function joinIDs(...ids: Array<string | undefined>): string | undefined {
   const resolved = ids.filter(Boolean);
   return resolved.length > 0 ? resolved.join(' ') : undefined;
@@ -700,7 +718,7 @@ export function ListInput<T>({
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const addPointerAnchorTopRef = useRef<number | null>(null);
   const addAnchorFrameRef = useRef<number | null>(null);
-  const pendingFocusRef = useRef<PendingFocus | null>(null);
+  const pendingChangeRef = useRef<PendingChange | null>(null);
   const pendingAddScrollAnchorRef = useRef<PendingAddScrollAnchor | null>(null);
   const pendingMutationMotionRef = useRef<PendingMutationMotion<T> | null>(
     null,
@@ -818,16 +836,17 @@ export function ListInput<T>({
     if (addAction == null) {
       return;
     }
-    const pendingFocus = pendingFocusRef.current;
+    const pendingChange = pendingChangeRef.current;
+    const pendingFocus = pendingChange?.focus;
     const addedRow = rowRefs.current.get(pendingAnchor.itemKey);
     const focusTarget =
       pendingFocus?.target === 'first-field' &&
       pendingFocus.itemKey === pendingAnchor.itemKey
         ? firstFieldIn(addedRow)
         : null;
-    if (focusTarget != null) {
+    if (focusTarget != null && pendingChange != null) {
       focusTarget.focus({preventScroll: true});
-      pendingFocusRef.current = null;
+      pendingChange.focus = null;
     }
 
     // Resolve after insertion: the new record may make a nearer overflow
@@ -941,27 +960,48 @@ export function ListInput<T>({
     }
   }, [value]);
 
+  // Syncs focus and the live region with the owner's value. A change that
+  // ListInput asked for takes effect when a value applies it: the added key
+  // is in the value, or the removed key is gone. The owner may order or
+  // replace the other records.
   useLayoutEffect(() => {
-    const pendingFocus = pendingFocusRef.current;
-    if (pendingFocus == null) {
+    const pendingChange = pendingChangeRef.current;
+    if (pendingChange == null) {
       return;
     }
-    let target: HTMLElement | null = null;
-    if (pendingFocus.target === 'add') {
-      target = addButtonRef.current;
-    } else if (pendingFocus.itemKey != null) {
-      const row = rowRefs.current.get(pendingFocus.itemKey);
-      target =
-        pendingFocus.target === 'remove'
-          ? (row?.querySelector<HTMLElement>('[data-list-input-remove]') ??
-            null)
-          : firstFieldIn(row);
+    const keys = value.map(item => String(getItemKey(item)));
+    const isApplied =
+      keys.includes(pendingChange.itemKey) === (pendingChange.type === 'add');
+    // The same keys can still become the change: an owner may apply it later.
+    if (!isApplied && hasSameKeys(keys, pendingChange.keysBefore)) {
+      return;
     }
-    if (target != null) {
-      target.focus();
-      pendingFocusRef.current = null;
+    pendingChangeRef.current = null;
+    if (isApplied) {
+      announce(pendingChange.announcement(keys));
     }
-  }, [value]);
+    const focused = document.activeElement;
+    const isFocusLost = focused == null || focused === document.body;
+    // A change never takes focus from where the user moved it, and a change
+    // that did not apply moves only focus that its record took with it.
+    const canMoveFocus =
+      isFocusLost || (isApplied && focused === pendingChange.focusedBefore);
+    const pendingFocus = pendingChange.focus;
+    if (pendingFocus == null || !canMoveFocus) {
+      return;
+    }
+    const row =
+      pendingFocus.itemKey == null
+        ? undefined
+        : rowRefs.current.get(pendingFocus.itemKey);
+    const target =
+      pendingFocus.target === 'remove'
+        ? row?.querySelector<HTMLElement>('[data-list-input-remove]')
+        : pendingFocus.target === 'first-field'
+          ? firstFieldIn(row)
+          : null;
+    (target ?? addButtonRef.current)?.focus();
+  }, [announce, getItemKey, value]);
 
   const mutationsDisabled = isDisabled || isLoading;
   const hasReachedMax = maxItems != null && value.length >= maxItems;
@@ -1050,9 +1090,17 @@ export function ListInput<T>({
     const item = createItem();
     const nextValue = [...value, item];
     const itemKey = String(getItemKey(item));
-    pendingFocusRef.current = {
+    pendingChangeRef.current = {
+      type: 'add',
       itemKey,
-      target: 'first-field',
+      keysBefore: value.map(candidate => String(getItemKey(candidate))),
+      announcement: keys =>
+        t('@astryx.listInput.announceAdded', {
+          itemName,
+          position: keys.indexOf(itemKey) + 1,
+        }),
+      focusedBefore: document.activeElement,
+      focus: {itemKey, target: 'first-field'},
     };
     if (event.detail > 0) {
       prepareAddScrollAnchor(
@@ -1066,12 +1114,6 @@ export function ListInput<T>({
     addPointerAnchorTopRef.current = null;
     prepareMutationMotion(nextValue);
     onChange(nextValue, {type: 'add', item, index: value.length});
-    announce(
-      t('@astryx.listInput.announceAdded', {
-        itemName,
-        position: value.length + 1,
-      }),
-    );
   };
 
   const handleUpdate = (
@@ -1108,15 +1150,23 @@ export function ListInput<T>({
     const removedItem = value[index];
     const nextValue = value.filter((_, itemIndex) => itemIndex !== index);
     const nextFocusItem = nextValue[Math.min(index, nextValue.length - 1)];
-    pendingFocusRef.current =
-      nextFocusItem == null
-        ? {target: 'add'}
-        : {itemKey: String(getItemKey(nextFocusItem)), target: 'remove'};
+    pendingChangeRef.current = {
+      type: 'remove',
+      itemKey,
+      keysBefore: value.map(candidate => String(getItemKey(candidate))),
+      announcement: () =>
+        t('@astryx.listInput.announceRemoved', {
+          itemName,
+          position: index + 1,
+        }),
+      focusedBefore: document.activeElement,
+      focus:
+        nextFocusItem == null
+          ? {target: 'add'}
+          : {itemKey: String(getItemKey(nextFocusItem)), target: 'remove'},
+    };
     prepareMutationMotion(nextValue);
     onChange(nextValue, {type: 'remove', item: removedItem, index});
-    announce(
-      t('@astryx.listInput.announceRemoved', {itemName, position: index + 1}),
-    );
   };
 
   const rowLayoutStyle = showEndHandle

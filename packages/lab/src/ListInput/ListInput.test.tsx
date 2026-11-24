@@ -21,6 +21,7 @@ import {useMemo, useState} from 'react';
 import userEvent from '@testing-library/user-event';
 import {createReorderable, type ReorderHandleOptions} from '@astryxdesign/core';
 import {
+  act,
   fireEvent,
   render,
   renderHook,
@@ -205,6 +206,21 @@ const shownNames = () =>
   screen
     .getAllByRole('textbox')
     .map(input => (input as HTMLInputElement).value);
+
+/** The text in the polite live regions. */
+const politeAnnouncements = () =>
+  Array.from(document.querySelectorAll('[aria-live="polite"]'))
+    .map(node => node.textContent ?? '')
+    .join(' ');
+
+/** Waits two animation frames, so a queued announcement has its turn. */
+const nextFrames = () =>
+  act(
+    () =>
+      new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
 
 function classTokens(element: Element | null): string[] {
   return element?.getAttribute('class')?.split(/\s+/).filter(Boolean) ?? [];
@@ -467,10 +483,10 @@ describe('ListInput', () => {
     const addAction = addButton.closest<HTMLElement>(
       '[data-list-input-motion-key="action:add"]',
     )!;
-    let anchorFrame: FrameRequestCallback | undefined;
+    const frames: FrameRequestCallback[] = [];
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
-      anchorFrame = callback;
-      return 1;
+      frames.push(callback);
+      return frames.length;
     });
     vi.spyOn(addAction, 'getBoundingClientRect').mockImplementation(() =>
       createRect(
@@ -496,7 +512,9 @@ describe('ListInput', () => {
 
     outerScroll.scrollTop = 25;
     expect(addAction.getBoundingClientRect().top).toBe(initialTop + 5);
-    anchorFrame?.(0);
+    for (const frame of frames.splice(0)) {
+      frame(0);
+    }
     expect(outerScroll.scrollTop).toBe(30);
     expect(addAction.getBoundingClientRect().top).toBe(initialTop);
   });
@@ -1371,6 +1389,210 @@ describe('ListInput', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', {name: /add guest/i})).toHaveFocus();
     });
+  });
+
+  it('announces nothing and keeps focus where the user puts it when the owner refuses a change', async () => {
+    const user = userEvent.setup();
+    function RefusingList() {
+      const [value, setValue] = useState([...guests, createdGuest]);
+      return (
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={value}
+          onChange={(nextValue, change) => {
+            if (change.type !== 'update') {
+              return;
+            }
+            setValue(nextValue);
+          }}
+          getItemKey={guest => guest.id}
+          createItem={() => ({id: 'new', name: ''})}
+          columns={columns}
+        />
+      );
+    }
+    render(<RefusingList />);
+
+    await user.click(screen.getByRole('button', {name: 'Remove guest 1'}));
+    await nextFrames();
+    expect(politeAnnouncements()).not.toContain('Removed guest 1.');
+
+    const linus = screen.getByDisplayValue('Linus');
+    await user.click(linus);
+    await user.keyboard('{End}es');
+    expect(linus).toHaveFocus();
+    expect(linus).toHaveValue('Linuses');
+
+    await user.click(screen.getByRole('button', {name: 'Add guest'}));
+    await nextFrames();
+    expect(politeAnnouncements()).not.toContain('Added guest 4.');
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+  });
+
+  it('announces a change and moves focus when the owner applies it later', async () => {
+    let applyLater: (() => void) | undefined;
+    function LaterList() {
+      const [value, setValue] = useState(guests);
+      return (
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={value}
+          onChange={nextValue => {
+            applyLater = () => setValue(nextValue);
+          }}
+          getItemKey={guest => guest.id}
+          createItem={() => createdGuest}
+          columns={columns}
+        />
+      );
+    }
+    render(<LaterList />);
+
+    const remove = screen.getByRole('button', {name: 'Remove guest 1'});
+    remove.focus();
+    fireEvent.click(remove);
+    await nextFrames();
+    expect(politeAnnouncements()).not.toContain('Removed guest 1.');
+
+    act(() => applyLater?.());
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    expect(screen.getByRole('button', {name: 'Remove guest 1'})).toHaveFocus();
+    await waitFor(() => {
+      expect(politeAnnouncements()).toContain('Removed guest 1.');
+    });
+  });
+
+  it('leaves focus where the user moved it when the owner applies a change later', async () => {
+    let applyLater: (() => void) | undefined;
+    function LaterList() {
+      const [value, setValue] = useState(guests);
+      return (
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={value}
+          onChange={nextValue => {
+            applyLater = () => setValue(nextValue);
+          }}
+          getItemKey={guest => guest.id}
+          createItem={() => createdGuest}
+          columns={columns}
+        />
+      );
+    }
+    render(<LaterList />);
+
+    const remove = screen.getByRole('button', {name: 'Remove guest 2'});
+    remove.focus();
+    fireEvent.click(remove);
+    const ada = screen.getByDisplayValue('Ada');
+    ada.focus();
+
+    act(() => applyLater?.());
+    expect(screen.queryByDisplayValue('Grace')).not.toBeInTheDocument();
+    expect(ada).toHaveFocus();
+    await waitFor(() => {
+      expect(politeAnnouncements()).toContain('Removed guest 2.');
+    });
+  });
+
+  it('announces an add and focuses the new record when the owner sorts the records', async () => {
+    function SortedList() {
+      const [value, setValue] = useState(guests);
+      return (
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={value}
+          onChange={nextValue =>
+            setValue(
+              [...nextValue].sort((a, b) =>
+                a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+              ),
+            )
+          }
+          getItemKey={guest => guest.id}
+          createItem={() => ({id: 'new', name: ''})}
+          columns={columns}
+        />
+      );
+    }
+    render(<SortedList />);
+
+    const add = screen.getByRole('button', {name: 'Add guest'});
+    add.focus();
+    fireEvent.click(add);
+
+    expect(shownNames()).toEqual(['', 'Ada', 'Grace']);
+    expect(screen.getAllByRole('textbox')[0]).toHaveFocus();
+    await waitFor(() => {
+      expect(politeAnnouncements()).toContain('Added guest 1.');
+    });
+  });
+
+  it('announces a removal and focuses Add when the owner puts a blank record in place of the last one', async () => {
+    function KeepOneList() {
+      const [value, setValue] = useState([guests[0]]);
+      return (
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={value}
+          onChange={nextValue =>
+            setValue(
+              nextValue.length > 0 ? nextValue : [{id: 'blank', name: ''}],
+            )
+          }
+          getItemKey={guest => guest.id}
+          createItem={() => createdGuest}
+          columns={columns}
+        />
+      );
+    }
+    render(<KeepOneList />);
+
+    const remove = screen.getByRole('button', {name: 'Remove guest 1'});
+    remove.focus();
+    fireEvent.click(remove);
+
+    expect(shownNames()).toEqual(['']);
+    expect(screen.getByRole('button', {name: 'Add guest'})).toHaveFocus();
+    await waitFor(() => {
+      expect(politeAnnouncements()).toContain('Removed guest 1.');
+    });
+  });
+
+  it('drops a change the owner answers with other records, with no announcement and no focus move', async () => {
+    function ReplacingList() {
+      const [value, setValue] = useState(guests);
+      return (
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={value}
+          onChange={(_, change) => {
+            if (change.type === 'add') {
+              setValue([...value, {id: 'server-id', name: 'Linus'}]);
+            }
+          }}
+          getItemKey={guest => guest.id}
+          createItem={() => createdGuest}
+          columns={columns}
+        />
+      );
+    }
+    render(<ReplacingList />);
+
+    const add = screen.getByRole('button', {name: 'Add guest'});
+    add.focus();
+    fireEvent.click(add);
+
+    expect(shownNames()).toEqual(['Ada', 'Grace', 'Linus']);
+    expect(add).toHaveFocus();
+    await nextFrames();
+    expect(politeAnnouncements()).not.toContain('Added guest');
   });
 
   it('warns in development when getItemKey returns a duplicate key', () => {
