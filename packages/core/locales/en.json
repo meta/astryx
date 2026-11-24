@@ -676,12 +676,12 @@
     "description": "The noun for one record in a lab ListInput when the app gives no noun of its own. The other ListInput messages put it in their `{itemName}` placeholder, as in \"Add item\" and \"Remove item 2\". Give the form of the noun that fits there."
   },
   "@astryx.listInput.emptyTitle": {
-    "defaultMessage": "No {itemName}s yet",
-    "description": "EmptyState title shown inside a lab ListInput when its collection has no records. `{itemName}` is the consumer's singular noun for one record (e.g. \"guest\"); the source appends a literal \"s\" to pluralize it, which only works for regular English plurals. If your language cannot pluralize an interpolated noun this way, rephrase around `{itemName}` instead (e.g. \"No {itemName} added yet\")."
+    "defaultMessage": "No {itemName} added yet",
+    "description": "EmptyState title shown inside a lab ListInput when its collection has no records. `{itemName}` is the singular noun for one record, from the app or the catalog (e.g. \"guest\" or \"email address\"). The noun can be any word, so the message uses it as given, with no plural ending or article. Write your translation so that it also needs none (e.g. \"No guest added yet\")."
   },
   "@astryx.listInput.emptyDescription": {
-    "defaultMessage": "Add a {itemName} to get started.",
-    "description": "EmptyState supporting text shown inside a lab ListInput when its collection has no records. `{itemName}` is the consumer's singular noun for one record (e.g. \"guest\")."
+    "defaultMessage": "Each {itemName} you add appears here.",
+    "description": "EmptyState supporting text shown inside a lab ListInput when its collection has no records, above the button that adds one. `{itemName}` is the singular noun for one record, from the app or the catalog (e.g. \"guest\" or \"email address\"). Use it as given, with no plural ending or article (e.g. \"Each guest you add appears here.\")."
   },
   "@astryx.listInput.addItem": {
     "defaultMessage": "Add {itemName}",

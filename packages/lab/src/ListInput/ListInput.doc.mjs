@@ -230,7 +230,7 @@ export const docs = {
         name: 'Empty state',
         required: false,
         description:
-          'When no records exist, a centered compact EmptyState names the empty collection and directs users to the Add action.',
+          'When no records exist, a centered compact EmptyState says that no record is added yet, above the Add action that adds the first one.',
       },
       {
         name: 'Add action',
