@@ -12,7 +12,10 @@
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {createRef, type ComponentPropsWithRef} from 'react';
 import {Token} from './Token';
+import {LinkProvider} from '../Link/LinkProvider';
+import {InteractiveRoleContext} from '../InteractiveRoleContext/InteractiveRoleContext';
 import {PRESSABLE_ATTRIBUTE} from '../utils/pressFeedback';
 import type {TokenColor} from './Token';
 
@@ -894,5 +897,196 @@ describe('popup state on a clickable token (FR10)', () => {
     render(<Token label="Open" onClick={() => {}} aria-pressed={true} />);
     const button = screen.getByRole('button', {name: 'Open', pressed: true});
     expect(button.parentElement).not.toHaveAttribute('aria-pressed');
+  });
+});
+
+/** A router link that keeps no ref and refuses to render without a destination. */
+function RouterLink({ref: _ref, ...props}: ComponentPropsWithRef<'a'>) {
+  if (props.href == null) {
+    throw new Error('RouterLink requires a destination');
+  }
+  return <a {...props} data-router-link="true" />;
+}
+
+describe('Token: a focused link that becomes disabled keeps focus', () => {
+  it('keeps focus and the ref on the link across disablement and back', async () => {
+    const user = userEvent.setup();
+    const ref = createRef<HTMLElement>();
+    const fixture = (isDisabled: boolean) => (
+      <>
+        <button type="button">Before</button>
+        <Token
+          ref={ref}
+          label="Tag"
+          href="#destination"
+          isDisabled={isDisabled}
+        />
+        <button type="button">After</button>
+      </>
+    );
+    const {rerender} = render(fixture(false));
+    let link = screen.getByRole('link', {name: 'Tag'});
+    await user.tab();
+    await user.tab();
+    expect(link).toHaveFocus();
+
+    rerender(fixture(true));
+    link = screen.getByRole('link', {name: 'Tag'});
+    expect(ref.current).toBe(link);
+    expect(link).toHaveFocus();
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    expect(link).not.toHaveAttribute('href');
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'After'})).toHaveFocus();
+    await user.tab({shift: true});
+    expect(link).toHaveFocus();
+
+    rerender(fixture(false));
+    link = screen.getByRole('link', {name: 'Tag'});
+    expect(ref.current).toBe(link);
+    expect(link).toHaveFocus();
+    expect(link).toHaveAttribute('href', '#destination');
+  });
+
+  it('keeps focus with a ref-less router link and a Remove button', async () => {
+    const user = userEvent.setup();
+    const ref = createRef<HTMLElement>();
+    const fixture = (isDisabled: boolean) => (
+      <LinkProvider component={RouterLink}>
+        <Token
+          ref={ref}
+          label="Tag"
+          href="#destination"
+          onRemove={() => {}}
+          isDisabled={isDisabled}
+        />
+      </LinkProvider>
+    );
+    const {rerender} = render(fixture(false));
+    const root = ref.current;
+    let link = screen.getByRole('link', {name: 'Tag'});
+    await user.tab();
+    expect(link).toHaveFocus();
+
+    rerender(fixture(true));
+    link = screen.getByRole('link', {name: 'Tag'});
+    expect(ref.current).toBe(root);
+    expect(link).toHaveFocus();
+    expect(link).not.toHaveAttribute('data-router-link');
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Remove Tag'})).toHaveFocus();
+    await user.tab({shift: true});
+    expect(link).toHaveFocus();
+
+    rerender(fixture(false));
+    link = screen.getByRole('link', {name: 'Tag'});
+    expect(link).toHaveFocus();
+    expect(link).toHaveAttribute('data-router-link', 'true');
+  });
+
+  for (const customLink of [false, true]) {
+    for (const removable of [false, true]) {
+      it(`keeps focus without rendering a disabled router link: custom=${customLink}, removable=${removable}`, () => {
+        const router = vi.fn(RouterLink);
+        const fixture = (isDisabled: boolean) => {
+          const token = (
+            <Token
+              label="Tag"
+              href="#destination"
+              isDisabled={isDisabled}
+              onRemove={removable ? () => {} : undefined}
+            />
+          );
+          return customLink ? (
+            <LinkProvider component={router}>{token}</LinkProvider>
+          ) : (
+            token
+          );
+        };
+        const {rerender} = render(fixture(false));
+        screen.getByRole('link', {name: 'Tag'}).focus();
+        router.mockClear();
+        rerender(fixture(true));
+        expect(screen.getByRole('link', {name: 'Tag'})).toHaveFocus();
+        expect(router).not.toHaveBeenCalled();
+        rerender(fixture(false));
+        expect(screen.getByRole('link', {name: 'Tag'})).toHaveFocus();
+      });
+    }
+  }
+
+  it('keeps focus when a link with onClick becomes a disabled button and back', () => {
+    const fixture = (isDisabled: boolean) => (
+      <Token
+        label="Tag"
+        href="#destination"
+        onClick={() => {}}
+        isDisabled={isDisabled}
+      />
+    );
+    const {rerender} = render(fixture(false));
+    const before = screen.getByText('Tag').closest('a, button') as HTMLElement;
+    before.focus();
+    expect(before).toHaveFocus();
+    rerender(fixture(true));
+    const disabled = screen
+      .getByText('Tag')
+      .closest('a, button') as HTMLElement;
+    expect(disabled).toHaveFocus();
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    rerender(fixture(false));
+    expect(screen.getByText('Tag').closest('a, button')).toHaveFocus();
+  });
+
+  it('keeps focus when a link inside a trigger becomes disabled and back', () => {
+    const fixture = (isDisabled: boolean) => (
+      <InteractiveRoleContext value="button">
+        <Token label="Tag" href="#destination" isDisabled={isDisabled} />
+      </InteractiveRoleContext>
+    );
+    const {rerender} = render(fixture(false));
+    (screen.getByText('Tag').closest('a, button') as HTMLElement).focus();
+    rerender(fixture(true));
+    const disabled = screen
+      .getByText('Tag')
+      .closest('a, button') as HTMLElement;
+    expect(disabled).toHaveFocus();
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    rerender(fixture(false));
+    expect(screen.getByText('Tag').closest('a, button')).toHaveFocus();
+  });
+
+  it('keeps focus on Remove when a link with onClick becomes disabled and back', () => {
+    const fixture = (isDisabled: boolean) => (
+      <Token
+        label="Tag"
+        href="#destination"
+        onClick={() => {}}
+        onRemove={() => {}}
+        isDisabled={isDisabled}
+      />
+    );
+    const {rerender} = render(fixture(false));
+    screen.getByRole('button', {name: 'Remove Tag'}).focus();
+    rerender(fixture(true));
+    const remove = screen.getByRole('button', {name: 'Remove Tag'});
+    expect(remove).toHaveFocus();
+    expect(remove).toHaveAttribute('aria-disabled', 'true');
+    rerender(fixture(false));
+    expect(screen.getByRole('button', {name: 'Remove Tag'})).toHaveFocus();
+  });
+
+  it('leaves focus that moved elsewhere where it is', () => {
+    const fixture = (isDisabled: boolean) => (
+      <>
+        <Token label="Tag" href="#destination" isDisabled={isDisabled} />
+        <button type="button">Other</button>
+      </>
+    );
+    const {rerender} = render(fixture(false));
+    screen.getByRole('button', {name: 'Other'}).focus();
+    rerender(fixture(true));
+    expect(screen.getByRole('button', {name: 'Other'})).toHaveFocus();
   });
 });

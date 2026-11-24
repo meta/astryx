@@ -5494,11 +5494,17 @@ jobs:
   # paints after Vite emits the final bundle. The `test-build` name makes that
   # package ownership explicit; the historical `test` join above projects its
   # result. Until runtime:build has a specialized route, broad CI dispatches it.
+  # It runs in two parts, each inside ten minutes: the Build package's
+  # contracts, and the vibe-tests fixtures that need the same Playwright setup.
   test-build:
     needs: [admission, heavy-ci]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [contracts, fixtures]
     permissions:
       # The heavy-suite caps read the author's pull requests and runs.
       actions: read
@@ -5583,20 +5589,19 @@ jobs:
       # production CSS-layer cascade, and cross-package StyleX markers in a
       # real browser. `pnpm test:build` owns the list.
       - name: Run Build package contracts
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && matrix.part == 'contracts'
         run: pnpm test:build
 
-      # The vibe-tests fixtures share this Playwright-equipped runner: the
-      # canonical setup compositions and the guest fixture contrast need a
-      # production browser render.
+      # The fixtures part: the vibe-tests canonical setup compositions and the
+      # guest fixture contrast need a production browser render.
       - name: Verify canonical setup compositions
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && matrix.part == 'fixtures'
         env:
           ASTRYX_CANONICAL_SETUP_BROWSER: '1'
         run: pnpm vitest run internal/vibe-tests/setup-test/setup-canonical.test.ts --project node --maxWorkers=1
 
       - name: Verify guest fixture contrast
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && matrix.part == 'fixtures'
         run: pnpm -F @astryxdesign/vibe-tests fixtures:contrast
 
   # The full visual plan first loads every Core story to learn which theming

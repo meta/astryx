@@ -843,6 +843,7 @@ describe('SegmentedControl disabled state', () => {
       expect(tooltip).toHaveTextContent('Choose a project to switch views');
       const group = screen.getByRole('radiogroup');
       fireEvent.mouseEnter(group);
+      fireEvent.pointerMove(group);
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(group);
       await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));

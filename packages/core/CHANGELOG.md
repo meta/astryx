@@ -1,4 +1,4 @@
-# @xds/core
+# @astryxdesign/core
 
 # 0.7.17
 
@@ -5442,11 +5442,11 @@ Thanks to everyone who contributed to this release:
 #### Breaking Changes
 
 - Rename theme-token helpers off the XDS name
-  The `@xds/core/theme` token helpers are renamed: `resolveXDSThemeTokens` ->
+  The `@astryxdesign/core/theme` token helpers are renamed: `resolveXDSThemeTokens` ->
   `resolveThemeTokens`, `resolveXDSThemeToken` -> `resolveThemeToken`,
   `xdsTokenVar` -> `tokenVar`, `xdsTokenVars` -> `tokenVars`, and the option types
   `ResolveXDSThemeToken(s)Options` -> `ResolveThemeToken(s)Options`. Update imports
-  from `@xds/core/theme` / `@xds/core/theme/tokens`. Part of removing `xds` naming
+  from `@astryxdesign/core/theme` / `@astryxdesign/core/theme/tokens`. Part of removing `xds` naming
   from the public API.
 - Remove the XDS-prefix compatibility layer — astryx is now the only public surface
   This release erases all `xds` naming from the public API; there is no compatibility
@@ -5494,8 +5494,8 @@ Thanks to everyone who contributed to this release:
 
   ```
 
-- Rename the npm package scope from `@xds/*` to `@astryxdesign/*`
-  All published packages move to the new `@astryxdesign` scope (e.g. `@xds/core` → `@astryxdesign/core`), along with the workspace lockfile, build/runtime scope-directory scans, and docsite slug derivation. Consumers must update their imports and dependency names. The internal ESLint plugin namespace (`@xds/*` rules) is intentionally untouched and tracked separately. Existing `@xds/*` codemods continue to target the old scope so projects still on `@xds/*` can migrate.
+- Move every package to the npm package scope `@astryxdesign/*`
+  All published packages move to the new `@astryxdesign` scope, along with the workspace lockfile, build/runtime scope-directory scans, and docsite slug derivation. Consumers must update their imports and dependency names. The ESLint plugin namespace is unchanged. The existing upgrade codemods still migrate projects from the earlier scope.
 
 #### Contributors
 
@@ -5516,7 +5516,7 @@ This release makes **bare component names canonical**: `Button`, `Stack`, `useTh
 
 - **Un-prefix migration — bare names are canonical** — Every `XDS*` component, hook, and type now has a bare alias (`XDSButton` → `Button`, `useXDSTheme` → `useTheme`, ~634 identifiers across 100 barrels). The prefixed names still work as aliases during the compat window, so this is non-breaking if you do nothing — but bare names are the new default for docs, discovery, and new code. (#2941)
   **Codemod:** `npx astryx upgrade --codemod drop-xds-prefix-imports`
-- **`@xds/core` un-prefix** — `XDSMetaAppShell` → `MetaAppShell` and related meta-app exports drop the `XDS` prefix. (#2957)
+- **`@astryxdesign/core` un-prefix** — `XDSMetaAppShell` → `MetaAppShell` and related meta-app exports drop the `XDS` prefix. (#2957)
 - **DatePicker components renamed to Input** — `XDSDateTimePicker` → `XDSDateTimeInput` and `XDSDateRangePicker` → `XDSDateRangeInput` (plus their props, size, and hour-format types), for consistency with `DateInput`/`TextInput`/`NumberInput`. (#2276)
   **Codemod:** `npx astryx upgrade --codemod rename-date-picker-to-input`
 - **Stack `element` → `as`** — `XDSStack`, `XDSHStack`, `XDSVStack`, and `XDSStackItem` use `as` instead of `element`, matching other polymorphic components. (#2441)
@@ -5534,7 +5534,7 @@ This release makes **bare component names canonical**: `Button`, `Stack`, `useTh
 - **FileInput `onChangeAction` → `changeAction`** — Aligns `XDSFileInput` with the React 19 action-prop convention used across the system. (#2288)
 - **PowerSearch preset types → `*FilterPreset`** — Preset type exports are renamed for clarity. (#2925)
 - **`CenterAxis` → `XDSCenterAxis`, `DateRange` unprefixed** — Type-export naming cleanups for consistency. (#2289, #2922)
-- **Stepper moved to `@xds/lab`** — `XDSStepper`/`XDSStep` move to the lab package while the API is reworked; import from `@xds/lab`. (#2335)
+- **Stepper moved to `@astryxdesign/lab`** — `XDSStepper`/`XDSStep` move to the lab package while the API is reworked; import from `@astryxdesign/lab`. (#2335)
 
 #### Upgrade
 
@@ -5557,7 +5557,7 @@ npx astryx upgrade --codemod drop-xds-prefix-imports --codemod-only --apply
 
 #### New Features
 
-- **Bare-name subpath exports** — `@xds/core/Heading`, `@xds/core/Code`, `@xds/core/HStack`, `@xds/core/VStack` ship as convenience subpaths. (#2420)
+- **Bare-name subpath exports** — `@astryxdesign/core/Heading`, `@astryxdesign/core/Code`, `@astryxdesign/core/HStack`, `@astryxdesign/core/VStack` ship as convenience subpaths. (#2420)
 - **Field `width` prop** — Field-based components accept a `width` (`SizeValue`) applied to the outer `XDSField`, so label, control, and status size together and stay aligned. Additive and backward compatible. Affects `XDSTextInput`, `XDSTextArea`, `XDSNumberInput`, `XDSDateInput`, `XDSDateRangeInput`, `XDSDateTimeInput`, `XDSTimeInput`, `XDSFileInput`, `XDSSelector`, `XDSMultiSelector`, `XDSTypeahead`, `XDSTokenizer`, `XDSSlider`, `XDSCheckboxInput`, `XDSCheckboxList`, `XDSRadioList`, `XDSSwitch`, and `XDSField`. (#2755)
 - **`lg` size on all input components** — Inputs gain a large size option. (#2324)
 - **Markdown `autolink="gfm"`** — `XDSMarkdown` gains an opt-in `autolink` prop enabling GitHub-Flavored Markdown autolink-literal rules (bare `https?://…`, `www.…`, `<scheme:url>`, `<email>`, `user@host`), skipping code spans, existing links, and image alt text. Also exposed on `parseMarkdown`, `parseInline`, and `parseMarkdownIncremental` via a new `ParseOptions` argument; the existing positional signature is preserved. Default behavior unchanged. (#2394)
@@ -5584,9 +5584,9 @@ npx astryx upgrade --codemod drop-xds-prefix-imports --codemod-only --apply
 - **List/Item density** — `XDSListItem` passes density (`compact`/`balanced`/`spacious`) through to the shared `XDSItem`, fixing `balanced`/`spacious` collapsing to the same padding.
 - **Markdown loose lists** — Join blank-line-separated same-style list items into a single loose list (CommonMark §5.3) and forward a non-default `start` onto the rendered `<ol>` for assistive tech and copy-paste.
 - **AppShell mobile nav** — Fix mobile nav with a heading-only `XDSTopNav`; remove `useXDSSlotPresence`. (#2243)
-- **Theme CSS prose regression** — Fix built theme CSS that broke Markdown typography in the docsite (headings lost block margins) after the un-prefix migration. `astryx theme build` now uses a single CSS generation path (`@xds/core`'s generator) and a failed `@xds/core/theme` import is a hard build error instead of a silent fallback. (#2964)
+- **Theme CSS prose regression** — Fix built theme CSS that broke Markdown typography in the docsite (headings lost block margins) after the un-prefix migration. `astryx theme build` now uses a single CSS generation path (`@astryxdesign/core`'s generator) and a failed `@astryxdesign/core/theme` import is a hard build error instead of a silent fallback. (#2964)
 - **Escape-hatch & base-prop hygiene** — Many components had redundant `xstyle`/`className`/`style` re-declarations removed and now consistently extend `XDSBaseProps`, forward escape hatches, and expose `displayName` (require-base-props / require-ref-prop lint rules). (#2300, #2310, #2835, #2858)
-- **Toast barrel export** — Export `XDSToast` and its props from the `@xds/core` barrel so docsite playground previews resolve Toast examples.
+- **Toast barrel export** — Export `XDSToast` and its props from the `@astryxdesign/core` barrel so docsite playground previews resolve Toast examples.
 - **Typeahead id-less rows** — `XDSBaseTypeahead` uses a shared key fallback for search results without `id` values, so id-less rows no longer all render as selected.
 - **SelectableCard transitions tokenized; ResizeHandle gains `className`.** (#2966)
 
@@ -5661,7 +5661,7 @@ This runs all three codemods (`rename-action-props`, `rename-status-variants`, `
 - **SideNav built-in resize** — Integrate `useXDSResizable` directly (#1877)
 - **Resizable pill placement offset** — Auto-collapse flipping (#1876)
 - **Theme `--color-track` token** — Spinner consumes it for fully tokenized track (#2170)
-- **Server-safe utility subpath exports** — `@xds/core/server` for RSC (#1981)
+- **Server-safe utility subpath exports** — `@astryxdesign/core/server` for RSC (#1981)
 - **XDSLinkProvider adoption** — All link-rendering components now use the provider (#1906)
 
 #### Fixes
@@ -5836,7 +5836,7 @@ List all available codemods: `npx astryx upgrade --list`
 - **SideNav/TopNav menu popover and heading variants** (#1272)
 - **TextInput `onEnter` prop** for consistency with NumberInput (#1223)
 - **Button `isPressed` prop** for toggle state (#1202)
-- **CLI programmatic API** — `@xds/cli/api` (#1208)
+- **CLI programmatic API** — `@astryxdesign/cli/api` (#1208)
 - **ChatComposer `headerActions` + `headerContext`** replacing `contextToolbar` (#1242)
 - **Chat trigger menu system** for ComposerInput (#1193)
 
@@ -6066,7 +6066,7 @@ See 0.0.6 above for breaking changes and upgrade instructions.
 #### Patch Changes
 
 - Bundle StyleX runtime — consumers no longer need @stylexjs/stylex as peer dependency (#545)
-- Add stable token export path at @xds/core/tokens (#544)
+- Add stable token export path at @astryxdesign/core/tokens (#544)
 - Replace null style overrides with explicit values, add lint rule (#547)
 - Fix theme packages to produce proper JS/TS module output via tsup (#541)
 - Sync package.json exports map

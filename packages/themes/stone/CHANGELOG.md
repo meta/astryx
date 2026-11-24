@@ -1,4 +1,4 @@
-# @xds/theme-stone
+# @astryxdesign/theme-stone
 
 # 0.7.17
 
@@ -460,4 +460,4 @@ Thanks to everyone who contributed to this release:
 
 #### Changes
 
-- Tracks `@xds/core@0.0.15` (bare-name migration + data-attribute selector surface).
+- Tracks `@astryxdesign/core@0.0.15` (bare-name migration + data-attribute selector surface).

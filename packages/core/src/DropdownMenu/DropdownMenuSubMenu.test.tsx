@@ -1607,6 +1607,26 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
   const shownMenu = (name: string) =>
     screen.getAllByRole('menu', {name, ...h}).find(isShown)!;
 
+  it('exposes only the drilled-in view as a menu, and the root again after Back (AR3)', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    render(<PhoneMenu />);
+    const trigger = screen.getByRole('button', {name: /Actions/});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    await user.click(shownRow('Move to'));
+    const view = await waitFor(() => shownMenu('Move to'));
+    expect(view.parentElement?.closest('[role="menu"]')).toBeNull();
+    expect(
+      screen.queryAllByRole('menu', {name: 'Actions', ...h}).filter(isShown),
+    ).toEqual([]);
+
+    await user.click(shownRow('Back to Actions'));
+    await waitFor(() => expect(shownMenu('Actions')).toBeDefined());
+  });
+
   it('drills in from a menu that mounts open, as from one opened by its trigger (FR11)', async () => {
     stubCompactTouch(true);
     const user = userEvent.setup();
@@ -1622,6 +1642,86 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
     await waitFor(() =>
       expect(visibleRows()).toEqual(['Back to Actions', 'Folder A']),
     );
+  });
+
+  it('keeps a right-to-left parent title in its own direction inside the Back row (bidirectionality DR2)', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    const title = 'مرحبا 42!';
+    render(
+      <DropdownMenu button={{label: title}}>
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole('button', {name: new RegExp(title)});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    await user.click(shownRow('Move to'));
+    const back = await waitFor(() => shownRow(`Back to ${title}`));
+    const isolated = Array.from(back.querySelectorAll('span')).find(
+      span => span.textContent === title,
+    );
+    expect(isolated).toHaveAttribute('dir', 'rtl');
+  });
+
+  it('keeps "Back to" before a Latin parent title on a right-to-left page, on one span in the template direction', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    const title = 'Monthly report';
+    render(
+      <div dir="rtl">
+        <DropdownMenu button={{label: title}}>
+          <DropdownMenuSubMenu label="Move to">
+            <DropdownMenuItem label="Folder A" onClick={() => {}} />
+          </DropdownMenuSubMenu>
+        </DropdownMenu>
+      </div>,
+    );
+    const trigger = screen.getByRole('button', {name: new RegExp(title)});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    await user.click(shownRow('Move to'));
+    const back = await waitFor(() => shownRow(`Back to ${title}`));
+    const label = Array.from(back.querySelectorAll('span[dir]')).find(span =>
+      span.textContent?.startsWith('Back to'),
+    );
+    expect(label).toHaveAttribute('dir', 'ltr');
+    expect(label?.textContent).toBe(`Back to ${title}`);
+  });
+
+  it('lets a Back label with a mixed parent title follow a right-to-left page, as a mixed cut label does', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    const title = 'ملف PDF';
+    render(
+      <div dir="rtl">
+        <DropdownMenu button={{label: title}}>
+          <DropdownMenuSubMenu label="Move to">
+            <DropdownMenuItem label="Folder A" onClick={() => {}} />
+          </DropdownMenuSubMenu>
+        </DropdownMenu>
+      </div>,
+    );
+    const trigger = screen.getByRole('button', {name: new RegExp(title)});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    await user.click(shownRow('Move to'));
+    const back = await waitFor(() => shownRow(`Back to ${title}`));
+    const isolated = Array.from(back.querySelectorAll('span')).find(
+      span => span.textContent === title,
+    );
+    // The label span is the title's parent; neither sets a direction.
+    expect(isolated?.parentElement?.textContent).toBe(`Back to ${title}`);
+    expect(isolated?.parentElement).not.toHaveAttribute('dir');
+    expect(isolated).not.toHaveAttribute('dir');
   });
 
   it('names a node-label sub-menu by its label alone, and its nested Back row after it', async () => {
@@ -2734,6 +2834,13 @@ describe('DropdownMenuSubMenu header and footer', () => {
       await waitFor(() => expect(row).toHaveFocus());
       expect(isShown(rootMenu)).toBe(true);
       expect(isShown(rootField)).toBe(true);
+    });
+
+    it('the drilled-in view carries the dropdown-menu theme target while the root steps aside (FR20)', async () => {
+      const {rootMenu, dialog} = await openLabels({});
+      expect(isShown(rootMenu)).toBe(false);
+      expect(rootMenu.className).toContain('astryx-dropdown-menu');
+      expect(dialog.className).toContain('astryx-dropdown-menu');
     });
 
     it('a shown view follows its header or footer as it comes and goes: beside the root menu with one, inside it without', async () => {
