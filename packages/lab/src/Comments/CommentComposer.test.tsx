@@ -106,6 +106,25 @@ async function settle() {
 }
 
 describe('CommentComposer', () => {
+  it("calls the caller's onClick and lets the click bubble", () => {
+    const onClick = vi.fn();
+    const onAncestorClick = vi.fn();
+    render(
+      <div onClick={onAncestorClick}>
+        <CommentComposer
+          value=""
+          onChange={vi.fn()}
+          onSubmit={vi.fn()}
+          onClick={onClick}
+          data-testid="composer"
+        />
+      </div>,
+    );
+    fireEvent.click(screen.getByTestId('composer'));
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(onAncestorClick).toHaveBeenCalledTimes(1);
+  });
+
   it('posts the draft from Post, and never an empty one', async () => {
     const onSubmit = vi.fn();
     const {rerender} = render(
