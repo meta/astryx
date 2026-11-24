@@ -747,7 +747,7 @@ jobs:
   # required checks fail with the reason until review passes: at the first
   # head whose review and spec gates pass, ci-review-pass.yml runs the run
   # again in full, and so does merge-guard before merge (any later attempt
-  # runs everything). A spec-only or Lab-only change is never deferred, nor a
+  # runs everything). A spec-only, docs-only or Lab-only change is never deferred, nor a
   # release merge-back, a release-branch pull request or a pull request whose
   # release-critical label someone with write access applied last.
   # Every other run skips this job at once, so it delays nothing; every job
@@ -767,6 +767,8 @@ jobs:
       statuses: read
     outputs:
       deferred: ${{ steps.decide.outputs.deferred }}
+      # No package or docsite code changed: the required joins pass at once.
+      docs_only: ${{ steps.scope.outputs.docs_only }}
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
@@ -845,7 +847,7 @@ jobs:
             }
             core.setOutput('passes', String(passes));
 
-      - name: Defer the heavy suites unless the change is spec-only or Lab-only
+      - name: Defer the heavy suites unless the change is spec-only, docs-only or Lab-only
         id: decide
         env:
           SPEC_ONLY: ${{ steps.scope.outputs.spec_only }}
@@ -853,6 +855,7 @@ jobs:
           RELEASE_CRITICAL: ${{ steps.release.outputs.counts }}
           REVIEW_PASSES: ${{ steps.gate.outputs.passes }}
         run: |
+          # A docs-only change arrives as spec-only: it builds and tests nothing.
           # A Lab-only change runs only fast work, so nothing is deferred (FR26).
           # Nor is a pull request whose release-critical label counts (DEC-30),
           # or a head whose review gate already passes (DEC-32).
@@ -1206,6 +1209,15 @@ jobs:
         run: |
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1
+
+      # No package or docsite code changed (spec:AST-030 FR2): nothing here
+      # has work, so the check passes at once and says why. This is its own
+      # success, never the deferral path below.
+      - name: 'Not affected: no package or docsite changes'
+        if: needs.heavy-ci.outputs.docs_only == 'true'
+        run: |
+          echo "::notice title=Not affected::Not affected: no package or docsite changes: this change touches only documentation, records or release notes, so there is nothing to build or test."
+          echo "Not affected: no package or docsite changes. This change touches only documentation, records or release notes, so there is nothing to build or test." >> "$GITHUB_STEP_SUMMARY"
 
       # A push defers the heavy suites until review passes (spec:AST-030 FR20): the
       # required check fails with the reason, never passes as skipped.
@@ -2482,6 +2494,15 @@ jobs:
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1
 
+      # No package or docsite code changed (spec:AST-030 FR2): nothing here
+      # has work, so the check passes at once and says why. This is its own
+      # success, never the deferral path below.
+      - name: 'Not affected: no package or docsite changes'
+        if: needs.heavy-ci.outputs.docs_only == 'true'
+        run: |
+          echo "::notice title=Not affected::Not affected: no package or docsite changes: this change touches only documentation, records or release notes, so there is nothing to build or test."
+          echo "Not affected: no package or docsite changes. This change touches only documentation, records or release notes, so there is nothing to build or test." >> "$GITHUB_STEP_SUMMARY"
+
       # The PR report says why the heavy checks did not run. Recorded here,
       # in a job a failed-jobs re-run repeats, so its attempt has the record.
       - name: Record the deferral for the PR report
@@ -3331,6 +3352,15 @@ jobs:
         run: |
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1
+
+      # No package or docsite code changed (spec:AST-030 FR2): nothing here
+      # has work, so the check passes at once and says why. This is its own
+      # success, never the deferral path below.
+      - name: 'Not affected: no package or docsite changes'
+        if: needs.heavy-ci.outputs.docs_only == 'true'
+        run: |
+          echo "::notice title=Not affected::Not affected: no package or docsite changes: this change touches only documentation, records or release notes, so there is nothing to build or test."
+          echo "Not affected: no package or docsite changes. This change touches only documentation, records or release notes, so there is nothing to build or test." >> "$GITHUB_STEP_SUMMARY"
 
       # A push defers the heavy suites until review passes (spec:AST-030 FR20): the
       # required check fails with the reason, never passes as skipped.

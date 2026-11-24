@@ -253,7 +253,7 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     );
     const decide = step(
       'heavy-ci',
-      'Defer the heavy suites unless the change is spec-only or Lab-only',
+      'Defer the heavy suites unless the change is spec-only, docs-only or Lab-only',
     );
     expect(decide.env.LAB_ONLY).toBe('${{ steps.scope.outputs.lab_only }}');
     expect(decide.run).toContain(

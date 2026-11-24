@@ -251,16 +251,18 @@ jobs:
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true'
         run: echo "Lightweight documentation PR — skipping full lint"
 
+      # A docs-only change (no package or docsite code) keeps the repository
+      # guardrails, which read documents too, and skips the rest of full lint.
       - uses: ./.github/actions/setup
         id: setup
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.docs_only == 'true')
 
       - name: Clear ESLint cache
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: rm -rf .eslintcache node_modules/.cache
 
       - name: Check repository guardrails
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.docs_only == 'true')
         run: pnpm check:repo
 
       # A static import from an entry into a surface revealed by interaction

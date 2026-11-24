@@ -143,8 +143,22 @@ const SURFACES = Object.freeze({
   DOCSITE: 'docsite',
   NODE_TOOLING: 'node-tooling',
   NODE_TIMES: 'node-times',
+  DOCS: 'docs',
   SHARED_OR_UNKNOWN: 'shared-or-unknown',
 });
+
+// Documents no package or app builds from: Markdown at the repository root,
+// the license, documentation under docs/ (records included) and Changesets.
+// The knowledge schemas and templates under docs/ feed the knowledge
+// validator, so they stay shared. A change only to these and to spec records
+// builds and tests nothing: the tests that read a changed document still run
+// (spec:AST-030 FR2).
+const DOCS_PATTERNS = [
+  /^[^/]+\.md$/,
+  /^LICENSE$/,
+  /^docs\/(?!schemas\/|templates\/)/,
+  CHANGESET_PATTERN,
+];
 
 // The recorded test times: the Node legs' and the interaction legs'. They
 // decide only how the legs are scheduled, never what a test checks, so a
@@ -222,6 +236,7 @@ function isVitestGraphInfraPath(filePath) {
 // its whole Node project (spec:AST-030 FR8).
 const SCOPABLE_SURFACES = new Set([
   SURFACES.KNOWLEDGE,
+  SURFACES.DOCS,
   SURFACES.DOCSITE,
   'storybook-visual',
   ...RUNTIME_PACKAGE_SURFACES.map(([, surface]) => surface),
@@ -282,6 +297,8 @@ function surfacesForPath(filePath) {
   if (RECORDED_TIMES.test(filePath)) return [SURFACES.NODE_TIMES];
   if (filePath.startsWith('apps/docsite/')) return [SURFACES.DOCSITE];
   if (isNodeToolingPath(filePath)) return [SURFACES.NODE_TOOLING];
+  if (DOCS_PATTERNS.some(pattern => pattern.test(filePath)))
+    return [SURFACES.DOCS];
 
   const surfaces = [];
   const runtimePackage = RUNTIME_PACKAGE_SURFACES.find(([root]) =>
@@ -322,6 +339,7 @@ function classifyChanges(changes, {expectedCount, patches = null} = {}) {
       touchesDesignAssets: false,
       specChangesetConflict: false,
       docsiteOnly: false,
+      docsOnly: false,
       labOnly: false,
       // No paths to scope from runs everything (spec:AST-030 FR4).
       fullSuite: true,
@@ -375,6 +393,12 @@ function classifyChanges(changes, {expectedCount, patches = null} = {}) {
   const timesOnly = exactSurface(SURFACES.NODE_TIMES);
   const specOnly = exactSurface(SURFACES.KNOWLEDGE) || timesOnly;
   const docsiteOnly = exactSurface(SURFACES.DOCSITE);
+  const docsOnly =
+    complete &&
+    surfaces.includes(SURFACES.DOCS) &&
+    surfaces.every(surface =>
+      [SURFACES.DOCS, SURFACES.KNOWLEDGE].includes(surface),
+    );
   const toolingOnly = exactSurface(SURFACES.NODE_TOOLING);
   // Every changed path is in the Lab package, besides Changesets, which no
   // test or build reads, and the Lab entry files of the Lab components the
@@ -425,6 +449,7 @@ function classifyChanges(changes, {expectedCount, patches = null} = {}) {
     touchesDesignAssets,
     specChangesetConflict,
     docsiteOnly,
+    docsOnly,
     labOnly,
     fullSuite,
     vitestFullSuite,
@@ -434,13 +459,15 @@ function classifyChanges(changes, {expectedCount, patches = null} = {}) {
       ? 'changed-file list is incomplete'
       : specOnly
         ? 'only spec records changed'
-        : docsiteOnly
-          ? 'only docsite files changed'
-          : toolingOnly
-            ? 'only admitted Node tooling changed'
-            : labOnly
-              ? 'only the Lab package changed'
-              : 'changes include another surface',
+        : docsOnly
+          ? 'no package or docsite code changed'
+          : docsiteOnly
+            ? 'only docsite files changed'
+            : toolingOnly
+              ? 'only admitted Node tooling changed'
+              : labOnly
+                ? 'only the Lab package changed'
+                : 'changes include another surface',
   };
 }
 
@@ -519,7 +546,10 @@ if (require.main === module) {
         throw new Error('GITHUB_OUTPUT is required with --github-output.');
       fs.appendFileSync(
         outputPath,
-        `spec_only=${result.specOnly}\ntimes_only=${result.timesOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\nvitest_full_suite=${result.vitestFullSuite}\n`,
+        // CI runs a docs-only change in the spec-only lane: it builds and
+        // tests nothing beyond the tests that read a changed document, and it
+        // is never deferred (spec:AST-030 FR20). docs_only names it.
+        `spec_only=${result.specOnly || result.docsOnly}\ndocs_only=${result.docsOnly}\ntimes_only=${result.timesOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\nvitest_full_suite=${result.vitestFullSuite}\n`,
       );
     } else {
       process.stdout.write(`${JSON.stringify(result)}\n`);

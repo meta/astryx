@@ -174,6 +174,7 @@ describe('per-job scope step', () => {
         'head_file_present',
         'changed_files_path',
         'decided',
+        'docs_only',
         'docsite_only',
         'force_full_component_audits',
         'full_suite',
@@ -585,12 +586,16 @@ describe('per-job scope step', () => {
     });
 
     it('reports a head without the file whether or not touches holds', async () => {
-      for (const file of ['packages/core/src/Button/Button.tsx', 'README.md']) {
+      // crowdin.yml: outside the paths, and not a specialized lane.
+      for (const file of [
+        'packages/core/src/Button/Button.tsx',
+        'crowdin.yml',
+      ]) {
         const {outputs} = await decide({files: changed(file), inputs});
         expect(outputs.head_file_present, file).toBe('false');
       }
       const {outputs} = await decide({
-        files: changed('README.md'),
+        files: changed('crowdin.yml'),
         headFiles: ['playwright.interaction.config.ts'],
         inputs,
       });

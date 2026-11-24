@@ -376,6 +376,97 @@ describe('spec-only change scope', () => {
   });
 });
 
+describe('docs-only changes: no package or docsite code', () => {
+  it('gives a root README change the docs-only lane, not the broad check set', () => {
+    // #13732's file set.
+    const result = classifyChanges([{filename: 'README.md', status: 'M'}]);
+    expect(result.docsOnly).toBe(true);
+    expect(result.specOnly).toBe(false);
+    expect(result.fullSuite).toBe(false);
+    expect(result.vitestFullSuite).toBe(false);
+    expect(result.surfaces).toEqual([SURFACES.DOCS]);
+    expect(result.reason).toBe('no package or docsite code changed');
+  });
+
+  it.each([
+    ['root Markdown', ['CONTRIBUTING.md', 'AGENTS.md', 'SECURITY.md']],
+    ['the license', ['LICENSE']],
+    ['guidance under docs/', ['docs/contributing/pull-requests.md']],
+    ['an architecture record', ['docs/architecture/knowledge-contracts.md']],
+    ['a design asset', ['docs/design/assets/selector/alignment.png']],
+    ['a Changeset alone', ['.changeset/quiet-owls.md']],
+    ['docs beside a spec record', ['README.md', 'docs/specs/AST-030/spec.md']],
+  ])('admits %s', (_, files) => {
+    const result = classifyChanges(files.map(filename => ({filename})));
+    expect(result.docsOnly).toBe(true);
+    expect(result.fullSuite).toBe(false);
+  });
+
+  it.each([
+    [
+      'a knowledge schema',
+      ['README.md', 'docs/schemas/knowledge/record.schema.json'],
+    ],
+    ['a knowledge template', ['docs/templates/knowledge/spec.md']],
+    ['Core source', ['README.md', 'packages/core/src/Button/Button.tsx']],
+    ['docsite source', ['README.md', 'apps/docsite/src/app/page.tsx']],
+    ['a root config file', ['README.md', 'package.json']],
+    // Recorded times beside anything but themselves keep the broad set.
+    [
+      'recorded test times',
+      ['README.md', 'scripts/vitest-node-durations.json'],
+    ],
+    ['a package README', ['packages/cli/README.md']],
+    ['Markdown in a nested folder', ['internal/vibe-tests/README.md']],
+  ])('keeps %s out of the docs-only lane', (_, files) => {
+    expect(classifyChanges(files.map(filename => ({filename}))).docsOnly).toBe(
+      false,
+    );
+  });
+
+  it('keeps spec records alone in the spec-only lane', () => {
+    const result = classifyChanges([{filename: 'docs/specs/AST-030/spec.md'}]);
+    expect(result.specOnly).toBe(true);
+    expect(result.docsOnly).toBe(false);
+  });
+
+  it('narrows a docs change beside package code rather than widening it', () => {
+    const result = classifyChanges([
+      {filename: 'README.md'},
+      {filename: 'packages/cli/clients/cli/commands/help.mjs'},
+    ]);
+    expect(result.docsOnly).toBe(false);
+    expect(result.fullSuite).toBe(false);
+    expect(result.surfaces).toEqual([SURFACES.DOCS, 'runtime:cli']);
+  });
+
+  it('puts a docs-only change in the CI spec lane through --github-output, and names it', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'change-scope-'));
+    const out = path.join(dir, 'output');
+    fs.writeFileSync(out, '');
+    const run = spawnSync(
+      process.execPath,
+      [path.join(import.meta.dirname, 'change-scope.cjs'), '--github-output'],
+      {
+        input: 'M\tREADME.md\n',
+        encoding: 'utf8',
+        env: {...process.env, GITHUB_OUTPUT: out},
+      },
+    );
+    expect(run.status, run.stderr).toBe(0);
+    const outputs = Object.fromEntries(
+      fs
+        .readFileSync(out, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map(line => line.split('=')),
+    );
+    expect(outputs.spec_only).toBe('true');
+    expect(outputs.docs_only).toBe('true');
+    expect(outputs.full_suite).toBe('false');
+  });
+});
+
 describe('positive CI surfaces', () => {
   const scoreLedger = 'scripts/score-ledger.mjs';
   const scoreLedgerTest = 'scripts/score-ledger.test.mjs';
