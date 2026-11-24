@@ -141,7 +141,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'ListInput edits a compact, ordered collection of records with consistent fields, built-in add and remove actions, and optional reordering. Standard Astryx controls rendered in its columns inherit the medium control size so inputs align with the Add, remove, reorder, and validation affordances; an explicit field size still takes precedence. Pointer activation measures Add before pointer-down blur or validation can change layout, then keeps it at that viewport position by adjusting available vertical scroll containers from nearest to outermost. The correction is interaction-scoped and rechecked for one animation frame without persistent scroll or resize observation. Added rows enter with tokenized translate motion; after removal, surviving rows animate into their new positions when their geometry stays stable. Motion never delays onChange, focus handoff, or the announcement, while reduced-motion preferences and unsupported browsers use an instant change. Use it for lists with fewer than seven records and up to three simple fields per record, such as guests, travelers, or tag options. Use a Table for larger collections and a card or step-based form when records need many, complex, or inconsistent fields.',
+      'ListInput edits a compact, ordered collection of records with consistent fields, built-in add and remove actions, and optional reordering. Standard Astryx controls rendered in its columns inherit the medium control size so inputs align with the Add, remove, reorder, and validation affordances; an explicit field size still takes precedence. Pointer activation measures Add before pointer-down blur or validation can change layout, then keeps it at that viewport position by adjusting available vertical scroll containers from nearest to outermost. The correction is interaction-scoped and rechecked for one animation frame without persistent scroll or resize observation. Added rows enter with tokenized translate motion; after removal, surviving rows animate into their new positions when their geometry stays stable. Motion never delays onChange, focus handoff, or the announcement, while reduced-motion preferences and unsupported browsers use an instant change. An add or a removal is announced, and moves focus, once the value you pass back applies it: the added key is in value, or the removed key is gone. Your value may order or replace the other records. Each change waits on its own record, so changes that you apply later, in any order, are each announced. A change you refuse is not announced and moves no focus. Use it for lists with fewer than seven records and up to three simple fields per record, such as guests, travelers, or tag options. Use a Table for larger collections and a card or step-based form when records need many, complex, or inconsistent fields.',
     bestPractices: [
       {
         guidance: true,
@@ -171,7 +171,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Keep collection motion informational and non-blocking. Added live rows translate into place; removed rows disappear immediately while stable-size survivors close the gap. onChange, focus, and announcements run without waiting, and reduced-motion preferences remain instant.',
+          'Keep collection motion informational and non-blocking. Added live rows translate into place; removed rows disappear immediately while stable-size survivors close the gap. Motion never delays onChange, focus, or announcements, and reduced-motion preferences remain instant.',
       },
       {
         guidance: true,
@@ -212,7 +212,7 @@ export const docs = {
         name: 'Remove action',
         required: true,
         description:
-          'Removes its record immediately, moves focus to a predictable neighboring control, and animates surviving rows into their new positions when supported. It is revealed while the record is hovered or contains keyboard focus and stays visible on touch screens; at rest it is transparent but keeps its column and its place in the tab order, so the fields never shift. In the stacked layout, it aligns beside the first field at the top of the record.',
+          'Asks onChange to remove its record and, once the value you pass back drops it, moves focus to a predictable neighboring control, and animates surviving rows into their new positions when supported. It is revealed while the record is hovered or contains keyboard focus and stays visible on touch screens; at rest it is transparent but keeps its column and its place in the tab order, so the fields never shift. In the stacked layout, it aligns beside the first field at the top of the record.',
       },
       {
         name: 'Reorder handle',
@@ -236,7 +236,7 @@ export const docs = {
         name: 'Add action',
         required: true,
         description:
-          'Fills the record-fields width, uses the inherited medium control size shared by ListInput fields and actions, and immediately appends a new record created by createItem unless maxItems has been reached. On pointer activation, available vertical scroll containers offset the inserted height from nearest to outermost so the action remains under the pointer; keyboard activation keeps the normal focus behavior, and newly focused field visibility always wins. The live row uses tokenized translate entrance motion when supported, and focus moves to its first field without waiting for the animation.',
+          'Fills the record-fields width, uses the inherited medium control size shared by ListInput fields and actions, and asks onChange to append a new record created by createItem unless maxItems has been reached. On pointer activation, available vertical scroll containers offset the inserted height from nearest to outermost so the action remains under the pointer; keyboard activation keeps the normal focus behavior, and newly focused field visibility always wins. The live row uses tokenized translate entrance motion when supported, and focus moves to its first field once the value you pass back holds it, without waiting for the animation.',
       },
       {
         name: 'Validation messages',
@@ -627,7 +627,7 @@ export const docsDense = {
   },
   usage: {
     description:
-      'Use for compact ordered records: fewer than 7 items and up to 3 simple consistent fields. Add/remove motion does not delay onChange or focus and becomes instant under reduced motion. Use Table or a dedicated flow for larger or complex data.',
+      'Use for compact ordered records: fewer than 7 items and up to 3 simple consistent fields. Add/remove motion does not delay onChange or focus and becomes instant under reduced motion. An add/remove is announced and moves focus once value applies it (added key present, removed key gone), each on its own record; a refused change announces nothing. Use Table or a dedicated flow for larger or complex data.',
     bestPractices: [
       {
         guidance: true,
