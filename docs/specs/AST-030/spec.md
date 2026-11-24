@@ -1426,6 +1426,9 @@ component's own audits join the leg. A first run fits what it can into the same
 three legs and lists the rest by name; a later run at the same head runs every
 owed audit, and merge-guard merges only on a run that ran them all.
 
+Amended 2026-11-24 by CI & Release: a first run may take a fourth ten-minute
+leg when that finishes every owed audit.
+
 Rejected: running the audits on fewer of those runs than the other heavy suites
 (a head would merge without them); every audit spec on every
 Layer change (about 37 minutes of recorded time on a change that lands about
