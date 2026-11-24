@@ -154,8 +154,11 @@ describe('isPlainBackup', () => {
     expect(isPlainBackup('mkdir -p /tmp/bak && cp src/App.tsx /tmp/bak/')).toBe(true);
     expect(isPlainBackup('cp src/App.tsx /tmp/../tmp/x')).toBe(false);
     expect(isPlainBackup('cp src/App.tsx "/tmp/x"')).toBe(false);
-    expect(isPlainBackup('mkdir /tmp/x')).toBe(true);
+    expect(isPlainBackup('cp /tmp/themes.bak src/astryx-themes.ts')).toBe(true);
+    expect(isPlainBackup('mkdir /tmp/x')).toBe(false);
     expect(isPlainBackup('mkdir -m 777 /tmp/x')).toBe(false);
+    expect(isPlainBackup('cp  src/App.tsx /tmp/x')).toBe(false);
+    expect(isPlainBackup('cp src/App.tsx')).toBe(false);
     expect(isPlainBackup('cat /tmp/x')).toBe(false);
   });
 });

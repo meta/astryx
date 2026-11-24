@@ -13,18 +13,21 @@ import path from 'node:path';
 import {givenAndRealPaths, isInside} from './workspace.mjs';
 
 /**
- * A plain backup: only `cp`, `mv` and `mkdir -p`, joined by `&&`, on literal
- * paths, with single spaces. Any other text can make the shell reach a path
- * the audit does not see, so only such a command lists its temp paths apart.
+ * A plain backup: only `cp`, `mv` and `mkdir -p`, joined by ` && `, on literal
+ * paths, with single spaces. A copy can go into or out of the temp folder. Any
+ * other text can make the shell reach a path the audit does not see, so only
+ * such a command lists its temp paths apart.
  */
 export function isPlainBackup(command) {
   if (/[^\S ]/.test(command)) return false;
-  return command.split('&&').every(stage => {
-    const [program, ...args] = stage.trim().split(/ +/);
-    if (!['cp', 'mv', 'mkdir'].includes(program) || args.length === 0) return false;
-    return args.every(arg =>
-      program === 'mkdir' ? arg === '-p' || isLiteralPath(arg) : /^-[a-zA-Z]+$/.test(arg) || isLiteralPath(arg),
-    );
+  return command.split(' && ').every(stage => {
+    const [program, ...args] = stage.split(' ');
+    if (program === 'mkdir') {
+      return args[0] === '-p' && args.length > 1 && args.slice(1).every(isLiteralPath);
+    }
+    if (program !== 'cp' && program !== 'mv') return false;
+    const paths = args.filter(arg => !/^-[a-zA-Z]+$/.test(arg));
+    return paths.length >= 2 && paths.every(isLiteralPath);
   });
 }
 

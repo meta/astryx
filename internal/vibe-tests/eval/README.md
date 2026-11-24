@@ -70,9 +70,10 @@ path. The agent's
 own session folder, where it saves long tool output, is allowed. Any other
 outside path, including a root named by another command, is a warning, and
 `report.md` lists every run with warnings for a person to review. Only a plain
-`cp` or `mv` backup into the system temp folder (with `mkdir -p`, on literal
-paths, nothing else in the command) is listed apart: `report.md` names those
-runs on their own line, because the agents that run at the same time share that
+backup is listed apart: a command that is nothing but `cp`, `mv` and
+`mkdir -p`, joined by `&&`, on literal paths with single spaces, copying into
+or out of the system temp folder. `report.md` names those runs on their own
+line, because the agents that run at the same time share that
 folder. Any other command or tool that names a temp path stays a warning,
 because the audit cannot tell everything the shell runs. Each agent gets its own
 TMPDIR in its run folder, removed after the run, so tools that honor TMPDIR keep
