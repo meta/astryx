@@ -14,8 +14,8 @@
 
 import React, {useCallback, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {renderIconSlot, type IconType} from '../Icon';
-import {Text} from '../Text';
+import {renderIconSlot, type IconType} from '../Icon/Icon';
+import {Text} from '../Text/Text';
 import {
   colorVars,
   focusVars,
@@ -24,7 +24,7 @@ import {
   typeScaleVars,
   typographyVars,
 } from '../theme/tokens.stylex';
-import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {mergeProps} from '../utils/mergeProps';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import type {BaseProps} from '../BaseProps';
@@ -97,6 +97,10 @@ const sizeStyles = stylex.create({
   },
 });
 
+function getMenuItemFromContent(node: HTMLSpanElement) {
+  return node.closest<HTMLElement>('[role="menuitem"]');
+}
+
 export interface NavHeadingMenuItemProps extends Omit<
   BaseProps<HTMLElement>,
   'onClick'
@@ -167,16 +171,17 @@ export function NavHeadingMenuItem({
 
   // The element type above changes when `isDisabled` flips, so React replaces
   // the row; focus follows to the replacement (spec:AST-085 FR4).
-  const itemRef = useFocusAcrossSwap<HTMLElement>(ref);
+  const contentRef = useFocusAcrossSwap<HTMLSpanElement>(undefined, {
+    getFocusTarget: getMenuItemFromContent,
+  });
 
   return (
     <Element
-      {...restProps}
-      onMouseDown={composeEventHandlers(
-        restProps.onMouseDown,
-        isDisabled ? keepDisabledRowUnfocused : undefined,
-      )}
-      ref={itemRef}
+      {...withholdCallerHandlers(restProps, isDisabled)}
+      onMouseDown={
+        isDisabled ? keepDisabledRowUnfocused : restProps.onMouseDown
+      }
+      ref={ref}
       role="menuitem"
       // Every row, disabled included, takes focus but is not a Tab stop.
       tabIndex={-1}
@@ -200,7 +205,7 @@ export function NavHeadingMenuItem({
         style,
       )}>
       {icon && renderIconSlot(icon, {size: 'sm', color: 'secondary'})}
-      <span {...stylex.props(styles.content)}>
+      <span ref={contentRef} {...stylex.props(styles.content)}>
         {typeof label === 'string' ? (
           <Text type="body" maxLines={1}>
             {label}

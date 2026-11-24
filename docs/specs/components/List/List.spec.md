@@ -241,7 +241,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   adopts it for row updates (FR12).
 - Additive theme surface: a theme maps the reorder handle's grip through
   `componentIcons['list-reorder-handle']`; with no entry, the grip is the
-  `drag` icon at the `sm` size (`spec:AST-103` DEC-7). The slot's size
+  `drag` icon at the `sm` size (`spec:AST-103` DEC-8). The slot's size
   changes only the icon.
 - `spec:AST-103` owns reordering. List is its first adopter: it
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
@@ -364,7 +364,7 @@ row then needs a second element or a main-thread paint for its press.
 **Decider:** `cixzhang`, `2026-11-13 18:40 PT`
 
 A reorderable row's handle draws its grip as the theme's icon
-(`spec:AST-103` DEC-7). That icon's own elements join the row, inside the
+(`spec:AST-103` DEC-8). That icon's own elements join the row, inside the
 handle: the default `drag` adds eight, a wrapper and an SVG of six dots.
 This is the list-row exception to the surface budget of
 `architecture:component-style-authoring` INV7. The handle's `::before` holds

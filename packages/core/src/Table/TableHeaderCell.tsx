@@ -30,6 +30,7 @@ import {
   headerOverflowStyles,
   overflowStyles,
   containerEdgeStyles,
+  cutHeadingStyles,
 } from './table.stylex';
 import {useTableContext, mergeXStyle} from './useTableCellStyles';
 import {
@@ -41,6 +42,7 @@ import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {useCutTextOnKeyboardFocus} from '../Text/cutTextOnKeyboardFocus';
+import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
 
 /** Props for TableHeaderCell — `<th>` wrapper with context-aware styling */
 export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
@@ -208,8 +210,22 @@ export function TableHeaderCell({
   // interacts with its padding / content. No-op when no actions. Inside a
   // Table the wrapper stays unpositioned, so a header plugin's overlay, such
   // as a resize boundary, positions against the cell and sits on its edge.
+  const cutDirection = truncates ? cutTextDirection(children).dir : undefined;
+  const heading =
+    cutDirection == null ? (
+      children
+    ) : (
+      <span
+        dir={cutDirection}
+        {...stylex.props(
+          cutHeadingStyles.label,
+          truncatedTextStyles.pageAlign,
+        )}>
+        {children}
+      </span>
+    );
   const content = wrapInTableContextMenu(
-    children,
+    heading,
     contextMenuActions,
     ctx && hasContextMenu ? headerTriggerStyles.unpositioned : undefined,
   );

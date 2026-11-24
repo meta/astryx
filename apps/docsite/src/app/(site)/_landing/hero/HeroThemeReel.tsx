@@ -46,7 +46,7 @@ import {useThemeMode} from '../../../providers';
 import {
   HERO_THEME_SLIDES,
   REEL_FONT_SPECIFIERS,
-  REEL_IMAGE_SRCS,
+  REEL_IMAGES,
   type HeroThemeSlide,
 } from './heroThemeContent';
 import {AstryxLogo} from '../../../../components/logos';
@@ -344,10 +344,13 @@ export function HeroReelProvider({children}: {children: ReactNode}) {
         }
       }
       // Images: prime the browser cache with the reel's product photos so they
-      // are decoded by the time their slide swaps in.
-      for (const src of REEL_IMAGE_SRCS) {
+      // are decoded by the time their slide swaps in. With the `sizes` and the
+      // `srcset` of the card's <img>, the browser selects the same file here.
+      for (const {src, srcSet, sizes} of REEL_IMAGES) {
         const img = new Image();
         img.decoding = 'async';
+        img.sizes = sizes;
+        img.srcset = srcSet;
         img.src = src;
       }
     });

@@ -46,7 +46,7 @@ import {
   tabularNumbersStyle,
   truncationTooltipStyles,
 } from './text.stylex';
-import {useTruncation} from './useTruncation';
+import {useTruncationMeasure} from './useTruncation';
 import {
   TruncationTooltip,
   useTruncationTooltipInterest,
@@ -57,7 +57,10 @@ import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {TextClampContext} from './textClampContext';
+import {
+  TextClampContext,
+  TextMeasureOnInterestContext,
+} from './textClampContext';
 
 export type {TextType, TextSize};
 
@@ -262,12 +265,23 @@ export function Text({
   // Resolve display - force block when maxLines > 0 or hasCapsize
   const resolvedDisplay = maxLines > 0 || hasCapsize ? 'block' : display;
 
+  // A Table's default cells mount many texts at once. Text in them measures at
+  // each hover, tap or focus, not at mount.
+  const measuresOnInterest =
+    use(TextMeasureOnInterestContext) &&
+    maxLines > 0 &&
+    hasTruncateTooltip !== false;
+
   // Truncation detection. Only the tooltip reads the measured overflow, so
   // with the tooltip off the text is clipped by CSS alone and nothing is
   // measured or observed.
-  const truncation = useTruncation({
+  const truncation = useTruncationMeasure({
     maxLines: hasTruncateTooltip === false ? 0 : maxLines,
+    measuresOnInterest,
   });
+
+  // Ref for the text element (used as tooltip anchor)
+  const textRef = useRef<HTMLElement>(null);
 
   // Tooltip for truncated text
   const tooltipPlacement: LayerPlacement =
@@ -275,10 +289,11 @@ export function Text({
   const tooltipEnabled =
     maxLines > 0 && hasTruncateTooltip !== false && truncation.isTruncated;
   // The tooltip mounts on the first hover, tap or focus, not with the text.
-  const tooltipInterest = useTruncationTooltipInterest(tooltipEnabled);
-
-  // Ref for the text element (used as tooltip anchor)
-  const textRef = useRef<HTMLElement>(null);
+  const tooltipInterest = useTruncationTooltipInterest(
+    tooltipEnabled,
+    truncation.measure,
+    textRef,
+  );
 
   // Keep the merged ref stable across rerenders.
   const mergedRef = useMergedRefs(ref, truncation.ref, textRef);
@@ -325,9 +340,9 @@ export function Text({
           {...style, ...inlineStyle},
         )}
         {...props}
-        onPointerEnter={composeEventHandlers(
-          tooltipInterest.onPointerEnter,
-          props.onPointerEnter,
+        onPointerMove={composeEventHandlers(
+          tooltipInterest.onPointerMove,
+          props.onPointerMove,
         )}
         onPointerLeave={composeEventHandlers(
           tooltipInterest.onPointerLeave,

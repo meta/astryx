@@ -25,6 +25,7 @@ import {
 } from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {mergeProps, rtlStyles} from '../utils';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
   endResizeAt,
   getCollapseControls,
@@ -341,7 +342,6 @@ export interface ResizeHandleProps extends Omit<
   position?: 'inline' | 'overlay';
 
   /**
-  /**
    * Reverse the drag direction. Use when the handle controls a panel
    * on the end/right/bottom side.
    * @default false
@@ -423,6 +423,9 @@ export function ResizeHandle({
   xstyle,
   className,
   ref,
+  onFocus: onFocusProp,
+  onBlur: onBlurProp,
+  onDoubleClick: onDoubleClickProp,
   ...props
 }: ResizeHandleProps) {
   const resizable =
@@ -669,16 +672,16 @@ export function ResizeHandle({
       role="separator"
       {...aria}
       aria-label={label}
-      onDoubleClick={() => {
+      onDoubleClick={composeEventHandlers(() => {
         if (!isDisabled) {
           gesture?.doubleClick();
         }
-      }}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
+      }, onDoubleClickProp)}
+      onFocus={composeEventHandlers(() => setIsFocused(true), onFocusProp)}
+      onBlur={composeEventHandlers(() => setIsFocused(false), onBlurProp)}
       data-resizing={isDragging || undefined}
       {...mergeProps(
-        themeProps('resize-handle'),
+        themeProps('resize-handle', {direction}),
         focusOutlineProps.focusVisible(
           styles.handle,
           isOverlay && styles.overlay,

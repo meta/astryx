@@ -7,10 +7,11 @@
  *   older than its sources once no earlier run is still running. It
  *   regenerates the Sandbox template registry and route wrappers, builds the
  *   theme editor's cache for the CLI's own Core, gives the folder the run
- *   builds each bundled theme once in, packs the CLI, points the per-user
- *   folder at a folder of this run and names the repository's package
- *   manager as the run's launcher, once, before any test worker forks. Its teardown fails the run when a test wrote into the
- *   checkout.
+ *   builds each bundled theme once in, packs the CLI, points the home
+ *   folder, the temp folder and every per-user folder at folders of this run
+ *   and names the repository's package manager as the run's launcher, once,
+ *   before any test worker forks. Its teardown fails the run when a test
+ *   wrote into the checkout.
  * @position Referenced by vitest.config.ts's `node` project. The build-theme
  *   suites need a compiled Core; the Sandbox route contract imports generated
  *   template metadata and scans ignored wrappers that do not exist in a fresh
@@ -37,8 +38,10 @@ import {
   writtenSince,
 } from './packages/cli/test-utils/checkout-writes.mjs';
 import {packCli} from './packages/cli/test-utils/pack-cli.mjs';
+import {moveUserHome} from './packages/cli/test-utils/test-home.mjs';
 import {repositoryUserAgent} from './packages/cli/test-utils/test-launcher.mjs';
 import {
+  TEST_TMP_PREFIX,
   sweepTrash,
   trashFolder,
 } from './packages/cli/test-utils/run-folder.mjs';
@@ -81,19 +84,17 @@ export default async function setup(project) {
     // An earlier run's child may have been stopped before it removed that
     // run's folder.
     sweepTrash(os.tmpdir(), Date.now());
-    // The CLI records once-a-day notices in a per-user state file. Point the
-    // per-user folder of every worker at a folder of this run, so no test
-    // writes the developer's real one. macOS reads it under the home folder
-    // only, so there the home folder moves too, and npm keeps its own cache.
+    // No test reads or writes the developer's home folder. The home folder,
+    // the temp folder and every per-user folder of every worker, and of every
+    // process a test starts, point at folders of this run
+    // (test-utils/test-home.mjs); each worker refuses to start otherwise.
     const userHome = fs.mkdtempSync(
       path.join(os.tmpdir(), 'astryx-test-user-'),
     );
-    process.env.XDG_CONFIG_HOME = path.join(userHome, '.config');
-    process.env.APPDATA = path.join(userHome, 'AppData', 'Roaming');
-    if (process.platform === 'darwin') {
-      process.env.npm_config_cache ??= path.join(os.homedir(), '.npm');
-      process.env.HOME = userHome;
-    }
+    // The run's temp folder sits beside its home folder, not around it, as
+    // on a developer's computer.
+    const runTmp = fs.mkdtempSync(path.join(os.tmpdir(), TEST_TMP_PREFIX));
+    moveUserHome(userHome, runTmp);
     // Tests read the package manager that started them from its user agent.
     // The run names the repository's own, so a run started with `node` or
     // `npx vitest` prints the same commands as one started with pnpm.
@@ -157,10 +158,10 @@ export default async function setup(project) {
     return () => {
       // Vitest gives close() 10 s, and the folder holds thousands of files.
       // It moves aside at once, and a detached child removes it.
-      trashFolder(packDir);
+      // The packed CLI, the theme cache and the base themes are in the run's
+      // temp folder, which moves aside with them.
+      trashFolder(runTmp);
       trashFolder(userHome);
-      trashFolder(themeCache);
-      trashFolder(baseThemes);
       const written = writtenSince(checkoutBefore, checkoutState(root));
       if (written.length) {
         endRun();

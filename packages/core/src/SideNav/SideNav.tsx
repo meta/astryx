@@ -45,7 +45,7 @@ import {
 } from './SideNavCollapseContext';
 import {SideNavCollapseButton} from './SideNavCollapseButton';
 import {useSideNavRenderMode} from './SideNavRenderContext';
-import {MobileNav} from '../MobileNav/MobileNav';
+import {MobileNavDrawer} from '../MobileNav/MobileNavToggle';
 import {
   isResizableRegion,
   useResizable,
@@ -888,7 +888,7 @@ export function SideNav({
 
   if (renderMode === 'drawer') {
     return (
-      <MobileNav
+      <MobileNavDrawer
         header={header}
         data-testid={testId}
         xstyle={xstyle}
@@ -909,7 +909,7 @@ export function SideNav({
             )}
           </div>
         )}
-      </MobileNav>
+      </MobileNavDrawer>
     );
   }
 

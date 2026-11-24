@@ -15,6 +15,7 @@
 
 import type {RefObject} from 'react';
 import {UndescribedTooltip} from '../Tooltip/Tooltip';
+import {isTooltipDescription} from '../privateAttributes/tooltipDescription.stylex';
 
 /** Whether a box clips its content. */
 function overflows(element: Element): boolean {
@@ -86,12 +87,17 @@ function visibleText(root: HTMLElement): string {
  */
 function hasCallerTooltip(anchor: HTMLElement): boolean {
   const ids = anchor.getAttribute('aria-describedby')?.split(/\s+/) ?? [];
-  return ids.some(
-    id =>
-      id !== '' &&
-      anchor.ownerDocument.getElementById(id)?.getAttribute('role') ===
-        'tooltip',
-  );
+  return ids.some(id => {
+    const described =
+      id === '' ? null : anchor.ownerDocument.getElementById(id);
+    // A tooltip's description is a hidden copy of its text after the
+    // trigger until its layer mounts, then the content inside the layer.
+    return (
+      described != null &&
+      (described.closest('[role="tooltip"]') != null ||
+        isTooltipDescription(described))
+    );
+  });
 }
 
 /**

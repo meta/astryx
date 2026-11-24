@@ -136,6 +136,7 @@ export const GROUP_ROLES = /** @type {const} */ ([
   'inset-fields',
   'status-surfaces',
   'overlay-headers',
+  'controls',
 ]);
 
 /** @param {string} target @returns {string | null} */
@@ -149,7 +150,9 @@ export const familyOf = target =>
  * settings reader share: on a member of a group that spreads (a text input
  * of inputs) it keeps the change on that member (`member`); on any other
  * part it changes nothing, as the part is styled on its own already
- * (`own`); on a group itself, the editor's own (inputs) or a family role
+ * (`own`), except on a control's own height, which keeps the height on
+ * that control (onlyFits, and onlyHeightShape for the settings reader);
+ * on a group itself, the editor's own (inputs) or a family role
  * (button-like), or with no part, it means nothing at all (`group`).
  * @param {string | undefined} on
  * @returns {'member' | 'own' | 'group'}
@@ -545,7 +548,7 @@ export const DIALS = wordTable({
           : []),
         `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
       ]).join(', ') +
-      `, or a size like 6px. more and less step through them in that order, ${ROUND_TO_PILL_STEP} included. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round), and gives the chat radius (--radius-chat: a composer, its drawer, message bubbles) back to the container radius, so it follows it. With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.`,
+      `, or a size like 6px. more and less step through them in that order, ${ROUND_TO_PILL_STEP} included. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round), and gives the chat radius (--radius-chat: a composer, its drawer, message bubbles) from the container radius, at the base theme's ratio of the two and at most one and a half times the base's chat radius, so it follows it and moves the way the corners move. With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.`,
     values: 'square|small|medium|large|round|pill|more|less|<size like 6px>',
     examples: [
       'set my corners pill',
@@ -661,6 +664,13 @@ export const DIALS = wordTable({
     values: 'solid|outline|soft|caps',
     examples: ['set my buttons outline', 'set my buttons caps'],
     words: 'cta solid outline outlined soft tint caps uppercase filled',
+  },
+  badges: {
+    help: "The badge style, the status and category badges together, in the theme's own status and category colors; the neutral badge keeps its look. solid: each status badge filled with its status color, its text in that color's on-color; each category badge filled with a strong color of its hue, its text in the page color or the primary text color. soft: each status badge a light tint of its color with text in that tint's on-color; the category badges keep their look. outline: each status and category badge a thin line in its own text color, with that text, on the surface it sits on. Each badge takes the first of its colors that reads at 4.5:1. A badge none of whose own colors read on the base falls back to a pair that reads, where one exists, and the set result names it: in solid it keeps its tint; in outline it draws the primary text inside a line of its color. show names a badge that still does not read. A property the theme sets on the badge itself stays, in the modes it is set for. Corners come from the corners dial (corners <value> --on badge).",
+    values: 'solid|soft|outline',
+    examples: ['set my badges soft', 'set my badges outline'],
+    words:
+      'badge badges tag tags label labels chip chips status solid filled soft tint tinted outline outlined',
   },
   type: {
     help: 'The type personality: how far headings step up from body text and how they are set. compact: small steps (x1.15), semibold. standard: the default (x1.2). editorial: bigger steps (x1.3), tight tracking, semibold. display: big steps (x1.4), heavy weight, tighter tracking (a marketing feel). Text below the base size keeps its standard sizes, so small text stays readable. Works with text-size; a headings setting keeps its weight or tracking whatever the order. Phones (touch screens below 1024px wide) keep the base theme reading sizes.',

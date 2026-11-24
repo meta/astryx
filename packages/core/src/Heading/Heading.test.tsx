@@ -503,6 +503,41 @@ describe('the truncation tooltip mounts on the first interaction', () => {
     };
   }
 
+  it('runs a caller\u2019s onPointerEnter and onPointerMove, and mounts the tooltip on the first move', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      const onPointerEnter = vi.fn();
+      const onPointerMove = vi.fn();
+      render(
+        <Heading
+          level={2}
+          maxLines={1}
+          onPointerEnter={onPointerEnter}
+          onPointerMove={onPointerMove}>
+          {TITLE}
+        </Heading>,
+      );
+      const heading = screen.getByText(TITLE);
+      fireEvent.pointerEnter(heading, {pointerType: 'mouse'});
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      // An arrival with no move is not a hover.
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+      fireEvent.pointerMove(heading, {pointerType: 'mouse'});
+      expect(onPointerEnter).toHaveBeenCalledTimes(1);
+      expect(onPointerMove).toHaveBeenCalledTimes(1);
+      await waitFor(
+        () => {
+          expect(showPopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+    } finally {
+      restore();
+    }
+  });
+
   it('mounts no tooltip layer before any interaction, and one on the first hover', async () => {
     const {showPopover, restore} = withOverflowAndPopover();
     try {
@@ -516,12 +551,18 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       });
       expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
 
-      fireEvent.pointerEnter(screen.getByText(TITLE), {pointerType: 'mouse'});
+      const heading = screen.getByText(TITLE);
+      fireEvent.pointerEnter(heading, {pointerType: 'mouse'});
+      fireEvent.pointerMove(heading, {pointerType: 'mouse'});
       await waitFor(
         () => {
           expect(showPopover).toHaveBeenCalled();
         },
         {timeout: 3000},
+      );
+      // The tooltip's text is the heading's own: no description, read once.
+      expect(screen.getByRole('heading', {level: 2})).not.toHaveAttribute(
+        'aria-describedby',
       );
     } finally {
       restore();

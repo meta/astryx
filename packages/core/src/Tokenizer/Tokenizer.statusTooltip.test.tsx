@@ -15,6 +15,7 @@ import {render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Tokenizer} from './Tokenizer';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // A field in the sheet presentation loads the sheet module on mount, and the
 // load runs past the test that started it. The file loads it before any test
@@ -64,7 +65,7 @@ describe('Tokenizer status icon', () => {
       container.querySelector('.astryx-field-status'),
     ).not.toBeInTheDocument();
     const button = await screen.findByRole('button', {name: 'Error details'});
-    const tooltip = await screen.findByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent(MESSAGE);
     expect(button.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
@@ -72,7 +73,7 @@ describe('Tokenizer status icon', () => {
   it('describes the input by the tooltip, not by an absent message box', async () => {
     render(<Field statusVariant="tooltip" />);
     const input = screen.getByRole('combobox');
-    const tooltip = await screen.findByRole('tooltip', h);
+    const tooltip = getTooltip();
     const describedBy = (input.getAttribute('aria-describedby') ?? '').split(
       ' ',
     );
@@ -99,7 +100,6 @@ describe('Tokenizer status icon', () => {
   it('reveals the message on keyboard focus', async () => {
     const user = userEvent.setup();
     render(<Field statusVariant="tooltip" />);
-    const tooltip = await screen.findByRole('tooltip', h);
     await user.tab();
     expect(screen.getByRole('combobox')).toHaveFocus();
     await user.tab();
@@ -107,7 +107,7 @@ describe('Tokenizer status icon', () => {
       await screen.findByRole('button', {name: 'Error details'}),
     ).toHaveFocus();
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
     });
   });
 
@@ -172,7 +172,7 @@ describe('Tokenizer status icon', () => {
     const trigger = screen.getByRole('button', {name: /Members/});
     expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
     const button = await screen.findByRole('button', {name: 'Error details'});
-    const tooltip = await screen.findByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent(MESSAGE);
     expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     await user.click(button);

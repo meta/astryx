@@ -248,8 +248,9 @@ function createPlugin() {
           for (const filePath of files) {
             // Classify every file on each pass: when a marker appears or goes,
             // `withAstryx()` rebuilds the copy with the other prefix.
+            const normalizedFilePath = filePath.replace(/\\/g, '/');
             const isLibrary =
-              libraryPatterns.some(p => filePath.includes(p)) ||
+              libraryPatterns.some(p => normalizedFilePath.includes(p)) ||
               isSwizzledSource(filePath, markerMemo);
             const rulesMap = isLibrary ? libraryRulesMap : productRulesMap;
             const movedSides = (
