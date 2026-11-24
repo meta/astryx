@@ -76,6 +76,32 @@ export const InSizedCard: StoryObj = {
   render: () => <InCard />,
 };
 
+function FallbackInCard() {
+  const virtualization = useTableRowsVirtualization({
+    rowHeight: 56,
+    initialViewportHeight: 400,
+  });
+  // Wrapped text is not fixed-height, so the Table renders every row, in a
+  // scroll area inside the Card's 400px.
+  return (
+    <Card height={400}>
+      <Table
+        data={rows}
+        columns={[
+          {key: 'name', header: 'Product'},
+          {key: 'status', header: 'Status'},
+        ]}
+        idKey="id"
+        virtualization={virtualization}
+        textOverflow="wrap"
+      />
+    </Card>
+  );
+}
+export const FallbackInSizedCard: StoryObj = {
+  render: () => <FallbackInCard />,
+};
+
 type WideRow = Record<string, string> & {id: string};
 const wideColumns: TableColumn<WideRow>[] = [
   {key: 'name', header: 'Name', width: pixel(160)},
