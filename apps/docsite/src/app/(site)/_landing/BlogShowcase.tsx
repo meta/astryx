@@ -43,6 +43,8 @@ const SLOT_COUNT = 3;
 // section gives the feature card at most 825 px and a compact card 344 px.
 // Below that each card has the full width, less the page's two 24 px
 // gutters.
+// SYNC: the gutters are the `paddingInline` of `showcaseOverlay` in
+// HomePage.tsx.
 const FEATURE_COVER_SIZES = '(min-width: 1024px) 825px, calc(100vw - 48px)';
 const COMPACT_COVER_SIZES = '(min-width: 1024px) 344px, calc(100vw - 48px)';
 
