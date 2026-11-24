@@ -568,7 +568,14 @@ export function CommentComposerBase({
       </VStack>
     );
 
-  const {xstyle, className, style, ...restRootProps} = rootProps ?? {};
+  const {
+    xstyle,
+    className,
+    style,
+    onClick: onRootClick,
+    ...restRootProps
+  } = rootProps ?? {};
+  const isInThread = context.kind !== 'comment';
   return (
     <VStack
       ref={rootRef}
@@ -583,9 +590,12 @@ export function CommentComposerBase({
         style,
       )}
       onClick={event => {
-        // The composer keeps its clicks: in a thread, a press on its empty
-        // space would otherwise reach the thread and collapse it.
-        event.stopPropagation();
+        onRootClick?.(event);
+        // In a thread, a press on the composer's empty space would otherwise
+        // reach the thread and collapse it.
+        if (isInThread) {
+          event.stopPropagation();
+        }
         const target = event.target as Element;
         if (
           target.closest(COMPOSER_CONTROL_SELECTOR) == null &&

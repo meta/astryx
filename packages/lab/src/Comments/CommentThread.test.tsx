@@ -145,6 +145,28 @@ describe('CommentThread', () => {
     ).toBeTruthy();
   });
 
+  it('stays open on a press in the empty space of its reply composer', async () => {
+    const onSelectedChange = vi.fn();
+    render(
+      <CommentThread
+        comment={THREAD}
+        currentUser={VIEWER}
+        onSubmit={vi.fn()}
+        onSelectedChange={onSelectedChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Thread by Maya Chen'}));
+    await settle();
+    const composer = document.querySelector('.astryx-comment-composer');
+    expect(composer).not.toBeNull();
+    fireEvent.click(composer!);
+    await settle();
+    expect(onSelectedChange).not.toHaveBeenCalledWith(false);
+    expect(
+      screen.getByRole('textbox', {name: 'Reply to Maya Chen…'}),
+    ).toBeTruthy();
+  });
+
   it('opens when the host selects it', async () => {
     const {rerender} = render(
       <CommentThread
