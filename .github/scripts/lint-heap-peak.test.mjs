@@ -108,8 +108,10 @@ describe('the report', () => {
       .map(line => JSON.parse(line));
     expect(recorded.liveHeap).toBeGreaterThan(20 * 1024 ** 2);
     expect(recorded.heldHeap).toBeGreaterThanOrEqual(recorded.liveHeap);
-    expect(recorded.heapLimit).toBeGreaterThan(200 * 1024 ** 2);
-    expect(recorded.heapLimit).toBeLessThan(400 * 1024 ** 2);
+    // The limit follows --max-old-space-size (plus the young generation,
+    // whose size varies by platform), far below Node's default.
+    expect(recorded.heapLimit).toBeGreaterThanOrEqual(256 * 1024 ** 2);
+    expect(recorded.heapLimit).toBeLessThan(1024 ** 3);
     expect(recorded.maxRss).toBeGreaterThan(recorded.liveHeap);
   });
 });
