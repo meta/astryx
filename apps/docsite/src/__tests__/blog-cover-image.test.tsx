@@ -2,8 +2,9 @@
 
 /**
  * @file A blog cover loads through the image optimizer, wherever a page shows
- * it. A cover the optimizer does not convert keeps its own URL. Page metadata
- * names the cover file itself.
+ * it. A cover the optimizer does not convert keeps its own URL. The landing
+ * page's cards let the browser select the width. Page metadata names the
+ * cover file itself.
  *
  * @input The cover components, the generated blog registry, and the Next.js
  *   config
@@ -131,7 +132,11 @@ import {BlogFeatureCard} from '../components/blog/BlogFeatureCard';
 import {BlogIndex} from '../components/blog/BlogIndex';
 import {BlogShowcase} from '../app/(site)/_landing/BlogShowcase';
 import {generateMetadata} from '../app/blog/[slug]/page';
-import {BLOG_COVER_WIDTH, blogCoverUrl} from '../lib/blog/coverImage';
+import {
+  BLOG_COVER_WIDTH,
+  blogCoverSources,
+  blogCoverUrl,
+} from '../lib/blog/coverImage';
 
 const publicDir = path.resolve(__dirname, '../../public');
 const {post} = fixtures;
@@ -146,6 +151,18 @@ function images(html: string): Array<{src: string; alt: string}> {
     alt: /\balt="([^"]*)"/u.exec(tag)?.[1] ?? '',
   }));
 }
+
+/** The `srcset` widths and the `sizes` of each image, in document order. */
+function candidates(html: string): Array<{widths: number[]; sizes: string}> {
+  return [...html.matchAll(/<img\b[^>]*>/gu)].map(([tag]) => ({
+    widths: [
+      ...(/\bsrcset="([^"]*)"/iu.exec(tag)?.[1] ?? '').matchAll(/ (\d+)w/gu),
+    ].map(([, width]) => Number(width)),
+    sizes: /\bsizes="([^"]*)"/u.exec(tag)?.[1] ?? '',
+  }));
+}
+
+const COVER_WIDTHS = [640, 1080, 1920];
 
 describe('blogCoverUrl', () => {
   it.each(['cover.png', 'header.jpg', 'photo.jpeg', 'COVER.PNG'])(
@@ -176,6 +193,29 @@ describe('blogCoverUrl', () => {
     ['a path that is not root-relative', 'blog/a-post/cover.png'],
   ])('keeps %s as written', (_, cover) => {
     expect(blogCoverUrl(cover)).toBe(cover);
+  });
+});
+
+describe('blogCoverSources', () => {
+  it('offers a PNG or JPEG cover at each width, for the slot it is given', () => {
+    const file = '/blog/a-post/cover.png';
+    expect(blogCoverSources(file, '344px')).toEqual({
+      src: optimized(file),
+      srcSet: COVER_WIDTHS.map(
+        width =>
+          `/_next/image?url=${encodeURIComponent(file)}&w=${width}&q=75 ${width}w`,
+      ).join(', '),
+      sizes: '344px',
+    });
+  });
+
+  it.each([
+    '/blog/the-astryx-cli/cover.gif',
+    '/blog/a-post/cover.webp',
+    'https://example.com/blog/a-post/cover.png',
+    '/blog/a-post/cover.png?v=2',
+  ])('gives %s its own URL and no widths', cover => {
+    expect(blogCoverSources(cover, '344px')).toEqual({src: cover});
   });
 });
 
@@ -230,6 +270,46 @@ describe('the places that show a cover', () => {
     ]);
   });
 
+  it('a card in a slot of a known width lets the browser select the cover width', () => {
+    for (const html of [
+      renderToStaticMarkup(<BlogCard post={post} coverSizes="344px" />),
+      renderToStaticMarkup(<BlogFeatureCard post={post} coverSizes="344px" />),
+    ]) {
+      expect(images(html)).toEqual([cover]);
+      expect(candidates(html)).toEqual([
+        {widths: COVER_WIDTHS, sizes: '344px'},
+      ]);
+    }
+  });
+
+  it('the landing page names the width of each cover slot', () => {
+    expect(candidates(renderToStaticMarkup(<BlogShowcase />))).toEqual([
+      {
+        widths: COVER_WIDTHS,
+        sizes: '(min-width: 1024px) 825px, calc(100vw - 48px)',
+      },
+      // A GIF has one file.
+      {widths: [], sizes: ''},
+      {
+        widths: COVER_WIDTHS,
+        sizes: '(min-width: 1024px) 344px, calc(100vw - 48px)',
+      },
+    ]);
+  });
+
+  it('the article, the blog index and a card with no slot width load one width', () => {
+    for (const html of [
+      renderToStaticMarkup(<BlogArticle post={post} />),
+      renderToStaticMarkup(
+        <BlogIndex posts={[post]} availableTypes={['story']} />,
+      ),
+      renderToStaticMarkup(<BlogCard post={post} />),
+      renderToStaticMarkup(<BlogFeatureCard post={post} />),
+    ]) {
+      expect(candidates(html)).toEqual([{widths: [], sizes: ''}]);
+    }
+  });
+
   it('a GIF cover renders from its own URL in each place', () => {
     const gif = {...post, coverImage: '/blog/the-astryx-cli/cover.gif'};
     for (const html of [
@@ -250,6 +330,9 @@ describe('the cover width', () => {
       ...(nextConfig as {images?: Partial<typeof imageConfigDefault>}).images,
     };
     expect(images.deviceSizes).toContain(BLOG_COVER_WIDTH);
+    expect([...images.deviceSizes, ...images.imageSizes]).toEqual(
+      expect.arrayContaining(COVER_WIDTHS),
+    );
   });
 });
 

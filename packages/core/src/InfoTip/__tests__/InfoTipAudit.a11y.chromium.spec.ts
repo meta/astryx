@@ -521,9 +521,10 @@ for (const item of cases) {
           button.description === spec.content,
           `description ${button.description}`,
         );
+        // The description is the content inside the surface it controls.
         check(
           button.ariaControls != null &&
-            button.ariaControls === button.describedBy,
+            button.describedBy === `${button.ariaControls}-description`,
           `aria-controls ${button.ariaControls} vs ${button.describedBy}`,
         );
       } else {

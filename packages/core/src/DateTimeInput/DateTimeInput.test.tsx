@@ -31,6 +31,7 @@ import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
@@ -707,7 +708,7 @@ describe('DateTimeInput', () => {
       />,
     );
     const timeInput = screen.getByLabelText('When time');
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    const tooltip = getTooltip();
     expect(timeInput.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 
@@ -1655,18 +1656,18 @@ describe('DateTimeInput', () => {
       // The tooltip anchors on the outer row that wraps both inputs.
       const dateInput = screen.getByRole('combobox');
       const row = dateInput.parentElement?.parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('You need the Editor role');
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(row);
       fireEvent.pointerMove(row);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(row);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(tooltip()).not.toHaveAttribute('popover-open');
       });
     });
 
@@ -1681,17 +1682,17 @@ describe('DateTimeInput', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       // The calendar button keeps its enabled tab stop (spec:AST-085 FR1).
       await user.tab();
       expect(getButton('Open calendar')).toHaveFocus();
       expect(
         getButton('Open calendar').getAttribute('aria-describedby'),
-      ).toContain(tooltip.id);
+      ).toContain(tooltip().id);
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
     });
 
@@ -1740,7 +1741,7 @@ describe('DateTimeInput', () => {
         />,
       );
       const dateInput = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(dateInput.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
