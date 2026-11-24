@@ -68,6 +68,7 @@ import {menuRowCornerStyles} from './menuRowCorners.stylex';
 import {Item} from '../Item';
 import {useLayer} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {surfaceEdgeStyles} from '../Popover/surfaceEdge.stylex';
 import {useInternalListFocus} from '../hooks/useListFocus';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMenuHover} from '../hooks/useMenuHover';
@@ -222,19 +223,7 @@ const flyoutStyles = stylex.create({
     borderRadius: 'var(--_dropdown-menu-radius)',
     backgroundColor: colorVars['--color-background-popover'],
     boxShadow: shadowVars['--shadow-low'],
-    // Forced colors removes box-shadow, which is this surface's only edge.
-    borderWidth: {
-      default: null,
-      '@media (forced-colors: active)': '1px',
-    },
-    borderStyle: {
-      default: null,
-      '@media (forced-colors: active)': 'solid',
-    },
-    borderColor: {
-      default: null,
-      '@media (forced-colors: active)': 'CanvasText',
-    },
+    // Its forced-colors edge is surfaceEdgeStyles.edgeKeepingFocus.
     opacity: 1,
     transitionProperty: 'opacity',
     transitionDuration: durationVars['--duration-fast'],
@@ -1476,6 +1465,7 @@ export function DropdownMenuSubMenu(
                     themeProps('dropdown-menu', {presentation: 'popover'}),
                     stylex.props(
                       flyoutStyles.menu,
+                      surfaceEdgeStyles.edgeKeepingFocus,
                       hasOverflow
                         ? flyoutStyles.touchPanYPinchZoom
                         : flyoutStyles.touchPinchZoom,

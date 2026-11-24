@@ -39,13 +39,16 @@ const RING_APPEARANCE = new Set(['outline', 'outlineWidth', 'outlineStyle']);
 
 /**
  * The files that own a ring are the only places allowed to write it: the
- * shared utility, and the focus-owner attribute's owner module, which holds
+ * shared utility, the focus-owner attribute's owner module, which holds
  * the wrapper ring keyed to that private attribute
- * (`architecture:public-component-api` INV23).
+ * (`architecture:public-component-api` INV23), and the floating-surface edge
+ * module, whose forced-colors edge shares `outline` with the ring
+ * (`component:Popover` FR10).
  */
 const RING_OWNER_FILES = [
   'focusOutline.stylex',
   'privateAttributes/focusOwner.stylex',
+  'Popover/surfaceEdge.stylex',
 ];
 
 function isFocusVisibleKey(key) {
