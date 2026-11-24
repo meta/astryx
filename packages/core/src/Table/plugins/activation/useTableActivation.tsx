@@ -213,11 +213,12 @@ function withActivationShortcuts(live: string | null): string {
  *
  * Active state is a `data-active` attribute, `aria-current="true"`, plus the
  * non-colour marker: a leading-edge accent bar on the first cell. Table's
- * row-paint path owns the fill. The bar is an inset shadow on the first cell in default mode; under forced colors the
- * shadow maps to nothing, so the stylesheet rule below paints an outline
- * there instead, which draws over the cell in a system color and follows
- * mode changes without a store update. No selection
- * semantics are inferred: `aria-selected` is never written here.
+ * row-paint path owns the fill. The bar is an inset shadow on the first cell
+ * in default mode; under forced colors the shadow maps to nothing, so the
+ * stylesheet rule below paints an outline there instead, which draws over
+ * the cell in a system color and follows mode changes without a store
+ * update. No selection semantics are inferred: `aria-selected` is never
+ * written here.
  */
 
 function applyRowActivationStyle(

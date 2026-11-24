@@ -1344,6 +1344,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // per-record fallback; duplicates warn above, so this covers the missing
   // and invalid remainder with one development diagnostic.
   if (
+    process.env.NODE_ENV !== 'production' &&
     canonicalIdentityOptIn &&
     idKey != null &&
     hasData &&
