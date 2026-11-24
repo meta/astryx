@@ -71,6 +71,28 @@ describe('the report', () => {
     expect(warning).toBe('');
   });
 
+  it('counts a process that finished with an error as finished, and once', () => {
+    const {summary, warning} = reportHeapPeaks([
+      row('eslint . --cache', 2.0 * GIB, {pid: 7, done: false}),
+      JSON.stringify({
+        pid: 7,
+        command: 'eslint . --cache',
+        done: true,
+        error: 'x',
+      }),
+      JSON.stringify({
+        pid: 7,
+        command: 'eslint . --cache',
+        done: true,
+        error: 'x',
+      }),
+    ]);
+    expect(summary).toBe(
+      'Lint heap: `eslint . --cache` kept about 2.00 GiB of a 6.00 GiB heap (33%) live after a full garbage collection; V8 held at most 2.60 GiB, and its peak RSS was 2.80 GiB. 1 process could not record: x.',
+    );
+    expect(warning).toBe('');
+  });
+
   it('skips a line it cannot read', () => {
     const {summary} = reportHeapPeaks([
       '{"pid": 9, "comm',
@@ -209,16 +231,18 @@ describe('a preload that fails', () => {
     expect(withPreload.status).toBe(without.status);
     expect(withPreload.stdout).toBe(without.stdout);
     expect(withPreload.stderr).toBe(without.stderr);
-    const [logged] = fs
-      .readFileSync(file, 'utf8')
-      .trim()
-      .split('\n')
-      .map(line => JSON.parse(line));
+    // The whole record: one error line, marked finished.
+    const lines = fs.readFileSync(file, 'utf8').trim().split('\n');
+    expect(lines).toHaveLength(1);
+    const logged = JSON.parse(lines[0]);
     expect(logged.error).toContain('heap read broken');
-    // The report counts it and still passes.
-    expect(reportHeapPeaks([JSON.stringify(logged)]).summary).toBe(
-      'Lint heap: no process recorded its peak. 1 process could not record: heap read broken.',
-    );
+    expect(logged.done).toBe(true);
+    // The report counts it once and still passes.
+    expect(reportHeapPeaks(lines)).toEqual({
+      summary:
+        'Lint heap: no process recorded its peak. 1 process could not record: heap read broken.',
+      warning: '',
+    });
   });
 
   it('changes no output and no exit code when it cannot write its record', () => {

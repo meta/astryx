@@ -31,15 +31,17 @@ const gib = bytes => `${(bytes / GIB).toFixed(2)} GiB`;
 const percent = share => `${Math.round(share * 100)}%`;
 
 /**
- * Each process's last line, with whether it reached its exit record. A line
- * that cannot be read is skipped.
+ * Each process's last reading, whether it finished, and one error per
+ * process that could not record. A line that cannot be read is skipped.
  * @param {string[]} lines
  */
 function readProcesses(lines) {
   /** @type {Map<number, Record<string, any>>} */
-  const byPid = new Map();
-  /** @type {string[]} */
-  const errors = [];
+  const readings = new Map();
+  /** @type {Map<number, string>} */
+  const errors = new Map();
+  /** @type {Set<number>} */
+  const finished = new Set();
   for (const line of lines) {
     let record;
     try {
@@ -48,18 +50,17 @@ function readProcesses(lines) {
       continue;
     }
     if (record == null || typeof record !== 'object') continue;
-    if (typeof record.error === 'string') {
-      errors.push(record.error);
-      continue;
-    }
-    if (!(record.heapLimit > 0)) continue;
-    const earlier = byPid.get(record.pid);
-    byPid.set(record.pid, {
-      ...record,
-      done: Boolean(earlier?.done || record.done),
-    });
+    if (record.done === true) finished.add(record.pid);
+    if (typeof record.error === 'string') errors.set(record.pid, record.error);
+    else if (record.heapLimit > 0) readings.set(record.pid, record);
   }
-  return {processes: [...byPid.values()], errors};
+  return {
+    processes: [...readings.values()].map(record => ({
+      ...record,
+      done: finished.has(record.pid),
+    })),
+    errors: [...errors.values()],
+  };
 }
 
 /**
@@ -180,8 +181,13 @@ function recordPeak(file) {
       });
       guard(() => observer?.disconnect());
       try {
-        guard(() => write(true));
-        if (failure != null) write(true);
+        let written = false;
+        guard(() => {
+          write(true);
+          written = true;
+        });
+        // The heap record failed: write the error record instead.
+        if (!written) write(true);
       } catch {
         // A record that cannot be written costs only the report.
       }
