@@ -17,6 +17,7 @@ import {Icon, renderIconSlot} from '../Icon/Icon';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
 import {pressBelongsToControl} from '../hooks/useClickableContainer';
+import {NOT_DRAG_FLIPPED} from '../privateAttributes/pressHoldsDrag.stylex';
 import {elementAtMenuPoint, useMenuPress} from '../hooks/useMenuPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
@@ -29,10 +30,10 @@ import {visibleText} from '../utils/accessibleName';
 /**
  * The elements a press runs. ListItem renders a row's action as a button (or a
  * link). A button, link, checkbox or switch in a row's end content runs its own
- * press the same way.
+ * press the same way, except a switch whose drag flipped it, which decides its
+ * own release.
  */
-const SHEET_ROW_SELECTOR =
-  'button:not(:disabled), a[href], input[type="checkbox"]:not(:disabled, [aria-disabled="true"])';
+const SHEET_ROW_SELECTOR = `button:not(:disabled), a[href], input[type="checkbox"]:not(:disabled, [aria-disabled="true"])${NOT_DRAG_FLIPPED}`;
 
 /** Whether the document can hit-test a point (jsdom cannot). */
 function canHitTestByPoint(): boolean {

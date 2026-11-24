@@ -8,7 +8,8 @@
  *   padding, a submenu row's chevron) runs the row, as a press on its label
  *   does, for a finger and for a mouse. A press on a section heading runs no
  *   row and leaves the sheet open. A tap or a click on a switch or a checkbox
- *   in a row's end content toggles it once and runs no row.
+ *   in a row's end content toggles it once and runs no row. A drag of a
+ *   switch's thumb past its flip and back changes nothing.
  * @position Evidence for MenuBottomSheetActionList's whole-row press; the
  *   row lookup itself is unit-tested in MenuBottomSheetActionList.test.tsx
  */
@@ -20,6 +21,7 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  drag,
   openStory,
   touchDriver,
   withStorybook,
@@ -224,4 +226,71 @@ test.describe("a control in a sheet row's end content", () => {
       expect(picked).toEqual([]);
     });
   }
+
+  /**
+   * Counts the switch's changes: a drag that toggles it on and back off
+   * ends unchecked, as a drag that changes nothing does.
+   */
+  async function countChanges(
+    control: Locator,
+  ): Promise<() => Promise<number>> {
+    await control.evaluate(input => {
+      const counted = input as HTMLInputElement & {changes?: number};
+      counted.changes = 0;
+      input.addEventListener('change', () => {
+        counted.changes = (counted.changes ?? 0) + 1;
+      });
+    });
+    return async () =>
+      control.evaluate(
+        input => (input as HTMLInputElement & {changes?: number}).changes ?? 0,
+      );
+  }
+
+  test('a finger that drags the switch past its flip and back changes nothing', async ({
+    page,
+  }) => {
+    const picked = await openSheet(page, END_CONTROLS);
+    const driver = await touchDriver(page);
+    const control = page
+      .getByRole('dialog')
+      .getByRole('switch', {name: 'Pinned'});
+    const changes = await countChanges(control);
+    const box = (await control.boundingBox())!;
+    const start = {x: box.x + 8, y: box.y + box.height / 2};
+    const out = {x: box.x + box.width + 12, y: start.y};
+    await driver.play([
+      ...drag(start, out, {durationMs: 400, holdMs: 300}).slice(0, -1),
+      ...drag(out, {x: start.x - 4, y: start.y}, {durationMs: 400, restMs: 200})
+        .slice(1)
+        .map(frame => ({...frame, t: frame.t + 700})),
+    ]);
+    await waitPastLateClicks(page);
+
+    await expect(control).not.toBeChecked();
+    expect(await changes()).toBe(0);
+    expect(picked).toEqual([]);
+  });
+
+  test('a mouse that drags the switch past its flip and back changes nothing', async ({
+    page,
+  }) => {
+    const picked = await openSheet(page, END_CONTROLS);
+    const control = page
+      .getByRole('dialog')
+      .getByRole('switch', {name: 'Pinned'});
+    const changes = await countChanges(control);
+    const box = (await control.boundingBox())!;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + 8, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width + 12, y, {steps: 12});
+    await page.mouse.move(box.x + 4, y, {steps: 12});
+    await page.mouse.up();
+    await waitPastLateClicks(page);
+
+    await expect(control).not.toBeChecked();
+    expect(await changes()).toBe(0);
+    expect(picked).toEqual([]);
+  });
 });

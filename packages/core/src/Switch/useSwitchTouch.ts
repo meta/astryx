@@ -35,6 +35,7 @@ import {useTouchPresentation} from '../utils/touchPresentation';
 import {awaitBrowserClick, clickForLift} from '../utils/browserClickWait';
 import {lockPressedRow} from '../utils/boxHold';
 import {armClickGuard} from '../utils/clickGuard';
+import {markDragFlipped} from '../privateAttributes/pressHoldsDrag.stylex';
 import {
   commitOnRelease,
   dragTarget,
@@ -259,8 +260,8 @@ export class SwitchTouchController {
   private downOffset = 0;
   /**
    * The value when the current finger landed. The release commits from it.
-   * A change of value during the press, such as a menu row's click on its
-   * release, is the press's toggle, and the switch adds no click of its own.
+   * A value change during the press, such as a menu row's click on its
+   * release, is the press's toggle. The switch then adds no click of its own.
    */
   private downIsOn = false;
   private drag: Drag | null = null;
@@ -598,6 +599,9 @@ export class SwitchTouchController {
     this.lastTravel = 0;
     this.downOffset = this.offsetAt(time);
     this.downIsOn = this.isOn;
+    if (this.elements != null) {
+      markDragFlipped(this.elements.input, false);
+    }
   }
 
   /** Passive: a mouse, a pen or a finger on the switch, UIControl's events. */
@@ -720,6 +724,11 @@ export class SwitchTouchController {
       }
     }
     drag.flip = stepFlip(drag.flip, x, this.geometry);
+    if (drag.flip.didFlip && this.elements != null) {
+      // The switch decides this press's release: a menu that runs presses
+      // on their release leaves it alone.
+      markDragFlipped(this.elements.input, true);
+    }
     if (drag.flip.isVisuallyOn !== this.isVisuallyOn) {
       this.showWell(drag.flip.isVisuallyOn, time);
     }
