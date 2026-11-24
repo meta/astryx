@@ -435,7 +435,7 @@ describe('starting the heavy suites', () => {
     // The cheap path first: a draft-and-ready toggle merges the same head
     // with today's main, so its review still holds.
     expect(said).toContain(
-      "Mark the pull request draft, then ready, to start a fresh run on today's main (no new head, so no new review); a push or a main merge also works.",
+      "Mark the pull request draft, then ready, to start a fresh run on today's main (no new head, so no new review; a fork head needs its ci:run label first); a push or a main merge also works.",
     );
   });
 
