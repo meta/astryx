@@ -307,7 +307,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           MERGE_SHA: ${{ github.sha }}
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=6144'
         run: |
           set -eu
           # Skip only on the helper's explicit answer: an empty list, an
@@ -376,13 +376,12 @@ jobs:
           fi
           echo 'Every changed file is formatted.'
 
-      # The full pass, type-aware rules over packages/core/src included, needs
-      # about 1.9 GB of heap on main. Node's default limit on this 16 GB runner
-      # is about 2 GB, so a pull request that adds a few percent of source can
-      # run it out of memory. 4 GB keeps the pass under half the runner's RAM
-      # (3.3 GB peak RSS measured) and spends less time in GC.
+      # The full pass, type-aware rules over packages/core/src included, ran
+      # out of a 4 GB heap on main after a cache wipe (about 3.9 GB in use when
+      # it stopped). 6 GB leaves room on this 16 GB runner and spends less time
+      # in GC. It bounds memory only and loosens no rule.
       - name: Run ESLint
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=6144'
         run: pnpm lint
