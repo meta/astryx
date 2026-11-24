@@ -46,7 +46,7 @@ const readNoFrame = (): null => null;
  * Loads the sheet frame and resolves whether it loaded. A failed load warns
  * once and is not kept, so the next intent or open asks again.
  */
-export function loadSelectorBottomSheet(): Promise<boolean> {
+export async function loadSelectorBottomSheet(): Promise<boolean> {
   pendingFrame ??= frame.load().then(
     () => {
       for (const listener of frameListeners) {
