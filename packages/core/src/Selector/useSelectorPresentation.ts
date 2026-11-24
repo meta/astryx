@@ -259,6 +259,8 @@ export function useSelectorPresentation({
     const root = trigger.getRootNode();
     heldPressWatch.start(trigger, path => path.includes(trigger), drop, {
       root: isShadowRoot(root) ? root : null,
+      // The drop closes no layer, so a backdrop press still closes its host.
+      isDismissal: false,
     });
     const handleFocusOut = (event: {
       readonly relatedTarget: EventTarget | null;
