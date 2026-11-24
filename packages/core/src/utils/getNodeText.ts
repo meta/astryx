@@ -94,7 +94,7 @@ function piecesOf(node: ReactNode): TextPiece[] {
   return [];
 }
 
-function joinPieces(pieces: readonly TextPiece[]): string {
+function joinPieces(pieces: ReadonlyArray<TextPiece>): string {
   let text = '';
   let isAfterBlock = false;
   for (const piece of pieces) {
