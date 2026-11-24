@@ -332,7 +332,7 @@ export function CommentRow({
     container,
     currentUser,
     editTarget,
-    hasEmojiPicker,
+    emojiPicker,
     highlightColor,
     isComposerActionPending,
     isSubmitting,
@@ -399,9 +399,7 @@ export function CommentRow({
               controlRef: resolveControlRef,
             }
           : undefined;
-  const hasHistory =
-    comment.isEdited === true &&
-    ((comment.previousVersions?.length ?? 0) > 0 || can.loadVersions);
+  const hasHistory = comment.isEdited === true && can.loadVersions;
   const actionFailure = actionErrors[comment.id];
   const actionError = actionFailure?.message;
   const editorIsOpen = editTarget?.comment.id === comment.id;
@@ -719,7 +717,7 @@ export function CommentRow({
                     highlightColor={highlightColor}
                     triggers={composerTriggers ?? []}
                     agentCommands={agentCommands}
-                    hasEmojiPicker={hasEmojiPicker}
+                    emojiPicker={emojiPicker}
                     onActionPendingChange={scope.composerActionPendingChange}
                     onUploadImages={uploaderFor({
                       kind: 'edit',
@@ -873,7 +871,7 @@ export function CommentRow({
                 highlightColor={highlightColor}
                 triggers={composerTriggers ?? []}
                 agentCommands={agentCommands}
-                hasEmojiPicker={hasEmojiPicker}
+                emojiPicker={emojiPicker}
                 onActionPendingChange={scope.composerActionPendingChange}
                 onUploadImages={uploaderFor({
                   kind: 'reply',

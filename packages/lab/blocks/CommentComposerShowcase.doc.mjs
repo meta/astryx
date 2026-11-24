@@ -11,5 +11,5 @@ export default {
   isReady: true,
   isShowcase: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['CommentComposer', 'VStack', 'Text'],
+  componentsUsed: ['CommentComposer', 'EmojiPicker', 'VStack', 'Text'],
 };

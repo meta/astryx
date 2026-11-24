@@ -139,7 +139,7 @@ export interface CommentsContextValue {
   composerTriggers?: readonly ChatComposerTrigger[];
   markdownPlugins?: readonly MarkdownPluginEntry[];
   markdownInlinePlugins?: readonly MarkdownInlinePlugin[];
-  hasEmojiPicker: boolean;
+  emojiPicker?: CommentThreadSharedProps['emojiPicker'];
   onUploadImages?: CommentImageUploader;
   renderAnchor?: CommentThreadSharedProps['renderAnchor'];
   renderBody?: CommentThreadSharedProps['renderBody'];
@@ -235,7 +235,7 @@ export function useCommentsController({
   markdownPlugins,
   markdownInlinePlugins,
   getReplyMention,
-  hasEmojiPicker = true,
+  emojiPicker,
   isSubmitting = false,
   onComposerDraftChange,
   onSubmit,
@@ -509,22 +509,10 @@ export function useCommentsController({
   };
 
   const openHistory = async (comment: AnyComment) => {
-    setHistory({
-      comment,
-      versions: comment.previousVersions ?? [],
-      isLoading: loadVersions != null,
-    });
     if (loadVersions == null) {
       return;
     }
-    try {
-      const versions = await loadVersions(comment.id);
-      setHistory(current =>
-        current?.comment.id === comment.id
-          ? {...current, versions, isLoading: false}
-          : current,
-      );
-    } catch {
+    const failed = () =>
       setHistory(current =>
         current?.comment.id === comment.id
           ? {
@@ -534,6 +522,30 @@ export function useCommentsController({
             }
           : current,
       );
+    let loaded: ReturnType<typeof loadVersions>;
+    try {
+      loaded = loadVersions(comment.id);
+    } catch {
+      setHistory({comment, versions: [], isLoading: true});
+      failed();
+      return;
+    }
+    // A host that already holds the versions returns them at once, so the
+    // dialog opens with them and shows no loading state.
+    if (!('then' in loaded)) {
+      setHistory({comment, versions: loaded, isLoading: false});
+      return;
+    }
+    setHistory({comment, versions: [], isLoading: true});
+    try {
+      const versions = await loaded;
+      setHistory(current =>
+        current?.comment.id === comment.id
+          ? {...current, versions, isLoading: false}
+          : current,
+      );
+    } catch {
+      failed();
     }
   };
 
@@ -555,7 +567,7 @@ export function useCommentsController({
     composerTriggers,
     markdownPlugins,
     markdownInlinePlugins,
-    hasEmojiPicker,
+    emojiPicker,
     onUploadImages,
     renderAnchor,
     renderBody,

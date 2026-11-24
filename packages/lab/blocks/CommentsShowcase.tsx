@@ -5,8 +5,8 @@
 /**
  * @input Controlled comments, events, and every Comments callback
  * @output A working Comments panel: threads with replies, reactions,
- *   edit history, inline comments, controlled typing and hidden seen metadata,
- *   a non-interrupting unread-reply reveal, an agent's reply in progress, a
+ *   edit history, inline comments, controlled typing, an emoji picker, a
+ *   non-interrupting unread-reply reveal, an agent's reply in progress, a
  *   failed comment, activity events, and earlier comments to load
  * @position Lab Comments's docsite showcase and copyable CLI block
  */
@@ -16,6 +16,7 @@ import {VStack} from '@astryxdesign/core/Layout';
 import {
   DEFAULT_COMMENT_REACTIONS,
   Comments,
+  EmojiPicker,
   type CommentData,
   type CommentReactionOption,
   type CommentThreadData,
@@ -57,22 +58,13 @@ const INITIAL_COMMENTS: readonly CommentThreadData[] = [
     isEdited: true,
     isUnread: true,
     typingUsers: [NOAH],
-    seenBy: [NOAH],
-    previousVersions: [
-      {
-        id: 'plan-v1',
-        body: 'The revised rollout plan is ready for review.',
-        editedAt: '2026-09-30T18:10:00Z',
-        author: MAYA,
-      },
-    ],
     reactions: [
       {
         key: 'like',
-        label: '👍',
-        description: 'Like',
+        emoji: '👍',
+        label: 'Like',
         count: 2,
-        reactedByViewer: true,
+        isSelected: true,
         actors: [VIEWER, NOAH],
       },
     ],
@@ -127,6 +119,20 @@ const INITIAL_COMMENTS: readonly CommentThreadData[] = [
   },
 ];
 
+/** Earlier versions of each edited comment, newest first, kept by the host. */
+const INITIAL_EARLIER_VERSIONS: Readonly<
+  Record<string, readonly CommentVersion[]>
+> = {
+  plan: [
+    {
+      id: 'plan-v1',
+      body: 'The revised rollout plan is ready for review.',
+      editedAt: '2026-09-30T18:10:00Z',
+      author: MAYA,
+    },
+  ],
+};
+
 function updateComment(
   comments: readonly CommentThreadData[],
   id: string,
@@ -168,6 +174,12 @@ export default function CommentsShowcase() {
     'plan',
   );
   const [hasOlderComments, setHasOlderComments] = useState(true);
+  const [earlierVersions, setEarlierVersions] = useState(
+    INITIAL_EARLIER_VERSIONS,
+  );
+  const [editedAt, setEditedAt] = useState<Readonly<Record<string, string>>>(
+    {},
+  );
   const nextId = useRef(1);
 
   const post = (body: string, parentCommentId?: string) => {
@@ -188,23 +200,33 @@ export default function CommentsShowcase() {
     );
   };
 
-  const saveEdit = (commentId: string, body: string) =>
+  const saveEdit = (commentId: string, body: string) => {
+    const edited = findComment(comments, commentId);
+    if (edited == null) {
+      return;
+    }
+    const now = new Date().toISOString();
+    setEarlierVersions(current => ({
+      ...current,
+      [commentId]: [
+        {
+          id: `${commentId}-${Date.now()}`,
+          body: edited.body,
+          editedAt: editedAt[commentId] ?? edited.createdAt,
+          author: edited.author,
+        },
+        ...(current[commentId] ?? []),
+      ],
+    }));
+    setEditedAt(current => ({...current, [commentId]: now}));
     setComments(current =>
       updateComment(current, commentId, comment => ({
         ...comment,
         body,
         isEdited: true,
-        previousVersions: [
-          {
-            id: `${comment.id}-${Date.now()}`,
-            body: comment.body,
-            editedAt: new Date().toISOString(),
-            author: comment.author,
-          },
-          ...(comment.previousVersions ?? []),
-        ],
       })),
     );
+  };
 
   const remove = (commentId: string) =>
     setComments(current =>
@@ -236,16 +258,15 @@ export default function CommentsShowcase() {
           existing == null
             ? [
                 ...(comment.reactions ?? []),
-                {...option, count: 1, reactedByViewer: true, actors: [VIEWER]},
+                {...option, count: 1, isSelected: true, actors: [VIEWER]},
               ]
             : (comment.reactions ?? [])
                 .map(reaction =>
                   reaction.key === key
                     ? {
                         ...reaction,
-                        count:
-                          reaction.count + (reaction.reactedByViewer ? -1 : 1),
-                        reactedByViewer: !reaction.reactedByViewer,
+                        count: reaction.count + (reaction.isSelected ? -1 : 1),
+                        isSelected: !reaction.isSelected,
                       }
                     : reaction,
                 )
@@ -268,9 +289,7 @@ export default function CommentsShowcase() {
       ),
     );
 
-  const loadVersions = async (
-    commentId: string,
-  ): Promise<readonly CommentVersion[]> => {
+  const loadVersions = (commentId: string): readonly CommentVersion[] => {
     const comment = findComment(comments, commentId);
     if (comment == null) {
       return [];
@@ -279,11 +298,11 @@ export default function CommentsShowcase() {
       {
         id: `${comment.id}-current`,
         body: comment.body,
-        editedAt: comment.updatedAt ?? comment.createdAt,
+        editedAt: editedAt[commentId] ?? comment.createdAt,
         author: comment.author,
         isCurrent: true,
       },
-      ...(comment.previousVersions ?? []),
+      ...(earlierVersions[commentId] ?? []),
     ];
   };
 
@@ -296,6 +315,7 @@ export default function CommentsShowcase() {
         selectedThreadId={selectedThreadId}
         onSelectedThreadChange={setSelectedThreadId}
         density="compact"
+        emojiPicker={({onSelect}) => <EmojiPicker onSelect={onSelect} />}
         hasOlderComments={hasOlderComments}
         onLoadOlder={() => {
           setComments(current => [

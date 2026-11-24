@@ -95,7 +95,6 @@ vi.mock('@astryxdesign/core/OverflowList', async () => {
 import {Comments} from './Comments';
 import type {
   CommentComposerRenderProps,
-  CommentData,
   CommentThreadData,
   CommentUser,
 } from './types';
@@ -116,21 +115,13 @@ const COMMENTS: readonly CommentThreadData[] = [
     body: 'The final states are **ready** for review.',
     createdAt: '2026-09-30T19:00:00Z',
     isEdited: true,
-    previousVersions: [
-      {
-        id: 'root-1-v1',
-        body: 'Earlier wording',
-        editedAt: '2026-09-30T18:00:00Z',
-        author: VIEWER,
-      },
-    ],
     reactions: [
       {
         key: 'like',
-        label: '👍',
-        description: 'Like',
+        emoji: '👍',
+        label: 'Like',
         count: 2,
-        reactedByViewer: true,
+        isSelected: true,
         actors: [VIEWER, OTHER],
       },
     ],
@@ -585,11 +576,7 @@ describe('Comments rendering', () => {
 });
 
 describe('Comments live collaboration seams', () => {
-  it('shows typing only after the thread opens and keeps seen-by metadata hidden by default', async () => {
-    const seenBy = [OTHER, AGENT] as const;
-    const renderBody = vi.fn((comment: CommentData) => (
-      <span>{comment.body}</span>
-    ));
+  it('shows typing only after the thread opens', async () => {
     render(
       <Sized>
         <Comments
@@ -598,11 +585,9 @@ describe('Comments live collaboration seams', () => {
               ...COMMENTS[0],
               replies: [],
               typingUsers: [VIEWER, OTHER, OTHER, AGENT],
-              seenBy,
             },
           ]}
           currentUser={VIEWER}
-          renderBody={renderBody}
         />
       </Sized>,
     );
@@ -610,9 +595,6 @@ describe('Comments live collaboration seams', () => {
     expect(
       screen.queryByText('Maya Chen and Release Assistant are typing…'),
     ).toBeNull();
-    expect(screen.queryByText('Seen by')).toBeNull();
-    expect(document.querySelector('[data-comment-seen-by]')).toBeNull();
-    expect(renderBody).toHaveBeenCalledWith(expect.objectContaining({seenBy}));
 
     await click(screen.getByRole('button', {name: 'Thread by Avery Kim'}));
     const typingStatus = screen
@@ -913,7 +895,7 @@ describe('Comments threads', () => {
     expect(onReact).toHaveBeenLastCalledWith(
       'root-1',
       'celebrate',
-      expect.objectContaining({key: 'celebrate', label: '🎉'}),
+      expect.objectContaining({key: 'celebrate', emoji: '🎉'}),
     );
   });
 
@@ -1104,6 +1086,44 @@ describe('Comments threads', () => {
     expect(loadVersions).toHaveBeenCalledWith('root-1');
     expect(document.body.textContent).toContain('Previous wording');
     expect(document.body.textContent).toContain('Current version');
+  });
+
+  it('opens the edit history at once from versions returned synchronously', async () => {
+    const loadVersions = vi.fn(() => [
+      {
+        id: 'current',
+        body: 'Current wording',
+        editedAt: '2026-09-30T19:00:00Z',
+        isCurrent: true,
+      },
+      {
+        id: 'previous',
+        body: 'Previous wording',
+        editedAt: '2026-09-30T18:00:00Z',
+      },
+    ]);
+    render(
+      <Sized>
+        <Comments comments={COMMENTS} loadVersions={loadVersions} />
+      </Sized>,
+    );
+    await click(screen.getByRole('button', {name: 'View edit history'}));
+    expect(loadVersions).toHaveBeenCalledWith('root-1');
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toContain('Previous wording');
+    expect(dialog.textContent).not.toContain('Loading edit history');
+  });
+
+  it('offers no edit history without loadVersions', () => {
+    render(
+      <Sized>
+        <Comments comments={COMMENTS} />
+      </Sized>,
+    );
+    expect(articleByAuthor('Avery Kim').textContent).toContain('Edited');
+    expect(
+      screen.queryByRole('button', {name: 'View edit history'}),
+    ).toBeNull();
   });
 
   it('announces the history load through the shared dialog channel, then clears it (AST-086 FR8, FR14)', async () => {
