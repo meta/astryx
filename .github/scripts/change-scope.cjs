@@ -150,13 +150,15 @@ const SURFACES = Object.freeze({
 // Documents no package or app builds from: Markdown at the repository root,
 // the license, documentation under docs/ (records included) and Changesets.
 // The knowledge schemas and templates under docs/ feed the knowledge
-// validator, so they stay shared. A change only to these and to spec records
+// validator, and the component import-boundaries record feeds lint's
+// boundary check against the build, so they stay shared. A change only to
+// these documents and to spec records
 // builds and tests nothing: the tests that read a changed document still run
 // (spec:AST-030 FR2).
 const DOCS_PATTERNS = [
   /^[^/]+\.md$/,
   /^LICENSE$/,
-  /^docs\/(?!schemas\/|templates\/)/,
+  /^docs\/(?!schemas\/|templates\/|architecture\/component-import-boundaries\.md$)/,
   CHANGESET_PATTERN,
 ];
 

@@ -410,6 +410,11 @@ describe('docs-only changes: no package or docsite code', () => {
       ['README.md', 'docs/schemas/knowledge/record.schema.json'],
     ],
     ['a knowledge template', ['docs/templates/knowledge/spec.md']],
+    // Lint's boundary check reads it against the build.
+    [
+      'the component import-boundaries record',
+      ['docs/architecture/component-import-boundaries.md'],
+    ],
     ['Core source', ['README.md', 'packages/core/src/Button/Button.tsx']],
     ['docsite source', ['README.md', 'apps/docsite/src/app/page.tsx']],
     ['a root config file', ['README.md', 'package.json']],
