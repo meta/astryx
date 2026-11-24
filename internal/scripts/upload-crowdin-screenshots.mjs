@@ -910,9 +910,9 @@ const TARGETS = [
     interact: async () => {},
     selector: null,
     manualTags: [
-      t('astryx.listInput.addItem', 'visibleText', "Add a subscriber to get started."),
-      t('astryx.listInput.emptyDescription', 'visibleText', "Add a subscriber to get started."),
-      t('astryx.listInput.emptyTitle', 'visibleText', "No subscribers yet"),
+      t('astryx.listInput.addItem', 'visibleText', "Add subscriber"),
+      t('astryx.listInput.emptyDescription', 'visibleText', "Each subscriber you add appears here."),
+      t('astryx.listInput.emptyTitle', 'visibleText', "No subscriber added yet"),
     ],
   },
   {
