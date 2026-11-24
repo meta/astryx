@@ -1268,13 +1268,6 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   );
   const searchRef = useRef<HTMLInputElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
-  // A sheet's listbox is in the document only once its frame has loaded and
-  // rendered it; until then the trigger names no listbox.
-  const [isListboxMounted, setIsListboxMounted] = useState(false);
-  const attachListbox = useCallback((node: HTMLDivElement | null) => {
-    listboxRef.current = node;
-    setIsListboxMounted(node != null);
-  }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
   // A typed query shows the search row's clear (✕) button, which becomes
@@ -1532,6 +1525,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    listboxRef,
     triggerModality,
     isFocusReturnAlways: hasExternalTrigger,
     popoverOptions: {
@@ -2526,7 +2520,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       <Divider />
       <div {...stylex.props(styles.dropdown)}>
         <div
-          ref={attachListbox}
+          ref={surface.attachListbox}
           id={listboxId}
           role={isGrid ? 'grid' : 'listbox'}
           aria-multiselectable="true"
@@ -2539,7 +2533,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   ) : (
     <div {...stylex.props(styles.dropdown)}>
       <div
-        ref={attachListbox}
+        ref={surface.attachListbox}
         id={listboxId}
         role={isGrid ? 'grid' : 'listbox'}
         aria-multiselectable="true"
@@ -2631,19 +2625,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ),
   };
 
-  // A sheet's listbox is in the document only while the sheet is open and its
-  // frame has rendered it. The trigger names it only then, so a load that
-  // another selector starts leaves this closed trigger's ARIA as it was.
-  const isListboxReferable =
-    !isEffectivelyReadOnly &&
-    (surface.activePresentation !== 'bottom-sheet' ||
-      (surface.isOpen && isListboxMounted));
-  // An open the sheet's frame has not rendered yet is a held intent: the
-  // trigger reports it expanded only once its listbox is in the document.
-  const isExpanded =
-    !isEffectivelyReadOnly &&
-    surface.isOpen &&
-    (surface.activePresentation !== 'bottom-sheet' || isListboxMounted);
+  const isListboxReferable = !isEffectivelyReadOnly && surface.isListboxNamed;
+  const isExpanded = !isEffectivelyReadOnly && surface.isListShown;
 
   if (renderTrigger != null) {
     // A caller's control gets no pointer props from the selector, so its
@@ -2844,7 +2827,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           aria-controls={isListboxReferable ? listboxId : undefined}
           aria-readonly={isEffectivelyReadOnly || undefined}
           aria-activedescendant={
-            !isEffectivelyReadOnly && !hasSearch
+            !isEffectivelyReadOnly && !hasSearch && isExpanded
               ? activeDescendantId
               : undefined
           }

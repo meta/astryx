@@ -32,7 +32,7 @@ const frame = createModuleLoader<typeof FrameModule>(
 // Hosts that wait for the frame. Each one renders again when it arrives.
 // Shared by every copy of Core, as the shared-identity check requires.
 const frameListeners = sharedState(
-  'Selector/SelectorBottomSheet/frameListeners',
+  'selector/selector-bottom-sheet/frame-listeners',
   1,
   () => new Set<() => void>(),
 );

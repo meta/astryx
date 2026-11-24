@@ -6,8 +6,10 @@
  *   bottom-sheet frame held until the test releases it, counting each request
  *   for it
  * @output Tests that a caller's renderTrigger control starts the sheet's load
- *   on a pointer down and on a mouse entering it, each on its own, and that a
- *   sheet trigger names the listbox only while the sheet is open
+ *   on a pointer down and on a mouse entering it, each on its own, that a
+ *   held open stays collapsed and names no listbox or option until the sheet
+ *   renders them, and that a sheet trigger names the listbox only while the
+ *   sheet is open
  * @position Tests; MultiSelector's touch presentation, alongside
  *   MultiSelector.test.tsx
  */
@@ -107,6 +109,45 @@ function renderWithTrigger() {
 describe('MultiSelector bottom-sheet load', () => {
   beforeEach(() => {
     vi.mocked(loadSelectorBottomSheet).mockClear();
+  });
+
+  // First in the file: the frame is still held here, so the open waits for it.
+  it('keeps a held open collapsed, naming nothing, until the sheet renders its listbox', async () => {
+    render(
+      <MultiSelector
+        label="Labels"
+        options={['Bug', 'Feature']}
+        value={[]}
+        onChange={() => {}}
+        presentation="bottom-sheet"
+      />,
+    );
+    const trigger = screen.getByRole('combobox', {name: 'Labels'});
+    act(() => {
+      trigger.focus();
+    });
+    fireEvent.keyDown(trigger, {key: 'ArrowDown'});
+    // Held: no listbox is in the document, so the trigger names nothing.
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).not.toHaveAttribute('aria-controls');
+    expect(trigger).not.toHaveAttribute('aria-activedescendant');
+
+    await act(async () => {
+      frameModule.release();
+      await frameModule.ready;
+    });
+    await vi.waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    const listboxId = trigger.getAttribute('aria-controls');
+    expect(document.getElementById(listboxId ?? '')).toHaveAttribute(
+      'role',
+      'listbox',
+    );
+    const active = trigger.getAttribute('aria-activedescendant');
+    if (active != null) {
+      expect(document.getElementById(active)).not.toBeNull();
+    }
   });
 
   it("starts the load on a pointer down on a caller's control", () => {

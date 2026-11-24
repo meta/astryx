@@ -48,6 +48,8 @@ interface UseSelectorPresentationOptions {
   onShow: () => void;
   popoverOptions: Omit<InternalPopoverOptions, 'onHide' | 'onShow'>;
   triggerRef: RefObject<HTMLElement | null>;
+  /** The listbox element, which the returned `attachListbox` keeps. */
+  listboxRef: RefObject<HTMLDivElement | null>;
   /**
    * The component's one modality tracking, its `ref` attached to the trigger,
    * so the returned trigger's ring follows the trigger's own document.
@@ -64,7 +66,22 @@ interface UseSelectorPresentationOptions {
 
 interface SelectorPresentationController {
   activePresentation: ResolvedAdaptivePresentation;
+  /** The listbox's `ref`: keeps `listboxRef` and `isListboxMounted`. */
+  attachListbox: (node: HTMLDivElement | null) => void;
   hide: () => void;
+  /** Whether the listbox is in the document. */
+  isListboxMounted: boolean;
+  /**
+   * Whether the trigger names the listbox (`aria-controls`). A closed sheet
+   * trigger names none, so its ARIA is the same before and after the frame
+   * loads. An open one names the listbox once the frame renders it.
+   */
+  isListboxNamed: boolean;
+  /**
+   * Whether the list is open and in the document (`aria-expanded`). An open
+   * the sheet's frame has not rendered yet is a held intent, not an open list.
+   */
+  isListShown: boolean;
   isOpen: boolean;
   isSheetOpen: boolean;
   isSheetPresented: boolean;
@@ -88,6 +105,7 @@ export function useSelectorPresentation({
   onShow,
   popoverOptions,
   triggerRef,
+  listboxRef,
   triggerModality,
   isFocusReturnAlways = false,
 }: UseSelectorPresentationOptions): SelectorPresentationController {
@@ -298,15 +316,30 @@ export function useSelectorPresentation({
     [preloadSheet],
   );
 
+  const [isListboxMounted, setIsListboxMounted] = useState(false);
+  const attachListbox = useCallback(
+    (node: HTMLDivElement | null) => {
+      // eslint-disable-next-line react-compiler/react-compiler -- the caller hands over its own ref so that this callback writes it
+      listboxRef.current = node;
+      setIsListboxMounted(node != null);
+    },
+    [listboxRef],
+  );
+
   const isOpen = popover.isOpen || isSheetOpen;
   const activePresentation =
     isOpen || isSheetPresented
       ? (activePresentationHold.current() ?? resolvedPresentation)
       : resolvedPresentation;
+  const isSheet = activePresentation === 'bottom-sheet';
 
   return {
     activePresentation,
+    attachListbox,
     hide,
+    isListboxMounted,
+    isListboxNamed: !isSheet || (isOpen && isListboxMounted),
+    isListShown: isOpen && (!isSheet || isListboxMounted),
     isOpen,
     isSheetOpen,
     isSheetPresented,

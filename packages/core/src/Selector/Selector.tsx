@@ -1410,14 +1410,6 @@ export function Selector<T extends SelectorOptionType>(
 
   // Ref for listbox to measure selected item position
   const listboxRef = useRef<HTMLDivElement>(null);
-  // The trigger may name the active option only once the listbox holding it
-  // is in the document. The bottom sheet loads its surface on first open, so
-  // the trigger expands a moment before its options exist.
-  const [isListboxMounted, setIsListboxMounted] = useState(false);
-  const attachListbox = useCallback((node: HTMLDivElement | null) => {
-    listboxRef.current = node;
-    setIsListboxMounted(node != null);
-  }, []);
 
   // Typeahead is defined below (it needs the popover), but closing and clearing
   // must drop its pending buffer — otherwise a stale prefix survives the reset
@@ -1458,6 +1450,7 @@ export function Selector<T extends SelectorOptionType>(
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    listboxRef,
     triggerModality,
     popoverOptions: {
       hasLightDismiss: true,
@@ -2200,7 +2193,7 @@ export function Selector<T extends SelectorOptionType>(
       {renderSearch()}
       <Divider />
       <div
-        ref={attachListbox}
+        ref={surface.attachListbox}
         id={listboxId}
         role="listbox"
         aria-label={label}
@@ -2219,7 +2212,7 @@ export function Selector<T extends SelectorOptionType>(
     </div>
   ) : (
     <div
-      ref={attachListbox}
+      ref={surface.attachListbox}
       id={listboxId}
       role="listbox"
       {...listboxPress.menuProps}
@@ -2252,19 +2245,8 @@ export function Selector<T extends SelectorOptionType>(
     </div>
   );
 
-  // A sheet's listbox is in the document only while the sheet is open and its
-  // frame has rendered it. The trigger names it only then, so a load that
-  // another selector starts leaves this closed trigger's ARIA as it was.
-  const isListboxReferable =
-    !isEffectivelyReadOnly &&
-    (surface.activePresentation !== 'bottom-sheet' ||
-      (surface.isOpen && isListboxMounted));
-  // An open the sheet's frame has not rendered yet is a held intent: the
-  // trigger reports it expanded only once its listbox is in the document.
-  const isExpanded =
-    !isEffectivelyReadOnly &&
-    surface.isOpen &&
-    (surface.activePresentation !== 'bottom-sheet' || isListboxMounted);
+  const isListboxReferable = !isEffectivelyReadOnly && surface.isListboxNamed;
+  const isExpanded = !isEffectivelyReadOnly && surface.isListShown;
 
   let selectionSurface: ReactNode = null;
   if (surface.activePresentation === 'bottom-sheet') {
@@ -2451,7 +2433,7 @@ export function Selector<T extends SelectorOptionType>(
             !isEffectivelyReadOnly &&
             !hasSearch &&
             surface.isOpen &&
-            isListboxMounted &&
+            surface.isListboxMounted &&
             highlightedIndex >= 0
               ? getItemId(highlightedIndex)
               : undefined
