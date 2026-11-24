@@ -291,4 +291,16 @@ export const defaultIcons: Record<IconName, ReactNode> &
       <path d="M12 18v4m-4 0h8" />
     </svg>
   ),
+
+  /** ⠿ — six dots in two columns (drag handle) */
+  drag: (
+    <svg {...solidSvgProps}>
+      <circle cx="9" cy="5" r="1.5" />
+      <circle cx="15" cy="5" r="1.5" />
+      <circle cx="9" cy="12" r="1.5" />
+      <circle cx="15" cy="12" r="1.5" />
+      <circle cx="9" cy="19" r="1.5" />
+      <circle cx="15" cy="19" r="1.5" />
+    </svg>
+  ),
 };

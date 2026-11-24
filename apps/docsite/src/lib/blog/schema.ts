@@ -4,14 +4,14 @@
  * @file schema.ts
  *
  * Shared TypeScript types for the blog. These describe the shape of a validated
- * blog post as produced by the build-time generator (src/generated/blogRegistry.ts)
- * and consumed by the blog pages.
+ * blog post as produced by the build-time generator (src/generated/) and
+ * consumed by the blog pages.
  *
  * The runtime discovery/validation rules live in ./posts.mjs (used by the data
  * generator and tests). This file is the type-level mirror of that contract.
  *
  * @input  none (type declarations)
- * @output BlogPost and related types
+ * @output BlogPostMeta, BlogPost and related types
  * @position Imported by src/generated/blogRegistry.ts and blog pages/components
  */
 
@@ -43,8 +43,11 @@ export interface RelatedDoc {
   href: string;
 }
 
-/** A fully validated blog post as emitted into the generated registry. */
-export interface BlogPost {
+/**
+ * A validated blog post without its body, as emitted into the generated
+ * registry: what a card, a list, a feed and the header of an article show.
+ */
+export interface BlogPostMeta {
   /** URL-friendly slug derived from the filename (e.g. 'designing-agent-ready-components'). */
   slug: string;
   /** Article h1, card title, and default page/social title. */
@@ -73,8 +76,12 @@ export interface BlogPost {
   releasePackage: string | null;
   /** Optional curated related-doc links. */
   relatedDocs: RelatedDoc[] | null;
-  /** Markdown body (frontmatter stripped). */
-  body: string;
   /** Estimated reading time in minutes. */
   readingTimeMinutes: number;
+}
+
+/** A fully validated blog post: what an article shows. */
+export interface BlogPost extends BlogPostMeta {
+  /** Markdown body (frontmatter stripped). */
+  body: string;
 }

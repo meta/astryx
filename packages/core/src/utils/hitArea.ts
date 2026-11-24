@@ -7,7 +7,8 @@
  * @input A target's rect and its neighbours' rects (or, for a live control,
  *   the element and the page around it)
  * @output The touch hit area: how far a target may grow toward 44 px on each
- *   side without taking a tap that is nearer a neighbour. `clampedHitInsets`
+ *   side without taking a tap that is nearer a neighbour. `centeredGrowth` is
+ *   the unclamped growth toward 44 px. `clampedHitInsets`
  *   and `resolveHitTarget` answer from rects. `watchHitArea` keeps a control's
  *   insets live where the primary pointer is coarse. `groupGrowth` sizes a
  *   group's box from its edge members, and shrinks a side the members do not
@@ -102,7 +103,7 @@ function intersects(a: HitRect, b: HitRect): boolean {
 }
 
 /** How far `rect` grows toward `minSize` on each axis, centered, unclamped. */
-function growth(rect: HitRect, minSize: number): HitInsets {
+export function centeredGrowth(rect: HitRect, minSize: number): HitInsets {
   const x = Math.max(0, (minSize - (rect.right - rect.left)) / 2);
   const y = Math.max(0, (minSize - (rect.bottom - rect.top)) / 2);
   return {top: y, right: x, bottom: y, left: x};
@@ -130,7 +131,7 @@ export function groupGrowth(
     left: -Infinity,
   };
   for (const member of members) {
-    const own = growth(member, minSize);
+    const own = centeredGrowth(member, minSize);
     insets.top = Math.max(insets.top, own.top - (member.top - group.top));
     insets.right = Math.max(
       insets.right,
@@ -162,7 +163,7 @@ export function clampedHitInsets(
   target: HitRect,
   neighbours: ReadonlyArray<HitRect>,
   minSize: number = MIN_TOUCH_TARGET,
-  full: HitInsets = growth(target, minSize),
+  full: HitInsets = centeredGrowth(target, minSize),
 ): HitInsets {
   if (
     full.top === 0 &&
@@ -188,7 +189,7 @@ export function clampedHitInsets(
     // Either one, at full growth, would reach into the other's half, or
     // their full areas would meet (a wide and a tall target, diagonally).
     const reach = grown(target, full);
-    const neighbourReach = grown(rect, growth(rect, minSize));
+    const neighbourReach = grown(rect, centeredGrowth(rect, minSize));
     const crosses =
       intersects(reach, grown(rect, half)) ||
       intersects(neighbourReach, grown(target, half)) ||
@@ -254,7 +255,9 @@ export function resolveHitTarget(
     return -1;
   }
   const rect = rects[nearest];
-  return contains(grown(rect, growth(rect, minSize)), x, y) ? nearest : -1;
+  return contains(grown(rect, centeredGrowth(rect, minSize)), x, y)
+    ? nearest
+    : -1;
 }
 
 /** Sets `HIT_INSET_PROPERTIES` on `element`. */

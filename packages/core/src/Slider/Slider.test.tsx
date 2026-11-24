@@ -26,6 +26,7 @@ import {
   __resetInteractionModalityForTest,
   getInteractionModality,
 } from '../utils/interactionModality';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // Mock showPopover/hidePopover (not implemented in jsdom) so the tooltip layer
 // reflects its open state via a `popover-open` attribute the tests can assert.
@@ -1185,15 +1186,21 @@ describe('Slider', () => {
           disabledMessage="Volume is locked while sharing your screen"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent(
         'Volume is locked while sharing your screen',
       );
       fireEvent.mouseEnter(getTrack());
       fireEvent.pointerMove(getTrack());
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
       fireEvent.mouseLeave(getTrack());
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        ),
+      );
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
@@ -1207,10 +1214,11 @@ describe('Slider', () => {
           disabledMessage="Volume is locked while sharing your screen"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('slider')).toHaveFocus();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -1258,7 +1266,7 @@ describe('Slider', () => {
         />,
       );
       const thumb = screen.getByRole('slider');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(thumb.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -2175,6 +2183,7 @@ describe('coincident range thumbs', () => {
       document.getElementById(
         (thumb.getAttribute('aria-describedby') ?? '')
           .split(' ')
+          .map(id => id.replace(/-description$/, ''))
           .find(
             id =>
               document.getElementById(id)?.getAttribute('role') === 'tooltip',

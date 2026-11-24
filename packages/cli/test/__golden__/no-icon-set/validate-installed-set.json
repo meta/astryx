@@ -140,6 +140,11 @@
         "code": "icon_builtin_definition_missing",
         "severity": "error",
         "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
       }
     ],
     "docTypes": {
@@ -680,16 +685,6 @@
             "name": "download",
             "description": "<text>",
             "words": [
-              "<text>",
-              "<text>",
-              "<text>"
-            ]
-          },
-          {
-            "name": "drag",
-            "description": "<text>",
-            "words": [
-              "<text>",
               "<text>",
               "<text>",
               "<text>"
