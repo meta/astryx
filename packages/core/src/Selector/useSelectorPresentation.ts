@@ -11,7 +11,6 @@
 
 import {
   useCallback,
-  useEffect,
   useRef,
   useState,
   type FocusEvent,
@@ -232,11 +231,13 @@ export function useSelectorPresentation({
   const hideRef = useRef<() => void>(() => {});
   // Stops the listeners that end a held sheet open: an open made before the
   // sheet's frame has rendered its list.
-  const stopHeldOpenRef = useRef<(() => void) | null>(null);
+  const heldPressWatch = useOutsidePress();
+  const stopHeldFocusWatchRef = useRef<(() => void) | null>(null);
   const stopHeldOpen = useCallback(() => {
-    stopHeldOpenRef.current?.();
-    stopHeldOpenRef.current = null;
-  }, []);
+    heldPressWatch.stop();
+    stopHeldFocusWatchRef.current?.();
+    stopHeldFocusWatchRef.current = null;
+  }, [heldPressWatch]);
   // A held open ends when the person moves on: a press outside the trigger,
   // or focus moving to another element. No sheet then appears later, over
   // what they turned to. Focus stays where they put it.
@@ -255,11 +256,10 @@ export function useSelectorPresentation({
       setIsSheetOpen(false);
       onHideRef.current();
     };
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!event.composedPath().includes(trigger)) {
-        drop();
-      }
-    };
+    const root = trigger.getRootNode();
+    heldPressWatch.start(trigger, path => path.includes(trigger), drop, {
+      root: isShadowRoot(root) ? root : null,
+    });
     const handleFocusOut = (event: {
       readonly relatedTarget: EventTarget | null;
     }) => {
@@ -268,16 +268,11 @@ export function useSelectorPresentation({
         drop();
       }
     };
-    const doc = trigger.ownerDocument;
-    doc.addEventListener('pointerdown', handlePointerDown, true);
     trigger.addEventListener('focusout', handleFocusOut);
-    stopHeldOpenRef.current = () => {
-      doc.removeEventListener('pointerdown', handlePointerDown, true);
+    stopHeldFocusWatchRef.current = () => {
       trigger.removeEventListener('focusout', handleFocusOut);
     };
-  }, [onHideRef, stopHeldOpen, triggerRef]);
-  // Syncs the held-open listeners on the document with unmount.
-  useEffect(() => stopHeldOpen, [stopHeldOpen]);
+  }, [heldPressWatch, onHideRef, stopHeldOpen, triggerRef]);
   const show = useCallback((): boolean => {
     activePresentationHold.take(resolvedPresentation);
     if (resolvedPresentation === 'bottom-sheet') {
