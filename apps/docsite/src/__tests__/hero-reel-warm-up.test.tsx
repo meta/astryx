@@ -363,6 +363,26 @@ describe('a narrow screen, where the reel is manual', () => {
     }
   });
 
+  it.each([
+    ['in a data-saving mode', {saveData: true}],
+    ['on a 2G connection', {effectiveType: '2g'}],
+  ])('loads no slide ahead of need %s', (_name, connection) => {
+    Object.defineProperty(navigator, 'connection', {
+      configurable: true,
+      value: connection,
+    });
+    try {
+      const link = renderReel();
+      touch(link, -20, 0);
+      focusDot(1, 'keyboard');
+      touch(link, -80, 0);
+      focusDot(4, 'press');
+      expect(loaded()).toEqual({photos: [], fonts: []});
+    } finally {
+      Reflect.deleteProperty(navigator, 'connection');
+    }
+  });
+
   it('loads every slide when the screen becomes wide', () => {
     renderReel();
     idle();

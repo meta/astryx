@@ -52,6 +52,7 @@ import {
   type HeroThemeSlide,
 } from './heroThemeContent';
 import {AstryxLogo} from '../../../../components/logos';
+import {prefersReducedData} from '../../../../lib/prefersReducedData';
 import {HeroFloatingCards} from './HeroFloatingCards';
 
 // How long each theme stays on screen before auto-advancing (ms).
@@ -325,8 +326,9 @@ export function HeroReelProvider({children}: {children: ReactNode}) {
   // when it shows.
   const warmNeighborsOf = useCallback(
     (center: number) => {
-      // A wide screen loads every slide after load.
-      if (slides.length === 0 || !isNarrow) {
+      // A wide screen loads every slide after load. For a visitor who saves
+      // data, a slide loads only when it shows.
+      if (slides.length === 0 || !isNarrow || prefersReducedData()) {
         return;
       }
       const started = startedSlides.current;
