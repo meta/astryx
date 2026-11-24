@@ -7,7 +7,7 @@
  *   limit, the most heap V8 held, and its peak RSS. `report <file>` then names
  *   the process nearest its limit in the job summary and warns at WARN_SHARE.
  * @input LINT_HEAP_PEAK_FILE, the record file a preloaded process appends to.
- * @output One JSON line per process; the report's summary and warning.
+ * @output JSON lines per process; the report's summary and warning.
  * @position CI tooling for lint.yml. It only reports: it never fails a run.
  */
 
@@ -23,54 +23,92 @@ export const WARN_SHARE = 0.8;
 /** How often the most heap V8 held is read, ms. */
 const SAMPLE_MS = 100;
 
+const NEXT_STEP =
+  "lint core's source with a source-only tsconfig, and core's tests in their own step.";
+
 const GIB = 1024 ** 3;
 const gib = bytes => `${(bytes / GIB).toFixed(2)} GiB`;
 const percent = share => `${Math.round(share * 100)}%`;
 
 /**
- * The summary line and warning for the recorded processes.
+ * Each process's last line, with whether it reached its exit record. A line
+ * that cannot be read is skipped.
+ * @param {string[]} lines
+ */
+function readProcesses(lines) {
+  /** @type {Map<number, Record<string, any>>} */
+  const byPid = new Map();
+  /** @type {string[]} */
+  const errors = [];
+  for (const line of lines) {
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (record == null || typeof record !== 'object') continue;
+    if (typeof record.error === 'string') {
+      errors.push(record.error);
+      continue;
+    }
+    if (!(record.heapLimit > 0)) continue;
+    const earlier = byPid.get(record.pid);
+    byPid.set(record.pid, {
+      ...record,
+      done: Boolean(earlier?.done || record.done),
+    });
+  }
+  return {processes: [...byPid.values()], errors};
+}
+
+/**
+ * The summary line and warning for the recorded processes. A process that
+ * did not finish comes first: one that runs out of heap writes no exit
+ * record, so its last reading after a full collection is all that remains.
  * @param {string[]} lines the record file's lines
  * @returns {{summary: string, warning: string}}
  */
 export function reportHeapPeaks(lines) {
-  const parsed = lines
-    .filter(line => line.trim() !== '')
-    .flatMap(line => {
-      try {
-        return [JSON.parse(line)];
-      } catch {
-        return [];
-      }
-    });
-  const failed = parsed.filter(record => typeof record.error === 'string');
+  const {processes, errors} = readProcesses(lines);
   const failures =
-    failed.length === 0
+    errors.length === 0
       ? ''
-      : ` ${failed.length} ${failed.length === 1 ? 'process' : 'processes'} could not record: ${failed[0].error}.`;
-  const records = parsed.filter(record => record.heapLimit > 0);
-  if (records.length === 0)
+      : ` ${errors.length} ${errors.length === 1 ? 'process' : 'processes'} could not record: ${errors[0]}.`;
+  if (processes.length === 0)
     return {
       summary: `Lint heap: no process recorded its peak.${failures}`,
       warning: '',
     };
   const share = record => record.liveHeap / record.heapLimit;
-  const top = records.reduce((best, next) =>
-    share(next) > share(best) ? next : best,
+  const rank = record => (record.done ? share(record) : 1 + share(record));
+  const top = processes.reduce((best, next) =>
+    rank(next) > rank(best) ? next : best,
   );
-  const live = `${gib(top.liveHeap)} of a ${gib(top.heapLimit)} heap (${percent(share(top))})`;
-  const summary = `Lint heap: \`${top.command}\` kept ${live} live after a full garbage collection; V8 held at most ${gib(top.heldHeap)}, and its peak RSS was ${gib(top.maxRss)}.${failures}`;
-  const warning =
-    share(top) >= WARN_SHARE
-      ? `::warning title=Lint heap near its limit::${top.command} kept ${gib(top.liveHeap)} of its ${gib(top.heapLimit)} heap (${percent(share(top))}) live, past ${percent(WARN_SHARE)}. Before it runs out: lint core's source with a source-only tsconfig, and core's tests in their own step.`
-      : '';
-  return {summary, warning};
+  const live = `about ${gib(top.liveHeap)} of a ${gib(top.heapLimit)} heap (${percent(share(top))}) live after a full garbage collection`;
+  const rest = `V8 held at most ${gib(top.heldHeap)}, and its peak RSS was ${gib(top.maxRss)}.${failures}`;
+  const title = '::warning title=Lint heap near its limit::';
+  if (!top.done)
+    return {
+      summary: `Lint heap: \`${top.command}\` did not finish; its last reading kept ${live}; ${rest}`,
+      warning: `${title}${top.command} did not finish, with about ${gib(top.liveHeap)} of its ${gib(top.heapLimit)} heap (${percent(share(top))}) live at its last reading. If it ran out of heap: ${NEXT_STEP}`,
+    };
+  return {
+    summary: `Lint heap: \`${top.command}\` kept ${live}; ${rest}`,
+    warning:
+      share(top) >= WARN_SHARE
+        ? `${title}${top.command} kept about ${gib(top.liveHeap)} of its ${gib(top.heapLimit)} heap (${percent(share(top))}) live, past ${percent(WARN_SHARE)}. Before it runs out: ${NEXT_STEP}`
+        : '',
+  };
 }
 
 /**
- * Records this process's heap at exit. The live heap is the most a full
- * garbage collection left in use: V8 lets the heap grow towards its limit
- * before it collects, so the most it held says little about what the process
- * needs, and a full collection that cannot free enough is what runs out.
+ * Records this process's heap. The live heap is the most a full garbage
+ * collection left in use: V8 lets the heap grow towards its limit before it
+ * collects, so the most it held says little about what the process needs,
+ * and a full collection that cannot free enough is what runs out. A reading
+ * is written each time the live heap rises, because a process that runs out
+ * of heap never reaches its exit record.
  *
  * It must never change the process it watches: every step catches its own
  * errors, writes nothing to the process's output, and never sets its exit
@@ -89,25 +127,45 @@ function recordPeak(file) {
       failure ??= error instanceof Error ? error.message : String(error);
     }
   };
+  const argv = process.argv.slice(1);
+  const command = [path.basename(argv[0] ?? 'node'), ...argv.slice(1)]
+    .join(' ')
+    .slice(0, 120);
   const sample = () => {
     const stats = v8.getHeapStatistics();
     heldHeap = Math.max(heldHeap, stats.total_heap_size);
     return stats.used_heap_size;
+  };
+  const write = done => {
+    const record =
+      failure == null
+        ? {
+            pid: process.pid,
+            command,
+            done,
+            liveHeap,
+            heldHeap,
+            heapLimit: v8.getHeapStatistics().heap_size_limit,
+            maxRss: process.resourceUsage().maxRSS * 1024,
+          }
+        : {pid: process.pid, command, done, error: failure};
+    fs.appendFileSync(file, `${JSON.stringify(record)}\n`);
   };
   /** @type {PerformanceObserver | undefined} */
   let observer;
   guard(() => {
     observer = new PerformanceObserver(list =>
       guard(() => {
-        if (
-          list
-            .getEntries()
-            .some(
-              entry =>
-                entry.detail?.kind === constants.NODE_PERFORMANCE_GC_MAJOR,
-            )
-        )
-          liveHeap = Math.max(liveHeap, sample());
+        const major = list
+          .getEntries()
+          .some(
+            entry => entry.detail?.kind === constants.NODE_PERFORMANCE_GC_MAJOR,
+          );
+        if (!major) return;
+        const used = sample();
+        if (used <= liveHeap) return;
+        liveHeap = used;
+        write(false);
       }),
     );
     observer.observe({entryTypes: ['gc']});
@@ -122,26 +180,8 @@ function recordPeak(file) {
       });
       guard(() => observer?.disconnect());
       try {
-        const argv = process.argv.slice(1);
-        const command = [path.basename(argv[0] ?? 'node'), ...argv.slice(1)]
-          .join(' ')
-          .slice(0, 120);
-        /** @type {Record<string, unknown>} */
-        let record = {pid: process.pid, command};
-        if (failure == null) {
-          guard(() => {
-            record = {
-              ...record,
-              liveHeap,
-              heldHeap,
-              heapLimit: v8.getHeapStatistics().heap_size_limit,
-              maxRss: process.resourceUsage().maxRSS * 1024,
-            };
-          });
-        }
-        if (failure != null)
-          record = {pid: process.pid, command, error: failure};
-        fs.appendFileSync(file, `${JSON.stringify(record)}\n`);
+        guard(() => write(true));
+        if (failure != null) write(true);
       } catch {
         // A record that cannot be written costs only the report.
       }
@@ -162,13 +202,18 @@ if (
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href &&
   process.argv[2] === 'report'
 ) {
-  const file = process.argv[3] ?? '';
-  const lines = fs.existsSync(file)
-    ? fs.readFileSync(file, 'utf8').split('\n')
-    : [];
-  const {summary, warning} = reportHeapPeaks(lines);
-  console.log(summary);
-  if (warning) console.log(warning);
-  if (process.env.GITHUB_STEP_SUMMARY)
-    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+  try {
+    const file = process.argv[3] ?? '';
+    const lines = fs.statSync(file, {throwIfNoEntry: false})?.isFile()
+      ? fs.readFileSync(file, 'utf8').split('\n')
+      : [];
+    const {summary, warning} = reportHeapPeaks(lines);
+    console.log(summary);
+    if (warning) console.log(warning);
+    if (process.env.GITHUB_STEP_SUMMARY)
+      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+  } catch (error) {
+    console.log(`Lint heap: the report could not be made: ${error.message}`);
+  }
+  process.exitCode = 0;
 }

@@ -28,32 +28,38 @@ const steps = lint.jobs.lint.steps;
 const step = name => steps.find(each => each.name === name);
 const GIB = 1024 ** 3;
 
-/** One recorded process, as the preload writes it. */
-const row = (command, liveHeap, heapLimit = 6 * GIB) =>
+/** One process's record line, as the preload writes it. */
+const row = (
+  command,
+  liveHeap,
+  {pid = 1, done = true, heapLimit = 6 * GIB} = {},
+) =>
   JSON.stringify({
-    pid: 1,
+    pid,
     command,
+    done,
     liveHeap,
     heldHeap: liveHeap * 1.3,
     heapLimit,
     maxRss: liveHeap * 1.4,
   });
+const PRELOAD = path.join(root, '.github/scripts/lint-heap-peak.mjs');
 
 describe('the report', () => {
   it('names the process whose live heap is nearest its limit, and warns at 80%', () => {
     const lines = [
-      row('pnpm lint', 0.1 * GIB),
-      row('eslint . --cache', 5.0 * GIB),
-      row('provenance --check', 3.0 * GIB),
+      row('pnpm lint', 0.1 * GIB, {pid: 1}),
+      row('eslint . --cache', 5.0 * GIB, {pid: 2}),
+      row('provenance --check', 3.0 * GIB, {pid: 3}),
     ];
     const {summary, warning} = reportHeapPeaks(lines);
     expect(WARN_SHARE).toBe(0.8);
     expect(summary).toContain('eslint . --cache');
     expect(summary).toContain(
-      '`eslint . --cache` kept 5.00 GiB of a 6.00 GiB heap (83%) live after a full garbage collection; V8 held at most 6.50 GiB',
+      '`eslint . --cache` kept about 5.00 GiB of a 6.00 GiB heap (83%) live after a full garbage collection; V8 held at most 6.50 GiB',
     );
     expect(warning).toMatch(
-      /^::warning title=Lint heap near its limit::eslint \. --cache kept 5\.00 GiB of its 6\.00 GiB heap \(83%\) live, past 80%/,
+      /^::warning title=Lint heap near its limit::eslint \. --cache kept about 5\.00 GiB of its 6\.00 GiB heap \(83%\) live, past 80%/,
     );
   });
 
@@ -61,8 +67,32 @@ describe('the report', () => {
     const {summary, warning} = reportHeapPeaks([
       row('eslint . --cache', 4.0 * GIB),
     ]);
-    expect(summary).toContain('4.00 GiB of a 6.00 GiB heap (67%) live');
+    expect(summary).toContain('about 4.00 GiB of a 6.00 GiB heap (67%) live');
     expect(warning).toBe('');
+  });
+
+  it('skips a line it cannot read', () => {
+    const {summary} = reportHeapPeaks([
+      '{"pid": 9, "comm',
+      row('eslint . --cache', 4.0 * GIB),
+    ]);
+    expect(summary).toContain('`eslint . --cache` kept about 4.00 GiB');
+  });
+
+  it('names a process that never finished, by its last reading, and warns', () => {
+    // A process that runs out of heap never reaches its exit record: only the
+    // readings it wrote after each full collection remain.
+    const {summary, warning} = reportHeapPeaks([
+      row('eslint . --cache', 2.0 * GIB, {pid: 7, done: false}),
+      row('eslint . --cache', 3.5 * GIB, {pid: 7, done: false}),
+      row('check-knowledge.mjs', 0.2 * GIB, {pid: 8}),
+    ]);
+    expect(summary).toBe(
+      'Lint heap: `eslint . --cache` did not finish; its last reading kept about 3.50 GiB of a 6.00 GiB heap (58%) live after a full garbage collection; V8 held at most 4.55 GiB, and its peak RSS was 4.90 GiB.',
+    );
+    expect(warning).toMatch(
+      /^::warning title=Lint heap near its limit::eslint \. --cache did not finish, with about 3\.50 GiB of its 6\.00 GiB heap \(58%\) live at its last reading\. If it ran out of heap: /,
+    );
   });
 
   it('says so when nothing was recorded, and still passes', () => {
@@ -84,6 +114,43 @@ describe('the report', () => {
     expect(out.stdout).toContain('no process recorded its peak');
   });
 
+  it('exits 0 whatever its record holds', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-heap-'));
+    const file = path.join(dir, 'peaks.jsonl');
+    fs.writeFileSync(file, 'not json\n{"pid":\n');
+    for (const record of [file, dir]) {
+      const out = spawnSync(process.execPath, [PRELOAD, 'report', record], {
+        encoding: 'utf8',
+        env: {...process.env, GITHUB_STEP_SUMMARY: ''},
+      });
+      expect(out.status, record).toBe(0);
+    }
+  });
+
+  it('keeps the last reading of a real process that runs out of heap', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-heap-'));
+    const file = path.join(dir, 'peaks.jsonl');
+    const run = spawnSync(
+      process.execPath,
+      [
+        '--max-old-space-size=64',
+        `--import=${PRELOAD}`,
+        '-e',
+        // Grows until the heap runs out, and yields between batches as a
+        // linter does between files.
+        "globalThis.keep = []; (async () => { for (;;) { for (let i = 0; i < 5e4; i++) keep.push({i, s: 'x'.repeat(16) + i}); await new Promise(resolve => setImmediate(resolve)); } })();",
+      ],
+      {encoding: 'utf8', env: {...process.env, LINT_HEAP_PEAK_FILE: file}},
+    );
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain('heap out of memory');
+    const lines = fs.readFileSync(file, 'utf8').trim().split('\n');
+    expect(lines.map(line => JSON.parse(line).done)).not.toContain(true);
+    const {summary, warning} = reportHeapPeaks(lines);
+    expect(summary).toMatch(/^Lint heap: `node[^`]*` did not finish; /);
+    expect(warning).toContain('did not finish');
+  });
+
   it('records a real Node process through the preload', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-heap-'));
     const file = path.join(dir, 'peaks.jsonl');
@@ -92,7 +159,7 @@ describe('the report', () => {
       [
         '--max-old-space-size=256',
         '--expose-gc',
-        `--import=${path.join(root, '.github/scripts/lint-heap-peak.mjs')}`,
+        `--import=${PRELOAD}`,
         '-e',
         // Keeps about 40 MB live through a full collection; the observer
         // reads the heap when the collection's entry arrives.
@@ -101,11 +168,14 @@ describe('the report', () => {
       {encoding: 'utf8', env: {...process.env, LINT_HEAP_PEAK_FILE: file}},
     );
     expect(run.status, run.stderr).toBe(0);
-    const [recorded] = fs
+    // A reading after the full collection, then the exit record.
+    const recorded = fs
       .readFileSync(file, 'utf8')
       .trim()
       .split('\n')
-      .map(line => JSON.parse(line));
+      .map(line => JSON.parse(line))
+      .at(-1);
+    expect(recorded.done).toBe(true);
     expect(recorded.liveHeap).toBeGreaterThan(20 * 1024 ** 2);
     expect(recorded.heldHeap).toBeGreaterThanOrEqual(recorded.liveHeap);
     // The limit follows --max-old-space-size (plus the young generation,
@@ -129,7 +199,6 @@ describe('a preload that fails', () => {
       [...imports.map(each => `--import=${each}`), '-e', SCRIPT],
       {encoding: 'utf8', env: {...process.env, LINT_HEAP_PEAK_FILE: file}},
     );
-  const PRELOAD = path.join(root, '.github/scripts/lint-heap-peak.mjs');
 
   it('changes no output and no exit code when its heap reads throw, and logs the error in its record', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-heap-'));
@@ -180,7 +249,13 @@ describe('the Lint job', () => {
     }
     const report = step('Report the lint heap peak');
     expect(steps.indexOf(report)).toBe(steps.indexOf(step('Run ESLint')) + 1);
-    expect(report.if).toBe(`always() && ${step('Run ESLint').if}`);
+    // It runs after a failed lint, but only where setup ran: a fork without
+    // its ci:run label, and the docs and spec lanes, have no checkout to run.
+    const setup = steps.find(each => each.uses === './.github/actions/setup');
+    expect(setup.id).toBe('setup');
+    expect(report.if).toBe(
+      "${{ !cancelled() && steps.setup.outcome == 'success' }}",
+    );
     expect(report['continue-on-error']).toBe(true);
     expect(report.run).toBe(
       'node .github/scripts/lint-heap-peak.mjs report "$RUNNER_TEMP/lint-heap-peaks.jsonl"',

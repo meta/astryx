@@ -252,6 +252,7 @@ jobs:
         run: echo "Lightweight documentation PR — skipping full lint"
 
       - uses: ./.github/actions/setup
+        id: setup
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
 
       - name: Clear ESLint cache
@@ -388,10 +389,12 @@ jobs:
           LINT_HEAP_PEAK_FILE: ${{ runner.temp }}/lint-heap-peaks.jsonl
         run: pnpm lint
 
-      # Each Node process of the two type-aware steps recorded its peak heap.
-      # The report names the one nearest its limit and warns at 80%, before
-      # core's TypeScript program outgrows the heap. It never fails the job.
+      # Each Node process of the two type-aware steps recorded its live heap.
+      # The report names the one nearest its limit, or one that did not
+      # finish, and warns at 80%, before core's TypeScript program outgrows
+      # the heap. It runs after a failed lint wherever setup ran, and it
+      # never fails the job.
       - name: Report the lint heap peak
-        if: always() && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         continue-on-error: true
         run: node .github/scripts/lint-heap-peak.mjs report "$RUNNER_TEMP/lint-heap-peaks.jsonl"
