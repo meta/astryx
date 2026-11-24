@@ -473,9 +473,9 @@ function hasModifier(e: React.KeyboardEvent): boolean {
  * rows and where the list renders. The caller announces each new result count
  * through useAnnounce (spec:AST-075 DEC-2), with the words the field shows.
  */
-export function useCombobox<T extends ComboboxOption = SelectorOptionData>(
-  options: UseComboboxOptions<T>,
-): UseComboboxResult<T> {
+export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
+  ...options
+}: UseComboboxOptions<T>): UseComboboxResult<T> {
   return useComboboxInternal(options);
 }
 

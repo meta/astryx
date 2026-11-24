@@ -94,9 +94,9 @@ interface UseMultiComboboxResult {
  *
  * The caller must ensure selectableItems is in the same order as the rendered DOM.
  */
-export function useMultiCombobox(
-  options: UseMultiComboboxOptions,
-): UseMultiComboboxResult {
+export function useMultiCombobox({
+  ...options
+}: UseMultiComboboxOptions): UseMultiComboboxResult {
   return useMultiComboboxInternal(options);
 }
 
