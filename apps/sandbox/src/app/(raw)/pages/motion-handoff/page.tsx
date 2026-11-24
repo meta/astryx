@@ -4,18 +4,25 @@
 
 /**
  * @file page.tsx
- * @input `?arm=`: main (the default) or option2. `?mode=`: fold (the
- *   default), release or nowork.
+ * @input `?arm=`: main (the default), workaround, retarget or option2.
+ *   `?mode=`: fold (the default), release or nowork.
  * @output A try-it page for filming a motion hand-off on a phone. In fold, a
  *   tap folds the rows above the card three times, 200 ms apart, so the
  *   second and third folds move the card mid-glide. In release, a one-finger
- *   drag moves the card, and the lift hands it to a spring. In nowork, the
- *   card rests and nothing hands off. The main arm keeps a moved card in place
- *   with `set` and starts a new `animate` from `get` and `getVelocity`. The
- *   option2 arm keeps the glide with `shift`. A corner square flips colour in
- *   each hand-off's own task, a ruler marks every 10 px, the step size prints
- *   one frame's travel at the hand-off, and a strip that a Web Animation moves
- *   at a constant speed shows each frame the compositor draws.
+ *   drag moves the card, and the lift hands it to a spring; every arm runs the
+ *   same release. In nowork, the card rests and nothing hands off. At a fold,
+ *   the main arm takes the plain public path: `set`, then `animate` from rest.
+ *   The workaround arm reads `get` and `getVelocity`, then calls `set` and an
+ *   `animate` with that velocity. The retarget arm uses public calls only: a
+ *   wrapper takes the layout's move with `set`, and the card's own glide is
+ *   retargeted with `animate`, which keeps its velocity. The option2 arm calls
+ *   `shift`. A corner square flips colour in each hand-off's own task, a ruler
+ *   marks every 10 px, the step size prints one frame's travel at the
+ *   hand-off, and a strip that a Web Animation moves at a constant speed shows
+ *   each frame the compositor draws. After each hand-off, a one-line reading
+ *   lists the card's steps on screen over the next 6 frames, from where the
+ *   last frame drew it, read in frame callbacks. Both text lines keep a fixed
+ *   height, so their text never moves the card.
  * @position A raw try-it page for the animator hand-off request. It comes out
  *   before the decision unless the spec owner keeps it.
  */
@@ -30,7 +37,8 @@ import {useSearchParams} from 'react-router-dom';
 import * as stylex from '@stylexjs/stylex';
 import {createAnimator, type Animator} from '@astryxdesign/core';
 
-type Arm = 'main' | 'option2';
+type Arm = 'main' | 'workaround' | 'retarget' | 'option2';
+const ARMS: ReadonlyArray<Arm> = ['main', 'workaround', 'retarget', 'option2'];
 type Mode = 'fold' | 'release' | 'nowork';
 
 /** How far one fold moves the card, and the folds a tap makes. */
@@ -38,6 +46,8 @@ const FOLD_PX = 120;
 const FOLDS_PER_TAP = 3;
 const FOLD_GAP_MS = 200;
 const FRAMES_PER_SECOND = 60;
+/** The frames after a hand-off whose steps the second line lists. */
+const WATCHED_FRAMES = 6;
 
 const styles = stylex.create({
   page: {
@@ -47,7 +57,7 @@ const styles = stylex.create({
     overflow: 'hidden',
     // Clear of the status bar, the corner square and the strip, and of
     // Safari's toolbar.
-    paddingBlockStart: 112,
+    paddingBlockStart: 104,
     paddingBlockEnd: 160,
     paddingInline: 16,
     backgroundColor: 'white',
@@ -55,10 +65,23 @@ const styles = stylex.create({
     fontFamily: 'system-ui, sans-serif',
     fontSize: 16,
   },
+  // Both lines keep a fixed height: a line that wraps anew would move the
+  // rows and the card below it mid-glide, on film.
   readout: {
     fontVariantNumeric: 'tabular-nums',
     marginBlock: 0,
-    minHeight: 48,
+    height: 48,
+    lineHeight: '24px',
+    overflow: 'hidden',
+  },
+  steps: {
+    fontVariantNumeric: 'tabular-nums',
+    marginBlock: 0,
+    height: 16,
+    fontSize: 12,
+    lineHeight: '16px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
   },
   marker: {
     position: 'fixed',
@@ -87,7 +110,7 @@ const styles = stylex.create({
     display: 'block',
     width: '100%',
     height: 72,
-    marginBlockStart: 16,
+    marginBlockStart: 8,
     borderStyle: 'none',
     borderRadius: 12,
     backgroundColor: 'black',
@@ -192,7 +215,8 @@ function useAnimatorOn(element: RefObject<HTMLDivElement | null>) {
 
 export default function MotionHandoffPage() {
   const [searchParams] = useSearchParams();
-  const arm: Arm = searchParams.get('arm') === 'option2' ? 'option2' : 'main';
+  const armParam = searchParams.get('arm');
+  const arm: Arm = ARMS.find(name => name === armParam) ?? 'main';
   const modeParam = searchParams.get('mode');
   const mode: Mode =
     modeParam === 'release' || modeParam === 'nowork' ? modeParam : 'fold';
@@ -201,7 +225,15 @@ export default function MotionHandoffPage() {
   const card = useRef<HTMLDivElement>(null);
   const rows = useRef<HTMLDivElement>(null);
   const readout = useRef<HTMLParagraphElement>(null);
+  const steps = useRef<HTMLParagraphElement>(null);
+  const holder = useRef<HTMLDivElement>(null);
   const animator = useAnimatorOn(card);
+  // The retarget arm's wrapper, with its own animator: it takes the layout's
+  // move, and the card's own glide goes on inside it.
+  const holderAnimator = useAnimatorOn(holder);
+  const holderY = useRef(0);
+  const cardTarget = useRef(0);
+  const foldSerial = useRef(0);
   const folded = useRef(false);
   const timers = useRef<number[]>([]);
   const drag = useRef<{
@@ -222,8 +254,52 @@ export default function MotionHandoffPage() {
     [],
   );
 
+  /**
+   * Lists the card's steps on screen over the frames after a hand-off, from
+   * where the last frame drew it, read in frame callbacks: the page's own
+   * reading of whether it holds, slows or jumps. A film decides.
+   */
+  const watchSteps = (axis: 'top' | 'left', drawn: number, step: number) => {
+    const element = card.current;
+    if (element == null) {
+      return;
+    }
+    const places = [drawn];
+    const tick = () => {
+      places.push(element.getBoundingClientRect()[axis]);
+      if (places.length <= WATCHED_FRAMES) {
+        requestAnimationFrame(tick);
+        return;
+      }
+      const moves = places
+        .slice(1)
+        .map((place, index) => Math.abs(place - places[index]));
+      const moving = step > 1;
+      // Holds: a frame that does not move while the card was moving.
+      const holds = moving ? moves.filter(move => move < 0.25).length : 0;
+      // Slows: a frame in the first three that moves less than half the
+      // hand-off's step, as when the glide starts over from rest.
+      const slows =
+        moving &&
+        moves.slice(0, 3).some(move => move >= 0.25 && move < step / 2);
+      // Jumps: a catch-up, one step well over the window's other steps.
+      const sorted = [...moves].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
+      const jumps = median > 1 && moves.some(move => move > 1.6 * median);
+      const flags = [
+        ...(holds > 0 ? [`holds ${holds} frame${holds === 1 ? '' : 's'}`] : []),
+        ...(slows ? ['slows'] : []),
+        ...(jumps ? ['jumps'] : []),
+      ];
+      if (steps.current != null) {
+        steps.current.textContent = `${flags.length > 0 ? flags.join(', ') : 'steady'}: ${moves.map(move => move.toFixed(1)).join(' ')} px`;
+      }
+    };
+    requestAnimationFrame(tick);
+  };
+
   /** Flips the corner square and prints the hand-off, in its own task. */
-  const mark = (velocity: number, detail: string) => {
+  const mark = (velocity: number, detail: string, drawn: number) => {
     handoffs.current += 1;
     const square = marker.current;
     if (square != null) {
@@ -234,6 +310,7 @@ export default function MotionHandoffPage() {
     if (readout.current != null) {
       readout.current.textContent = `${arm} · ${mode} · #${handoffs.current} · step ${step.toFixed(1)} px/frame at 60 fps · ${detail}`;
     }
+    watchSteps(mode === 'release' ? 'left' : 'top', drawn, step);
   };
 
   /** One fold: the rows above the card change height in this task. */
@@ -244,27 +321,61 @@ export default function MotionHandoffPage() {
     if (element == null || area == null || motion == null) {
       return;
     }
-    const before = element.offsetTop;
+    // The layout's move, read on the wrapper: once the wrapper has a
+    // translate, it is the card's offsetParent, so the card's own offsetTop
+    // stops following the layout.
+    const placed = holder.current ?? element;
+    const drawnBefore = element.getBoundingClientRect().top;
+    const before = placed.offsetTop;
     area.style.height = `${area.offsetHeight + by}px`;
-    const moved = element.offsetTop - before;
+    const moved = placed.offsetTop - before;
     const y = motion.get().y;
     const velocity = motion.getVelocity().y;
-    const gliding = y !== 0 || velocity !== 0;
-    if (arm === 'option2' && gliding) {
+    const gliding = y !== cardTarget.current || velocity !== 0;
+    const holderMotion = holderAnimator.current;
+    if (arm === 'retarget' && holderMotion != null) {
+      // Public calls only. The wrapper takes the layout's move at once, with
+      // no motion of its own, so the card stays where it is drawn. The card's
+      // glide is retargeted by as much and keeps its velocity.
+      holderY.current -= moved;
+      holderMotion.set({y: holderY.current});
+      cardTarget.current += moved;
+      const serial = (foldSerial.current += 1);
+      void motion.animate({y: cardTarget.current}).then(() => {
+        // At rest after the last fold: both offsets go back to 0 together, in
+        // one task, so nothing moves on screen.
+        if (
+          serial === foldSerial.current &&
+          motion.getVelocity().y === 0 &&
+          motion.get().y === cardTarget.current
+        ) {
+          holderY.current = 0;
+          cardTarget.current = 0;
+          holderMotion.set({y: 0});
+          motion.set({y: 0});
+        }
+      });
+    } else if (arm === 'option2' && gliding) {
       // The glide goes on: the card stays where it is drawn.
       motion.shift({y: -moved});
-    } else {
-      // Today's public path: put the card back where it is drawn, then a new
-      // spring from there with the speed it had.
+    } else if (arm === 'workaround') {
+      // Today's tightest public path: put the card back where it is drawn,
+      // then a new spring from there with the speed it had, in this task.
       motion.set({y: y - moved});
       void motion.animate(
         {y: 0},
         velocity !== 0 ? {velocity: {y: velocity}} : undefined,
       );
+    } else {
+      // The plain public path: put the card back where it is drawn, then a
+      // new spring from rest.
+      motion.set({y: y - moved});
+      void motion.animate({y: 0});
     }
     mark(
       velocity,
       `fold ${moved > 0 ? '+' : ''}${moved} px ${gliding ? 'mid-glide' : 'from rest'}`,
+      drawnBefore,
     );
   };
 
@@ -318,8 +429,9 @@ export default function MotionHandoffPage() {
         : [current.samples[0], current.samples[0]];
     const elapsed = last.t - first.t;
     const velocity = elapsed > 0 ? ((last.x - first.x) / elapsed) * 1000 : 0;
+    const drawn = card.current?.getBoundingClientRect().left ?? 0;
     void animator.current.animate({x: 0}, {velocity: {x: velocity}});
-    mark(velocity, `release from ${Math.round(last.x)} px`);
+    mark(velocity, `release from ${Math.round(last.x)} px`, drawn);
   };
 
   return (
@@ -331,6 +443,7 @@ export default function MotionHandoffPage() {
       <p ref={readout} {...stylex.props(styles.readout)} aria-live="polite">
         {`${arm} · ${mode} · no hand-off yet`}
       </p>
+      <p ref={steps} {...stylex.props(styles.steps)} />
       {mode === 'release' ? (
         <div
           {...stylex.props(styles.dragArea)}
@@ -353,7 +466,9 @@ export default function MotionHandoffPage() {
           <div {...stylex.props(styles.stage)}>
             <div {...stylex.props(styles.rulerColumn)} aria-hidden />
             <div ref={rows} {...stylex.props(styles.rows)} aria-hidden />
-            <div ref={card} {...stylex.props(styles.card)} />
+            <div ref={holder}>
+              <div ref={card} {...stylex.props(styles.card)} />
+            </div>
           </div>
         </>
       )}

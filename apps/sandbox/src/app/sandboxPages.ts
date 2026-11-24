@@ -145,7 +145,7 @@ export const categories: SandboxCategory[] = [
         name: 'Motion Hand-off',
         href: '/pages/motion-handoff/',
         description:
-          'A try-it for filming a motion hand-off on a phone: ?mode= fold (a tap folds the rows above a card), release (a drag lifts into a spring) or nowork, and ?arm= main or option2. It comes out before the decision',
+          'A try-it for filming a motion hand-off on a phone: ?mode= fold (a tap folds the rows above a card), release (a drag lifts into a spring) or nowork, and ?arm= main, workaround, retarget or option2. It comes out before the decision',
       },
       {
         name: 'TextArea Counter',
