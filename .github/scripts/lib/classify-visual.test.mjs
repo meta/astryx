@@ -1045,9 +1045,10 @@ describe('CSS-named keys count only in a style context', () => {
 
 // The style-context test reads a pull request's files inside the review job,
 // so its cost must grow with the file, never faster, for every construct it
-// walks. Each case builds an input of size n and 10n and compares the times,
-// not a fixed limit: a linear pass grows about 10 times, a quadratic one about
-// 100 times. The best of three runs keeps a slow moment from deciding.
+// walks. Each case builds an input of size n and 10n and compares the work the
+// pass counts (every loop step it takes, `meter.steps`), not the time, so a
+// shared runner's load cannot decide: a linear pass grows about 10 times, a
+// quadratic one about 100 times.
 describe('style-context limits', () => {
   it('reads a style context with more names than a call can take as arguments', () => {
     // Names are queued one at a time; spreading them into one call would
@@ -1062,15 +1063,16 @@ describe('style-context limits', () => {
 });
 
 describe('style-context cost grows with the file', () => {
-  const best = source => {
-    let fastest = Infinity;
-    for (let run = 0; run < 3; run += 1) {
-      const started = performance.now();
-      styleContextLines(source, true);
-      fastest = Math.min(fastest, performance.now() - started);
-    }
-    return fastest;
+  // The steps one pass over `source` takes.
+  const steps = source => {
+    const meter = {steps: 0};
+    expect(styleContextLines(source, true, meter)).not.toBeNull();
+    return meter.steps;
   };
+  // Linear work with a constant part grows at most 10 times for 10 times the
+  // input; 12 leaves room for that, and quadratic work grows about 100 times.
+  const LINEAR_BOUND = 12;
+  const growth = (count, build, n) => count(build(n * 10)) / count(build(n));
   const lines = (count, each) => Array.from({length: count}, (_, i) => each(i));
   // Each construct the test walks, as an input of size n.
   const CONSTRUCTS = {
@@ -1160,19 +1162,28 @@ describe('style-context cost grows with the file', () => {
 
   for (const [construct, build] of Object.entries(CONSTRUCTS)) {
     it(`grows about linearly for ${construct}`, () => {
-      const n = 6000;
-      const small = build(n);
-      const large = build(n * 10);
-      // Warm the function so the first run's compile time is not measured.
-      styleContextLines(small, true);
-      const ratio = best(large) / Math.max(best(small), 1);
-      // Linear is about 10; quadratic is about 100.
+      const ratio = growth(steps, build, 6000);
       expect(
         ratio,
-        `${construct}: ${ratio.toFixed(1)}x for 10x the input`,
-      ).toBeLessThan(30);
+        `${construct}: ${ratio.toFixed(1)}x the steps for 10x the input`,
+      ).toBeLessThanOrEqual(LINEAR_BOUND);
     });
   }
+
+  it('would catch a pass whose steps grow with the square of the input', () => {
+    // A pass that compares every line with every line before it.
+    const quadratic = source => {
+      const count = source.split('\n').length;
+      return (count * (count - 1)) / 2;
+    };
+    expect(
+      growth(quadratic, CONSTRUCTS['nested style-named properties'], 6000),
+    ).toBeGreaterThan(LINEAR_BOUND);
+  });
+
+  it('counts every step of a pass, so a pass that takes none fails', () => {
+    expect(steps('const a = 1;')).toBeGreaterThan(0);
+  });
 });
 
 describe('review-signal loading contract', () => {

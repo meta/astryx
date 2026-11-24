@@ -1772,7 +1772,7 @@
             },
             {
               "definition": "<text>",
-              "templates": 16
+              "templates": 17
             },
             {
               "definition": "<text>",
@@ -1788,15 +1788,11 @@
             },
             {
               "definition": "<text>",
-              "templates": 12
+              "templates": 13
             },
             {
               "definition": "<text>",
-              "templates": 12
-            },
-            {
-              "definition": "<text>",
-              "templates": 11
+              "templates": 13
             },
             {
               "definition": "<text>",
@@ -1820,11 +1816,15 @@
             },
             {
               "definition": "<text>",
-              "templates": 10
+              "templates": 11
             },
             {
               "definition": "<text>",
-              "templates": 10
+              "templates": 11
+            },
+            {
+              "definition": "<text>",
+              "templates": 11
             },
             {
               "definition": "<text>",
@@ -2176,7 +2176,7 @@
             },
             {
               "definition": "<text>",
-              "templates": 1
+              "templates": 2
             },
             {
               "definition": "<text>",

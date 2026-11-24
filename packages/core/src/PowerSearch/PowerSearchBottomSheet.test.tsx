@@ -64,6 +64,14 @@ import {
 } from './powerSearchSheetUtils';
 import {renderHook} from '@testing-library/react';
 
+// A press that starts and ends on the scrim: the browser targets the dialog
+// element with the pointer events and with the click.
+function pressScrim(dialog: HTMLElement) {
+  fireEvent.pointerDown(dialog);
+  fireEvent.pointerUp(dialog);
+  fireEvent.click(dialog);
+}
+
 // PowerSearch and Tokenizer load their sheets on demand, and a first load
 // under the test transform can take seconds on a busy machine. The file loads
 // both sheet modules before any test runs, so neither load counts against a
@@ -3983,7 +3991,7 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
     openSheet();
     settleSheets();
     // A click on the dialog element itself is the scrim.
-    fireEvent.click(sheet());
+    pressScrim(sheet());
     expect(isSheetOpen()).toBe(false);
     settleSheets();
 
@@ -3996,7 +4004,7 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
       expect.stringContaining('Status'),
     );
     // The value step is an info sheet: its scrim dismisses it.
-    fireEvent.click(sheet());
+    pressScrim(sheet());
     settleSheets();
     expect(isSheetOpen()).toBe(true);
     expect(sheet()).toHaveAttribute('aria-label', 'Add filter');
@@ -4042,7 +4050,7 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
     openSheet();
     const filters = sheet();
     tapRow('Add filter');
-    fireEvent.click(filters);
+    pressScrim(filters);
     expect(isSheetOpen()).toBe(true);
     expect(sheet()).toHaveAttribute('aria-label', 'Add filter');
   });
@@ -4053,7 +4061,7 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
     tapRow('Closed');
     // The staged value is not protected by a form purpose: a scrim press
     // reveals Filters, and nothing is committed.
-    fireEvent.click(sheet());
+    pressScrim(sheet());
     expect(sheet()).toHaveAttribute('aria-label', 'Filters');
   });
 
@@ -4141,6 +4149,248 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
           'This filter is no longer available',
         ),
       );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+describe('PowerSearch step changes move focus and speak from the handler (architecture:react-component-runtime INV2, INV3)', () => {
+  // The controls focus lands on while `run` acts: a sheet panel or a dialog
+  // that the stack focuses on the way is not a control a person hears.
+  function focusedControls(run: () => void): HTMLElement[] {
+    const landed: HTMLElement[] = [];
+    const record = (event: FocusEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        target instanceof HTMLDialogElement ||
+        target.getAttribute('tabindex') === '-1'
+      ) {
+        return;
+      }
+      landed.push(target);
+    };
+    document.addEventListener('focusin', record);
+    try {
+      run();
+    } finally {
+      document.removeEventListener('focusin', record);
+    }
+    return landed;
+  }
+
+  // Every text the dialog's own live region receives while it is observed.
+  function observeAnnouncements(dialog: Element): {
+    texts: string[];
+    stop: () => void;
+  } {
+    // The region mounts with the dialog's first message, so the dialog is
+    // what is observed.
+    const texts: string[] = [];
+    const observer = new MutationObserver(() => {
+      const text = modalLiveRegion(dialog)?.textContent ?? '';
+      if (text !== '' && texts[texts.length - 1] !== text) {
+        texts.push(text);
+      }
+    });
+    observer.observe(dialog, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    return {texts, stop: () => observer.disconnect()};
+  }
+
+  it('moves focus once, to the row, when a keyboard Cancel returns from the value step', async () => {
+    const user = userEvent.setup();
+    render(
+      <StrictMode>
+        <PowerSearch
+          config={config}
+          filters={[openFilter]}
+          onChange={vi.fn()}
+          presentation="bottom-sheet"
+        />
+      </StrictMode>,
+    );
+    openEditFlow('Status is Open');
+    const cancel = within(sheet()).getByRole('button', {name: 'Cancel'});
+    cancel.focus();
+    const landed: HTMLElement[] = [];
+    const record = (event: FocusEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        !(target instanceof HTMLDialogElement) &&
+        target.getAttribute('tabindex') !== '-1'
+      ) {
+        landed.push(target);
+      }
+    };
+    document.addEventListener('focusin', record);
+    try {
+      await user.keyboard('{Enter}');
+      settleSheets();
+    } finally {
+      document.removeEventListener('focusin', record);
+    }
+    const row = within(sheet()).getByRole('button', {name: 'Status is Open'});
+    expect(row).toHaveFocus();
+    expect(landed).toEqual([row]);
+  });
+
+  it('moves focus inside the action that changes the step, before any later work', () => {
+    render(
+      <PowerSearch
+        config={config}
+        filters={[openFilter]}
+        onChange={vi.fn()}
+        presentation="bottom-sheet"
+      />,
+    );
+    openEditFlow('Status is Open');
+    const cancel = within(sheet()).getByRole('button', {name: 'Cancel'});
+    // A listener on the document runs after the component's own handler,
+    // in the same dispatch, before React runs any Effect the update queued.
+    let focusedDuringAction: Element | null = null;
+    const readFocus = () => {
+      focusedDuringAction = document.activeElement;
+    };
+    document.addEventListener('click', readFocus);
+    try {
+      fireEvent.click(cancel);
+    } finally {
+      document.removeEventListener('click', readFocus);
+    }
+    const row = within(sheet()).getByRole('button', {name: 'Status is Open'});
+    expect(focusedDuringAction).toBe(row);
+    expect(row).toHaveFocus();
+  });
+
+  it('returns focus to the trigger when the field becomes disabled after a canceled creation from the entry Add filter', () => {
+    const {rerender} = setup({filters: []});
+    openSheet();
+    // Add filter opens directly: the field has no filters to manage.
+    tapRow('Author');
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
+    // Cancel returned to Add filter and named the Author row.
+    expect(within(sheet()).getByRole('button', {name: 'Author'})).toHaveFocus();
+    rerender(
+      <PowerSearch
+        config={config}
+        filters={[]}
+        onChange={vi.fn()}
+        presentation="bottom-sheet"
+        isDisabled
+      />,
+    );
+    settleSheets();
+    expect(isSheetOpen()).toBe(false);
+    expect(trigger()).toHaveFocus();
+  });
+
+  it('moves focus once to a one-tap filter added from the keyboard, and speaks the addition once', async () => {
+    const spy = mockModalDialogs();
+    try {
+      const user = userEvent.setup();
+      function Harness() {
+        const [filters, setFilters] = useState<
+          ReadonlyArray<PowerSearchFilter>
+        >([openFilter]);
+        return (
+          <PowerSearch
+            config={config}
+            filters={filters}
+            onChange={setFilters}
+            presentation="bottom-sheet"
+          />
+        );
+      }
+      render(<Harness />);
+      openAddFlow();
+      const filtersDialog = document.querySelector<HTMLElement>(
+        'dialog[aria-label="Filters"]',
+      )!;
+      const announcements = observeAnnouncements(filtersDialog);
+      within(sheet()).getByRole('button', {name: 'Unassigned'}).focus();
+      const landed: HTMLElement[] = [];
+      const record = (event: FocusEvent) => {
+        const target = event.target as HTMLElement;
+        if (
+          !(target instanceof HTMLDialogElement) &&
+          target.getAttribute('tabindex') !== '-1'
+        ) {
+          landed.push(target);
+        }
+      };
+      document.addEventListener('focusin', record);
+      try {
+        await user.keyboard('{Enter}');
+        settleSheets();
+      } finally {
+        document.removeEventListener('focusin', record);
+      }
+      const added = within(filtersDialog).getByRole('button', {
+        name: 'Unassigned is true',
+      });
+      expect(added).toHaveFocus();
+      expect(landed).toEqual([added]);
+      await waitFor(() =>
+        expect(modalLiveRegion(filtersDialog)).toHaveTextContent(
+          'Added Unassigned is true',
+        ),
+      );
+      announcements.stop();
+      expect(
+        announcements.texts.filter(text => text.includes('Added')),
+      ).toEqual(['Added Unassigned is true']);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('moves no focus and speaks nothing again on a re-render that changes no step', async () => {
+    const spy = mockModalDialogs();
+    try {
+      function Harness({placeholder}: {placeholder: string}) {
+        const [filters, setFilters] = useState<
+          ReadonlyArray<PowerSearchFilter>
+        >([openFilter]);
+        return (
+          <PowerSearch
+            config={config}
+            filters={filters}
+            onChange={setFilters}
+            placeholder={placeholder}
+            presentation="bottom-sheet"
+          />
+        );
+      }
+      const {rerender} = render(<Harness placeholder="Filter" />);
+      openAddFlow();
+      tapRow('Unassigned');
+      settleSheets();
+      const filtersDialog = sheet();
+      await waitFor(() =>
+        expect(modalLiveRegion(filtersDialog)).toHaveTextContent(
+          'Added Unassigned is true',
+        ),
+      );
+      const addButton = within(filtersDialog).getAllByRole('button', {
+        name: 'Add filter',
+      })[0];
+      addButton.focus();
+      const announcements = observeAnnouncements(filtersDialog);
+      const landed = focusedControls(() => {
+        rerender(<Harness placeholder="Filter issues" />);
+        rerender(<Harness placeholder="Filter" />);
+      });
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      announcements.stop();
+      expect(landed).toEqual([]);
+      expect(addButton).toHaveFocus();
+      expect(announcements.texts).toEqual([]);
     } finally {
       spy.mockRestore();
     }
