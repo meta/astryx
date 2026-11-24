@@ -143,7 +143,16 @@ async function scrimRules(
     (matched.inherited ?? []).forEach((entry, index) => {
       collect(index + 1, entry.matchedCSSRules, entry.inlineStyle);
     });
-    return rules;
+    // The protocol can list one declaration twice: as written and as parsed.
+    const seen = new Set<string>();
+    return rules.filter(rule => {
+      const key = JSON.stringify(rule);
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
   };
   const rules = {
     sheet: await rulesFor('dialog[open] .astryx-bottom-sheet'),
