@@ -4,11 +4,10 @@
 
 /**
  * @file ListInput.tsx
- * @input React, StyleX, Astryx field/list/button/icon/empty-state
- *   primitives, the container-reveal hook, compact size context, browser
- *   scroll geometry, and programmatic theme tokens. Also core List's reorder
- *   session and handle, run by the owner's createReorderable object through
- *   Core's internal entry `@astryxdesign/core/internal/reorder`
+ * @input React, StyleX, Astryx Field, list, button, icon, and empty-state
+ *   primitives, size context, scroll geometry, theme tokens, and, through
+ *   Core's internal `reorder` and `selectable-card` entries, List's reorder
+ *   session and handle and Field's shared styling rule
  * @output Exports ListInput and its controlled data, column, renderer, and change types
  * @position Lab experiment (RFC meta/astryx#4531) for editing compact repeated records
  *
@@ -29,16 +28,20 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import type {BaseProps} from '@astryxdesign/core';
 import {Button} from '@astryxdesign/core/Button';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
-import {Field, type InputStatus} from '@astryxdesign/core/Field';
+import {
+  Field,
+  type FieldInputBaseProps,
+  type InputStatus,
+} from '@astryxdesign/core/Field';
 import {FieldStatus} from '@astryxdesign/core/FieldStatus';
 import {Icon} from '@astryxdesign/core/Icon';
 import {
   useAnnounce,
   useContainerReveal,
   useMediaQuery,
+  useMergedRefs,
 } from '@astryxdesign/core/hooks';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {useTranslator} from '@astryxdesign/core/i18n';
@@ -47,6 +50,7 @@ import {
   ListReorderScope,
   useListReorderScope,
 } from '@astryxdesign/core/internal/reorder';
+import {useFieldInputStyling} from '@astryxdesign/core/internal/selectable-card';
 import type {Reorderable} from '@astryxdesign/core';
 import {reorderHandle} from '@astryxdesign/core/internal/reorderHandle.stylex';
 import {SizeProvider} from '@astryxdesign/core/SizeContext';
@@ -115,10 +119,10 @@ export interface ListInputColumn<T> {
 }
 
 export interface ListInputProps<T> extends Omit<
-  BaseProps<HTMLDivElement>,
+  FieldInputBaseProps<HTMLDivElement>,
   'onChange'
 > {
-  /** Ref forwarded to the outer field element. */
+  /** Ref forwarded to the `role="group"` element. */
   ref?: React.Ref<HTMLDivElement>;
   /** Visible and accessible label for the list. */
   label: string;
@@ -696,17 +700,33 @@ export function ListInput<T>({
   isLabelHidden = false,
   isOptional = false,
   isRequired = false,
+  id,
+  containerXstyle,
+  containerClassName,
+  containerStyle,
+  controlXstyle,
+  controlClassName,
+  controlStyle,
+  'aria-labelledby': ariaLabelledBy,
+  'aria-describedby': ariaDescribedBy,
   ref,
-  ...rest
+  ...restProps
 }: ListInputProps<T>): ReactNode {
+  const {rest, container} = useFieldInputStyling('ListInput', restProps, {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  });
   const generatedID = useId();
-  const groupID = `list-input-${generatedID}`;
-  const labelID = `${groupID}-label`;
-  const descriptionID = description ? `${groupID}-description` : undefined;
-  const statusID = status?.message ? `${groupID}-status` : undefined;
-  const reorderInstructionsID = `${groupID}-reorder-instructions`;
+  const baseID = `list-input-${generatedID}`;
+  const groupID = id ?? baseID;
+  const labelID = `${baseID}-label`;
+  const descriptionID = description ? `${baseID}-description` : undefined;
+  const statusID = status?.message ? `${baseID}-status` : undefined;
+  const reorderInstructionsID = `${baseID}-reorder-instructions`;
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const groupRef = useRef<HTMLDivElement>(null);
+  const mergedGroupRef = useMergedRefs(ref, groupRef);
   const listRef = useRef<HTMLOListElement>(null);
   const addActionRef = useRef<HTMLDivElement>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
@@ -1192,7 +1212,6 @@ export function ListInput<T>({
   return (
     <SizeProvider value="md">
       <Field
-        ref={ref}
         label={label}
         description={description}
         inputID={groupID}
@@ -1205,15 +1224,18 @@ export function ListInput<T>({
         isDisabled={isDisabled}
         status={status == null ? undefined : {...status, messageID: statusID}}
         statusVariant="detached"
-        {...rest}>
+        xstyle={container.xstyle}
+        className={container.className}
+        style={container.style}>
         <div
-          ref={groupRef}
+          {...rest}
+          ref={mergedGroupRef}
           id={groupID}
           role="group"
-          aria-labelledby={labelID}
-          aria-describedby={joinIDs(descriptionID, statusID)}
-          aria-disabled={isDisabled || undefined}
-          aria-busy={isLoading || undefined}
+          aria-labelledby={joinIDs(labelID, ariaLabelledBy)}
+          aria-describedby={joinIDs(ariaDescribedBy, descriptionID, statusID)}
+          aria-disabled={isDisabled || rest['aria-disabled']}
+          aria-busy={isLoading || rest['aria-busy']}
           {...mergeProps(
             themeProps('list-input', {
               state: isLoading
@@ -1228,7 +1250,10 @@ export function ListInput<T>({
               showStartHandle &&
                 !isHandleAlwaysVisible &&
                 styles.groupWithHangingHandles,
+              controlXstyle,
             ),
+            controlClassName,
+            controlStyle,
           )}>
           <ListReorderScope reorder={reorderScope}>
             <ol
@@ -1263,7 +1288,7 @@ export function ListInput<T>({
                     showReorderHandle && (canReorder?.(itemKey) ?? true);
                   const itemStatus = getItemStatus?.(item, index);
                   const itemStatusID = itemStatus?.message
-                    ? `${groupID}-item-${index}-status`
+                    ? `${baseID}-item-${index}-status`
                     : undefined;
                   return (
                     <li

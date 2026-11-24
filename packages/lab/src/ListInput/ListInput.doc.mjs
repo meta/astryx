@@ -138,6 +138,42 @@ export const docs = {
         'Displays a required indicator beside the collection label and exposes the requirement to assistive technology. Mutually exclusive with isOptional.',
       default: 'false',
     },
+    {
+      name: 'containerXstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles for the field container (label, list, and status together). No effect inside InputGroup (style the InputGroup instead) or in a `horizontal-labels` FormLayout. Root `xstyle`, `className`, and `style` are not accepted.',
+    },
+    {
+      name: 'containerClassName',
+      type: 'string',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
+    },
+    {
+      name: 'containerStyle',
+      type: 'CSSProperties',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
+    },
+    {
+      name: 'controlXstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles for the role="group" element, which holds the records and the Add action. That element also takes `ref`, `id`, `aria-*`, `data-*`, and event handlers.',
+    },
+    {
+      name: 'controlClassName',
+      type: 'string',
+      description:
+        'Class name for the role="group" element. Same targeting as `controlXstyle`.',
+    },
+    {
+      name: 'controlStyle',
+      type: 'CSSProperties',
+      description:
+        'Inline styles for the role="group" element. Same targeting as `controlXstyle`.',
+    },
   ],
   usage: {
     description:
@@ -624,6 +660,14 @@ export const docsDense = {
     isOptional: 'Shows Optional; exclusive with isRequired.',
     isRequired:
       'Shows Required + accessible requirement; exclusive with isOptional.',
+    containerXstyle:
+      'StyleX styles for the Field box; no root xstyle/className/style',
+    containerClassName: 'class name for the Field box',
+    containerStyle: 'inline styles for the Field box',
+    controlXstyle:
+      'StyleX styles for the role="group" element; ref, id, aria-*, data-*, and handlers reach it too',
+    controlClassName: 'class name for the role="group" element',
+    controlStyle: 'inline styles for the role="group" element',
   },
   usage: {
     description:
