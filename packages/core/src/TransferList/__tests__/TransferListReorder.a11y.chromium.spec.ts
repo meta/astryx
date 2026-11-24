@@ -2,7 +2,7 @@
 
 /**
  * @file TransferListReorder.a11y.chromium.spec.ts
- * @input The checked-in Lab/TransferList › Default story, a built Storybook and
+ * @input The checked-in Core/TransferList › Default story, a built Storybook and
  *   real Chromium touch input (CDP) on a phone viewport. The A11y/TransferList
  *   › Disabled fixture, with a mouse and keys
  * @output Browser evidence that a selected row dragged past the end of its
@@ -68,7 +68,7 @@ test('a row dragged past the end of its list stays inside it, clear of the next 
   page,
 }) => {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-transferlist--default&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-transferlist--default&viewMode=story`,
   );
   const grip = page.locator(GRIP).first();
   await expect(grip).toBeVisible();
@@ -137,7 +137,7 @@ test('the panels clip nothing in the phone layout, and clip at a desktop width',
   page,
 }) => {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-transferlist--default&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-transferlist--default&viewMode=story`,
   );
   await expect(page.locator(GRIP).first()).toBeVisible();
   const overflows = async () =>
@@ -161,7 +161,7 @@ async function selectedRows(
   revealBehavior: 'always' | 'adaptive',
 ) {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-transferlist--locked&viewMode=story&args=placement:${placement};revealBehavior:${revealBehavior}`,
+    `${storybook.origin}/iframe.html?id=core-transferlist--locked&viewMode=story&args=placement:${placement};revealBehavior:${revealBehavior}`,
   );
   await page.locator(GRIP).first().waitFor({state: 'attached'});
   await page.mouse.move(1, 1);
@@ -283,7 +283,7 @@ test.describe('with a mouse', () => {
     page,
   }) => {
     await page.goto(
-      `${storybook.origin}/iframe.html?id=lab-transferlist--default&viewMode=story`,
+      `${storybook.origin}/iframe.html?id=core-transferlist--default&viewMode=story`,
     );
     // This context's primary pointer is fine: the case is a mouse's.
     expect(
@@ -370,11 +370,11 @@ test.describe('a disabled list', () => {
             }
             return Math.round(opacity * 100) / 100;
           });
-      await expect.poll(() => seen('text=Owner')).toBe(0.5);
+      await expect.poll(async () => seen('text=Owner')).toBe(0.5);
       await expect
-        .poll(() => seen('[data-transfer-list-action="selected"]'))
+        .poll(async () => seen('[data-transfer-list-action="selected"]'))
         .toBe(0.5);
-      await expect.poll(() => seen(handle)).toBe(0.5);
+      await expect.poll(async () => seen(handle)).toBe(0.5);
     });
   }
 

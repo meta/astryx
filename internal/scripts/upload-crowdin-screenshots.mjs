@@ -816,7 +816,7 @@ const TARGETS = [
   // ==========================================================================
   {
     name: 'transferlist-default',
-    storyId: 'lab-transferlist--default',
+    storyId: 'core-transferlist--default',
     viewport: {width: 1200, height: 800},
     interact: async () => {},
     selector: null,
@@ -1042,7 +1042,7 @@ const TARGETS = [
   },
   {
     name: 'transferlist-searchable',
-    storyId: 'lab-transferlist--searchable',
+    storyId: 'core-transferlist--searchable',
     viewport: {width: 1200, height: 800},
     interact: async () => {},
     selector: null,

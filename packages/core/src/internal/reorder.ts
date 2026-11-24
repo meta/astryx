@@ -5,10 +5,10 @@
  * @input A reorderable object made by createReorderable
  * @output `reorderableOptions`: the options a reorderable object was made
  *   with. `adaptReorderable`: an object that runs the owner's engine with
- *   other options. A Lab collection uses it to adapt the owner's moves, such
- *   as a staged selector that aims them at its draft. The owner's `start`
- *   still finds its list. Neither loads the reorder engine: it comes with the
- *   owner's object.
+ *   other options. A collection that wraps List uses it to adapt the
+ *   owner's moves, such as a staged selector that aims them at its draft. The
+ *   owner's `start` still finds its list. Neither loads the reorder engine: it
+ *   comes with the owner's object.
  *   It also gives List's reorder session for rows that are not ListItems,
  *   for Lab's ListInput: `useListReorderScope` and `ListReorderScope`. The
  *   handle each row ends with is the session's `Handle`: it comes with the
@@ -39,7 +39,7 @@ export function reorderableOptions<TKey extends string | number, TTo>(
 
 /**
  * An object that reorders with `reorderable`'s engine but `options`' moves
- * and `isReorderable`: a Lab collection's adapter of the owner's object. The
+ * and `isReorderable`: a collection's adapter of the owner's object. The
  * owner's `start(key)` still finds the collection's list,
  * and its own `start` is the owner's.
  */

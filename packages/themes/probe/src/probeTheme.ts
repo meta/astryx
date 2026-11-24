@@ -6067,6 +6067,30 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(341.2 90% 25%)',
       },
     },
+    'transfer-list': {
+      base: {
+        backgroundColor: 'hsl(195.8 94% 64%)',
+        color: 'hsl(265.9 85% 12%)',
+        borderColor: 'hsl(265.3 78% 25%)',
+        outlineColor: 'hsl(37.4 77% 25%)',
+      },
+    },
+    'transfer-list-item': {
+      base: {
+        backgroundColor: 'hsl(243.3 76% 64%)',
+        color: 'hsl(280.4 79% 12%)',
+        borderColor: 'hsl(109.4 86% 25%)',
+        outlineColor: 'hsl(193.6 89% 25%)',
+      },
+    },
+    'transfer-list-panel': {
+      base: {
+        backgroundColor: 'hsl(215.5 73% 47%)',
+        color: 'hsl(312.0 71% 12%)',
+        borderColor: 'hsl(202.8 79% 25%)',
+        outlineColor: 'hsl(182.4 81% 25%)',
+      },
+    },
     'tree-list': {
       base: {
         backgroundColor: 'hsl(345.7 80% 46%)',

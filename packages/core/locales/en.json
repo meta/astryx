@@ -2145,11 +2145,11 @@
   },
   "@astryx.transferList.selectedLabel": {
     "defaultMessage": "Selected",
-    "description": "Default heading above the right-hand panel of a lab TransferList, which holds the options the user has chosen. Consumers usually override this with a domain noun (e.g. \"Shown columns\")."
+    "description": "Default heading above the right-hand panel of a TransferList, which holds the options the user has chosen. Consumers usually override this with a domain noun (e.g. \"Shown columns\")."
   },
   "@astryx.transferList.availableLabel": {
     "defaultMessage": "Available",
-    "description": "Default heading above the left-hand panel of a lab TransferList, which holds the options not yet chosen. Consumers usually override this with a domain noun (e.g. \"Hidden columns\")."
+    "description": "Default heading above the left-hand panel of a TransferList, which holds the options not yet chosen. Consumers usually override this with a domain noun (e.g. \"Hidden columns\")."
   },
   "@astryx.transferList.ungroupedLabel": {
     "defaultMessage": "Other",
@@ -2157,107 +2157,107 @@
   },
   "@astryx.transferList.searchPlaceholder": {
     "defaultMessage": "Search…",
-    "description": "Placeholder in the single search field that filters both panels of a lab TransferList. Same English as `selector.searchPlaceholder` but a separate key so it can be phrased for two lists."
+    "description": "Placeholder in the single search field that filters both panels of a TransferList. Same English as `selector.searchPlaceholder` but a separate key so it can be phrased for two lists."
   },
   "@astryx.transferList.searchLabel": {
     "defaultMessage": "Search {label}",
-    "description": "Screen-reader-only label on the search field of a lab TransferList, naming what is being searched. `{label}` is the component's own label (e.g. \"Search Table columns\")."
+    "description": "Screen-reader-only label on the search field of a TransferList, naming what is being searched. `{label}` is the component's own label (e.g. \"Search Table columns\")."
   },
   "@astryx.transferList.selectedEmpty": {
     "defaultMessage": "No selected options",
-    "description": "Message shown inside the selected panel of a lab TransferList when the user has chosen nothing yet."
+    "description": "Message shown inside the selected panel of a TransferList when the user has chosen nothing yet."
   },
   "@astryx.transferList.availableEmpty": {
     "defaultMessage": "No available options",
-    "description": "Message shown inside the available panel of a lab TransferList when every option has already been moved to the selected panel."
+    "description": "Message shown inside the available panel of a TransferList when every option has already been moved to the selected panel."
   },
   "@astryx.transferList.noResults": {
     "defaultMessage": "No results",
-    "description": "Message shown inside either panel of a lab TransferList when the search query matches nothing in that panel."
+    "description": "Message shown inside either panel of a TransferList when the search query matches nothing in that panel."
   },
   "@astryx.transferList.clear": {
     "defaultMessage": "Clear",
-    "description": "Label on the bulk action in a lab TransferList's selected-panel header that removes every option that is allowed to be removed. Locked options stay."
+    "description": "Label on the bulk action in a TransferList's selected-panel header that removes every option that is allowed to be removed. Locked options stay."
   },
   "@astryx.transferList.addAll": {
     "defaultMessage": "Add all",
-    "description": "Label on the bulk action in a lab TransferList's available-panel header that moves every remaining option into the selected panel."
+    "description": "Label on the bulk action in a TransferList's available-panel header that moves every remaining option into the selected panel."
   },
   "@astryx.transferList.addOption": {
     "defaultMessage": "Add {label}",
-    "description": "Accessible label on the per-row + button that moves one option into the selected panel of a lab TransferList. `{label}` is that option's visible text (e.g. \"Add Owner\")."
+    "description": "Accessible label on the per-row + button that moves one option into the selected panel of a TransferList. `{label}` is that option's visible text (e.g. \"Add Owner\")."
   },
   "@astryx.transferList.removeOption": {
     "defaultMessage": "Remove {label}",
-    "description": "Accessible label on the per-row × button that moves one option out of the selected panel of a lab TransferList. `{label}` is that option's visible text (e.g. \"Remove Name\")."
+    "description": "Accessible label on the per-row × button that moves one option out of the selected panel of a TransferList. `{label}` is that option's visible text (e.g. \"Remove Name\")."
   },
   "@astryx.transferList.reorderOption": {
     "defaultMessage": "Reorder {label}",
-    "description": "Accessible label on the per-row drag handle that reorders one option within the selected panel of a lab TransferList. `{label}` is that option's visible text (e.g. \"Reorder Name\")."
+    "description": "Accessible label on the per-row drag handle that reorders one option within the selected panel of a TransferList. `{label}` is that option's visible text (e.g. \"Reorder Name\")."
   },
   "@astryx.transferList.transferDisabled": {
     "defaultMessage": "{label} cannot be moved",
-    "description": "Default tooltip explaining why a locked option in a lab TransferList cannot be transferred between panels. `{label}` is the option's visible text. Consumers may override per option."
+    "description": "Default tooltip explaining why a locked option in a TransferList cannot be transferred between panels. `{label}` is the option's visible text. Consumers may override per option."
   },
   "@astryx.transferList.reorderDisabled": {
     "defaultMessage": "{label} cannot be reordered",
-    "description": "Default tooltip explaining why a locked option in a lab TransferList cannot be moved within the selected panel. `{label}` is the option's visible text. Consumers may override per option."
+    "description": "Default tooltip explaining why a locked option in a TransferList cannot be moved within the selected panel. `{label}` is the option's visible text. Consumers may override per option."
   },
   "@astryx.transferList.reorderInstructions": {
     "defaultMessage": "Press Space or Enter to pick up an item. Use Arrow Up, Arrow Down, Home, or End to move it. Press Space or Enter to drop, or Escape to cancel.",
-    "description": "Screen-reader-only instructions describing the keyboard reorder contract, referenced by every drag handle in a lab TransferList. Never shown on screen. Name the actual keys your locale's users press."
+    "description": "Screen-reader-only instructions describing the keyboard reorder contract, referenced by every drag handle in a TransferList. Never shown on screen. Name the actual keys your locale's users press."
   },
   "@astryx.transferList.announceAdded": {
     "defaultMessage": "{label} added. {count, number} {count, plural, one {item} other {items}} selected.",
-    "description": "Polite screen-reader announcement after one option moves into the selected panel of a lab TransferList. Live-region text, never shown on screen; `{label}` is the option's visible text and `{count}` is the new selected total."
+    "description": "Polite screen-reader announcement after one option moves into the selected panel of a TransferList. Live-region text, never shown on screen; `{label}` is the option's visible text and `{count}` is the new selected total."
   },
   "@astryx.transferList.announceRemoved": {
     "defaultMessage": "{label} removed. {count, number} {count, plural, one {item} other {items}} selected.",
-    "description": "Polite screen-reader announcement after one option moves out of the selected panel of a lab TransferList. Live-region text, never shown on screen; `{label}` is the option's visible text and `{count}` is the new selected total."
+    "description": "Polite screen-reader announcement after one option moves out of the selected panel of a TransferList. Live-region text, never shown on screen; `{label}` is the option's visible text and `{count}` is the new selected total."
   },
   "@astryx.transferList.announceBulkAdded": {
     "defaultMessage": "{count, number} {count, plural, one {item} other {items}} added.",
-    "description": "Polite screen-reader announcement after the Add all bulk action in a lab TransferList. Live-region text, never shown on screen; `{count}` is how many options moved."
+    "description": "Polite screen-reader announcement after the Add all bulk action in a TransferList. Live-region text, never shown on screen; `{count}` is how many options moved."
   },
   "@astryx.transferList.announceBulkRemoved": {
     "defaultMessage": "{count, number} {count, plural, one {item} other {items}} removed.",
-    "description": "Polite screen-reader announcement after the Clear bulk action in a lab TransferList. Live-region text, never shown on screen; `{count}` is how many options moved."
+    "description": "Polite screen-reader announcement after the Clear bulk action in a TransferList. Live-region text, never shown on screen; `{count}` is how many options moved."
   },
   "@astryx.transferList.announceGrabbed": {
     "defaultMessage": "{label} picked up, position {position, number} of {total, number}. Use arrow keys to move, Space or Enter to drop, or Escape to cancel.",
-    "description": "Polite screen-reader announcement when a lab TransferList row enters keyboard reorder mode. Live-region text, never shown on screen; `{position}` is 1-based within the selected panel."
+    "description": "Polite screen-reader announcement when a TransferList row enters keyboard reorder mode. Live-region text, never shown on screen; `{position}` is 1-based within the selected panel."
   },
   "@astryx.transferList.announceMoveCancelled": {
     "defaultMessage": "{label} move cancelled.",
-    "description": "Polite screen-reader announcement when a lab TransferList reorder is abandoned with Escape or a cancelled pointer drag, restoring the original order. Live-region text, never shown on screen."
+    "description": "Polite screen-reader announcement when a TransferList reorder is abandoned with Escape or a cancelled pointer drag, restoring the original order. Live-region text, never shown on screen."
   },
   "@astryx.transferList.announceDropped": {
     "defaultMessage": "{label} dropped at position {position, number} of {total, number}.",
-    "description": "Polite screen-reader announcement when a lab TransferList reorder commits at a new position. Live-region text, never shown on screen; `{position}` is 1-based within the selected panel."
+    "description": "Polite screen-reader announcement when a TransferList reorder commits at a new position. Live-region text, never shown on screen; `{position}` is 1-based within the selected panel."
   },
   "@astryx.transferList.announceReturned": {
     "defaultMessage": "{label} returned to position {position, number}.",
-    "description": "Polite screen-reader announcement when a lab TransferList pointer drag ends where it began, so the order did not change. Live-region text, never shown on screen; `{position}` is 1-based."
+    "description": "Polite screen-reader announcement when a TransferList pointer drag ends where it began, so the order did not change. Live-region text, never shown on screen; `{position}` is 1-based."
   },
   "@astryx.transferList.announceMovedToPosition": {
     "defaultMessage": "{label}, position {position, number} of {total, number}.",
-    "description": "Polite screen-reader announcement after each arrow-key step of an in-progress lab TransferList reorder. Live-region text, never shown on screen; `{position}` is 1-based within the selected panel."
+    "description": "Polite screen-reader announcement after each arrow-key step of an in-progress TransferList reorder. Live-region text, never shown on screen; `{position}` is 1-based within the selected panel."
   },
   "@astryx.transferList.announceSearchResults": {
     "defaultMessage": "{count, number} {count, plural, one {item} other {items}} found.",
-    "description": "Polite screen-reader announcement of how many options a lab TransferList search matched across both panels. Live-region text, never shown on screen."
+    "description": "Polite screen-reader announcement of how many options a TransferList search matched across both panels. Live-region text, never shown on screen."
   },
   "@astryx.transferListSelector.apply": {
     "defaultMessage": "Apply",
-    "description": "Label on the button that commits the staged draft of a lab TransferListSelector and closes it. Only rendered in staged commit mode."
+    "description": "Label on the button that commits the staged draft of a TransferListSelector and closes it. Only rendered in staged commit mode."
   },
   "@astryx.transferListSelector.cancel": {
     "defaultMessage": "Cancel",
-    "description": "Label on the button that discards the staged draft of a lab TransferListSelector and closes it. Only rendered in staged commit mode."
+    "description": "Label on the button that discards the staged draft of a TransferListSelector and closes it. Only rendered in staged commit mode."
   },
   "@astryx.transferListSelector.triggerLabel": {
     "defaultMessage": "{count, number} selected",
-    "description": "Default summary on the closed trigger of a lab TransferListSelector, stating how many options are currently chosen. Consumers usually override this with a domain phrase (e.g. \"7 columns\")."
+    "description": "Default summary on the closed trigger of a TransferListSelector, stating how many options are currently chosen. Consumers usually override this with a domain phrase (e.g. \"7 columns\")."
   },
   "@astryx.emojiPicker.label": {
     "defaultMessage": "Emoji",

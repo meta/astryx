@@ -11,7 +11,7 @@
  *   export it, so the public props of both components do not change.
  */
 
-import {createSharedContext} from '@astryxdesign/core/internal/shared-context';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * True while the list's owner has a change pending and refuses the next one.

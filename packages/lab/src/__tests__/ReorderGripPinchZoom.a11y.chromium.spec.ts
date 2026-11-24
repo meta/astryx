@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^(packages/lab/src/(ListInput/|TransferList/)|packages/core/src/(List/|internal/reorder|reorderable/|gestures/(GestureHost|LongPressGestureRecognizer)\.ts|motion/uikit/reorder\.ts)|apps/storybook/stories/(ListInput|TransferList[A-Za-z0-9]*)\.stories)
+// @pr-a11y scope ^(packages/lab/src/ListInput/|packages/core/src/(TransferList/|List/|internal/reorder|reorderable/|gestures/(GestureHost|LongPressGestureRecognizer)\.ts|motion/uikit/reorder\.ts)|apps/storybook/stories/(ListInput|TransferList[A-Za-z0-9]*)\.stories)
 
 /**
  * @file ReorderGripPinchZoom.a11y.chromium.spec.ts
- * @input The checked-in Lab/ListInput › Tag Options and Lab/TransferList ›
+ * @input The checked-in Lab/ListInput › Tag Options and Core/TransferList ›
  *   Default stories, a built Storybook and real Chromium touch input (CDP) on
  *   a phone viewport
  * @output Browser evidence that a pinch which starts on, or reaches, a reorder
@@ -11,8 +11,9 @@
  *   grip whose first finger slid on it first. A one-finger drag on the grip
  *   still reorders (WCAG 1.4.4)
  * @position Chromium proof for the `touch-action` of core List's reorder
- *   handle as the Lab reorderable inputs render it. ListInput renders it
- *   through Core's internal reorder entry, TransferList through `List`
+ *   handle as Lab's ListInput and Core's TransferList render it. ListInput
+ *   renders it through Core's internal reorder entry, TransferList through
+ *   `List`
  */
 
 import {
@@ -74,7 +75,7 @@ const SURFACES: Surface[] = [
   },
   {
     name: 'TransferList',
-    story: 'lab-transferlist--default',
+    story: 'core-transferlist--default',
     grip: '[data-transfer-list-row] button[data-astryx-list-reorder]',
     rowAttribute: 'data-transfer-list-row',
     // Core List's handle claims a still finger after 150 ms, as UIKit's

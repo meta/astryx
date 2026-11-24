@@ -89,6 +89,7 @@ export * from './Tokenizer';
 export * from './Thumbnail';
 export * from './PowerSearch';
 export * from './TreeList';
+export * from './TransferList';
 
 // Keyboard shortcut display
 export * from './Kbd';

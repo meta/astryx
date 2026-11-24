@@ -4,7 +4,7 @@
  * @file TransferList.stories.tsx
  * @input TransferList option data plus advanced Core selector and table primitives
  * @output Storybook examples for the TransferList composition primitive
- * @position Lab Storybook documentation and visual validation
+ * @position Core Storybook documentation and visual validation
  *
  * Covers the primitive directly rather than through TransferListSelector. The
  * two surfaces are documented separately because a Storybook title maps to one
@@ -19,8 +19,8 @@
 import {useEffect, useMemo, useRef, useState, type SVGProps} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
-import {TransferList} from '@astryxdesign/lab';
-import type {TransferListOption} from '@astryxdesign/lab';
+import {TransferList} from '@astryxdesign/core/TransferList';
+import type {TransferListOption} from '@astryxdesign/core/TransferList';
 import {Theme} from '@astryxdesign/core';
 import {Button} from '@astryxdesign/core/Button';
 import {ComplexSelector} from '@astryxdesign/core/ComplexSelector';
@@ -133,7 +133,7 @@ const styles = stylex.create({
 });
 
 const meta: Meta<typeof TransferList> = {
-  title: 'Lab/TransferList',
+  title: 'Core/TransferList',
   component: TransferList,
   tags: ['autodocs'],
   parameters: {

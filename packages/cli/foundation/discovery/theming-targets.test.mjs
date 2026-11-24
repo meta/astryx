@@ -365,9 +365,12 @@ describe('collectThemingVars', () => {
     /** @type {string[]} */
     const unread = [];
     for (const v of await enumeratedVars) {
-      const read = sourcesIn(v.dir).some(f =>
-        fs.readFileSync(f, 'utf-8').includes(`var(${v.name}`),
-      );
+      // A read through a StyleX `defineVars` object, `someVars['--name']`,
+      // compiles to `var(--name)`.
+      const read = sourcesIn(v.dir).some(f => {
+        const text = fs.readFileSync(f, 'utf-8');
+        return text.includes(`var(${v.name}`) || text.includes(`['${v.name}']`);
+      });
       if (!read) unread.push(`${v.component}: nothing reads var(${v.name})`);
     }
     expect(

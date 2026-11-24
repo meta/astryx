@@ -6,7 +6,7 @@
  * @output `reorderHandle`, the reorder handle's sizes: its grip's box and how
  *   far its target reaches past the grip, for a fine pointer and for a finger
  * @position The one place these sizes live. Core List's handle draws with
- *   them, and Lab's ListInput and TransferList keep the handle's room with
+ *   them, and TransferList and Lab's ListInput keep the handle's room with
  *   them. StyleX reads them at build time, so a value is written out in full.
  */
 

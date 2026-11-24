@@ -336,6 +336,24 @@ const FIXTURES: Readonly<Record<string, (probe: Probe) => ReactElement>> = {
       {...probe}
     />
   ),
+  TransferList: probe => (
+    <Core.TransferList
+      label="Columns"
+      options={[{value: 'name', label: 'Name'}]}
+      value={[]}
+      onChange={noop}
+      {...probe}
+    />
+  ),
+  TransferListSelector: probe => (
+    <Core.TransferListSelector
+      label="Columns"
+      options={[{value: 'name', label: 'Name'}]}
+      value={[]}
+      onChange={noop}
+      {...probe}
+    />
+  ),
   TreeList: probe => (
     <Core.TreeList items={[{id: 'a', label: 'A'}] as never} {...probe} />
   ),

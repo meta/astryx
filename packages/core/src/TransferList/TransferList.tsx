@@ -5,17 +5,18 @@
 /**
  * @file TransferList.tsx
  * @input Controlled option data, local action glyphs, core's reorder (List
- *   `reorderable` and ListItem `itemKey`), the core i18n catalog, and the
+ *   `reorderable` and ListItem `itemKey`), the component translator, and the
  *   busy state a TransferListSelector provides. The owner's createReorderable
  *   object is adapted through Core's internal reorder entry, which loads no
  *   reorder code of its own
  * @output Exports TransferList with immediate transfers, vertical reordering, and responsive scroll ownership
- * @position Lab collection input; consumed by index.ts, TransferListSelector, docs, and tests
+ * @position Core collection input; consumed by index.ts, TransferListSelector, docs, and tests
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/lab/src/TransferList/TransferList.doc.mjs
- * - /packages/lab/src/TransferList/TransferList.test.tsx
- * - /packages/lab/src/TransferList/index.ts
+ * - /packages/core/src/TransferList/TransferList.doc.mjs
+ * - /packages/core/src/TransferList/TransferList.test.tsx
+ * - /packages/core/src/TransferList/index.ts
+ * - /docs/specs/components/TransferList/TransferList.spec.md
  */
 
 import {
@@ -32,39 +33,43 @@ import {
   type SVGProps,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import type {BaseProps} from '@astryxdesign/core';
-import {Button} from '@astryxdesign/core/Button';
-import {Icon} from '@astryxdesign/core/Icon';
-import {IconButton} from '@astryxdesign/core/IconButton';
-import {Item} from '@astryxdesign/core/Item';
-import {List, ListItem} from '@astryxdesign/core/List';
-import {type Reorderable, type ReorderMove} from '@astryxdesign/core';
+import type {BaseProps} from '../BaseProps';
+import {Button} from '../Button/Button';
+import {useAnnounce} from '../hooks/useAnnounce';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
-  adaptReorderable,
-  reorderableOptions,
-} from '@astryxdesign/core/internal/reorder';
-import {Text} from '@astryxdesign/core/Text';
-import {TextInput} from '@astryxdesign/core/TextInput';
-import {Tooltip} from '@astryxdesign/core/Tooltip';
-import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
-import {useAnnounce} from '@astryxdesign/core/hooks';
-import {useTranslator} from '@astryxdesign/core/i18n';
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TransferList/TransferList.generated';
+import {Icon} from '../Icon/Icon';
+import {IconButton} from '../IconButton/IconButton';
+import {adaptReorderable, reorderableOptions} from '../internal/reorder';
+import {reorderHandle} from '../internal/reorderHandle.stylex';
+import {Item} from '../Item/Item';
+import {List} from '../List/List';
+import {ListItem} from '../List/ListItem';
+import type {Reorderable, ReorderMove} from '../reorderable/createReorderable';
+import {Text} from '../Text/Text';
+import {TextInput} from '../TextInput/TextInput';
 import {
   borderVars,
   colorVars,
   sizeVars,
   spacingVars,
   typeScaleVars,
-} from '@astryxdesign/core/theme/tokens.stylex';
-import {
-  focusOutlineStyles,
-  mergeProps,
-  mergeRefs,
-  themeProps,
-} from '@astryxdesign/core/utils';
-import {reorderHandle} from '@astryxdesign/core/internal/reorderHandle.stylex';
+} from '../theme/tokens.stylex';
+import {Tooltip} from '../Tooltip/Tooltip';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {mergeProps} from '../utils/mergeProps';
+import {isRenderable} from '../utils/isRenderable';
+import {themeProps} from '../utils/themeProps';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {transferListVars} from './tokens.stylex';
 import {TransferListBusyContext} from './transferListBusy';
+
+registerEnglishFallback(english);
 
 // A Lucide glyph the shared icon registry does not carry (there is no `add`
 // semantic name). Typed as icon components and rendered through `Icon`
@@ -114,16 +119,16 @@ export interface TransferListProps<T extends string = string> extends Omit<
   /** Supporting guidance shown below the label. */
   description?: string;
   /** Complete option catalog. Option values must be unique. */
-  options: readonly TransferListOption<T>[];
+  options: ReadonlyArray<TransferListOption<T>>;
   /**
    * Disables every transfer, reorder, Clear, Add all and search control. The
    * row controls and the search field stay focusable. @default false
    */
   isDisabled?: boolean;
   /** Ordered selected values. This array is the single source of truth. */
-  value: readonly T[];
+  value: ReadonlyArray<T>;
   /** Called with the next ordered selection after a committed change. */
-  onChange: (value: readonly T[]) => void;
+  onChange: (value: ReadonlyArray<T>) => void;
   /** Heading for the selected panel. @default 'Selected' */
   selectedLabel?: string;
   /** Heading for the available panel. @default 'Available' */
@@ -317,11 +322,7 @@ const styles = stylex.create({
     paddingInline: 0,
     borderRadius: 0,
     color: colorVars['--color-text-accent'],
-    backgroundImage: {
-      default: 'none',
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))': 'none',
-      ':active': 'none',
-    },
+    backgroundImage: 'none',
     textDecoration: {
       default: 'none',
       ':hover:where(:not(:disabled,[aria-disabled="true"]))': 'underline',
@@ -488,7 +489,7 @@ export function TransferList<T extends string = string>({
   'aria-describedby': ariaDescribedBy,
   ...restProps
 }: TransferListProps<T>): ReactNode {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const selectedLabel =
     selectedLabelFromProps ?? t('@astryx.transferList.selectedLabel');
   const availableLabel =
@@ -506,10 +507,12 @@ export function TransferList<T extends string = string>({
   const selectedHeadingId = useId();
   const availableHeadingId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const emptySearchRef = useRef<HTMLDivElement | null>(null);
+  const mergedRef = useMergedRefs(ref, rootRef);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const selectedPanelRef = useRef<HTMLDivElement | null>(null);
   const availablePanelRef = useRef<HTMLDivElement | null>(null);
-  const currentValueRef = useRef<readonly T[]>(value);
+  const currentValueRef = useRef<ReadonlyArray<T>>(value);
   const [query, setQuery] = useState('');
   const announce = useAnnounce();
   const isBusy = use(TransferListBusyContext);
@@ -575,7 +578,7 @@ export function TransferList<T extends string = string>({
   }, [availableOptions]);
 
   const commit = useCallback(
-    (nextValue: readonly T[]) => {
+    (nextValue: ReadonlyArray<T>) => {
       currentValueRef.current = nextValue;
       onChange(nextValue);
     },
@@ -780,11 +783,23 @@ export function TransferList<T extends string = string>({
         const count = options.filter(option =>
           matchesQuery(option, normalized),
         ).length;
-        announce(t('@astryx.transferList.announceSearchResults', {count}));
+        // The panels' message speaks for a search that matches nothing. A
+        // count here would speak twice, in words the panels do not show.
+        if (count > 0) {
+          announce(t('@astryx.transferList.announceSearchResults', {count}));
+        }
       }
     },
     [announce, options, t],
   );
+
+  // The message is read off the rendered element, so a caller's element is
+  // announced as the panels show it.
+  const isSearchEmpty =
+    normalizedQuery !== '' &&
+    selectedOptions.length === 0 &&
+    availableOptions.length === 0;
+  useAnnounceRenderedText(emptySearchRef, isSearchEmpty, normalizedQuery);
 
   const optionActions = (
     option: TransferListOption<T>,
@@ -923,13 +938,13 @@ export function TransferList<T extends string = string>({
   );
 
   const describedBy =
-    [ariaDescribedBy, description != null ? descriptionId : undefined]
+    [ariaDescribedBy, isRenderable(description) ? descriptionId : undefined]
       .filter(Boolean)
       .join(' ') || undefined;
 
   return (
     <div
-      ref={mergeRefs(ref, rootRef)}
+      ref={mergedRef}
       {...restProps}
       {...mergeProps(
         themeProps('transfer-list'),
@@ -948,7 +963,7 @@ export function TransferList<T extends string = string>({
             {label}
           </Text>
         )}
-        {description != null && (
+        {isRenderable(description) && (
           <Text id={descriptionId} type="supporting" display="block">
             {description}
           </Text>
@@ -1018,6 +1033,7 @@ export function TransferList<T extends string = string>({
               </List>
             ) : (
               <div
+                ref={emptySearchRef}
                 data-transfer-list-empty="selected"
                 {...stylex.props(styles.empty)}>
                 <Text type="supporting" color="secondary">

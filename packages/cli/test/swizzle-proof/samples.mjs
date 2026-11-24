@@ -239,6 +239,17 @@ export const samples = {
       ),
       endContent: React.createElement(Core.Button, {label: 'Export'}),
     }),
+  core__TransferList: ({C, React}) =>
+    React.createElement(C, {
+      label: 'Columns',
+      options: [
+        {value: 'name', label: 'Name'},
+        {value: 'status', label: 'Status'},
+        {value: 'owner', label: 'Owner'},
+      ],
+      value: ['name'],
+      onChange: noop,
+    }),
   charts__Chart: ({React, mod, Pkg}) => chartsSample(React, mod, Pkg, {}),
   charts__ChartAxis: ({C, React, mod, Pkg}) =>
     chartsSample(React, mod, Pkg, {
@@ -509,17 +520,6 @@ export const samples = {
         React.createElement(mod.ThreeDBar ?? Pkg.ThreeDBar, {color: '#00aa00'}),
       ),
     ),
-  lab__TransferList: ({C, React}) =>
-    React.createElement(C, {
-      label: 'Columns',
-      options: [
-        {value: 'name', label: 'Name'},
-        {value: 'status', label: 'Status'},
-        {value: 'owner', label: 'Owner'},
-      ],
-      value: ['name'],
-      onChange: noop,
-    }),
   lab__NavigationStack: ({C, React, mod, Pkg}) =>
     navigation(React, C, mod.NavigationScreen ?? Pkg.NavigationScreen),
   lab__NavigationScreen: ({C, React, mod, Pkg}) =>

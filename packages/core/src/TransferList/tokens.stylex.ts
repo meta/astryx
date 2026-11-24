@@ -4,7 +4,8 @@
  * @file tokens.stylex.ts
  * @input StyleX variable definitions
  * @output Exports TransferList layout variables
- * @position Lab component tokens consumed by TransferList.tsx
+ * @position Core component tokens consumed by TransferList.tsx; exported as
+ *   transferListVars
  *
  * SYNC: When modified, update TransferList.tsx usage and TransferList.doc.mjs.
  */

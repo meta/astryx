@@ -4,7 +4,7 @@
  * @file TransferListSelector.test.tsx
  * @input Uses TransferListSelector, React state, Vitest, and Testing Library
  * @output Unit coverage for immediate and staged commits, uncontrolled dismissal, synchronization, disabled states, defaults, and prop forwarding
- * @position Lab component test; validates the TransferListSelector public contract
+ * @position Core component test; validates the TransferListSelector public contract
  *
  * SYNC: When TransferListSelector.tsx behavior changes, update this test.
  */
@@ -33,12 +33,12 @@ import {
   type TransferListSelectorProps,
 } from './TransferListSelector';
 import type {TransferListOption} from './TransferList';
-import {createReorderable} from '@astryxdesign/core';
-import type * as CoreHooks from '@astryxdesign/core/hooks';
+import {createReorderable} from '../reorderable/createReorderable';
+import type * as AnnounceModule from '../hooks/useAnnounce';
 
 const announcements = vi.hoisted((): string[] => []);
-vi.mock('@astryxdesign/core/hooks', async importOriginal => {
-  const actual = await importOriginal<typeof CoreHooks>();
+vi.mock('../hooks/useAnnounce', async importOriginal => {
+  const actual = await importOriginal<typeof AnnounceModule>();
   const recorders = new WeakMap<
     ReturnType<typeof actual.useAnnounce>,
     ReturnType<typeof actual.useAnnounce>
@@ -105,8 +105,8 @@ afterAll(() => {
 });
 
 type HarnessProps = {
-  initialValue?: readonly Column[];
-  onCommit: (value: readonly Column[]) => void;
+  initialValue?: ReadonlyArray<Column>;
+  onCommit: (value: ReadonlyArray<Column>) => void;
   /** The owner's reorderable object's `isReorderable`. */
   isMovable?: (value: Column) => boolean;
   selectorProps?: Partial<
@@ -117,13 +117,15 @@ type HarnessProps = {
   >;
 };
 
+const HARNESS_INITIAL_VALUE: ReadonlyArray<Column> = ['name', 'status'];
+
 function Harness({
-  initialValue = ['name', 'status'],
+  initialValue = HARNESS_INITIAL_VALUE,
   onCommit,
   selectorProps,
   isMovable,
 }: HarnessProps) {
-  const [value, setValue] = useState<readonly Column[]>(initialValue);
+  const [value, setValue] = useState<ReadonlyArray<Column>>(initialValue);
   const valueRef = useRef(value);
   valueRef.current = value;
   // The owner's reorder: each move it is handed applies to its value.
@@ -159,12 +161,10 @@ function Harness({
   );
 }
 
-async function openSelector(
-  name = 'Visible fields',
-): Promise<HTMLButtonElement> {
+async function openSelector(name = 'Visible fields'): Promise<HTMLElement> {
   const trigger = screen.getByRole('combobox', {
     name,
-  }) as HTMLButtonElement;
+  });
   fireEvent.keyDown(trigger, {key: 'ArrowDown'});
   await waitFor(() => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
@@ -804,7 +804,7 @@ describe('TransferListSelector draft reset timing', () => {
 });
 
 describe('TransferListSelector while a change is pending', () => {
-  const pending: Array<() => void> = [];
+  const pending: (() => void)[] = [];
   const settle = async () => {
     await act(async () => {
       pending.splice(0).forEach(resolve => resolve());
@@ -827,7 +827,7 @@ describe('TransferListSelector while a change is pending', () => {
   }
 
   async function openBusySelector(
-    onCommit: (value: readonly Column[]) => void,
+    onCommit: (value: ReadonlyArray<Column>) => void,
   ) {
     const user = userEvent.setup();
     const changeAction = pendingChangeAction();

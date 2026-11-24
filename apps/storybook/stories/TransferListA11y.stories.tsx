@@ -11,8 +11,8 @@
 
 import {useMemo, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
-import {TransferList} from '@astryxdesign/lab';
-import type {TransferListOption} from '@astryxdesign/lab';
+import {TransferList} from '@astryxdesign/core/TransferList';
+import type {TransferListOption} from '@astryxdesign/core/TransferList';
 import {createReorderable} from '@astryxdesign/core';
 import {Switch} from '@astryxdesign/core/Switch';
 
