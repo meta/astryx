@@ -253,6 +253,13 @@ export interface UseMenuPressOptions {
    */
   hitTest?: (x: number, y: number) => Element | null;
   /**
+   * Whether a press that starts on `target` belongs to a control there. The
+   * model leaves such a press alone: it tracks nothing, acts on nothing and
+   * swallows no click, so the control handles its own press. A bottom sheet
+   * passes one for the controls in a row's content.
+   */
+  ownsPress?: (target: Element) => boolean;
+  /**
    * How long a finger rests on the trigger before the menu opens under it.
    * Unset, a finger on every device waits as on UIMenu: not at all in a fixed
    * bar, and 150 ms in a scroll view. The opening finger then picks after
@@ -1046,6 +1053,9 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
       // its parent menu, and both would otherwise track the same pointer.
       const target = event.target as Element | null;
       if (target?.closest(MENU_PRESS_ROOT_SELECTOR) !== menu) {
+        return;
+      }
+      if (target != null && optionsRef.current.ownsPress?.(target) === true) {
         return;
       }
       if (pointerType !== 'mouse') {

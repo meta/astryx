@@ -241,7 +241,10 @@ describe('MenuBottomSheetActionList', () => {
           ),
         },
       ]);
-      press(screen.getByRole('button', {name: 'Pin'}), 'touch');
+      const pin = screen.getByRole('button', {name: 'Pin'});
+      press(pin, 'touch');
+      // The browser's own click on the control follows the release.
+      fireEvent.click(pin, {detail: 1});
       expect(onEndClick).toHaveBeenCalledTimes(1);
       expect(onSelect).not.toHaveBeenCalled();
     });

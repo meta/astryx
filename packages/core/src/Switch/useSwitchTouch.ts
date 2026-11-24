@@ -35,7 +35,6 @@ import {useTouchPresentation} from '../utils/touchPresentation';
 import {awaitBrowserClick, clickForLift} from '../utils/browserClickWait';
 import {lockPressedRow} from '../utils/boxHold';
 import {armClickGuard} from '../utils/clickGuard';
-import {markDragFlipped} from '../privateAttributes/dragFlipped.stylex';
 import {
   commitOnRelease,
   dragTarget,
@@ -258,12 +257,6 @@ export class SwitchTouchController {
   private pressTime: number | null = null;
   /** The thumb's offset when the current finger landed. */
   private downOffset = 0;
-  /**
-   * The value when the current finger landed. The release commits from it.
-   * A value change during the press, such as a menu row's click on its
-   * release, is the press's toggle. The switch then adds no click of its own.
-   */
-  private downIsOn = false;
   private drag: Drag | null = null;
   /** The finger's last travel along x, for a lift that reports none. */
   private lastTravel = 0;
@@ -598,18 +591,6 @@ export class SwitchTouchController {
     this.drag = null;
     this.lastTravel = 0;
     this.downOffset = this.offsetAt(time);
-    this.downIsOn = this.isOn;
-  }
-
-  /**
-   * Clears the drag-flipped mark once the press ends. A menu reads it on the
-   * same release, so it goes in the next task.
-   */
-  private clearDragFlipped(): void {
-    const input = this.elements?.input;
-    if (input != null) {
-      setTimeout(() => markDragFlipped(input, false), 0);
-    }
   }
 
   /** Passive: a mouse, a pen or a finger on the switch, UIControl's events. */
@@ -732,11 +713,6 @@ export class SwitchTouchController {
       }
     }
     drag.flip = stepFlip(drag.flip, x, this.geometry);
-    if (drag.flip.didFlip && this.elements != null) {
-      // The switch decides this press's release: a menu that runs presses
-      // on their release leaves it alone.
-      markDragFlipped(this.elements.input, true);
-    }
     if (drag.flip.isVisuallyOn !== this.isVisuallyOn) {
       this.showWell(drag.flip.isVisuallyOn, time);
     }
@@ -759,7 +735,7 @@ export class SwitchTouchController {
     }
     this.released = true;
     this.clearTimers();
-    const commit = commitOnRelease(this.drag?.flip ?? null, this.downIsOn);
+    const commit = commitOnRelease(this.drag?.flip ?? null, this.isOn);
     this.drag = null;
     if (this.pressTime == null) {
       // A tap quicker than a scroller's content delay: the press begins now.
@@ -977,7 +953,6 @@ export class SwitchTouchController {
 
   /** The press ended (a release, a cancel or the switch turning off). */
   private pressEnded(time: number = now(), touchRelease = false): void {
-    this.clearDragFlipped();
     this.pressTime = null;
     this.settle(time, touchRelease);
   }

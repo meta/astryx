@@ -17,7 +17,6 @@ import {Icon, renderIconSlot} from '../Icon/Icon';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
 import {pressBelongsToControl} from '../hooks/useClickableContainer';
-import {isDragFlipped} from '../privateAttributes/dragFlipped.stylex';
 import {elementAtMenuPoint, useMenuPress} from '../hooks/useMenuPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
@@ -27,13 +26,8 @@ import type {DropdownMenuItemData, DropdownMenuOption} from './DropdownMenu';
 import {isModifiedClick} from './menuItemRoles';
 import {visibleText} from '../utils/accessibleName';
 
-/**
- * The elements a press runs. ListItem renders a row's action as a button (or a
- * link). A button, link, checkbox or switch in a row's end content runs its own
- * press the same way.
- */
-const SHEET_ROW_SELECTOR =
-  'button:not(:disabled), a[href], input[type="checkbox"]:not(:disabled, [aria-disabled="true"])';
+/** The action rows: ListItem renders its action as a button (or a link). */
+const SHEET_ROW_SELECTOR = 'button:not(:disabled), a[href]';
 
 /** Whether the document can hit-test a point (jsdom cannot). */
 function canHitTestByPoint(): boolean {
@@ -58,11 +52,6 @@ function sheetElementAtPoint(
 ): Element | null {
   const doc = list?.ownerDocument ?? document;
   const element = elementAtMenuPoint(list, doc, x, y);
-  // A switch whose drag flipped it decides its own release. Its row is then
-  // no press target.
-  if (element != null && isDragFlipped(element)) {
-    return element.closest('li');
-  }
   if (element == null || element.closest(SHEET_ROW_SELECTOR) != null) {
     return element;
   }
@@ -79,6 +68,25 @@ function sheetElementAtPoint(
     }
   }
   return element;
+}
+
+/**
+ * Whether a press that starts on `target` is a control's in a row's content,
+ * such as a switch, a checkbox or a button in its end content. That control
+ * handles its own press: a switch decides its own drag.
+ */
+function isRowContentControl(target: Element): boolean {
+  const row = target.closest('li');
+  if (row == null || !pressBelongsToControl(target, row)) {
+    return false;
+  }
+  for (const child of row.children) {
+    if (child.matches('button, a') && child.contains(target)) {
+      // The row's own action.
+      return false;
+    }
+  }
+  return true;
 }
 
 const styles = stylex.create({
@@ -138,6 +146,7 @@ export function MenuBottomSheetActionList({
     hitTest: canHitTestByPoint()
       ? (x, y) => sheetElementAtPoint(listRef.current, x, y)
       : undefined,
+    ownsPress: isRowContentControl,
   });
 
   // `rowPath` names the row within the whole list: an index alone restarts in
