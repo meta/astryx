@@ -24,21 +24,18 @@ vi.mock('@astryxdesign/core/hooks', async importOriginal => ({
   ...(await importOriginal<typeof import('@astryxdesign/core/hooks')>()),
   useAnnounce: () => announce,
 }));
-// The full emoji set renders slowly in jsdom; the composer only needs a few.
-vi.mock('../EmojiPicker/emojiData', () => ({
-  EMOJI_GROUPS: [
-    {
-      name: 'Activities',
-      emojis: [
-        ['🎉', 'Party popper', 'celebration tada'],
-        ['🎈', 'Balloon', 'celebration'],
-      ],
-    },
-  ],
-}));
 
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {CommentComposer, CommentComposerBase} from './CommentComposer';
+import type {CommentEmojiPickerRenderProps} from './types';
+
+function renderEmojiPicker({onSelect}: CommentEmojiPickerRenderProps) {
+  return (
+    <button type="button" onClick={() => onSelect('🎉')}>
+      Party popper
+    </button>
+  );
+}
 
 const originalMatches = HTMLElement.prototype.matches;
 const popoverOpenState = new WeakMap<HTMLElement, boolean>();
@@ -195,7 +192,6 @@ describe('CommentComposer', () => {
         highlightColor="yellow"
         triggers={[]}
         agentCommands={[]}
-        hasEmojiPicker={false}
         isSubmitting
       />,
     );
@@ -216,6 +212,7 @@ describe('CommentComposer', () => {
         value="Draft"
         onChange={() => {}}
         onSubmit={onSubmit}
+        emojiPicker={renderEmojiPicker}
         isSubmitting
       />,
     );
@@ -249,18 +246,25 @@ describe('CommentComposer', () => {
             value={value}
             onChange={setValue}
             onSubmit={() => {}}
+            emojiPicker={renderEmojiPicker}
           />
         </>
       );
     }
     render(<Host />);
-    fireEvent.click(screen.getByRole('button', {name: 'Add emoji'}));
+    const emojiButton = screen.getByRole('button', {name: 'Add emoji'});
+    fireEvent.click(emojiButton);
     await settle();
-    // The frequent row lists it before its group does.
+    expect(emojiButton).toHaveAttribute('aria-expanded', 'true');
     fireEvent.click(
-      screen.getAllByRole('button', {name: 'Party popper', hidden: true})[0],
+      screen.getByRole('button', {name: 'Party popper', hidden: true}),
     );
+    await settle();
     expect(screen.getByTestId('draft').textContent).toBe('Ship it 🎉');
+    expect(emojiButton).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.getByRole('textbox', {name: 'Write a comment…'}),
+    ).toHaveFocus();
   });
 
   it('ends the upload busy state when onActionPendingChange is a new function each render', async () => {
@@ -285,7 +289,6 @@ describe('CommentComposer', () => {
             highlightColor="yellow"
             triggers={[]}
             agentCommands={[]}
-            hasEmojiPicker={false}
             isSubmitting={false}
             onUploadImages={onUploadImages}
             // Inline: a new callback on every render of the host.
@@ -544,13 +547,12 @@ describe('CommentComposer', () => {
     expect(onAnchorDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it('leaves the emoji button out when hasEmojiPicker is false, and adds controls', () => {
+  it('leaves the emoji button out without emojiPicker, and adds controls', () => {
     render(
       <CommentComposer
         value=""
         onChange={() => {}}
         onSubmit={() => {}}
-        hasEmojiPicker={false}
         controls={<button type="button">Pin to moment</button>}
       />,
     );
@@ -584,7 +586,6 @@ describe('CommentComposer, when React discards a render', () => {
           highlightColor="yellow"
           triggers={[]}
           agentCommands={[]}
-          hasEmojiPicker={false}
           isSubmitting={false}
           {...props}
         />

@@ -12,6 +12,7 @@ import {useState} from 'react';
 import {Card} from '@astryxdesign/core/Card';
 import {
   CommentThread,
+  EmojiPicker,
   type CommentThreadData,
   type CommentUser,
 } from '@astryxdesign/lab';
@@ -41,6 +42,7 @@ export default function CommentThreadShowcase() {
         comment={thread}
         currentUser={VIEWER}
         container="card"
+        emojiPicker={({onSelect}) => <EmojiPicker onSelect={onSelect} />}
         onSubmit={body =>
           setThread(current => ({
             ...current,

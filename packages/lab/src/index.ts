@@ -64,6 +64,7 @@ export {
   type CommentComposerContext,
   type CommentComposerRenderProps,
   type CommentData,
+  type CommentEmojiPickerRenderProps,
   type CommentStatus,
   type CommentHighlightColor,
   type CommentImageUploader,

@@ -42,9 +42,9 @@ const COMMENTS: readonly CommentThreadData[] = [
     reactions: [
       {
         key: 'like',
-        label: '👍',
+        emoji: '👍',
         count: 2,
-        reactedByViewer: true,
+        isSelected: true,
         actors: [VIEWER, MAYA],
       },
     ],
@@ -148,7 +148,7 @@ export const OpenThread: Story = {
   ),
 };
 
-/** Controlled typing plus hidden seen metadata, ready for a transport adapter. */
+/** Controlled typing, ready for a transport adapter. */
 export const LiveState: Story = {
   render: () => (
     <VStack width={480}>
@@ -156,14 +156,12 @@ export const LiveState: Story = {
         comment={{
           ...COMMENTS[0],
           typingUsers: [JORDAN, SAM],
-          seenBy: [JORDAN, SAM],
           replies: [
             {
               id: 'live-reply',
               author: VIEWER,
               body: 'The review notes are incorporated.',
               createdAt: '2026-09-30T19:10:00Z',
-              seenBy: [MAYA, JORDAN, SAM],
             },
           ],
         }}

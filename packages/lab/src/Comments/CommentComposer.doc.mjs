@@ -10,7 +10,7 @@ export const docs = {
   category: 'Chat',
   keywords: ['comment box', 'comment input', 'reply box', 'composer'],
   description:
-    'A comment composer: an input that grows to five lines, with typeahead triggers and pasted or dropped images, above attach and emoji buttons and Post. Controlled: your app owns the draft.',
+    'A comment composer: an input that grows to five lines, with typeahead triggers and pasted or dropped images, above Post and any attach and emoji buttons you turn on with `onUploadImages` and `emojiPicker`. Controlled: your app owns the draft.',
   usage: {
     description:
       'A comment composer writes a new comment. Use it where comments start outside a Comments panel, such as a new margin comment on a text selection. Comments and CommentThread use it for new comments, replies, and edits.',
@@ -31,7 +31,7 @@ export const docs = {
         name: 'Footer',
         required: true,
         description:
-          'Attach images (with `onUploadImages`), Add emoji, your `controls`, then Post at the end.',
+          'Attach images (with `onUploadImages`), Add emoji (with `emojiPicker`), your `controls`, then Post at the end.',
       },
     ],
     bestPractices: [
@@ -142,10 +142,10 @@ export const docs = {
       description: 'Agents the comment can address: typing `/` lists them.',
     },
     {
-      name: 'hasEmojiPicker',
-      type: 'boolean',
-      default: 'true',
-      description: 'Whether the Add emoji button shows.',
+      name: 'emojiPicker',
+      type: '(props: {onSelect: (emoji: string) => void}) => ReactNode',
+      description:
+        'Renders the emoji picker the Add emoji button opens; pass `onSelect` to it. Without it, there is no Add emoji button. The picker fills a fixed-width panel with no padding, so it brings its own.',
     },
     {
       name: 'controls',
@@ -157,7 +157,7 @@ export const docs = {
     {
       label: 'New comment',
       code: `import {useState} from 'react';
-import {CommentComposer} from '@astryxdesign/lab';
+import {CommentComposer, EmojiPicker} from '@astryxdesign/lab';
 
 export default function Example() {
   const [draft, setDraft] = useState('');
@@ -165,6 +165,7 @@ export default function Example() {
     <CommentComposer
       value={draft}
       onChange={setDraft}
+      emojiPicker={({onSelect}) => <EmojiPicker onSelect={onSelect} />}
       onSubmit={body => {
         post(body);
         setDraft('');

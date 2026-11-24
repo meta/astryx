@@ -216,7 +216,7 @@ export function Comments({
   markdownPlugins,
   markdownInlinePlugins,
   getReplyMention,
-  hasEmojiPicker = true,
+  emojiPicker,
   isSubmitting,
   onComposerDraftChange,
   onSubmit,
@@ -318,7 +318,7 @@ export function Comments({
     markdownPlugins,
     markdownInlinePlugins,
     getReplyMention,
-    hasEmojiPicker,
+    emojiPicker,
     isSubmitting,
     onComposerDraftChange,
     onSubmit,
@@ -451,7 +451,7 @@ export function Comments({
       highlightColor={highlightColor}
       triggers={composerTriggers ?? []}
       agentCommands={value.agentCommands}
-      hasEmojiPicker={hasEmojiPicker}
+      emojiPicker={emojiPicker}
       controls={composerControls}
       onActionPendingChange={value.composerActionPendingChange}
       onUploadImages={
@@ -466,7 +466,7 @@ export function Comments({
     isLoading && mode !== 'read-only' && composerPosition !== 'none' ? (
       <CommentComposerLoadingSkeleton
         actionCount={
-          (onUploadImages == null ? 0 : 1) + (hasEmojiPicker ? 1 : 0)
+          (onUploadImages == null ? 0 : 1) + (emojiPicker == null ? 0 : 1)
         }
       />
     ) : null;

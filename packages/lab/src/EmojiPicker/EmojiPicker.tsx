@@ -10,8 +10,8 @@
  * @output Exports EmojiPicker, EmojiPickerProps, EmojiOption, EmojiCategory,
  *   DEFAULT_FREQUENT_EMOJIS, and a persistent search-status announcement
  * @position Standalone emoji panel: a search field over every emoji by CLDR
- *   group. Hosts place it inline or inside a Popover; CommentComposer uses it
- *   for its emoji button.
+ *   group. Hosts place it inline or inside a Popover, such as the one a
+ *   comment composer's `emojiPicker` renders.
  *
  * The full emoji set is the largest part of the picker, so it loads the first
  * time a picker mounts rather than with the page. Each group is a WAI-ARIA

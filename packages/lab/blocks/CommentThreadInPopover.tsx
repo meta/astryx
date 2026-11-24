@@ -19,6 +19,7 @@ import {Popover} from '@astryxdesign/core/Popover';
 import {Text} from '@astryxdesign/core/Text';
 import {
   CommentThread,
+  EmojiPicker,
   type CommentThreadData,
   type CommentUser,
 } from '@astryxdesign/lab';
@@ -58,6 +59,7 @@ export default function CommentThreadInPopover() {
               comment={thread}
               currentUser={VIEWER}
               container="card"
+              emojiPicker={({onSelect}) => <EmojiPicker onSelect={onSelect} />}
               onDismiss={() => setIsOpen(false)}
               onSubmit={body =>
                 setThread(current => ({

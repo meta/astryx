@@ -11,5 +11,5 @@ export default {
   isReady: true,
   isShowcase: true,
   aspectRatio: 4 / 3,
-  componentsUsed: ['CommentThread', 'Card'],
+  componentsUsed: ['CommentThread', 'EmojiPicker', 'Card'],
 };
