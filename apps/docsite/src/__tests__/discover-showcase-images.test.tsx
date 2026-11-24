@@ -5,7 +5,7 @@
  * @input The home page's Discover section
  * @output Proof that each floating image offers a screen too narrow to show
  *   it a source with nothing to download, and keeps its own file
- * @position Docsite unit tests. e2e/home-photo-sizes.spec.ts counts the
+ * @position Docsite unit tests. e2e/home-discover-images.spec.ts counts the
  *   requests of the built page at a narrow and at a wide size.
  * Run: pnpm -F @astryxdesign/docsite test discover-showcase-images
  */
