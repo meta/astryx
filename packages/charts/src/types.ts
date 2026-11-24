@@ -97,8 +97,8 @@ export interface SeriesContext {
   /**
    * Per-chart token for SVG `url(#…)` ids a mark defines (e.g. an area fill
    * gradient). Unique per <Chart> instance and already sanitized, so two
-   * charts over the same key never share a def. Set by the chart root;
-   * absent when a mark renders outside one.
+   * charts over the same key never share a def. Set on the context passed
+   * to render(); absent when a mark renders outside one.
    */
   chartId?: string;
 }
