@@ -133,6 +133,35 @@ export interface ItemSwipeActions {
   trailing?: ItemSwipeAction[];
 }
 
+/**
+ * Attributes for the control the row renders — the invisible button
+ * (`onClick`) or anchor (`href`) that carries the label and takes keyboard
+ * focus. States and relations a screen reader must find on the focused
+ * control (`aria-expanded`, `aria-haspopup`, `aria-controls`,
+ * `aria-pressed`, `aria-describedby`), a host's marks (`data-*`), its key
+ * handling, and the roving `tabIndex` of a composite all belong here; the
+ * rest of the row's props stay on the root. The control's role, its content,
+ * its click and its disabled state are the row's own and are not accepted,
+ * nor is anything that would hide the row's only focusable element.
+ */
+export type ItemControlProps = Omit<
+  React.HTMLAttributes<HTMLElement>,
+  | 'children'
+  | 'className'
+  | 'style'
+  | 'role'
+  | 'onClick'
+  | 'dangerouslySetInnerHTML'
+  // The row's only focusable element is never hidden by the bag.
+  | 'hidden'
+  | 'inert'
+  | 'aria-hidden'
+  // The disabled state is the row's own, from `isDisabled`.
+  | 'aria-disabled'
+> & {
+  [key: `data-${string}`]: string | number | boolean | undefined;
+};
+
 export interface ItemProps extends BaseProps<HTMLElement> {
   /** Ref forwarded to the root element. */
   ref?: React.Ref<HTMLElement>;
@@ -245,6 +274,31 @@ export interface ItemProps extends BaseProps<HTMLElement> {
    * that root instead, and no invisible anchor is rendered.
    */
   href?: string;
+
+  /**
+   * Attributes spread on the control the row renders for `onClick` or `href`
+   * (the invisible button or anchor the label sits in), which is the element
+   * keyboard focus lands on. Use it for what a screen reader must find on
+   * the focused control — a disclosure's `aria-expanded`, `aria-haspopup`
+   * and `aria-controls`, a toggle's `aria-pressed`, a name of its own
+   * through `aria-label` or `aria-labelledby` — and for a host's own marks
+   * and key handling (`data-*`, `onKeyDown`, a composite's roving
+   * `tabIndex`). Every other prop keeps landing on the root. The row's own
+   * attributes win where they conflict. `aria-disabled` is the row's own,
+   * from `isDisabled`: a disabled row's button or anchor says so and does not
+   * activate, and keeps the enabled row's focus order, or the `tabIndex`
+   * these props set. Where the root is the control (`as` is a link component,
+   * with or without a `role`), these land on the root after the row's other
+   * props, so on an attribute named in both places the `controlProps` value
+   * is the one written, a disabled row says so there too, and an invisible
+   * button the row still nests inside such a root for `onClick` takes none of
+   * them. A row given no `controlProps` renders as if the prop did not exist.
+   * Ignored, with a development warning, where the row renders no control: a
+   * row with a `role` on a plain root (its parent owns keyboard access) or an
+   * `interactiveRef` (the nested control is the one to attribute), a link
+   * root included. `ListItem` passes it through unchanged.
+   */
+  controlProps?: ItemControlProps;
 
   /**
    * Link target (e.g., '_blank'). Only used with href.
@@ -643,6 +697,7 @@ export function Item({
   onClick,
   interactiveRef,
   href,
+  controlProps,
   target: targetFromProps,
   rel: relFromProps,
   isHighlighted = false,
@@ -708,6 +763,30 @@ export function Item({
   // component means the root itself is the anchor, so the address rides it
   // and the invisible anchor below is not rendered.
   const isLinkRoot = typeof Component !== 'string' && href != null;
+  // A link root is the control whatever its `role`.
+  const rendersControl =
+    !isDelegate &&
+    (isLinkRoot || (role == null && (href != null || onClick != null)));
+  // A link root with `onClick` still nests the invisible button inside it.
+  // That button takes no bag: the root is the control.
+  const rootControlProps =
+    isLinkRoot && rendersControl ? controlProps : undefined;
+  const buttonControlProps = isLinkRoot ? undefined : controlProps;
+  // A disabled anchor or link root keeps Enter and Space, the keys that
+  // activate a control, from the bag's key handler. Other keys still reach it.
+  const disabledBagKeys =
+    isDisabled && controlProps?.onKeyDown != null
+      ? {onKeyDown: disabledInteractionProps(controlProps.onKeyDown).onKeyDown}
+      : null;
+  useDevWarning(
+    'Item',
+    '`controlProps` reaches the control the row renders for `onClick` or ' +
+      '`href`, and this row renders none: a row with a `role` leaves keyboard ' +
+      'access to its parent, and a row with an `interactiveRef` has the ' +
+      'nested control as its one control. Put the attributes on that ' +
+      'control, or on the row itself.',
+    controlProps != null && !rendersControl,
+  );
   // A press on a nested control does not run this row's action, so the row
   // shows no touch press. A row with a parent role or a link root runs it, so
   // it keeps the press. Such a row is not a clickable container: an enclosing
@@ -956,11 +1035,14 @@ export function Item({
         </span>
       ) : href != null && !isLinkRoot ? (
         <RowAnchor
+          {...controlProps}
           ref={anchorRef}
           {...(isDisabled
-            ? {role: 'link', 'aria-disabled': true, tabIndex: 0}
+            ? {role: 'link', tabIndex: controlProps?.tabIndex ?? 0}
             : {href, target, rel})}
-          aria-current={ariaCurrent}
+          aria-current={ariaCurrent ?? controlProps?.['aria-current']}
+          aria-disabled={isDisabled || undefined}
+          {...disabledBagKeys}
           {...focusOwnerProps}
           {...stylex.props(
             styles.invisibleAnchor,
@@ -971,13 +1053,16 @@ export function Item({
         </RowAnchor>
       ) : onClick != null ? (
         <button
+          {...buttonControlProps}
           ref={actionButtonRef}
           type="button"
           onClick={onClick}
-          aria-current={ariaCurrent}
+          aria-current={ariaCurrent ?? buttonControlProps?.['aria-current']}
           aria-disabled={isDisabled || undefined}
           {...(isDisabled
-            ? disabledInteractionProps<HTMLButtonElement>()
+            ? disabledInteractionProps<HTMLButtonElement>(
+                buttonControlProps?.onKeyDown,
+              )
             : null)}
           {...focusOwnerProps}
           {...stylex.props(
@@ -1039,6 +1124,14 @@ export function Item({
     <Component
       ref={rootRef as React.Ref<never>}
       {...restProps}
+      {...rootControlProps}
+      {...(rootControlProps != null ? disabledBagKeys : null)}
+      // A disabled link root has no `href`, so it is not focusable by itself.
+      // It keeps the enabled focus order: the bag's `tabIndex`, else the
+      // root's, else 0.
+      {...(isDisabled && rootControlProps != null
+        ? {tabIndex: rootControlProps.tabIndex ?? restProps.tabIndex ?? 0}
+        : null)}
       {...swipeHandlers}
       {...linkRootProps}
       {...(isDelegate
@@ -1064,8 +1157,13 @@ export function Item({
       // bare div, etc.). For those, convey selection via aria-current — valid
       // on any element — so the state still reaches AT. Written after
       // {...restProps}: an interactive row moves the marker, a caller's
-      // included, to the element that takes focus.
-      aria-current={currentOnFocusTarget ? undefined : ariaCurrent}
+      // included, to the element that takes focus. On a link root the bag is
+      // written after the root's props, so the bag's marker wins there.
+      aria-current={
+        currentOnFocusTarget
+          ? undefined
+          : (rootControlProps?.['aria-current'] ?? ariaCurrent)
+      }
       aria-disabled={isDisabled || undefined}
       {...(isInteractive ? pressable : undefined)}
       {...mergeProps(

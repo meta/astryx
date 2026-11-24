@@ -11,6 +11,7 @@ export {Item} from './Item';
 export type {
   ItemProps,
   ItemAlign,
+  ItemControlProps,
   ItemDensity,
   ItemSwipeAction,
   ItemSwipeActions,

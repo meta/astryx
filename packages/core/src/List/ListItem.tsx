@@ -55,7 +55,12 @@ import {ItemListRowContext} from '../Item/ItemListRowContext';
 import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import {ItemLabelNeededContext} from '../Item/ItemLabelContext';
 import {ItemTrailingContext} from '../Item/ItemTrailingContext';
-import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
+import type {
+  ItemAlign,
+  ItemControlProps,
+  ItemSwipeActions,
+  ItemSwipeBehavior,
+} from '../Item';
 import {swipeWithItemKey, type Swipe} from '../Swipe/swipeHost';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -176,6 +181,12 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
    * @default 'reveal'
    */
   swipeBehavior?: ItemSwipeBehavior;
+
+  /**
+   * Attributes for the control the row renders for `onClick` or `href`,
+   * passed through to `Item` unchanged. See `Item.controlProps`.
+   */
+  controlProps?: ItemControlProps;
 }
 
 // =============================================================================
