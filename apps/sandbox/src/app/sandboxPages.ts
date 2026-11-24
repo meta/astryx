@@ -139,7 +139,7 @@ export const categories: SandboxCategory[] = [
         name: 'NavigationStack Inert Cost',
         href: '/pages/navstack-inert-cost/',
         description:
-          'Times setting inert, pointer-events: none and aria-hidden on a covered long list and on a transcript, on a phone',
+          'Times setting inert, pointer-events: none and aria-hidden on a covered long list and on a transcript, on a phone; ?mode=settle times one flip of the list where a slide-out settles',
       },
       {
         name: 'NavigationStack Kept Layout',
