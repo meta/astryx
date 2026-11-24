@@ -7536,7 +7536,8 @@ jobs:
   # the components that use it. These otherwise run only in their own
   # component-audit pull request and in the release check. The plan job reads
   # the changed files and the import graph at the merge commit and splits the
-  # audits into at most three legs of about ten minutes each by recorded time.
+  # audits into at most three legs of about ten minutes each by recorded time,
+  # or four on a first run when a fourth runs every owed audit.
   # It waits for the Storybook build, which the legs need anyway.
   a11y-dependent-audits-plan:
     needs: [room, admission, heavy-ci, build-storybook]
@@ -7606,15 +7607,18 @@ jobs:
           echo "::error::The scope step could not list the changed files, so the dependent audits to run are unknown. Re-run the job."
           exit 1
 
-      # A first run fits what it can into three legs of about ten minutes and
-      # names the rest as not yet run; a later run at the same head (a re-run
-      # of all jobs) runs every owed audit.
+      # A first run fits what it can into three legs of about ten minutes, or
+      # four when a fourth runs every owed audit, and names the rest as not
+      # yet run, with the audits-at-head dispatch that runs them at this head;
+      # a later run at the same head (a re-run of all jobs) runs every owed
+      # audit.
       - name: Plan the dependent audits
         id: plan
         if: steps.scope.outputs.applies == 'true'
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           TRUNCATED: ${{ steps.scope.outputs.truncated }}
         run: |
@@ -7652,10 +7656,11 @@ jobs:
     # An empty count (the plan skipped) compares as 0.
     runs-on: ${{ needs.a11y-dependent-audits-plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: 15
-    # A first run plans at most three legs; a later run at the same head may
-    # plan up to six to run every owed audit. The matrix starts only the
-    # planned legs; a plan that owes no audit starts none (the condition above),
-    # and a plan that did not succeed starts exactly one, which fails.
+    # A first run plans at most three legs, or four when that runs every owed
+    # audit; a later run at the same head may plan up to six to run them all.
+    # The matrix starts only the planned legs; a plan that owes no audit
+    # starts none (the condition above), and a plan that did not succeed
+    # starts exactly one, which fails.
     strategy:
       fail-fast: false
       matrix:
