@@ -13,7 +13,13 @@
  * @position Internal parts of a comment row in the Comments family
  */
 
-import {useCallback, useRef, useState, type ReactNode} from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefCallback,
+} from 'react';
 import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
@@ -57,7 +63,12 @@ const styles = stylex.create({
 export type CommentActionId = 'resolve' | 'reopen' | 'react' | 'reply' | 'link';
 
 /** Mark as resolved on an open thread, Reopen on a resolved one. */
-export type ResolveAction = {kind: 'resolve' | 'reopen'; onClick: () => void};
+export type ResolveAction = {
+  kind: 'resolve' | 'reopen';
+  onClick: () => void;
+  /** Carries focus to the control that replaces a pressed one. */
+  controlRef?: RefCallback<HTMLElement>;
+};
 
 /** One of a comment's action buttons, as it shows. OverflowList renders a
  *  hidden copy of every item to measure it; only the copy in the visible list
@@ -400,6 +411,7 @@ export function CommentActions({
         {resolveAction?.kind === 'resolve' ? (
           <CommentActionSlot key="resolve" data-comment-action="resolve">
             <IconButton
+              ref={resolveAction.controlRef}
               label={resolveLabel}
               tooltip={resolveLabel}
               variant="ghost"
@@ -413,6 +425,7 @@ export function CommentActions({
         ) : resolveAction?.kind === 'reopen' ? (
           <CommentActionSlot key="reopen" data-comment-action="reopen">
             <Button
+              ref={resolveAction.controlRef}
               label={reopenLabel}
               variant="ghost"
               size="sm"

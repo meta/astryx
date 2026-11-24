@@ -128,6 +128,10 @@ export type {ActionGroupTrackingOptions} from '../hooks/useActionGroupTracking';
 // Lab's TabBar finds a panel's scroll area with Core's scroll test.
 export {measureLogicalScrollAxis} from '../hooks/scrollGeometry';
 
+// Lab's Comments carries focus to the control that replaces a pressed one,
+// Mark as resolved and Reopen, with the same focus hand-off as Core.
+export {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
+
 // A Lab group shares Core's group press tracking and the group-item mark.
 export {
   useGroupPressTracking,

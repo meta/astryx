@@ -16,7 +16,10 @@
  * focus, and only if focus has fallen to the page: React also detaches and
  * re-attaches the same node (for example when an <Activity> boundary hides and
  * reveals it), and neither case may pull focus back after the person has moved
- * elsewhere.
+ * elsewhere. An element inside an inert region, such as the copy OverflowList
+ * renders to measure its items, can hold no focus, so it neither leaves nor
+ * takes a handoff. Inertness is read when a handoff is recorded or taken, not
+ * when the node attaches: a region can stop being inert later.
  */
 
 import {useCallback, useEffect, useRef, type Ref} from 'react';
@@ -31,6 +34,10 @@ function isNativeTarget(value: unknown): value is HTMLElement {
     typeof value.getRootNode === 'function' &&
     typeof value.focus === 'function'
   );
+}
+
+function isInertCopy(value: unknown): boolean {
+  return isHTMLElement(value) && value.closest('[inert]') != null;
 }
 
 function wasHidden(node: HTMLElement): boolean {
@@ -71,33 +78,38 @@ export function useFocusAcrossSwap<T extends HTMLElement>(
       if (node === null) {
         return undefined;
       }
-      const outgoing = focusedNodeRef.current;
-      focusedNodeRef.current = null;
       const resolved = getFocusTarget ? getFocusTarget(node) : node;
       const target = isNativeTarget(resolved) ? resolved : null;
-      if (
-        target?.isConnected &&
-        outgoing !== null &&
-        outgoing.target !== target &&
-        !outgoing.target.isConnected &&
-        !wasHidden(outgoing.source) &&
-        isFocusUnclaimed(target)
-      ) {
-        target.focus({preventScroll: true});
+      if (!isInertCopy(node)) {
+        const outgoing = focusedNodeRef.current;
+        focusedNodeRef.current = null;
+        if (
+          target?.isConnected &&
+          outgoing !== null &&
+          outgoing.target !== target &&
+          !outgoing.target.isConnected &&
+          !wasHidden(outgoing.source) &&
+          isFocusUnclaimed(target)
+        ) {
+          target.focus({preventScroll: true});
+        }
       }
       const release = mergeRefs<T>(ref)(node);
       return () => {
-        const outgoing =
-          target && ownsFocus(target) ? {target, source: node} : null;
-        focusedNodeRef.current = outgoing;
-        if (outgoing) {
-          // Descendant refs can detach without disconnecting this hook's Effect.
-          // Expire the handoff after this commit, but leave newer handoffs intact.
-          queueMicrotask(() => {
-            if (focusedNodeRef.current === outgoing) {
-              focusedNodeRef.current = null;
-            }
-          });
+        if (!isInertCopy(node)) {
+          const outgoing =
+            target && ownsFocus(target) ? {target, source: node} : null;
+          focusedNodeRef.current = outgoing;
+          if (outgoing) {
+            // Descendant refs can detach without disconnecting this hook's
+            // Effect. Expire the handoff after this commit, but leave newer
+            // handoffs intact.
+            queueMicrotask(() => {
+              if (focusedNodeRef.current === outgoing) {
+                focusedNodeRef.current = null;
+              }
+            });
+          }
         }
         release?.();
       };
