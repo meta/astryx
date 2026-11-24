@@ -33,7 +33,8 @@ from the monorepo and writes typed TypeScript registries to `src/generated/`.
 | `blockRegistry.ts`            | CLI + integration template blocks                  | Showcase and example blocks with metadata                     |
 | `templateRegistry.ts`         | CLI `templates/pages/`                             | Page-level templates (e.g. dashboard, settings)               |
 | `docsRegistry.ts`             | CLI `docs/`                                        | Long-form guide and foundation topics                         |
-| `blogRegistry.ts`             | `src/content/blog/posts/`                          | Human-authored blog posts (frontmatter validated)             |
+| `blogRegistry.ts`             | `src/content/blog/posts/`                          | Human-authored blog posts (frontmatter validated), no bodies  |
+| `blogPostBodies.json`         | `src/content/blog/posts/`                          | Markdown body of each blog post, for server modules           |
 | `themeRegistry.ts`            | Installed `@astryxdesign/theme-*` packages         | Built theme objects, keyed by package name                    |
 | `showcaseRegistry.ts`         | Blocks with `isShowcase`                           | Copied showcase source files                                  |
 | `exampleRegistry.ts`          | Blocks with `exampleFor`                           | Copied example blocks per component                           |
