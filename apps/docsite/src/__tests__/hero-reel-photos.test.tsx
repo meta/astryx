@@ -6,7 +6,7 @@
  *   that show them, and the Next.js image configuration
  * @output Proof that each reel photo loads through the image optimizer with a
  *   `srcset` and a `sizes` for its slot, in both card layouts, and that the
- *   warm-up list names the same sources
+ *   warm-up names the same sources, for the whole reel and for one slide
  * @position Docsite unit tests. hero-reel-photo-warm-up.test.tsx proves what
  *   the warm-up gives the browser, and e2e/home-photo-sizes.spec.ts counts
  *   the requests of the built page.
@@ -25,6 +25,7 @@ import {
   REEL_IMAGES,
   reelPhotoSources,
   reelThumbSources,
+  slideAssets,
 } from '../app/(site)/_landing/hero/heroThemeContent';
 
 // The suite does not resolve the app's `@/` paths. The reel takes a theme
@@ -173,6 +174,25 @@ describe('the warm-up list', () => {
       expect(REEL_IMAGES).toEqual(rendered);
       expect(REEL_IMAGES).toHaveLength(15);
       expect(new Set(REEL_IMAGES.map(image => image.srcSet)).size).toBe(15);
+    },
+  );
+
+  it.each(['overlap', 'stack'] as const)(
+    'names, for one slide, the sources that the %s layout renders for it',
+    layout => {
+      for (const slide of HERO_THEME_SLIDES) {
+        expect(slideAssets(slide).images).toEqual(
+          images(
+            renderToStaticMarkup(
+              <HeroFloatingCards
+                content={slide.content}
+                mounted
+                layout={layout}
+              />,
+            ),
+          ),
+        );
+      }
     },
   );
 
