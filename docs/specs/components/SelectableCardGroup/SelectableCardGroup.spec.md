@@ -27,7 +27,7 @@ design_specs: []
 architecture:
   [architecture:component-theming-surface, architecture:public-component-api]
 contributing: []
-system_specs: [spec:AST-017, spec:AST-038, spec:AST-085]
+system_specs: [spec:AST-038, spec:AST-085]
 ---
 
 # SelectableCardGroup component contract
@@ -47,10 +47,10 @@ system_specs: [spec:AST-017, spec:AST-038, spec:AST-085]
 | Public contract         | `SelectableCardGroup` and `SelectableCardGroupProps` from `@astryxdesign/core`. Props: `label`, `type` (`single` or `multiple`), a controlled `value` and `onChange`, `isLabelHidden`, `description`, `htmlName`, `isDisabled`, `orientation`, `children`, a `ref`, and the `container*` and `control*` styling props. |
 | Behavior                | Its children are SelectableCards, each with a `value`. One choice is a Field-labelled `role="radiogroup"` of native radios: one tab stop, arrow keys that move and select, and a choice that never clears. Several choices are a labelled `role="group"` of checkboxes that toggle.                                    |
 | End-user impact         | Keyboard and screen-reader users get the radio-group model for one choice, with its position spoken, and a named group of checkboxes for several. A disabled group's cards stay reachable by Tab and announce as unavailable.                                                                                          |
-| Builder impact          | Render SelectableCards with a `value` inside the group, and keep `value` in state. Lab callers change the import.                                                                                                                                                                                                      |
-| Compatibility/readiness | Additive Core export. The `@astryxdesign/lab` exports are deprecated re-exports of the Core ones for one release (FR9). INV6 gap: the `selectable-card-group` target does not reflect the disabled state (FR1).                                                                                                        |
+| Builder impact          | Render SelectableCards with a `value` inside the group, and keep `value` in state. A Lab import reaches the Core component.                                                                                                                                                                                            |
+| Compatibility/readiness | Additive Core export. The `@astryxdesign/lab` `SelectableCardGroup` and `SelectableCardGroupProps` exports re-export the Core ones (FR9). INV6 gap: the `selectable-card-group` target does not reflect the disabled state (FR1).                                                                                      |
 | Review checks           | Reject a single choice that is not one tab stop, a single choice that reports `null` or deselects its card, root styling props, a group without a name, or a card in a layer that joins the group.                                                                                                                     |
-| Governing rules         | `component:SelectableCard` DEC-1, FR1, FR2; `family:input-fields` FR10; `spec:AST-038` FR7, FR8; `spec:AST-085` FR1; `spec:AST-017` FR29, FR29a (lifecycle); `architecture:public-component-api` INV2, DEC-1 (`type`, the word ToggleButtonGroup uses); WAI-ARIA radio group pattern.                                  |
+| Governing rules         | `component:SelectableCard` DEC-1, FR1, FR2; `family:input-fields` FR10; `spec:AST-038` FR7, FR8; `spec:AST-085` FR1; `architecture:public-component-api` INV2, DEC-1 (`type`, the word ToggleButtonGroup uses); WAI-ARIA radio group pattern.                                                                          |
 
 This table is a review projection; the body below is authoritative.
 
@@ -68,11 +68,10 @@ Consumer usage lives in `SelectableCardGroup.doc.mjs`.
 - Released default preserved: not yet released in Core; the Lab component's
   props keep their meaning and defaults
 - Compatibility class: additive Core export; the Lab exports re-export the Core
-  ones, deprecated, for one release (FR9)
+  ones (FR9)
 - Controlled/uncontrolled behavior: controlled only; the group holds no
   selection of its own
-- Migration decision: `spec:AST-017` FR29 and FR29a; Lab callers import from
-  `@astryxdesign/core`
+- Migration decision: none; a Lab import reaches the Core component (FR9)
 
 Consumer migration instructions belong in consumer docs and release notes.
 
@@ -123,7 +122,7 @@ intentional decision. A `current` contract contains no unresolved rows.
 | FR6 | The members sit in wrapping rows with the `--spacing-3` gap, or in one column when `orientation="vertical"`, in DOM order.                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Documented promise; current source                                            | settled            |
 | FR7 | The props type takes no root `xstyle`, `className`, or `style`; an untyped one is ignored and warns in development. `containerXstyle`, `containerClassName`, and `containerStyle` reach the Field box; `controlXstyle`, `controlClassName`, and `controlStyle` reach the group element after the group's own layout styles; and `ref`, DOM, and ARIA props reach the group element (`family:input-fields` FR10).                                                                                                                                                                  | `family:input-fields` FR10; current source and tests                          | settled            |
 | FR8 | Membership stops at a layer boundary: a card with a `value` in a layer opened inside the group is not a member (`spec:AST-038` FR7, FR8).                                                                                                                                                                                                                                                                                                                                                                                                                                         | `spec:AST-038` FR7, FR8; current source and tests                             | settled            |
-| FR9 | The `@astryxdesign/lab` `SelectableCardGroup` and `SelectableCardGroupProps` exports re-export the Core ones, marked deprecated with static metadata, for one release, and are then removed.                                                                                                                                                                                                                                                                                                                                                                                      | `spec:AST-017` FR29, FR29a                                                    | settled            |
+| FR9 | The `@astryxdesign/lab` `SelectableCardGroup` and `SelectableCardGroupProps` exports re-export the Core ones, so a Lab import renders the Core component and takes the Core props.                                                                                                                                                                                                                                                                                                                                                                                                | Current source and tests                                                      | settled            |
 
 ### Allowed variation
 
@@ -184,7 +183,6 @@ durable constraints and their verification target.
   do.
 - `spec:AST-038` FR7 and FR8 stop the group's membership at a layer boundary.
 - `spec:AST-085` FR1 keeps disabled cards focusable.
-- `spec:AST-017` FR29 and FR29a set the Lab re-export's lifecycle.
 
 ## Verification map
 
@@ -197,7 +195,7 @@ durable constraints and their verification target.
 | FR5, AR3 | `SelectableCardGroup.test.tsx` disabled-group, member-disabled, and form cases; `SelectableCardRadio.test.tsx` disabled cases                                                  | Group disabled; one member disabled                                                                                                         | A selection while disabled, a disabled card that submits or leaves the tab order, or a group that enables a disabled member fails.                                                                  | `audit:SelectableCardGroup/a11y`     |
 | FR6      | `SelectableCardGroup.stories.tsx` horizontal and vertical stories; real-browser evidence                                                                                       | Horizontal and vertical                                                                                                                     | Gap: no automated check of the gap or the wrapping.                                                                                                                                                 | `audit:SelectableCardGroup/design`   |
 | FR7      | `SelectableCardGroup.test.tsx` root-styling and container cases; `SelectableCardGroup.fr10.test.tsx`, the shared input-fields FR10 suite; `fieldInputFamily.test.tsx` coverage | An untyped `className`; `container*` and `control*`; a caller `ref`, `id`, `data-*`, and `aria-describedby`; a horizontal-labels FormLayout | A root styling prop that reaches the group element, a `container*` prop that misses the Field box, a `control*` prop that misses the group element, or base props that miss the group element fail. | `audit:SelectableCardGroup/api`      |
-| FR9      | Lab `index.test.ts` identity and deprecation cases                                                                                                                             | Lab imports                                                                                                                                 | A Lab export that is not the Core export, or one without the deprecation metadata, fails.                                                                                                           | `audit:SelectableCardGroup/api`      |
+| FR9      | Lab `index.test.ts` identity and props-type cases                                                                                                                              | Lab imports                                                                                                                                 | A Lab export that is not the Core component, or Lab props that differ from the Core props, fail.                                                                                                    | `audit:SelectableCardGroup/api`      |
 
 ## Decision log
 

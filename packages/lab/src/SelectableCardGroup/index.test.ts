@@ -3,33 +3,23 @@
 /**
  * @file index.test.ts
  * @input The Lab SelectableCardGroup entry and the Core component
- * @output Tests that the Lab entry re-exports the Core exports, deprecated
+ * @output Tests that the Lab entry re-exports the Core component and its props
  * @position Testing; validates index.ts
  */
 
-import {readFileSync} from 'node:fs';
-import path from 'node:path';
-import {describe, expect, it} from 'vitest';
-import {SelectableCardGroup as CoreSelectableCardGroup} from '@astryxdesign/core/SelectableCardGroup';
-import {SelectableCardGroup} from './index';
-
-const EXPORTS = ['SelectableCardGroup', 'SelectableCardGroupProps'];
+import {describe, expect, expectTypeOf, it} from 'vitest';
+import {
+  SelectableCardGroup as CoreSelectableCardGroup,
+  type SelectableCardGroupProps as CoreSelectableCardGroupProps,
+} from '@astryxdesign/core/SelectableCardGroup';
+import {SelectableCardGroup, type SelectableCardGroupProps} from './index';
 
 describe('Lab SelectableCardGroup', () => {
   it('is the Core component', () => {
     expect(SelectableCardGroup).toBe(CoreSelectableCardGroup);
   });
 
-  it('marks each of its exports deprecated', () => {
-    // Static metadata only: editors and type checkers show it, and nothing
-    // warns at runtime.
-    const source = readFileSync(path.join(__dirname, 'index.ts'), 'utf8');
-    for (const name of EXPORTS) {
-      // The doc comment right above the export, whatever it contains.
-      const comment = new RegExp(
-        String.raw`/\*\*((?:(?!\*/)[\s\S])*)\*/\nexport (?:const|type) ${name}\b`,
-      ).exec(source);
-      expect(comment?.[1], name).toContain('@deprecated');
-    }
+  it('takes the Core props', () => {
+    expectTypeOf<SelectableCardGroupProps>().toEqualTypeOf<CoreSelectableCardGroupProps>();
   });
 });

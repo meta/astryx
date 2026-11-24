@@ -1,29 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
- * @file SelectableCardGroup deprecated re-export
+ * @file SelectableCardGroup re-export
  * @input `@astryxdesign/core/SelectableCardGroup`
- * @output Exports SelectableCardGroup and SelectableCardGroupProps, each
- *   deprecated
- * @position Lab entry kept for one release after SelectableCardGroup moved to
- *   Core; consumed by packages/lab/src/index.ts
+ * @output Re-exports SelectableCardGroup and SelectableCardGroupProps from Core
+ * @position Lab entry for callers that import the group from Lab; consumed by
+ *   packages/lab/src/index.ts
  */
 
-import {
-  SelectableCardGroup as CoreSelectableCardGroup,
-  type SelectableCardGroupProps as CoreSelectableCardGroupProps,
-} from '@astryxdesign/core/SelectableCardGroup';
-
-/**
- * @deprecated SelectableCardGroup moved to Core: import it from
- * `@astryxdesign/core`. This Lab export is removed in the next release.
- */
-export const SelectableCardGroup = CoreSelectableCardGroup;
-
-/**
- * @deprecated Import `SelectableCardGroupProps` from `@astryxdesign/core`.
- * This Lab export is removed in the next release.
- */
-export type SelectableCardGroupProps = CoreSelectableCardGroupProps;
+export {SelectableCardGroup} from '@astryxdesign/core/SelectableCardGroup';
+export type {SelectableCardGroupProps} from '@astryxdesign/core/SelectableCardGroup';
