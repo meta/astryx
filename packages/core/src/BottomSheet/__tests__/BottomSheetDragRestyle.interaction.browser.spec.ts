@@ -51,7 +51,23 @@ interface OpenSheet {
   handle: {x: number; y: number};
 }
 
+interface MatchedStyle {
+  readonly cssProperties: ReadonlyArray<{name: string; value: string}>;
+}
+
+interface MatchedRule {
+  readonly rule: {
+    readonly selectorList: {readonly text: string};
+    readonly origin: string;
+    readonly styleSheetId?: string;
+    readonly layers?: ReadonlyArray<{readonly text: string}>;
+    readonly style: MatchedStyle;
+  };
+}
+
 interface ScrimRule {
+  /** 0 for the node itself, n for its nth ancestor. */
+  readonly from: number;
   readonly selector: string;
   readonly value: string;
   readonly origin: string;
@@ -61,8 +77,8 @@ interface ScrimRule {
 
 /**
  * Every rule that sets the scrim's opacity on the sheet and on its first
- * content element, with its origin, layers and stylesheet, as the DevTools
- * protocol matches them. It names the rule that wins over the sheet's reset
+ * content element, or on an ancestor they inherit from, with its origin,
+ * layers and stylesheet, as the DevTools protocol matches them. It names the rule that wins over the sheet's reset
  * when the reset does not apply.
  */
 async function scrimRules(
@@ -86,33 +102,47 @@ async function scrimRules(
     }
     const matched = await cdp.send('CSS.getMatchedStylesForNode', {nodeId});
     const rules: ScrimRule[] = [];
-    for (const {rule} of matched.matchedCSSRules ?? []) {
-      for (const property of rule.style.cssProperties) {
+    // `from` is 0 for the node itself and n for its nth ancestor, whose
+    // declarations the node inherits.
+    const collect = (
+      from: number,
+      matchedRules: ReadonlyArray<MatchedRule>,
+      inline: MatchedStyle | undefined,
+    ) => {
+      for (const {rule} of matchedRules) {
+        for (const property of rule.style.cssProperties) {
+          if (property.name === '--_sheet-scrim-opacity') {
+            rules.push({
+              from,
+              selector: rule.selectorList.text,
+              value: property.value,
+              origin: rule.origin,
+              layers: (rule.layers ?? []).map(layer => layer.text),
+              stylesheet:
+                rule.styleSheetId == null
+                  ? null
+                  : (stylesheets.get(rule.styleSheetId) ?? rule.styleSheetId),
+            });
+          }
+        }
+      }
+      for (const property of inline?.cssProperties ?? []) {
         if (property.name === '--_sheet-scrim-opacity') {
           rules.push({
-            selector: rule.selectorList.text,
+            from,
+            selector: 'style attribute',
             value: property.value,
-            origin: rule.origin,
-            layers: (rule.layers ?? []).map(layer => layer.text),
-            stylesheet:
-              rule.styleSheetId == null
-                ? null
-                : (stylesheets.get(rule.styleSheetId) ?? rule.styleSheetId),
+            origin: 'inline',
+            layers: [],
+            stylesheet: null,
           });
         }
       }
-    }
-    for (const property of matched.inlineStyle?.cssProperties ?? []) {
-      if (property.name === '--_sheet-scrim-opacity') {
-        rules.push({
-          selector: 'style attribute',
-          value: property.value,
-          origin: 'inline',
-          layers: [],
-          stylesheet: null,
-        });
-      }
-    }
+    };
+    collect(0, matched.matchedCSSRules ?? [], matched.inlineStyle);
+    (matched.inherited ?? []).forEach((entry, index) => {
+      collect(index + 1, entry.matchedCSSRules, entry.inlineStyle);
+    });
     return rules;
   };
   const rules = {
