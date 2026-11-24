@@ -440,7 +440,7 @@ function NoResultsExample() {
       hasSearch
       searchLabel="Search report fields"
       searchPlaceholder="Try a term that matches nothing"
-      noResultsText="No field matches that search."
+      emptySearchText="No field matches that search."
     />
   );
 }
