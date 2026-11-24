@@ -721,6 +721,7 @@ describe('Switch', () => {
         'Notifications are turned off org-wide',
       );
       fireEvent.mouseEnter(getRow());
+      fireEvent.pointerMove(getRow());
       await waitFor(() =>
         expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
       );

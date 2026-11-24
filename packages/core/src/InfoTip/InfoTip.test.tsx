@@ -168,6 +168,7 @@ describe('InfoTip', () => {
     const trigger = screen.getByRole('button', {name: 'More information'});
 
     fireEvent.mouseEnter(trigger);
+    fireEvent.pointerMove(trigger);
 
     await waitFor(() => {
       expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
@@ -230,6 +231,7 @@ describe('InfoTip', () => {
     fireEvent.mouseLeave(trigger);
 
     fireEvent.mouseEnter(trigger);
+    fireEvent.pointerMove(trigger);
     await waitFor(() => {
       expect(popoverOpenState.get(layer())).toBe(true);
     });

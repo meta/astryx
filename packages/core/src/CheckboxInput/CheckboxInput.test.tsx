@@ -582,6 +582,7 @@ describe('CheckboxInput', () => {
       // The tooltip's layer mounts at its first show.
       const tooltip = () => screen.getByRole('tooltip', h);
       fireEvent.mouseEnter(getRow());
+      fireEvent.pointerMove(getRow());
       await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       expect(tooltip()).toHaveTextContent(
         'Terms are managed by your administrator',

@@ -1215,6 +1215,7 @@ describe('TextInput', () => {
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
         expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });

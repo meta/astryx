@@ -1370,6 +1370,7 @@ describe('ComplexSelector disabledMessage', () => {
     expect(tooltip()).toHaveTextContent('You need the Editor role');
 
     fireEvent.mouseEnter(within(container).getByRole('combobox'));
+    fireEvent.pointerMove(within(container).getByRole('combobox'));
     await waitFor(() => {
       expect(tooltip()).toHaveAttribute('popover-open');
     });
@@ -1771,6 +1772,7 @@ describe('ComplexSelector disabledMessage', () => {
     const tooltip = () => getTooltip();
     expect(trigger.getAttribute('aria-describedby')).toContain(tooltip().id);
     fireEvent.mouseEnter(within(container).getByRole('combobox'));
+    fireEvent.pointerMove(within(container).getByRole('combobox'));
     await waitFor(() => {
       expect(tooltip()).toHaveAttribute('popover-open');
     });
@@ -1807,6 +1809,7 @@ describe('ComplexSelector disabledMessage', () => {
         .trim();
 
     fireEvent.mouseEnter(within(container).getByRole('combobox'));
+    fireEvent.pointerMove(within(container).getByRole('combobox'));
     await waitFor(() => {
       expect(tooltip()).toHaveAttribute('popover-open');
     });
@@ -1830,6 +1833,7 @@ describe('ComplexSelector disabledMessage', () => {
       expect(tooltip()).not.toHaveAttribute('popover-open');
     });
     fireEvent.mouseEnter(within(container).getByRole('combobox'));
+    fireEvent.pointerMove(within(container).getByRole('combobox'));
     await waitFor(() => {
       expect(tooltip()).toHaveAttribute('popover-open');
     });
@@ -2008,6 +2012,7 @@ describe('ComplexSelector disabledMessage', () => {
 
     const tooltip = () => getTooltip();
     fireEvent.mouseEnter(screen.getByTestId('view-options'));
+    fireEvent.pointerMove(screen.getByTestId('view-options'));
     await waitFor(() => {
       expect(tooltip()).toHaveAttribute('popover-open');
     });
@@ -2036,6 +2041,7 @@ describe('ComplexSelector disabledMessage', () => {
       const tooltip = () => getTooltip();
       expect(tooltip()).toHaveTextContent('You need the Editor role');
       fireEvent.mouseEnter(screen.getByRole('combobox', {name: 'Assign'}));
+      fireEvent.pointerMove(screen.getByRole('combobox', {name: 'Assign'}));
       await waitFor(() => {
         expect(tooltip()).toHaveAttribute('popover-open');
       });

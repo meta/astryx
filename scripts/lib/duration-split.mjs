@@ -66,22 +66,44 @@ export function assertEachOnce(items, legs, what = 'item') {
 }
 
 /**
+ * Which items share one leg of their own (`together`), and which other items
+ * may join them there (`besideTogether`; every item when it is not given).
+ * @typedef {{together?: (item: string) => boolean, besideTogether?: (item: string) => boolean}} KeptApart
+ */
+
+/**
  * Splits items into `count` legs, slowest first, each to the leg with the
  * least time so far. `reserved[i]` starts leg i with that much time already
- * taken, for work the leg does besides these items.
+ * taken, for work the leg does besides these items. With `apart.together`,
+ * those items go to the last leg, and only items `apart.besideTogether`
+ * accepts join them there. With one leg, or none of those items, the split
+ * is as without it.
  * @param {string[]} items
  * @param {number} count
  * @param {(item: string) => number} cost
  * @param {number[]} [reserved]
+ * @param {KeptApart} [apart]
  * @returns {string[][]} each leg's items, sorted; together exactly `items`
  */
-export function splitByDuration(items, count, cost, reserved = []) {
+export function splitByDuration(items, count, cost, reserved = [], apart = {}) {
   const legs = Array.from({length: count}, (_, i) => ({
     items: [],
     total: reserved[i] ?? 0,
   }));
-  for (const item of slowestFirst(new Set(items), cost)) {
-    const leg = legs.reduce((best, next) =>
+  const unique = [...new Set(items)];
+  const kept = apart.together && count > 1 ? unique.filter(apart.together) : [];
+  const keptLeg = kept.length > 0 ? legs[count - 1] : null;
+  const besideKept = apart.besideTogether ?? (() => true);
+  for (const item of slowestFirst(kept, cost)) {
+    keptLeg.items.push(item);
+    keptLeg.total += cost(item);
+  }
+  const keptSet = new Set(kept);
+  const rest = unique.filter(item => !keptSet.has(item));
+  for (const item of slowestFirst(rest, cost)) {
+    const open =
+      keptLeg && !besideKept(item) ? legs.filter(leg => leg !== keptLeg) : legs;
+    const leg = open.reduce((best, next) =>
       next.total < best.total ? next : best,
     );
     leg.items.push(item);
@@ -98,19 +120,28 @@ export function splitByDuration(items, count, cost, reserved = []) {
  * runs in a leg of its own and does not raise the other legs' limit. When
  * those legs, and one more for the rest, would pass `maxLegs`, the items split
  * into `maxLegs` legs by time instead, so there are never more than `maxLegs`.
+ * At `maxLegs` with a leg still over the budget, an even split of every item
+ * into `maxLegs` legs is kept when its longest leg is shorter.
  * @param {string[]} items
  * @param {(item: string) => number} cost
- * @param {{budget: number, maxLegs?: number, start?: number}} limits
+ * @param {{budget: number, maxLegs?: number, start?: number} & KeptApart} limits
+ *   `together` and `besideTogether` keep items apart in each split, as
+ *   splitByDuration does
  * @returns {{count: number, shares: string[][], longest: number}} `longest`
  *   in seconds
  */
-export function fitLegsToBudget(items, cost, {budget, maxLegs, start = 1}) {
+export function fitLegsToBudget(
+  items,
+  cost,
+  {budget, maxLegs, start = 1, together, besideTogether},
+) {
+  const apart = {together, besideTogether};
   const unique = [...new Set(items)];
   const total = leg => leg.reduce((sum, item) => sum + cost(item), 0);
   const alone = unique.filter(item => cost(item) > budget).sort();
   const rest = unique.filter(item => cost(item) <= budget);
   if (maxLegs != null && alone.length + (rest.length > 0 ? 1 : 0) > maxLegs) {
-    const shares = splitByDuration(unique, maxLegs, cost).filter(
+    const shares = splitByDuration(unique, maxLegs, cost, [], apart).filter(
       leg => leg.length > 0,
     );
     return {
@@ -129,22 +160,29 @@ export function fitLegsToBudget(items, cost, {budget, maxLegs, start = 1}) {
       Math.max(1, start - alone.length, Math.ceil(total(rest) / budget)),
       most,
     );
-    shared = splitByDuration(rest, count, cost);
+    shared = splitByDuration(rest, count, cost, [], apart);
     while (shared.some(leg => total(leg) > budget) && count < most) {
       count += 1;
-      shared = splitByDuration(rest, count, cost);
+      shared = splitByDuration(rest, count, cost, [], apart);
     }
   }
-  const shares = [
+  let shares = [
     ...alone.map(item => [item]),
     ...shared.filter(leg => leg.length > 0),
   ];
+  const longestOf = legs => Math.max(0, ...legs.map(total));
+  if (
+    maxLegs != null &&
+    shares.length >= maxLegs &&
+    longestOf(shares) > budget
+  ) {
+    const even = splitByDuration(unique, maxLegs, cost, [], apart).filter(
+      leg => leg.length > 0,
+    );
+    if (longestOf(even) < longestOf(shares)) shares = even;
+  }
   assertEachOnce(unique, shares);
-  return {
-    count: shares.length,
-    shares,
-    longest: Math.max(0, ...shares.map(total)),
-  };
+  return {count: shares.length, shares, longest: longestOf(shares)};
 }
 
 /** A swizzle-proof slice file. */

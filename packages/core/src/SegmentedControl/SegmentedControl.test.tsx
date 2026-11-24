@@ -61,7 +61,7 @@ beforeEach(() => {
 });
 
 describe('SegmentedControl', () => {
-  it('gives a Latin label its own direction, so a cut label keeps its start, and leaves a right-to-left label in the page direction', () => {
+  it('gives a Latin label its own direction, so a cut label keeps its start, and gives a right-to-left label its own right-to-left direction', () => {
     render(
       <div dir="rtl">
         <SegmentedControl value="month" onChange={() => {}} label="Range">
@@ -72,7 +72,7 @@ describe('SegmentedControl', () => {
       </div>,
     );
     expect(screen.getByText('Monthly')).toHaveAttribute('dir', 'ltr');
-    expect(screen.getByText('שבועי')).not.toHaveAttribute('dir');
+    expect(screen.getByText('שבועי')).toHaveAttribute('dir', 'rtl');
     expect(screen.getByText('iPhone جديد')).not.toHaveAttribute('dir');
     expect(screen.getByRole('radio', {name: 'Monthly'})).toBeTruthy();
   });
@@ -844,6 +844,7 @@ describe('SegmentedControl disabled state', () => {
       expect(tooltip()).toHaveTextContent('Choose a project to switch views');
       const group = screen.getByRole('radiogroup');
       fireEvent.mouseEnter(group);
+      fireEvent.pointerMove(group);
       await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(group);
       await waitFor(() =>

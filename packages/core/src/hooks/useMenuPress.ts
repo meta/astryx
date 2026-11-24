@@ -7,7 +7,8 @@
  * @input The menu root, its trigger, the enabled-row selector, and callbacks
  *   for opening, highlighting, activating and dismissing
  * @output useMenuPress, useMenuPressInternal for DropdownMenu, the marker
- *   attributes and the activation mark
+ *   attributes, the activation mark and elementAtMenuPoint (internal: the
+ *   point lookup a caller's hitTest builds on)
  * @position Core hook for DropdownMenu, ContextMenu, DropdownMenuSubMenu,
  *   Selector, MenuBottomSheetActionList and the navigation menus. The
  *   transition table lives in menuPressGesture.ts.
@@ -154,6 +155,41 @@ const INNER_CONTROL_SELECTOR = 'a[href], button, [tabindex]';
 let isModelActivation = false;
 
 /**
+ * The element under a viewport point, as a menu's press resolves it. Internal:
+ * the hooks entry point does not export it. A Core menu's `hitTest` calls it
+ * first, so that a hit test keeps the menu's own lookup. `doc` must have
+ * `elementFromPoint`.
+ */
+export function elementAtMenuPoint(
+  menu: HTMLElement | null,
+  doc: Document,
+  x: number,
+  y: number,
+): Element | null {
+  // Hit-test in the menu's own tree: inside a shadow root the document
+  // answers with the shadow host, never the row under the pointer.
+  const tree = menu?.getRootNode();
+  const scope: Pick<Document, 'elementFromPoint' | 'elementsFromPoint'> =
+    tree != null &&
+    tree !== doc &&
+    typeof (tree as ShadowRoot).elementFromPoint === 'function'
+      ? (tree as ShadowRoot)
+      : doc;
+  const element = scope.elementFromPoint(x, y);
+  if (isInputShield(element) && typeof scope.elementsFromPoint === 'function') {
+    // An input hold's shield covers the viewport while the menu enters. It
+    // keeps new input away, but the press in flight still reaches the row
+    // under it. So the hit test sees through that shield only.
+    return (
+      scope
+        .elementsFromPoint(x, y)
+        .find(candidate => !isInputShield(candidate)) ?? null
+    );
+  }
+  return element;
+}
+
+/**
  * Whether a menu row activation dispatched by the press model is in flight.
  * True for the synchronous extent of that dispatch, so a row that forwards
  * the activation to a control inside it (a link) can tell the model's click
@@ -212,7 +248,8 @@ export interface UseMenuPressOptions {
   /**
    * Resolve the element under a viewport point. Defaults to
    * `elementFromPoint` on the menu's own document or shadow root, falling back
-   * to the event target where the document lacks it (jsdom). A test seam.
+   * to the event target where the document lacks it (jsdom). A bottom sheet
+   * passes one that also maps a row's icon, padding or end content to the row.
    */
   hitTest?: (x: number, y: number) => Element | null;
   /**
@@ -494,28 +531,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
       if (hitTest != null) {
         element = hitTest(event.clientX, event.clientY);
       } else if (typeof doc.elementFromPoint === 'function') {
-        // Hit-test in the menu's own tree: inside a shadow root the document
-        // answers with the shadow host, never the row under the pointer.
-        const tree = menu?.getRootNode();
-        const scope: Pick<Document, 'elementFromPoint' | 'elementsFromPoint'> =
-          tree != null &&
-          tree !== doc &&
-          typeof (tree as ShadowRoot).elementFromPoint === 'function'
-            ? (tree as ShadowRoot)
-            : doc;
-        element = scope.elementFromPoint(event.clientX, event.clientY);
-        if (
-          isInputShield(element) &&
-          typeof scope.elementsFromPoint === 'function'
-        ) {
-          // An input hold's shield covers the viewport while the menu enters.
-          // It keeps new input away, but the press in flight still reaches the
-          // row under it. So the hit test sees through that shield only.
-          element =
-            scope
-              .elementsFromPoint(event.clientX, event.clientY)
-              .find(candidate => !isInputShield(candidate)) ?? null;
-        }
+        element = elementAtMenuPoint(menu, doc, event.clientX, event.clientY);
       } else {
         element = event.target instanceof Element ? event.target : null;
       }
@@ -691,6 +707,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
             cancelsTouchEnd: native?.pointerType === 'touch',
             touchIdentifier: touchIdentifierRef.current ?? undefined,
             touchTarget: touchTargetRef.current ?? undefined,
+            staysArmedAfterTouchEnd: true,
           });
           if (native != null) {
             activate(effect.row, native);
@@ -724,6 +741,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
               cancelsTouchEnd: native?.pointerType === 'touch',
               touchIdentifier: touchIdentifierRef.current ?? undefined,
               touchTarget: touchTargetRef.current ?? undefined,
+              staysArmedAfterTouchEnd: true,
             });
           }
           if (effect.dismiss) {

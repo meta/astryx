@@ -725,6 +725,8 @@ function buildSpans(
 
 const TAB_SIZE = 2;
 
+const BAR_WIDTH = `calc(3 * ${borderVars['--border-width']})`;
+
 // Column widths, also used to place pinned cells and size split panes.
 const MARKER_WIDTH: Record<DiffViewerChangeIndicator, string> = {
   classic: `calc(1ch + ${spacingVars['--spacing-1']} + ${spacingVars['--spacing-2']})`,
@@ -790,6 +792,10 @@ const styles = stylex.create({
     display: 'inline-flex',
     flexShrink: 0,
     color: colorVars['--color-icon-secondary'],
+  },
+  // On the chevron's Icon: the glyph is the element that rotates and the
+  // element a theme targets, so one selector reaches both.
+  chevronIcon: {
     transitionProperty: 'transform',
     transitionDuration: {
       default: durationVars['--duration-fast'],
@@ -875,6 +881,8 @@ const styles = stylex.create({
   },
   gutterButton: {
     display: 'inline',
+    // The press band below is positioned against the button.
+    position: 'relative',
     padding: 0,
     margin: 0,
     borderWidth: 0,
@@ -891,6 +899,15 @@ const styles = stylex.create({
       default: 'none',
       ':hover:where(:not(:disabled,[aria-disabled="true"]))': 'underline',
     },
+    // An invisible band gives a narrow line number a press area at least
+    // 24px wide. The band keeps the row height, so it takes no presses
+    // from other rows.
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetBlock: 0,
+      insetInline: 'min(0px, calc((100% - 24px) / 2))',
+    },
   },
   marker: {
     position: 'relative',
@@ -904,18 +921,41 @@ const styles = stylex.create({
   },
   // The bar sits at the start of the indicator column, beside the code.
   // Added lines get a solid bar, removed lines a dashed one, so the two read
-  // apart without relying on colour.
+  // apart without relying on colour. Forced colors drop background colours
+  // and gradients, so there the bar paints as a border of the same width.
   bar: {
     position: 'absolute',
     insetBlock: 0,
     insetInlineStart: 0,
-    width: `calc(3 * ${borderVars['--border-width']})`,
+    boxSizing: 'border-box',
+    width: BAR_WIDTH,
+    borderInlineStartWidth: {
+      default: null,
+      '@media (forced-colors: active)': BAR_WIDTH,
+    },
+    borderInlineStartColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
   },
   barAdded: {
     backgroundColor: 'var(--color-syntax-added-marker)',
+    borderInlineStartStyle: {
+      default: null,
+      '@media (forced-colors: active)': 'solid',
+    },
   },
   barRemoved: {
     backgroundImage: `repeating-linear-gradient(to bottom, var(--color-syntax-removed-marker) 0 calc(2 * ${borderVars['--border-width']}), transparent calc(2 * ${borderVars['--border-width']}) calc(4 * ${borderVars['--border-width']}))`,
+    borderInlineStartStyle: {
+      default: null,
+      '@media (forced-colors: active)': 'dashed',
+    },
+  },
+  // With no indicator, the row tint alone marks a change. Forced colors drop
+  // the tint, so the bar shows there instead.
+  barWhenForced: {
+    display: {default: 'none', '@media (forced-colors: active)': 'block'},
   },
   // Line numbers and change indicators stay put while unwrapped code scrolls
   // sideways. They paint the syntax background under their tint so scrolled
@@ -1531,6 +1571,16 @@ export function DiffViewer({
             )}
           />
         )}
+        {isChange && changeIndicator === 'none' && hasChangeBackground && (
+          <span
+            aria-hidden="true"
+            {...stylex.props(
+              styles.bar,
+              kind === 'added' ? styles.barAdded : styles.barRemoved,
+              styles.barWhenForced,
+            )}
+          />
+        )}
         {isChange && (
           <VisuallyHidden>
             {kind === 'added'
@@ -2025,14 +2075,20 @@ export function DiffViewer({
             aria-controls={bodyId}
             onClick={toggleCollapsed}
             {...focusOutlineProps.focusVisible(styles.toggle)}>
-            <span
-              {...stylex.props(
-                styles.chevron,
-                !isCollapsed && styles.chevronExpanded,
-              )}>
-              <span {...stylex.props(isCollapsed && rtlStyles.mirror)}>
-                <Icon icon="chevronRight" size="xsm" color="inherit" />
-              </span>
+            {/* The collapsed chevron points toward the inline end, so it
+                mirrors in RTL. The glyph's own transform holds the rotation,
+                so the mirror sits on this box. Rotated down, the mirrored
+                glyph still points down. */}
+            <span {...stylex.props(styles.chevron, rtlStyles.mirror)}>
+              <Icon
+                icon="chevronRight"
+                size="xsm"
+                color="inherit"
+                xstyle={[
+                  styles.chevronIcon,
+                  !isCollapsed && styles.chevronExpanded,
+                ]}
+              />
             </span>
             {pathEl}
           </button>
