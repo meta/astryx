@@ -55,6 +55,7 @@ export const FIREFOX_HOVER_SPECS = Object.freeze([
   'packages/core/src/NavMenu/__tests__/NavHeadingMenuAudit.a11y.chromium.spec.ts',
   'packages/core/src/NavMenu/__tests__/NavHeadingMenuItemAudit.a11y.chromium.spec.ts',
   'packages/core/src/NavMenu/__tests__/NavMenusSlideSelection.a11y.chromium.spec.ts',
+  'packages/core/src/Tooltip/__tests__/TooltipAfterPaint.a11y.browser.spec.ts',
   'packages/core/src/Tooltip/__tests__/TooltipDecorator.a11y.browser.spec.ts',
   'packages/core/src/Tooltip/__tests__/TooltipDescription.a11y.browser.spec.ts',
   'packages/core/src/Tooltip/__tests__/TooltipHoverBridge.a11y.chromium.spec.ts',

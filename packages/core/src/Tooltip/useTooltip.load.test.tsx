@@ -30,6 +30,7 @@ import type {ReactElement} from 'react';
 import type * as UseTooltipModule from './useTooltip';
 import type * as TooltipModule from './Tooltip';
 import type * as SurfaceModule from './tooltipSurface';
+import {resetSharedStateForTest} from '../utils/sharedRealm';
 
 const loads = {
   surface: 0,
@@ -106,6 +107,8 @@ let Tooltip: typeof TooltipModule.Tooltip;
 // the shared setup's preload) is cached.
 beforeEach(async () => {
   vi.resetModules();
+  // The load is page state every copy of Core shares, so a fresh page forgets it.
+  resetSharedStateForTest('tooltip/use-tooltip/');
   loads.surface = 0;
   loads.surfaceContents = [];
   loads.layer = 0;

@@ -35,6 +35,7 @@ import type {LayerTouchTrigger} from '../Layer/useTouchTrigger';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {warnOnce} from '../utils/devWarning';
 import {createModuleLoader} from '../utils/moduleLoader';
+import {sharedState, sharedStore} from '../utils/sharedRealm';
 import {isElement} from '../utils/nodeType';
 import {
   TooltipPresentInterestContext,
@@ -234,50 +235,41 @@ const surfaceModule = createModuleLoader(
   async () => import('./tooltipSurface'),
 );
 
-let loadedSurface: TooltipSurfaceComponent | null = null;
-// The windows whose triggers scheduled the load. Each schedules its own, so a
-// window that goes away (a frame, a Picture-in-Picture window) before its
-// callbacks run does not stop the others.
-let scheduledViews = new WeakSet<Window>();
-let hasFailed = false;
-// Open requests that wait for the load. A failed load drops them.
-const heldShows = new Set<() => void>();
-let pendingLoad: Promise<void> | null = null;
-const listeners = new Set<() => void>();
+// Every copy of Core on the page shares one load.
+const surfaceStore = sharedStore<TooltipSurfaceComponent | null>(
+  'tooltip/use-tooltip/surface',
+  1,
+  null,
+);
+const loader = sharedState('tooltip/use-tooltip/loader', 1, () => ({
+  // The windows whose triggers scheduled the load. Each schedules its own, so
+  // a window that goes away (a frame, a Picture-in-Picture window) before its
+  // callbacks run does not stop the others.
+  scheduledViews: new WeakSet<Window>(),
+  hasFailed: false,
+  // Open requests that wait for the load. A failed load drops them.
+  heldShows: new Set<() => void>(),
+  pendingLoad: null as Promise<void> | null,
+}));
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function getSurface(): TooltipSurfaceComponent | null {
-  return loadedSurface;
-}
+const subscribe = surfaceStore.subscribe;
+const getSurface = surfaceStore.get;
 
 function getServerSurface(): null {
   return null;
 }
 
-function publish(surface: TooltipSurfaceComponent | null): void {
-  loadedSurface = surface;
-  for (const listener of [...listeners]) {
-    listener();
-  }
-}
-
 async function loadSurface(): Promise<void> {
   try {
-    publish((await surfaceModule.load()).TooltipSurface);
+    surfaceStore.set((await surfaceModule.load()).TooltipSurface);
     // Each mounted tooltip answers its own request when it connects.
-    heldShows.clear();
+    loader.heldShows.clear();
   } catch (error: unknown) {
     // The triggers keep working without tooltips. A later intent on a
     // trigger, or the next trigger that mounts, asks for the load again.
-    scheduledViews = new WeakSet();
-    hasFailed = true;
-    for (const drop of [...heldShows]) {
+    loader.scheduledViews = new WeakSet();
+    loader.hasFailed = true;
+    for (const drop of [...loader.heldShows]) {
       drop();
     }
     warnOnce(
@@ -290,11 +282,11 @@ async function loadSurface(): Promise<void> {
 }
 
 function startLoad(): void {
-  if (pendingLoad != null || loadedSurface != null) {
+  if (loader.pendingLoad != null || getSurface() != null) {
     return;
   }
-  pendingLoad = loadSurface().finally(() => {
-    pendingLoad = null;
+  loader.pendingLoad = loadSurface().finally(() => {
+    loader.pendingLoad = null;
   });
 }
 
@@ -304,10 +296,10 @@ function startLoad(): void {
  * after that paint. No input starts or hurries the load.
  */
 function scheduleTooltipLoad(view: Window | null): void {
-  if (loadedSurface != null || view == null || scheduledViews.has(view)) {
+  if (getSurface() != null || view == null || loader.scheduledViews.has(view)) {
     return;
   }
-  scheduledViews.add(view);
+  loader.scheduledViews.add(view);
   // The timers belong to the trigger's window, so they end with its document.
   // A frame callback runs before the frame paints. The task it queues runs
   // after that paint.
@@ -434,9 +426,9 @@ function createTooltipBridge(
   const setShowRequested = (isRequested: boolean) => {
     isShowRequested = isRequested;
     if (isRequested) {
-      heldShows.add(dropHeldShow);
+      loader.heldShows.add(dropHeldShow);
     } else {
-      heldShows.delete(dropHeldShow);
+      loader.heldShows.delete(dropHeldShow);
     }
   };
   const dropHeldShow = () => {
@@ -447,7 +439,7 @@ function createTooltipBridge(
   // an intent its own listeners did not see, and only at its first connect.
   // A surface that mounts again later (a trigger that a component renders
   // again) answers new input only.
-  const isMountedBeforeLoad = loadedSurface == null;
+  const isMountedBeforeLoad = getSurface() == null;
   let hasConnected = false;
   // When a mouse or pen last entered the trigger before the surface loaded,
   // so a hover held at the load waits only the rest of the show delay.
@@ -703,10 +695,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
  * once.
  */
 function retryFailedLoad(): void {
-  if (!hasFailed || pendingLoad != null) {
+  if (!loader.hasFailed || loader.pendingLoad != null) {
     return;
   }
-  hasFailed = false;
+  loader.hasFailed = false;
   startLoad();
 }
 
@@ -722,10 +714,10 @@ export function useIsTooltipLoaded(): boolean {
 
 /** Test only: loads the tooltip surface now and makes every tooltip see it. */
 export async function __loadTooltipForTest(): Promise<void> {
-  publish((await surfaceModule.load()).TooltipSurface);
+  surfaceStore.set((await surfaceModule.load()).TooltipSurface);
 }
 
 /** Test only: the load in flight, or null when none has started. */
 export function __pendingTooltipLoadForTest(): Promise<void> | null {
-  return pendingLoad;
+  return loader.pendingLoad;
 }
