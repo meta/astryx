@@ -74,7 +74,7 @@ export const docs = {
         name: 'Live state',
         required: false,
         description:
-          'Controlled typing state appears at the end of an open thread, with its pulsing dots in the avatar column and its label on the comment-text line.',
+          'With `typingIndicator`, controlled typing state appears at the end of an open thread: Comments passes the people typing, each once and without the viewer, and places what the function returns.',
       },
       {
         name: 'Activity event',
@@ -108,7 +108,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Keep live state controlled and transport-neutral: map your collaboration layer to `typingUsers`, and use `onComposerDraftChange` to publish local activity. Keep other per-comment metadata, such as who has seen a comment, beside your own records and look it up by comment id in a render callback. Debounce and expire transient activity in your app.',
+          'Keep live state controlled and transport-neutral: map your collaboration layer to `typingUsers`, show it with `typingIndicator`, and use `onComposerDraftChange` to publish local activity. Keep other per-comment metadata, such as who has seen a comment, beside your own records and look it up by comment id in a render callback. Debounce and expire transient activity in your app.',
       },
       {
         guidance: false,
@@ -133,7 +133,7 @@ export const docs = {
         category: 'Content',
         criterion: '4.1.3 Status Messages',
         description:
-          'Typing is a polite status message with reduced-motion-safe dots.',
+          'Inside the threads log (the default layout), the log announces the indicator\'s text, so the indicator must not announce it again. With `layout="embedded"`, which has no log, the indicator says who is typing once per change, politely, and keeps its motion safe under reduced motion.',
       },
       {
         name: 'Thread toggle',
@@ -446,6 +446,12 @@ export const docs = {
             'Renders the emoji picker that composers open from their Add emoji button; pass `onSelect` to it. Without it, composers show no emoji button. The picker fills a fixed-width panel with no padding, so it brings its own.',
         },
         {
+          name: 'typingIndicator',
+          type: '(props: {users: readonly CommentUser[]}) => ReactNode',
+          description:
+            'Renders the typing indicator at the end of an open thread while its `typingUsers` name someone besides the viewer. `users` lists each person once, without the viewer. Without it, typing shows nothing.',
+        },
+        {
           name: 'emptyState',
           type: 'ReactNode',
           description: 'Replaces the default no-comments state.',
@@ -614,7 +620,7 @@ import {Comments} from '@astryxdesign/lab';
     },
     {
       label: 'Live collaboration state',
-      code: `import {Comments} from '@astryxdesign/lab';
+      code: `import {ChatTypingIndicator, Comments} from '@astryxdesign/lab';
 
 <Comments
   comments={comments.map(thread => ({
@@ -622,6 +628,9 @@ import {Comments} from '@astryxdesign/lab';
     typingUsers: typingUsersByThread[thread.id] ?? [],
   }))}
   currentUser={viewer}
+  typingIndicator={({users}) => (
+    <ChatTypingIndicator names={users.map(user => user.name)} />
+  )}
   onSubmit={post}
   onComposerDraftChange={(value, context) =>
     publishTyping({context, isTyping: value.trim() !== ''})

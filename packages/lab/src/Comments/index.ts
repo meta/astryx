@@ -33,6 +33,7 @@ export type {
   CommentReactionOption,
   CommentThreadData,
   CommentThreadSharedProps,
+  CommentTypingIndicatorRenderProps,
   CommentUploadedImage,
   CommentUser,
   CommentVersion,

@@ -6,6 +6,7 @@ import {VStack} from '@astryxdesign/core/Layout';
 import {Popover} from '@astryxdesign/core/Popover';
 import {Button} from '@astryxdesign/core/Button';
 import {
+  ChatTypingIndicator,
   CommentThread,
   Comments,
   type CommentThreadData,
@@ -167,6 +168,9 @@ export const LiveState: Story = {
         }}
         currentUser={VIEWER}
         isSelected
+        typingIndicator={({users}) => (
+          <ChatTypingIndicator names={users.map(user => user.name)} />
+        )}
         onSubmit={() => {}}
       />
     </VStack>

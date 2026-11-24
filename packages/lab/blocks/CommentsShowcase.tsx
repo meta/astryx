@@ -14,6 +14,7 @@
 import {useRef, useState} from 'react';
 import {VStack} from '@astryxdesign/core/Layout';
 import {
+  ChatTypingIndicator,
   DEFAULT_COMMENT_REACTIONS,
   Comments,
   EmojiPicker,
@@ -316,6 +317,9 @@ export default function CommentsShowcase() {
         onSelectedThreadChange={setSelectedThreadId}
         density="compact"
         emojiPicker={({onSelect}) => <EmojiPicker onSelect={onSelect} />}
+        typingIndicator={({users}) => (
+          <ChatTypingIndicator names={users.map(user => user.name)} />
+        )}
         hasOlderComments={hasOlderComments}
         onLoadOlder={() => {
           setComments(current => [

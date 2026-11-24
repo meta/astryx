@@ -168,7 +168,8 @@ export interface CommentThreadData extends CommentData {
   /**
    * Other people currently composing in this thread. Controlled, transient
    * state: update it from your collaboration layer and expire stale entries
-   * there. While this thread is open, the current viewer is not shown.
+   * there. While this thread is open, `typingIndicator` shows them, without
+   * the current viewer.
    */
   typingUsers?: readonly CommentUser[];
   /** One level of replies, oldest first. */
@@ -249,6 +250,12 @@ export interface CommentEmojiPickerRenderProps {
   onSelect: (emoji: string) => void;
 }
 
+/** What a `typingIndicator` render function receives. */
+export interface CommentTypingIndicatorRenderProps {
+  /** The people typing in the open thread, each once, without the viewer. */
+  users: readonly CommentUser[];
+}
+
 /** Uploads images for a composer and returns where they were stored. */
 export type CommentImageUploader = (
   files: readonly File[],
@@ -307,6 +314,12 @@ export interface CommentThreadSharedProps {
    * picker fills a fixed-width panel with no padding, so it brings its own.
    */
   emojiPicker?: (props: CommentEmojiPickerRenderProps) => ReactNode;
+  /**
+   * Renders the typing indicator at the end of an open thread while its
+   * `typingUsers` name someone besides the viewer. Without it, typing shows
+   * nothing.
+   */
+  typingIndicator?: (props: CommentTypingIndicatorRenderProps) => ReactNode;
   /** Host-controlled pending state for a post or reply. */
   isSubmitting?: boolean;
   /**

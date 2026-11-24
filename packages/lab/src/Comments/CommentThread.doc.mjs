@@ -50,7 +50,7 @@ export const docs = {
         name: 'Live state',
         required: false,
         description:
-          'Controlled typing state follows the conversation while the thread is open, with its pulsing dots in the avatar column and its label on the comment-text line.',
+          'With `typingIndicator`, controlled typing state follows the conversation while the thread is open: the thread passes the people typing, each once and without the viewer.',
       },
       {
         name: 'Reply composer',
@@ -78,7 +78,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Map your collaboration state to `typingUsers`, then publish local reply and edit activity with `onComposerDraftChange`. The thread never opens a connection or expires participants.',
+          'Map your collaboration state to `typingUsers` and show it with `typingIndicator`, then publish local reply and edit activity with `onComposerDraftChange`. The thread never opens a connection or expires participants.',
       },
       {
         guidance: false,
@@ -110,6 +110,13 @@ export const docs = {
         criterion: '4.1.3 Status Messages',
         description:
           'When a dismissal would discard an unsaved reply or edit, the thread stays open, focus returns to the draft, and a polite live region says the draft is unsaved and that dismissing again discards it. The shake is never the only signal.',
+      },
+      {
+        name: 'Typing indicator',
+        category: 'Content',
+        criterion: '4.1.3 Status Messages',
+        description:
+          'A standalone thread has no log, so the indicator `typingIndicator` returns says who is typing once per change, politely, unless your page puts the thread inside a live region that already speaks it. It keeps its motion safe under reduced motion.',
       },
       {
         name: 'Reduced motion',
@@ -277,6 +284,12 @@ export const docs = {
         'Renders the emoji picker the reply composer opens; pass `onSelect` to it. Without it, there is no emoji button. The picker fills a fixed-width panel with no padding, so it brings its own.',
     },
     {
+      name: 'typingIndicator',
+      type: '(props: {users: readonly CommentUser[]}) => ReactNode',
+      description:
+        'Renders the typing indicator at the end of the open thread while `typingUsers` name someone besides the viewer. Without it, typing shows nothing.',
+    },
+    {
       name: 'renderAnchor',
       type: '(comment: CommentThreadData, defaultAnchor: ReactNode) => ReactNode',
       description: 'Replaces the thread’s quoted passage.',
@@ -386,7 +399,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          '将协作状态映射到 `typingUsers`，再通过 `onComposerDraftChange` 发布本地的回复和编辑动态。线程从不建立连接，也不会让参与者过期。',
+          '将协作状态映射到 `typingUsers` 并用 `typingIndicator` 显示，再通过 `onComposerDraftChange` 发布本地的回复和编辑动态。线程从不建立连接，也不会让参与者过期。',
       },
       {
         guidance: false,
@@ -418,6 +431,13 @@ export const docsZh = {
         criterion: '4.1.3 Status Messages',
         description:
           '当关闭会丢弃未保存的回复或编辑时，线程保持打开，焦点回到草稿，礼貌型实时区域会说明草稿尚未保存，再次关闭将丢弃它。抖动从来不是唯一的提示。',
+      },
+      {
+        name: '输入状态指示',
+        category: 'Content',
+        criterion: '4.1.3 Status Messages',
+        description:
+          '单独呈现的线程没有日志区域，因此 `typingIndicator` 返回的指示器要在每次变化时以礼貌方式播报一次谁在输入，除非页面已把线程放在会播报它的实时区域中。在减少动态效果设置下，其动画也要保持安全。',
       },
       {
         name: '减少动态效果',
@@ -464,6 +484,8 @@ export const docsZh = {
     getReplyMention: '回复某条回复时，用提及其作者的内容预填。',
     emojiPicker:
       '渲染回复输入框打开的表情选择器，并将 `onSelect` 传给它；省略时没有表情按钮。选择器填满一个固定宽度、无内边距的面板，需自带内边距。',
+    typingIndicator:
+      '线程展开且 `typingUsers` 中有查看者以外的人时，在线程末尾渲染输入状态指示；省略时不显示输入状态。',
     renderAnchor: '替换线程引用的段落。',
     renderBody: '替换评论的 Markdown 正文。',
     renderVersionBody: '替换编辑历史中某个版本的正文。',
@@ -498,7 +520,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Map collaboration state to `typingUsers`; publish local drafts via `onComposerDraftChange`. No connections, no participant expiry.',
+          'Map collaboration state to `typingUsers`, show it via `typingIndicator`; publish local drafts via `onComposerDraftChange`. No connections, no participant expiry.',
       },
       {
         guidance: false,
@@ -530,6 +552,13 @@ export const docsDense = {
         criterion: '4.1.3 Status Messages',
         description:
           'A dismissal over an unsaved reply/edit keeps the thread open, refocuses the draft, and announces politely. Shake is never the only signal.',
+      },
+      {
+        name: 'Typing indicator',
+        category: 'Content',
+        criterion: '4.1.3 Status Messages',
+        description:
+          'No log in a standalone thread: the `typingIndicator` result announces who is typing once per change, politely, unless a live region already speaks it. Reduced-motion safe.',
       },
       {
         name: 'Reduced motion',
@@ -576,6 +605,8 @@ export const docsDense = {
     getReplyMention: 'Seeds a reply-to-reply with an author mention.',
     emojiPicker:
       '({onSelect}) => picker for the reply composer (fixed width, no padding: bring your own); none = no emoji button.',
+    typingIndicator:
+      '({users}) => typing row at the end of the open thread; none = no typing row.',
     renderAnchor: 'Replaces the quoted passage.',
     renderBody: 'Replaces a comment’s Markdown body.',
     renderVersionBody: 'Replaces a history version’s body.',
