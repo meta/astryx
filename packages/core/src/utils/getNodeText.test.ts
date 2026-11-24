@@ -51,6 +51,38 @@ describe('getNodeText', () => {
     );
   });
 
+  it('keeps a block apart from the text beside it when an inline element holds it', () => {
+    expect(
+      getNodeText([
+        'x',
+        createElement('span', null, createElement('div', null, 'A')),
+        'y',
+      ]),
+    ).toBe('x A y');
+    expect(
+      getNodeText([
+        'Total',
+        createElement('span', null, '12', createElement('div', null, 'items')),
+        'left',
+      ]),
+    ).toBe('Total12 items left');
+    expect(
+      getNodeText([
+        'Saved',
+        createElement('span', null, createElement('br')),
+        'now',
+      ]),
+    ).toBe('Saved now');
+    // An inline element that holds only inline text still joins it.
+    expect(
+      getNodeText([
+        'un',
+        createElement('span', null, createElement('b', null, 'like')),
+        'ly',
+      ]),
+    ).toBe('unlikely');
+  });
+
   it('yields nothing for empty nodes and text a component renders from other props', () => {
     for (const node of [null, undefined, true, false, []]) {
       expect(getNodeText(node)).toBe('');

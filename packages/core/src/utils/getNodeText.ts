@@ -63,19 +63,43 @@ const BLOCK_ELEMENTS: ReadonlySet<string> = new Set([
 
 interface TextPiece {
   readonly text: string;
-  // A block's text stands apart from the text beside it.
-  readonly isBlock: boolean;
+  // Whether a block starts or ends the piece: its text then stands apart
+  // from the text before or after it.
+  readonly startsBlock: boolean;
+  readonly endsBlock: boolean;
+}
+
+/**
+ * The block edges an inline element takes from its children: a block before
+ * its first text starts it, and a block after its last text ends it.
+ */
+function edgesOf(
+  pieces: ReadonlyArray<TextPiece>,
+): Pick<TextPiece, 'startsBlock' | 'endsBlock'> {
+  const edge = (ordered: ReadonlyArray<TextPiece>, isStart: boolean) => {
+    for (const piece of ordered) {
+      if (piece.text === '') {
+        if (piece.startsBlock || piece.endsBlock) {
+          return true;
+        }
+        continue;
+      }
+      return isStart ? piece.startsBlock : piece.endsBlock;
+    }
+    return false;
+  };
+  return {
+    startsBlock: edge(pieces, true),
+    endsBlock: edge([...pieces].reverse(), false),
+  };
 }
 
 function piecesOf(node: ReactNode): TextPiece[] {
   if (!isRenderable(node)) {
     return [];
   }
-  if (typeof node === 'string') {
-    return [{text: node, isBlock: false}];
-  }
-  if (typeof node === 'number') {
-    return [{text: String(node), isBlock: false}];
+  if (typeof node === 'string' || typeof node === 'number') {
+    return [{text: String(node), startsBlock: false, endsBlock: false}];
   }
   if (Array.isArray(node)) {
     return node.flatMap(piecesOf);
@@ -85,11 +109,14 @@ function piecesOf(node: ReactNode): TextPiece[] {
     if (node.type === Fragment) {
       return piecesOf(children);
     }
+    const pieces = piecesOf(children);
+    const text = joinPieces(pieces);
     // A component's display is unknown here, so its text stands apart, as a
     // block's does.
-    const isBlock =
-      typeof node.type !== 'string' || BLOCK_ELEMENTS.has(node.type);
-    return [{text: joinPieces(piecesOf(children)), isBlock}];
+    if (typeof node.type !== 'string' || BLOCK_ELEMENTS.has(node.type)) {
+      return [{text, startsBlock: true, endsBlock: true}];
+    }
+    return [{text, ...edgesOf(pieces)}];
   }
   return [];
 }
@@ -99,16 +126,16 @@ function joinPieces(pieces: ReadonlyArray<TextPiece>): string {
   let isAfterBlock = false;
   for (const piece of pieces) {
     if (piece.text === '') {
-      isAfterBlock ||= piece.isBlock;
+      isAfterBlock ||= piece.startsBlock || piece.endsBlock;
       continue;
     }
     const needsSpace =
       text !== '' &&
-      (piece.isBlock || isAfterBlock) &&
+      (piece.startsBlock || isAfterBlock) &&
       !/\s$/.test(text) &&
       !/^\s/.test(piece.text);
     text += (needsSpace ? ' ' : '') + piece.text;
-    isAfterBlock = piece.isBlock;
+    isAfterBlock = piece.endsBlock;
   }
   return text;
 }
@@ -117,7 +144,7 @@ function joinPieces(pieces: ReadonlyArray<TextPiece>): string {
  * The plain text a node renders through strings, numbers and element
  * children, as it reads on the page: inline elements join the text beside
  * them, and a block element, a `<br>` or a component stands apart with a
- * space. Text a component renders internally, from props other than
+ * space, also when an inline element holds it. Text a component renders internally, from props other than
  * `children`, is not reachable and yields `''`.
  */
 export function getNodeText(node: ReactNode): string {
