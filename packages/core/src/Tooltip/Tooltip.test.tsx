@@ -1107,6 +1107,35 @@ describe('Tooltip layer mounts at its first show', () => {
     }
   });
 
+  it('describes the trigger, before the first show, with the content read as it renders', () => {
+    render(
+      <>
+        <Tooltip
+          content={
+            <>
+              un<b>like</b>ly
+            </>
+          }>
+          <button type="button">Odds</button>
+        </Tooltip>
+        <Tooltip
+          content={
+            <>
+              <strong>March 1</strong>.
+            </>
+          }>
+          <button type="button">Due</button>
+        </Tooltip>
+      </>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Odds'}),
+    ).toHaveAccessibleDescription('unlikely');
+    expect(
+      screen.getByRole('button', {name: 'Due'}),
+    ).toHaveAccessibleDescription('March 1.');
+  });
+
   it('renders the text once before the first show, while shown, after it hides, and again from a fresh mount', () => {
     vi.useFakeTimers();
     // The elements whose own text is the tooltip text.
