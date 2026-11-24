@@ -11,7 +11,7 @@ import {Text, Heading} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Link} from '@astryxdesign/core/Link';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
-import type {BlogPost} from '../../lib/blog/schema';
+import type {BlogPostMeta} from '../../lib/blog/schema';
 import {AuthorByline} from './AuthorByline';
 import {BlogCoverArt} from './BlogCoverArt';
 import {ReleaseCoverArt} from './ReleaseCoverArt';
@@ -77,7 +77,7 @@ const styles = stylex.create({
 });
 
 export interface BlogCardProps {
-  post: BlogPost;
+  post: BlogPostMeta;
   feature?: boolean;
   /** Hide the description/excerpt (e.g. to keep the home showcase tight). */
   hideDescription?: boolean;
