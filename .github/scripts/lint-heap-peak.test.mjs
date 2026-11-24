@@ -274,7 +274,8 @@ describe('the Lint job', () => {
     const report = step('Report the lint heap peak');
     expect(steps.indexOf(report)).toBe(steps.indexOf(step('Run ESLint')) + 1);
     // It runs after a failed lint, but only where setup ran: a fork without
-    // its ci:run label, and the docs and spec lanes, have no checkout to run.
+    // its ci:run label has no checkout, and the docs and spec lanes skip
+    // setup and both type-aware steps.
     const setup = steps.find(each => each.uses === './.github/actions/setup');
     expect(setup.id).toBe('setup');
     expect(report.if).toBe(
