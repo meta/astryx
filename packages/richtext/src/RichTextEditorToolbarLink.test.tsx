@@ -155,6 +155,7 @@ async function tooltipOf(button: HTMLElement): Promise<string> {
   // at its first show, so hover to read it.
   const name = button.getAttribute('aria-label') ?? '';
   fireEvent.mouseEnter(button);
+  fireEvent.pointerMove(button);
   const text = await waitFor(() => {
     const tooltip = Array.from(
       document.querySelectorAll<HTMLElement>('[role="tooltip"]'),

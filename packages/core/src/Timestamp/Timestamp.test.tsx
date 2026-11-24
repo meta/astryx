@@ -1327,6 +1327,7 @@ describe('Timestamp', () => {
       const button = card.querySelector('button')!;
       const restName = button.getAttribute('aria-label');
       fireEvent.mouseEnter(button);
+      fireEvent.pointerMove(button);
       fireEvent.click(button);
       await waitFor(() =>
         expect(button).toHaveAccessibleName(
@@ -1360,6 +1361,7 @@ describe('Timestamp', () => {
       // The visible tooltip content defaults to the short imperative 'Copy'
       // (the full "Copy <value>" string stays the button's aria-label).
       fireEvent.mouseEnter(button);
+      fireEvent.pointerMove(button);
       await waitFor(() =>
         expect(
           screen.getByText('Copy', {

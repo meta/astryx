@@ -86,6 +86,7 @@ describe('RichTextEditor portal ownership', () => {
         .getAttribute('aria-describedby')
         ?.replace(/-description$/, '');
       fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
       await waitFor(() => {
         const tooltip = id ? document.getElementById(id) : null;
         expect(tooltip).not.toBeNull();
