@@ -6,13 +6,13 @@
  * @input Controlled subscriber records, starting empty
  * @output A one-column ListInput of email addresses with a six-record limit,
  *   duplicate detection, and blur validation
- * @position Copyable Lab ListInput example
+ * @position Copyable ListInput example
  */
 
 import {useMemo, useState} from 'react';
 import {VStack} from '@astryxdesign/core/Layout';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {ListInput, type ListInputColumn} from '@astryxdesign/lab';
+import {ListInput, type ListInputColumn} from '@astryxdesign/core/ListInput';
 
 type Subscriber = {id: string; email: string};
 

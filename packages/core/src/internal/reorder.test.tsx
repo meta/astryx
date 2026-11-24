@@ -9,8 +9,8 @@
  *   each move to the object and keeps a rejected row in place. The options
  *   read back as the object was made with them. The entry loads no reorder
  *   code: the handle comes with the object
- * @position Testing for packages/core/src/internal/reorder.ts as Lab's
- *   ListInput and TransferList use it
+ * @position Testing for packages/core/src/internal/reorder.ts, the internal
+ *   entry that Lab's TransferList imports
  */
 
 import {readFileSync} from 'node:fs';

@@ -30,7 +30,7 @@ import {TextInput} from '@astryxdesign/core/TextInput';
 import {Theme} from '@astryxdesign/core';
 import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {neutralTheme} from '@astryxdesign/theme-neutral';
-import {ListInput, type ListInputColumn} from '@astryxdesign/lab';
+import {ListInput, type ListInputColumn} from '@astryxdesign/core/ListInput';
 const storyStyles = stylex.create({
   canvas: {
     width: 680,
@@ -63,7 +63,7 @@ const storyStyles = stylex.create({
 });
 
 const meta: Meta<typeof ListInput> = {
-  title: 'Lab/ListInput',
+  title: 'Core/ListInput',
   component: ListInput,
   tags: ['autodocs'],
   parameters: {

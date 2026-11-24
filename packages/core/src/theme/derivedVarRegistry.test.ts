@@ -410,6 +410,9 @@ const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   // renders, and a reorderable row that stays put sets the room after its
   // marker; Item owns, documents and reads both.
   List: ['--_item-inset-inline', '--_item-marker-room'],
+  // ListInput zeroes the inline inset that core List's reorder handle reaches
+  // into, because a record has none; Item owns, documents and reads it.
+  ListInput: ['--_item-inset-inline'],
   // A layer content root stops an outer Stepper's connector gap; Stepper owns,
   // documents and reads it.
   Layer: ['--step-connector-gap'],

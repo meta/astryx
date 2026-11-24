@@ -673,23 +673,23 @@
   },
   "@astryx.listInput.defaultItemName": {
     "defaultMessage": "item",
-    "description": "The noun for one record in a lab ListInput when the app gives no noun of its own. The other ListInput messages put it in their `{itemName}` placeholder, as in \"Add item\" and \"Remove item 2\". Give the form of the noun that fits there."
+    "description": "The noun for one record in a ListInput when the app gives no noun of its own. The other ListInput messages put it in their `{itemName}` placeholder, as in \"Add item\" and \"Remove item 2\". Give the form of the noun that fits there."
   },
   "@astryx.listInput.emptyTitle": {
     "defaultMessage": "No {itemName} added yet",
-    "description": "EmptyState title shown inside a lab ListInput when its collection has no records. `{itemName}` is the singular noun for one record, from the app or the catalog (e.g. \"guest\" or \"email address\"). The noun can be any word, so the message uses it as given, with no plural ending or article. Write your translation so that it also needs none (e.g. \"No guest added yet\")."
+    "description": "EmptyState title shown inside a ListInput when its collection has no records. `{itemName}` is the singular noun for one record, from the app or the catalog (e.g. \"guest\" or \"email address\"). The noun can be any word, so the message uses it as given, with no plural ending or article. Write your translation so that it also needs none (e.g. \"No guest added yet\")."
   },
   "@astryx.listInput.emptyDescription": {
     "defaultMessage": "Each {itemName} you add appears here.",
-    "description": "EmptyState supporting text shown inside a lab ListInput when its collection has no records, above the button that adds one. `{itemName}` is the singular noun for one record, from the app or the catalog (e.g. \"guest\" or \"email address\"). Use it as given, with no plural ending or article (e.g. \"Each guest you add appears here.\")."
+    "description": "EmptyState supporting text shown inside a ListInput when its collection has no records, above the button that adds one. `{itemName}` is the singular noun for one record, from the app or the catalog (e.g. \"guest\" or \"email address\"). Use it as given, with no plural ending or article (e.g. \"Each guest you add appears here.\")."
   },
   "@astryx.listInput.addItem": {
     "defaultMessage": "Add {itemName}",
-    "description": "Accessible label on the button that appends a new record to a lab ListInput. `{itemName}` is the consumer's singular noun for one record (e.g. \"guest\")."
+    "description": "Accessible label on the button that appends a new record to a ListInput. `{itemName}` is the consumer's singular noun for one record (e.g. \"guest\")."
   },
   "@astryx.listInput.removeItem": {
     "defaultMessage": "Remove {itemName} {position, number}",
-    "description": "Accessible label and tooltip on the button that deletes one record from a lab ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number (e.g. \"Remove guest 2\")."
+    "description": "Accessible label and tooltip on the button that deletes one record from a ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number (e.g. \"Remove guest 2\")."
   },
   "@astryx.listInput.removeUnavailable": {
     "defaultMessage": "Remove is unavailable while the list is disabled",
@@ -697,47 +697,47 @@
   },
   "@astryx.listInput.reorderItem": {
     "defaultMessage": "Reorder {itemName} {position, number}",
-    "description": "Accessible label on the drag-handle button that reorders one record in a lab ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number (e.g. \"Reorder guest 2\")."
+    "description": "Accessible label on the drag-handle button that reorders one record in a ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number (e.g. \"Reorder guest 2\")."
   },
   "@astryx.listInput.itemName": {
     "defaultMessage": "{itemName} {position, number}",
-    "description": "The name of one record in a lab ListInput, which its reorder handle (\"Reorder guest 2\") and the reorder announcements use. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number (e.g. \"guest 2\")."
+    "description": "The name of one record in a ListInput, which its reorder handle (\"Reorder guest 2\") and the reorder announcements use. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number (e.g. \"guest 2\")."
   },
   "@astryx.listInput.fieldLabelWithPosition": {
     "defaultMessage": "{header}, {itemName} {position, number} of {total, number}",
-    "description": "Accessible name for a field inside a lab ListInput row after the first row, disambiguating repeated column labels. `{header}` is the column's own label (e.g. \"Name\"); `{itemName}` is the consumer's singular noun for one record; `{position}`/`{total}` are the row's 1-based index and the total row count (e.g. \"Name, guest 2 of 3\")."
+    "description": "Accessible name for a field inside a ListInput row after the first row, disambiguating repeated column labels. `{header}` is the column's own label (e.g. \"Name\"); `{itemName}` is the consumer's singular noun for one record; `{position}`/`{total}` are the row's 1-based index and the total row count (e.g. \"Name, guest 2 of 3\")."
   },
   "@astryx.listInput.reorderInstructions": {
     "defaultMessage": "Use Arrow Up or Arrow Down to move this item one position. Press Space or Enter to pick it up for extended keyboard reordering.",
-    "description": "Visually-hidden instructions describing how to use a lab ListInput row's keyboard reorder handle, referenced via aria-describedby from every reorder button."
+    "description": "Visually-hidden instructions describing how to use a ListInput row's keyboard reorder handle, referenced via aria-describedby from every reorder button."
   },
   "@astryx.listInput.announceAdded": {
     "defaultMessage": "Added {itemName} {position, number}.",
-    "description": "Screen-reader-only live announcement after a new record is appended to a lab ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is the new record's 1-based row number."
+    "description": "Screen-reader-only live announcement after a new record is appended to a ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is the new record's 1-based row number."
   },
   "@astryx.listInput.announceRemoved": {
     "defaultMessage": "Removed {itemName} {position, number}.",
-    "description": "Screen-reader-only live announcement after a record is deleted from a lab ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is the removed record's former 1-based row number."
+    "description": "Screen-reader-only live announcement after a record is deleted from a ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is the removed record's former 1-based row number."
   },
   "@astryx.listInput.announceGrabbed": {
     "defaultMessage": "{itemName} {position, number} grabbed. Use arrow keys to move, Space or Enter to drop, and Escape to cancel.",
-    "description": "Screen-reader-only live announcement when a lab ListInput record's keyboard reorder handle enters extended \"lift\" mode. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number."
+    "description": "Screen-reader-only live announcement when a ListInput record's keyboard reorder handle enters extended \"lift\" mode. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number."
   },
   "@astryx.listInput.announceMovedToPosition": {
     "defaultMessage": "{itemName} moved to position {position, number} of {total, number}.",
-    "description": "Screen-reader-only live announcement each time a lab ListInput record's reorder position changes (arrow-key step, keyboard lift-mode preview, or pointer drag). `{itemName}` is the consumer's singular noun for one record; `{position}`/`{total}` are the record's new 1-based position and the total row count."
+    "description": "Screen-reader-only live announcement each time a ListInput record's reorder position changes (arrow-key step, keyboard lift-mode preview, or pointer drag). `{itemName}` is the consumer's singular noun for one record; `{position}`/`{total}` are the record's new 1-based position and the total row count."
   },
   "@astryx.listInput.announceReorderCancelled": {
     "defaultMessage": "Reordering cancelled.",
-    "description": "Screen-reader-only live announcement when a lab ListInput reorder in progress is cancelled (Escape key, blur, or the collection becoming disabled/loading mid-drag)."
+    "description": "Screen-reader-only live announcement when a ListInput reorder in progress is cancelled (Escape key, blur, or the collection becoming disabled/loading mid-drag)."
   },
   "@astryx.listInput.announceReturnedToPosition": {
     "defaultMessage": "{itemName} returned to position {position, number}.",
-    "description": "Screen-reader-only live announcement when a lab ListInput reorder is committed without the record's position actually changing. `{itemName}` is the consumer's singular noun for one record; `{position}` is its unchanged 1-based row number."
+    "description": "Screen-reader-only live announcement when a ListInput reorder is committed without the record's position actually changing. `{itemName}` is the consumer's singular noun for one record; `{position}` is its unchanged 1-based row number."
   },
   "@astryx.listInput.announceDropped": {
     "defaultMessage": "{itemName} dropped at position {position, number} of {total, number}.",
-    "description": "Screen-reader-only live announcement when a lab ListInput reorder is committed with the record's position actually changing. `{itemName}` is the consumer's singular noun for one record; `{position}`/`{total}` are its new 1-based position and the total row count."
+    "description": "Screen-reader-only live announcement when a ListInput reorder is committed with the record's position actually changing. `{itemName}` is the consumer's singular noun for one record; `{position}`/`{total}` are its new 1-based position and the total row count."
   },
   "@astryx.listInput.announceAlreadyAtBoundary": {
     "defaultMessage": "This {itemName} is already {boundary, select, first {first} last {last} other {}}.",
