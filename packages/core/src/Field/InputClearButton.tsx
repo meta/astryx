@@ -83,10 +83,37 @@ const CLEAR_BUTTON_HIT_AREA: TouchHitAreaOptions = {
   growth: clearButtonGrowth,
 };
 
+// The glyph button is 20 px square. Under a coarse pointer, Button's shared
+// touch band grows its target. Under a fine pointer its own `::after`, Button's
+// decoration slot, grows it to the 24 px minimum (WCAG 2.2 SC 2.5.8). The
+// growth goes only into space no other control takes: up and down into the
+// field's padding, and toward the field's end. It never reaches toward the
+// text, so a click at the end of the text still places the caret. The
+// `::after` has a hole over the button's own box, so a pointer there reaches
+// the glyph and the glyph's hover style applies. StyleX reads these at build
+// time.
+const FINE_POINTER = '@media (pointer: fine)';
+const BLOCK_GROWTH = 'calc((24px - 20px) / 2)';
+const END_GROWTH = 'calc(24px - 20px)';
+const HOLE_LTR = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 0 ${BLOCK_GROWTH}, calc(100% - ${END_GROWTH}) ${BLOCK_GROWTH}, calc(100% - ${END_GROWTH}) calc(100% - ${BLOCK_GROWTH}), 0 calc(100% - ${BLOCK_GROWTH}), 0 ${BLOCK_GROWTH})`;
+const HOLE_RTL = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${END_GROWTH} ${BLOCK_GROWTH}, 100% ${BLOCK_GROWTH}, 100% calc(100% - ${BLOCK_GROWTH}), ${END_GROWTH} calc(100% - ${BLOCK_GROWTH}), ${END_GROWTH} ${BLOCK_GROWTH})`;
+
 const styles = stylex.create({
   button: {
     height: '20px',
     flexShrink: 0,
+    // A pseudo-element takes no media condition here, so the button holds
+    // the conditions and its `::after` reads them.
+    '--_input-clear-target': {default: null, [FINE_POINTER]: '""'},
+    '--_input-clear-target-hole': {default: HOLE_LTR, ':dir(rtl)': HOLE_RTL},
+    '::after': {
+      content: 'var(--_input-clear-target)',
+      position: 'absolute',
+      insetBlock: `calc(${BLOCK_GROWTH} * -1)`,
+      insetInlineStart: 0,
+      insetInlineEnd: `calc(${END_GROWTH} * -1)`,
+      clipPath: 'var(--_input-clear-target-hole)',
+    },
   },
 });
 

@@ -124,10 +124,10 @@ describe('the theme map for each look', () => {
     await iconMap('delete', 'bin', {cwd: dir});
     const js = generated(dir);
     expect(js).toContain(
-      "export const themeIcons = {\n  close: createElement(CloseIcon, {'aria-hidden': true, 'width': '1em', 'height': '1em', 'style': {'width': '1em', 'height': '1em'}}),\n};",
+      "export const themeIcons = {\n  close: /* @__PURE__ */ createElement(CloseIcon, {'aria-hidden': true, 'width': '1em', 'height': '1em', 'style': {'width': '1em', 'height': '1em'}}),\n};",
     );
     expect(js).toContain(
-      "export const themeIconsSolid = {\n  close: createElement(CloseSolidIcon, {'aria-hidden': true, 'width': '1em', 'height': '1em', 'style': {'width': '1em', 'height': '1em'}}),\n};",
+      "export const themeIconsSolid = {\n  close: /* @__PURE__ */ createElement(CloseSolidIcon, {'aria-hidden': true, 'width': '1em', 'height': '1em', 'style': {'width': '1em', 'height': '1em'}}),\n};",
     );
     // The solid export gets a local name the map reads, as themeIcons' do.
     expect(js).toContain(
@@ -153,7 +153,7 @@ describe('the theme map for each look', () => {
     });
     const js = generated(dir);
     expect(js).toContain(
-      'export const themeIconsSolid = {\n  close: createElement(CloseIcon,',
+      'export const themeIconsSolid = {\n  close: /* @__PURE__ */ createElement(CloseIcon,',
     );
     expect(themeIssues(dir).issues).toEqual([]);
   });
@@ -175,7 +175,7 @@ describe('the theme map for each look', () => {
     expect(themeIssues(dir).issues).toEqual([
       [
         'icon_theme_map_mismatch',
-        `Icon set "glyphs": its generated module ./${GENERATED} has no theme map "themeIconsSolid", which draws the built-in icons in the solid look an icon draws. Rewrite the module: \`astryx experimental icon add --variant solid --from ${FROM}/solid --all --set glyphs\`.`,
+        `Icon set "glyphs": its generated module ./${GENERATED} has no theme map "themeIconsSolid", which draws the built-in icons in the solid variant an icon draws. Rewrite the module: \`astryx experimental icon add --variant solid --from ${FROM}/solid --all --set glyphs\`.`,
       ],
     ]);
     await iconAdd(undefined, {
@@ -202,8 +202,8 @@ describe('the theme map for each look', () => {
     fs.writeFileSync(
       file,
       js.replace(
-        'export const themeIconsSolid = {\n  close: createElement(CloseSolidIcon,',
-        'export const themeIconsSolid = {\n  close: createElement(CloseIcon,',
+        'export const themeIconsSolid = {\n  close: /* @__PURE__ */ createElement(CloseSolidIcon,',
+        'export const themeIconsSolid = {\n  close: /* @__PURE__ */ createElement(CloseIcon,',
       ),
     );
     expect(themeIssues(dir).issues).toEqual([

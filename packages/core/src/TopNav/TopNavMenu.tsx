@@ -37,7 +37,7 @@ import {mergeProps, composeEventHandlers} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {navItemStyles} from '../NavItem/navItemStyles.stylex';
-import {useTopNavSlot} from './TopNavContext';
+import {pickCloses, useTopNavSlot} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -56,6 +56,11 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {isRenderable} from '../utils/isRenderable';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 // =============================================================================
 // Styles
@@ -239,6 +244,7 @@ const drawerStyles = stylex.create({
   },
   itemDescription: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
     fontWeight: fontWeightVars['--font-weight-normal'],
   },
@@ -276,6 +282,15 @@ export interface TopNavMenuItemData {
    * Callback when item is clicked.
    */
   onClick?: () => void;
+
+  /**
+   * Whether a keyboard, finger or pen pick on the item closes the menu and
+   * returns focus to the trigger (a mouse pick leaves it open). Set `false`
+   * for an action that reports its result on the item itself, as with
+   * DropdownMenuItem.
+   * @default true
+   */
+  hasCloseOnSelect?: boolean;
 }
 
 function getMenuItemKey(item: TopNavMenuItemData): string {
@@ -361,6 +376,13 @@ export function TopNavMenu({
   onMouseLeave: onMouseLeaveProp,
   ...rest
 }: TopNavMenuProps) {
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(items)) {
+    throw devPropError(
+      'TopNavMenu',
+      'items',
+      "must be an array of menu items, for example items={[{title: 'Docs', href: '/docs'}]}. TopNavMenu does not read children.",
+    );
+  }
   const pressable = usePressFeedback();
   const renderMode = useTopNavRenderMode();
   const closeDrawerAfter = useCloseMobileDrawerOnActivate(
@@ -637,7 +659,17 @@ export function TopNavMenu({
                 // A menu row is never a draggable link: a mouse press that
                 // slides to another item would start a drag instead.
                 draggable={item.href != null ? false : undefined}
-                onClick={item.onClick}
+                // A keyboard, finger or pen pick ends the menu; a mouse pick
+                // leaves it open.
+                onClick={event => {
+                  item.onClick?.();
+                  if (
+                    item.hasCloseOnSelect !== false &&
+                    pickCloses(event.currentTarget)
+                  ) {
+                    close();
+                  }
+                }}
                 {...focusOutlineProps.focusVisible(styles.menuItem)}>
                 <div {...stylex.props(styles.menuItemIcon)}>{item.icon}</div>
                 <div {...stylex.props(styles.menuItemContent)}>

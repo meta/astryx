@@ -62,6 +62,7 @@ import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {
   MenuBottomSheet,
   MenuBottomSheetActionList,
+  MenuBottomSheetWithoutActionList,
   preloadMenuBottomSheetActionList,
 } from '../DropdownMenu/lazyMenuBottomSheet';
 import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
@@ -85,6 +86,7 @@ import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useLongPress} from '../hooks/useLongPress';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {surfaceEdgeStyles} from '../Popover/surfaceEdge.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {
   colorVars,
@@ -155,24 +157,22 @@ const styles = stylex.create({
     ),
     overflowY: 'auto',
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     padding: spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',
     backgroundColor: colorVars['--color-background-popover'],
     boxShadow: shadowVars['--shadow-low'],
-    // Forced colors removes box-shadow, which is this surface's only edge.
-    borderWidth: {
-      default: null,
-      '@media (forced-colors: active)': '1px',
-    },
-    borderStyle: {
-      default: null,
-      '@media (forced-colors: active)': 'solid',
-    },
-    borderColor: {
-      default: null,
-      '@media (forced-colors: active)': 'CanvasText',
-    },
+    // Its forced-colors edge is surfaceEdgeStyles.edgeKeepingFocus.
     opacity: 1,
     transitionProperty: 'opacity',
     transitionDuration: durationVars['--duration-fast'],
@@ -201,6 +201,16 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-0-5'],
     width: '100%',
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     padding: spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',
@@ -423,15 +433,24 @@ export function ContextMenu({
   const focusOnShowRef = useRef(false);
   const focusFirstRef = useRef<() => void>(() => {});
   const [submenuPath, setSubmenuPath] = useState<ContextMenuItemData[]>([]);
+  // The row reads a node label's text as the level opens. That text names the
+  // sheet.
+  const [submenuTitles, setSubmenuTitles] = useState<(string | undefined)[]>(
+    [],
+  );
   const currentSubmenu = submenuPath.at(-1);
   const currentItems = currentSubmenu?.items ?? items;
   const currentTitle = currentSubmenu?.label ?? label;
-  const sheetLabel = typeof currentTitle === 'string' ? currentTitle : label;
+  const sheetLabel =
+    typeof currentTitle === 'string'
+      ? currentTitle
+      : submenuTitles.at(-1) || label;
 
   const updateOpenState = useCallback(
     (nextIsOpen: boolean) => {
       if (!nextIsOpen) {
         setSubmenuPath([]);
+        setSubmenuTitles([]);
       }
       setIsOpen(nextIsOpen);
       onOpenChange?.(nextIsOpen);
@@ -780,7 +799,9 @@ export function ContextMenu({
 
   // The drill-in view stack for sub-menus on a phone; the bottom sheet has
   // its own drill-in.
-  const {drillIn, wrapContent} = useMenuDrillIn(isOpen && !usesBottomSheet);
+  const {drillIn, isDrilled, wrapContent} = useMenuDrillIn(
+    isOpen && !usesBottomSheet,
+  );
   const contextValue = useMemo<DropdownMenuContextValue>(
     () => ({closeMenu, menuSize: size, drillIn, menuLabel: label}),
     [closeMenu, size, drillIn, label],
@@ -810,10 +831,12 @@ export function ContextMenu({
     <div
       ref={listRef}
       id={menuId}
-      role="menu"
+      // While a sub-menu's view shows in place of the rows, that view is the
+      // one menu, so this box stops being a menu around it.
+      role={isDrilled ? 'none' : 'menu'}
       data-autofocus={usesBottomSheet ? '' : undefined}
       tabIndex={usesBottomSheet ? 0 : -1}
-      aria-label={label}
+      aria-label={isDrilled ? undefined : label}
       onKeyDown={listKeyDown}
       onContextMenu={e => e.preventDefault()}
       {...menuPress.menuProps}
@@ -826,7 +849,7 @@ export function ContextMenu({
                 menuBottomSheetStyles.content,
                 styles.sheetMenuInset,
               ]
-            : styles.menu,
+            : [styles.menu, surfaceEdgeStyles.edgeKeepingFocus],
           !usesBottomSheet &&
             (hasOverflow ? styles.touchPanYPinchZoom : styles.touchPinchZoom),
           xstyle,
@@ -887,7 +910,10 @@ export function ContextMenu({
                 <Icon icon="chevronLeft" size="sm" xstyle={rtlStyles.mirror} />
               }
               isIconOnly
-              onClick={() => setSubmenuPath(path => path.slice(0, -1))}
+              onClick={() => {
+                setSubmenuPath(path => path.slice(0, -1));
+                setSubmenuTitles(titles => titles.slice(0, -1));
+              }}
             />
             {sheetViewHeading}
           </div>
@@ -897,7 +923,10 @@ export function ContextMenu({
         <MenuBottomSheetActionList
           items={currentItems}
           onSelect={handleBottomSheetSelect}
-          onOpenSubmenu={item => setSubmenuPath(path => [...path, item])}
+          onOpenSubmenu={(item, title) => {
+            setSubmenuPath(path => [...path, item]);
+            setSubmenuTitles(titles => [...titles, title]);
+          }}
         />
       </div>
     ) : (
@@ -907,6 +936,9 @@ export function ContextMenu({
   // An inline trigger (`span`) lets prose own a context menu without
   // breaking its flow.
   const TriggerElement = triggerAs === 'div' ? 'div' : 'span';
+  const SheetForContent = usesSheetActionList
+    ? MenuBottomSheet
+    : MenuBottomSheetWithoutActionList;
 
   return (
     <>
@@ -941,12 +973,12 @@ export function ContextMenu({
       </TriggerElement>
 
       {usesBottomSheet ? (
-        <MenuBottomSheet
+        <SheetForContent
           isOpen={isOpen}
           onOpenChange={updateOpenState}
           label={sheetLabel}>
           {renderedBottomSheetContent}
-        </MenuBottomSheet>
+        </SheetForContent>
       ) : (
         layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
           placement: 'below',

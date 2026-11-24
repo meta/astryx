@@ -711,7 +711,13 @@ async function main() {
       continue;
     }
     const printed = line.replace(/^command:\s+/, '').trim();
-    const target = `out-${Math.random().toString(36).slice(2, 6)}/Settings.tsx`;
+    const destination = printed.split(/\s+/).at(-1);
+    const target =
+      destination === '<path>'
+        ? `out-${Math.random().toString(36).slice(2, 6)}/Settings.tsx`
+        : destination.endsWith('.tsx')
+          ? destination
+          : `${destination}/page.tsx`;
     const cmd = printed.replace('<path>', target);
     const shells = WIN
       ? [
@@ -724,7 +730,10 @@ async function main() {
         ]
       : [['sh', '/bin/sh', ['-c', cmd]]];
     for (const [sname, exe, argv] of shells) {
-      const t = path.join(dir, target.split('/')[0]);
+      const t = path.join(
+        dir,
+        destination.endsWith('.tsx') ? target : path.dirname(target),
+      );
       fs.rmSync(t, {recursive: true, force: true});
       const r = await run(exe, argv, {cwd: dir, env: envA, timeoutMs: 300_000});
       const made = fs.existsSync(path.join(dir, target));

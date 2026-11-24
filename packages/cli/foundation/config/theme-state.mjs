@@ -495,6 +495,34 @@ const MODE_ENTRY_RE = new RegExp(
 );
 
 /**
+ * The stylesheets the CLI's theme module imports for the themes its record
+ * carries (each theme's stylesheet, then its font stylesheet), as written in
+ * the module, each with its theme's recorded owner. Only the module the CLI
+ * writes counts (exactly its rendering of the record); none otherwise.
+ * @param {string} source
+ * @param {boolean} typescript
+ * @returns {Array<{spec: string, owner: string}>}
+ */
+export function themeModuleStylesheets(source, typescript) {
+  if (!isUneditedThemeModule(source, typescript)) return [];
+  const owners = Object.values(parseThemeModuleRecord(source).themes);
+  /** @type {Array<{spec: string, owner: string}>} */
+  const out = [];
+  let index = -1;
+  for (const line of source.split(/\r?\n/u)) {
+    if (NAMED_IMPORT_RE.test(line)) {
+      index++;
+      continue;
+    }
+    const bare = BARE_IMPORT_RE.exec(line);
+    const owner = owners[index];
+    if (bare && owner !== undefined)
+      out.push({spec: JSON.parse(bare[1]), owner});
+  }
+  return out;
+}
+
+/**
  * Is `source` exactly the module `renderThemeModule` writes for the record it
  * carries? Only then may a command delete the module: it holds nothing a
  * person wrote. The imports come from the module itself, so the check works

@@ -30,6 +30,7 @@ import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -79,13 +80,14 @@ describe('InputClearButton', () => {
     const button = screen.getByRole('button', {
       name: 'Clear Assigned engineering partner',
     });
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent(/^Clear$/);
     // The name already says "Clear", so the tooltip adds no description and a
     // screen reader does not read the word twice.
     expect(button).toHaveAccessibleDescription('');
 
     fireEvent.mouseEnter(button);
+    fireEvent.pointerMove(button);
     await waitFor(() => expect(showPopover).toHaveBeenCalled());
     showPopover.mockRestore();
   });
@@ -99,9 +101,7 @@ describe('InputClearButton', () => {
       </InternationalizationProvider>,
     );
     expect(screen.getByRole('button', {name: 'Suche leeren'})).toBeTruthy();
-    expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
-      /^Leeren$/,
-    );
+    expect(getTooltip()).toHaveTextContent(/^Leeren$/);
   });
 
   it('renders a real button with the given accessible label', () => {
@@ -223,9 +223,12 @@ describe('InputClearButton', () => {
     expect(declaredValue(screen.getByRole('button'), 'width')).toBe('999px');
   });
 
-  it("takes Button's shared touch band rather than a fixed 24px overlay of its own", () => {
+  it("takes Button's shared touch band under a finger, and its own 24px target only under a fine pointer", () => {
     // Under a finger the clear button's target grows toward 44 px where its
-    // neighbors leave room, through Button's band (AST-094 FR42).
+    // neighbors leave room, through Button's band (AST-094 FR42). Under a fine
+    // pointer its own ::after grows it to 24 px (WCAG 2.5.8), away from the
+    // text; it is off under a coarse pointer, so each pointer type has one hit
+    // area.
     render(<InputClearButton label="Clear" onClick={() => {}} />);
     const button = screen.getByRole('button', {name: 'Clear'});
     const bandClasses = (stylex.props(touchHitAreaStyles.layer).className ?? '')
@@ -241,7 +244,10 @@ describe('InputClearButton', () => {
       'utf-8',
     );
     expect(source).not.toContain('--_input-clear-hit-inset');
-    expect(source).not.toContain("'::after'");
+    expect(source).toContain("const FINE_POINTER = '@media (pointer: fine)';");
+    expect(source).toContain(
+      "'--_input-clear-target': {default: null, [FINE_POINTER]: '\"\"'}",
+    );
   });
 
   it('exposes input-clear-button so a theme controls the button size and hover', () => {

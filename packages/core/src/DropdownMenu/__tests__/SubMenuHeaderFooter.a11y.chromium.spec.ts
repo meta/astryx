@@ -214,13 +214,13 @@ test.describe('on a phone (coarse pointer)', () => {
     await expect(rootMenu).toBeHidden();
     expect(await isInsideAMenu(page, 'Labels')).toBe(false);
     // Same popover: the view replaces the root's rows in place.
+    const rootId = await trigger.getAttribute('aria-controls');
     expect(
       await dialog.evaluate(
-        el =>
+        (el, id) =>
           el.closest('[popover]') ===
-          document
-            .querySelector('[role="menu"][aria-label="Session"]')
-            ?.closest('[popover]'),
+          document.getElementById(id ?? '')?.closest('[popover]'),
+        rootId,
       ),
     ).toBe(true);
     await expect(

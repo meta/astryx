@@ -200,9 +200,7 @@ describe('Toast responsive layout', () => {
 
     const viewport = screen.getByRole('region', {name: 'Notifications'});
     const body = within(viewport).getByText(LONG_TOAST_BODY);
-    const toast = body.closest('[data-type]') as HTMLElement;
-    const mediaWrapper = toast.firstElementChild as HTMLElement;
-    const layoutRow = mediaWrapper.firstElementChild as HTMLElement;
+    const layoutRow = body.parentElement as HTMLElement;
     const endArea = body.nextElementSibling as HTMLElement;
     const actionControl = endArea.firstElementChild as HTMLElement;
     const dismissControl = within(endArea).getByRole('button', {
@@ -284,6 +282,59 @@ describe('Toast responsive layout', () => {
     expect(viewport.style.insetInlineStart).toBe('24px');
     expect(viewport.style.insetInlineEnd).toBe('40px');
     expect(getComputedStyle(viewport).width).not.toBe('100%');
+  });
+  it('lets an inset edge of 0 replace the provider value on that edge, in LTR and RTL', () => {
+    const edges = [
+      ['top', 'top', 'topEnd'],
+      ['bottom', 'bottom', 'bottomEnd'],
+      ['start', 'insetInlineStart', 'bottomEnd'],
+      ['end', 'insetInlineEnd', 'bottomEnd'],
+    ] as const;
+    for (const direction of ['ltr', 'rtl'] as const) {
+      for (const [edge, property, position] of edges) {
+        render(
+          <div dir={direction}>
+            <ToastViewport
+              isTopLayer={false}
+              position={position}
+              inset={{[edge]: 0}}>
+              <ShowToastButton options={INFO_A} />
+            </ToastViewport>
+          </div>,
+        );
+        act(() => {
+          fireEvent.click(screen.getByText('Trigger'));
+        });
+        const viewport = screen.getByRole('region', {name: 'Notifications'});
+        // React writes a zero without a unit; jsdom adds `px` only to `top` and `bottom`.
+        expect(viewport.style[property], `${direction} ${edge}`).toMatch(
+          /^0(px)?$/,
+        );
+        cleanup();
+      }
+    }
+  });
+
+  it('writes nothing for a zero on the block edge opposite the position', () => {
+    for (const [position, edge] of [
+      ['bottomEnd', 'top'],
+      ['topStart', 'bottom'],
+    ] as const) {
+      render(
+        <ToastViewport
+          isTopLayer={false}
+          position={position}
+          inset={{top: 0, bottom: 0}}>
+          <ShowToastButton options={INFO_A} />
+        </ToastViewport>,
+      );
+      act(() => {
+        fireEvent.click(screen.getByText('Trigger'));
+      });
+      const viewport = screen.getByRole('region', {name: 'Notifications'});
+      expect(viewport.style[edge], `${position} ${edge}`).toBe('');
+      cleanup();
+    }
   });
 });
 
@@ -3152,18 +3203,33 @@ describe('toast announcements via singleton live regions', () => {
     act(() => {
       fireEvent.click(screen.getByText('Show'));
     });
-    // Announced once when the toast is dispatched.
+    // The flattened text reaches the polite singleton region (the sink),
+    // once.
+    await waitFor(() => {
+      expect(politeRegion()).toHaveTextContent('Update ready Restart to apply');
+    });
     expect(announceSpy).toHaveBeenCalledTimes(1);
     expect(announceSpy).toHaveBeenCalledWith(
       'Update ready Restart to apply',
       'polite',
     );
-    // The flattened text reaches the polite singleton region (the sink).
-    await waitFor(() => {
-      expect(politeRegion()).toHaveTextContent('Update ready Restart to apply');
-    });
     // Status toasts never touch the assertive region.
     expect(assertiveRegion()).toHaveTextContent('');
+  });
+
+  it('announces a plain-text body by its words as they read', async () => {
+    renderViewport(
+      <ShowToastButton
+        options={{body: [42, '% uploaded']}}
+        triggerLabel="Show"
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+    await waitFor(() => {
+      expect(announceSpy).toHaveBeenCalledWith('42% uploaded', 'polite');
+    });
   });
 
   it('announces an error toast assertively', async () => {
@@ -3202,6 +3268,81 @@ describe('toast announcements via singleton live regions', () => {
     });
     expect(announceSpy).toHaveBeenCalledWith('Draft saved', 'polite');
     expect(assertiveRegion()).toHaveTextContent('');
+  });
+
+  it('announces a body that mixes text and a component with the words it shows', async () => {
+    function Amount() {
+      return <strong>$120.00</strong>;
+    }
+    renderViewport(
+      <ShowToastButton
+        options={{
+          body: (
+            <>
+              Payment received: <Amount />
+            </>
+          ),
+        }}
+        triggerLabel="Show"
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+
+    await waitFor(() => {
+      expect(politeRegion()).toHaveTextContent('Payment received: $120.00');
+    });
+    expect(announceSpy).toHaveBeenCalledTimes(1);
+    expect(announceSpy).toHaveBeenCalledWith(
+      'Payment received: $120.00',
+      'polite',
+    );
+  });
+
+  it('announces a mixed body once, though its component changes after the toast shows', async () => {
+    let resolveAmount = () => {};
+    function Amount() {
+      const [amount, setAmount] = useState('…');
+      resolveAmount = () => {
+        setAmount('$120.00');
+      };
+      return <strong>{amount}</strong>;
+    }
+    renderViewport(
+      <ShowToastButton
+        options={{
+          body: (
+            <>
+              Payment received: <Amount />
+            </>
+          ),
+        }}
+        triggerLabel="Show"
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+    await waitFor(() => {
+      expect(announceSpy).toHaveBeenCalledTimes(1);
+    });
+    expect(announceSpy).toHaveBeenCalledWith('Payment received: …', 'polite');
+
+    act(() => {
+      resolveAmount();
+    });
+    expect(screen.getByText('$120.00')).toBeInTheDocument();
+    // Dismissing renders the card again with the new words on screen.
+    act(() => {
+      fireEvent.click(
+        screen.getByRole('button', {name: 'Dismiss notification'}),
+      );
+    });
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    expect(announceSpy).toHaveBeenCalledTimes(1);
   });
 
   it('announces a component body in full, its link included', async () => {

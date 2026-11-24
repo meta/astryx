@@ -317,6 +317,38 @@ describe('cliDocSection', () => {
     ]);
   });
 
+  it("reads every part of an option's pointers, after its own or its parameter's text", () => {
+    const docs = [
+      command('pick', {
+        fn: 'pick',
+        options: [
+          {
+            flag: '--list',
+            description: 'List: <name>',
+            pointers: [{commands: ['pick --deep'], text: ', --deep'}, ' are refused'],
+          },
+          {
+            flag: '--from <pkg>',
+            param: 'options.from',
+            pointers: [{commands: ['pick x --from core'], text: ' Use core for originals.'}],
+          },
+        ],
+      }),
+      fn('pick', {
+        params: [{name: 'options.from', type: 'string', description: 'Narrow to one package.'}],
+      }),
+    ];
+    const section = cliDocSection(docs[0], indexOf(docs));
+    expect(section.content).toContainEqual({
+      type: 'table',
+      headers: ['Option', 'Description'],
+      rows: [
+        ['`--list`', 'List: <name>, --deep are refused'],
+        ['`--from <pkg>`', 'Narrow to one package. Use core for originals.'],
+      ],
+    });
+  });
+
   it('marks required parameters and adds a Default column when a parameter has a default', () => {
     const beta = fn('beta', {
       params: [

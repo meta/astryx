@@ -7,20 +7,25 @@
  *   explicit live-region roles, augmented-status color fallback, scoped status
  *   foregrounds that do not recolor consumer content or tooltips, the
  *   'banner-frame' theme target on the outer elevation/radius painter, and the
- *   'banner-icon' theme target on the status icon glyph (#4166)
+ *   'banner-icon' theme target on the status icon glyph, and the
+ *   'banner-message' and 'banner-title' targets
  * @position Testing; validates Banner.tsx implementation
  *
  * SYNC: When modified, update this header
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Banner, type BannerStatus} from './Banner';
 import {defineTheme, generateThemeCSS} from '../theme';
 import {registerIcons, resetIcons} from '../Icon';
 import {InternationalizationProvider} from '../i18n';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
+import {
+  getTooltipDescriptions,
+  tooltipTextOnHover,
+} from '../__tests__/tooltipDescription';
 
 describe('Banner', () => {
   afterEach(() => {
@@ -190,7 +195,7 @@ describe('Banner', () => {
     ['error', 'var(--color-on-error-muted)'],
   ] as const)(
     'routes %s built-in controls to the matching on-muted role without recoloring tooltips',
-    (status, expectedRole) => {
+    async (status, expectedRole) => {
       render(
         <Banner
           status={status}
@@ -208,22 +213,30 @@ describe('Banner', () => {
         expect(
           getComputedStyle(button).getPropertyValue('--color-text-primary'),
         ).toBe(expectedRole);
-        // A tooltip that repeats the name does not describe the button
-        // (Button FR12), so find it by its text.
-        const describedBy = button.getAttribute('aria-describedby');
-        const tooltip =
-          describedBy != null
-            ? document.getElementById(describedBy)
-            : (screen
-                .getAllByRole('tooltip', {hidden: true})
-                .find(el =>
-                  (button.getAttribute('aria-label') ?? '').includes(
-                    el.textContent ?? '',
-                  ),
-                ) ?? null);
-        expect(tooltip).not.toBeNull();
+        // The tooltip's layer mounts at its first show. A tooltip that
+        // repeats the name does not describe the button (Button FR12), so
+        // find it by its text.
+        await userEvent.hover(button);
+        const tooltip = await waitFor(() => {
+          const describedBy = button.getAttribute('aria-describedby');
+          const shown =
+            describedBy != null
+              ? document.getElementById(
+                  describedBy.replace(/-description$/, ''),
+                )
+              : screen
+                  .getAllByRole('tooltip', {hidden: true})
+                  .find(el =>
+                    (button.getAttribute('aria-label') ?? '').includes(
+                      el.textContent ?? '',
+                    ),
+                  );
+          expect(shown).toHaveAttribute('role', 'tooltip');
+          return shown as HTMLElement;
+        });
+        await userEvent.unhover(button);
         expect(
-          getComputedStyle(tooltip!).getPropertyValue('--color-text-primary'),
+          getComputedStyle(tooltip).getPropertyValue('--color-text-primary'),
         ).not.toBe(expectedRole);
       }
     },
@@ -651,6 +664,84 @@ describe('Banner', () => {
     expect(custom?.className).toBe('');
   });
 
+  it('places the default status icon directly in the header, so hiding it leaves no gap', () => {
+    // The header lays its items out with a column gap. With no wrapper box,
+    // a theme rule that hides 'banner-icon' removes the only flex item the
+    // icon adds, and the gap before the message goes with it.
+    const {container} = render(<Banner status="info" title="Saved" />);
+    const header = container.querySelector('.astryx-banner');
+    const icon = container.querySelector('.astryx-banner-icon');
+    expect(icon?.parentElement).toBe(header);
+    expect(header?.firstElementChild).toBe(icon);
+    expect(icon).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('renders no icon box when the status has no default glyph', () => {
+    const augmentedStatus = 'neutral' as unknown as BannerStatus;
+    const {container} = render(
+      <Banner status={augmentedStatus} title="Plain" />,
+    );
+    const header = container.querySelector('.astryx-banner');
+    expect(header?.firstElementChild).toHaveClass('astryx-banner-message');
+  });
+
+  // =========================================================================
+  // Message and title theme targets
+  // =========================================================================
+
+  it("carries 'banner-message' on the title-and-description column and 'banner-title' on the title", () => {
+    const {container} = render(
+      <Banner
+        status="warning"
+        title="Heads up"
+        description="Check the form."
+      />,
+    );
+    const message = container.querySelector('.astryx-banner-message');
+    const title = container.querySelector('.astryx-banner-title');
+    const description = container.querySelector('.astryx-banner-description');
+    expect(title).toHaveTextContent('Heads up');
+    expect(title?.parentElement).toBe(message);
+    expect(description?.parentElement).toBe(message);
+    expect(container.querySelectorAll('.astryx-banner-message')).toHaveLength(
+      1,
+    );
+    expect(container.querySelectorAll('.astryx-banner-title')).toHaveLength(1);
+  });
+
+  it('separates the title and the description by one space in every banner', () => {
+    // A theme that lays the message out on one line gets the same gap for
+    // an urgent banner and any other one.
+    for (const role of [undefined, 'alert'] as const) {
+      const {container, unmount} = render(
+        <Banner
+          status="error"
+          title="Upload failed"
+          description="Retry."
+          role={role}
+        />,
+      );
+      expect(
+        container.querySelector('.astryx-banner-message')?.textContent,
+      ).toBe('Upload failed Retry.');
+      unmount();
+    }
+  });
+
+  it('keeps role="alert" on the \'banner-message\' element', () => {
+    const {container} = render(
+      <Banner
+        status="error"
+        title="Upload failed"
+        description="Retry."
+        role="alert"
+      />,
+    );
+    expect(screen.getByRole('alert')).toBe(
+      container.querySelector('.astryx-banner-message'),
+    );
+  });
+
   // =========================================================================
   // Icon registry integration
   // =========================================================================
@@ -884,7 +975,7 @@ describe('Banner', () => {
   });
 
   describe('dismiss control naming', () => {
-    it('names stacked string-title banners distinctly', () => {
+    it('names stacked string-title banners distinctly', async () => {
       render(
         <>
           <Banner status="error" title="Upload invoice failed" isDismissable />
@@ -898,31 +989,26 @@ describe('Banner', () => {
       ]);
       // Each name already contains the "Dismiss" tooltip, so the tooltip
       // shows but adds no description.
+      expect(getTooltipDescriptions()).toHaveLength(0);
       for (const button of buttons) {
         expect(button).toHaveAccessibleDescription('');
+        expect(await tooltipTextOnHover(button)).toBe('Dismiss');
+        expect(button).toHaveAccessibleDescription('');
       }
-      expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .filter(el => el.textContent === 'Dismiss'),
-      ).toHaveLength(2);
     });
 
-    it('keeps the bare name and tooltip for a rich title', () => {
+    it('keeps the bare name and tooltip for a rich title', async () => {
       render(
         <Banner status="info" title={<span>Rich title</span>} isDismissable />,
       );
       const button = screen.getByRole('button', {name: 'Dismiss'});
       // The tooltip repeats the name, so it shows but adds no description.
       expect(button).not.toHaveAttribute('aria-describedby');
-      expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Dismiss'),
-      ).toBe(true);
+      expect(getTooltipDescriptions()).toHaveLength(0);
+      expect(await tooltipTextOnHover(button)).toBe('Dismiss');
     });
 
-    it('uses a translated dismissLabel for a rich title and its tooltip', () => {
+    it('uses a translated dismissLabel for a rich title and its tooltip', async () => {
       render(
         <Banner
           status="info"
@@ -935,11 +1021,9 @@ describe('Banner', () => {
         name: 'Wartungshinweis schließen',
       });
       expect(button).not.toHaveAttribute('aria-describedby');
-      expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Wartungshinweis schließen'),
-      ).toBe(true);
+      expect(await tooltipTextOnHover(button)).toBe(
+        'Wartungshinweis schließen',
+      );
     });
 
     it('keeps a translated verb when the titled message falls back to English', () => {

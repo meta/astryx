@@ -7,7 +7,7 @@ export const docs = {
   subComponentOf: 'Table',
   displayName: 'useTableSelectionState',
   description:
-    'State management companion for useTableSelection. Returns selectionConfig for the behaviour plugin plus selectionState for selection-aware UI such as TableSelectionToolbar. Handles disabled/selectable row filtering for select-all automatically: disabled rows are frozen (preserved across select-all/deselect-all), non-selectable rows are excluded.',
+    'State management companion for useTableSelection that returns {selectionConfig, selectionState}: selectionConfig (UseTableSelectionConfig<T>) goes to useTableSelection, and selectionState (TableSelectionState) has selectedKeys: ReadonlySet<string>, selectedCount: number, hasSelection: boolean, and clearSelection: () => void, for a bulk-action bar such as TableSelectionToolbar. selectedKeys holds the complete selection, also keys outside the current view, and clearSelection clears all of them. Handles disabled/selectable row filtering for select-all automatically: disabled rows are frozen (preserved across select-all/deselect-all), non-selectable rows are excluded.',
   props: [
     {
       name: 'data',
@@ -49,13 +49,41 @@ export const docs = {
       default: '() => true',
     },
   ],
+  examples: [
+    {
+      label: 'Bulk action with the selection state',
+      code: `const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+const {selectionConfig, selectionState} = useTableSelectionState({
+  data: users,
+  idKey: 'id',
+  selectedKeys,
+  setSelectedKeys,
+});
+const selectionPlugin = useTableSelection(selectionConfig);
+
+const exportSelected = () => {
+  exportUsers([...selectionState.selectedKeys]);
+  selectionState.clearSelection();
+};
+
+<>
+  {selectionState.hasSelection && (
+    <Button
+      label={\`Export \${selectionState.selectedCount} users\`}
+      onClick={exportSelected}
+    />
+  )}
+  <Table data={users} columns={columns} idKey="id" plugins={{selection: selectionPlugin}} />
+</>;`,
+    },
+  ],
 };
 
 export const docsDense = {
   name: 'useTableSelectionState',
   displayName: 'useTableSelectionState',
   description:
-    'State companion for useTableSelection. Returns selectionConfig for the behavior plugin + selectionState for selection-aware UI. Handles disabled/selectable row filtering for select-all automatically: disabled rows frozen (state preserved across select-all/deselect-all), non-selectable rows excluded.',
+    'State companion for useTableSelection. Returns {selectionConfig, selectionState}: selectionConfig -> useTableSelection; selectionState = {selectedKeys: ReadonlySet<string> (all keys, incl. outside view), selectedCount: number, hasSelection: boolean, clearSelection: () => void} for bulk-action UI (e.g. TableSelectionToolbar). Handles disabled/selectable row filtering for select-all automatically: disabled rows frozen (state preserved across select-all/deselect-all), non-selectable rows excluded.',
   propDescriptions: {
     data: 'full data array rendered in table',
     idKey: 'key extractor: property name or fn returning unique string ID',

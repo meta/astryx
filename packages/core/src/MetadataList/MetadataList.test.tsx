@@ -322,6 +322,26 @@ describe('MetadataListItem', () => {
     expect(wrapper?.querySelector('dt')).toBeInTheDocument();
     expect(wrapper?.querySelector('dd')).toBeInTheDocument();
   });
+
+  // `word-break: break-word` would let a row squeeze a value down to one
+  // character, breaking an amount or a word mid-way; `overflow-wrap` breaks
+  // only a word longer than its line.
+  it.each([
+    ['side by side', undefined],
+    ['stacked', {position: 'top' as const}],
+  ])('%s, the value breaks only words longer than its line', (_case, label) => {
+    const {container} = render(
+      <MetadataList label={label}>
+        <MetadataListItem label="Shipping">$0.00</MetadataListItem>
+      </MetadataList>,
+    );
+
+    const value = container.querySelector('dd');
+    expect(value).not.toBeNull();
+    const style = getComputedStyle(value as Element);
+    expect(style.overflowWrap).toBe('break-word');
+    expect(style.wordBreak).not.toBe('break-word');
+  });
 });
 
 describe('MetadataListItem pass-through props', () => {
@@ -397,6 +417,71 @@ describe('MetadataListItem pass-through target', () => {
   });
 });
 
+describe('MetadataList accessible name', () => {
+  it('puts aria-label on the dl, not the root div', () => {
+    const {container} = render(
+      <MetadataList aria-label="Record details" data-testid="list">
+        <MetadataListItem label="Owner">Alice</MetadataListItem>
+      </MetadataList>,
+    );
+
+    const list = container.querySelector('dl');
+    expect(list).toHaveAttribute('aria-label', 'Record details');
+    expect(screen.getByTestId('list')).not.toHaveAttribute('aria-label');
+  });
+
+  it('puts aria-labelledby on the dl', () => {
+    const {container} = render(
+      <>
+        <h2 id="record-heading">Record details</h2>
+        <MetadataList aria-labelledby="record-heading" data-testid="list">
+          <MetadataListItem label="Owner">Alice</MetadataListItem>
+        </MetadataList>
+      </>,
+    );
+
+    const list = container.querySelector('dl');
+    expect(list).toHaveAttribute('aria-labelledby', 'record-heading');
+    expect(screen.getByTestId('list')).not.toHaveAttribute('aria-labelledby');
+  });
+
+  it('puts aria-describedby on the dl', () => {
+    const {container} = render(
+      <>
+        <p id="record-note">Verified yesterday</p>
+        <MetadataList aria-describedby="record-note" data-testid="list">
+          <MetadataListItem label="Owner">Alice</MetadataListItem>
+        </MetadataList>
+      </>,
+    );
+
+    const list = container.querySelector('dl');
+    expect(list).toHaveAttribute('aria-describedby', 'record-note');
+    expect(screen.getByTestId('list')).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('keeps className and data-* on the root while aria-label moves to the dl', () => {
+    const {container} = render(
+      <MetadataList
+        aria-label="Record details"
+        className="facts"
+        data-source="crm"
+        data-testid="list">
+        <MetadataListItem label="Owner">Alice</MetadataListItem>
+      </MetadataList>,
+    );
+
+    const rootEl = screen.getByTestId('list');
+    expect(rootEl).toHaveAttribute('data-source', 'crm');
+    expect(rootEl).toHaveClass('facts');
+    expect(rootEl).not.toHaveAttribute('aria-label');
+    expect(container.querySelector('dl')).toHaveAttribute(
+      'aria-label',
+      'Record details',
+    );
+  });
+});
+
 describe('MetadataList pass-through props', () => {
   it('forwards pass-through props to the root element', () => {
     render(
@@ -409,9 +494,10 @@ describe('MetadataList pass-through props', () => {
       </MetadataList>,
     );
     const rootEl = screen.getByTestId('list');
-    expect(rootEl).toHaveAttribute('aria-label', 'Record details');
     expect(rootEl).toHaveAttribute('id', 'record-meta');
     expect(rootEl).toHaveAttribute('data-source', 'crm');
+    // The accessible name belongs on the dl, not the root div.
+    expect(rootEl).not.toHaveAttribute('aria-label');
   });
 
   it('forwards ref, className and style to the root element', () => {

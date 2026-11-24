@@ -53,6 +53,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type SyntheticEvent,
 } from 'react';
@@ -65,7 +66,9 @@ import {useScrollLock} from '../hooks/useScrollLock';
 import {useFocusTrapEscapeCompatibilitySignal} from '../hooks/useFocusTrap';
 import {dispatchLayerEscapeKeyDown} from '../Layer/layerStack';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {useBackdropPress} from '../Layer/useBackdropPress';
 import {composeEventHandlers} from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {mergeRefs} from '../utils/mergeRefs';
 import {useModalOutletWithoutRef} from '../Layer/modalOutlet';
 import {BottomSheetHostContext} from './BottomSheetHostContext';
@@ -94,6 +97,10 @@ import {
   type BottomSheetSwitcherPhase,
   type BottomSheetSwitcherTransitionEvent,
 } from './BottomSheetSwitcherContext';
+import {
+  prepareFocusRepairOnRemoval,
+  returnFocusForLastInput,
+} from '../utils/focusReturn';
 
 const styles = stylex.create({
   // A scrim flow's dialogs live in the top layer; the wrapper has no box.
@@ -295,6 +302,9 @@ export function BottomSheetSwitcher({
   onCancel,
   onClick,
   onKeyDown,
+  onPointerDownCapture,
+  onPointerUpCapture,
+  onPointerCancelCapture,
   className,
   style,
   xstyle,
@@ -568,6 +578,36 @@ export function BottomSheetSwitcher({
     presentationCounterRef.current += 1;
     presentationOrderRef.current.set(sheetId, presentationCounterRef.current);
   }, []);
+  // The step dialogs can render outside the flow's element, so focus counts as
+  // inside the flow when the flow or one of its step dialogs holds it.
+  const holdsFocus = useCallback(
+    (active: Element | null): boolean =>
+      active != null &&
+      (flowRef.current?.contains(active) === true ||
+        [...sheetDialogsRef.current.values()].some(dialog =>
+          dialog.contains(active),
+        )),
+    [],
+  );
+  // Whether focus was in the flow when the flow closed. Read in the commit
+  // that closes it: the closing step is marked inert in that commit, and the
+  // browser moves focus out of it only when it next renders.
+  const hadFocusAtCloseRef = useRef(false);
+  const previousActiveSheetRef = useRef(activeSheet);
+  // Syncs with document focus: records whether the flow held it in the commit
+  // that closes the flow.
+  useLayoutEffect(() => {
+    const wasOpen = previousActiveSheetRef.current != null;
+    previousActiveSheetRef.current = activeSheet;
+    if (wasOpen && activeSheet == null) {
+      hadFocusAtCloseRef.current = holdsFocus(document.activeElement);
+    }
+  }, [activeSheet, holdsFocus]);
+  const onBeforeSheetShow = useCallback(() => {
+    if (triggerRef.current == null) {
+      triggerRef.current = document.activeElement as HTMLElement | null;
+    }
+  }, []);
   // Syncs document focus with the flow's visibility. When the flow hides, focus
   // goes to the opener, to the sheet now on top, or to the target of the
   // registry.
@@ -607,11 +647,47 @@ export function BottomSheetSwitcher({
           trigger?.focus({preventScroll: true});
         }
       }
+    } else if (!hasScrim) {
+      // A flow without the scrim keeps the native dialog's return rule: focus
+      // goes back to the opener only while it is still inside the flow.
+      const trigger = triggerRef.current;
+      const active = document.activeElement;
+      const isFocusLeftInFlow =
+        active == null || active === document.body || holdsFocus(active);
+      if (
+        hadFocusAtCloseRef.current &&
+        isFocusLeftInFlow &&
+        trigger?.isConnected === true
+      ) {
+        returnFocusForLastInput(trigger);
+      }
     }
+    hadFocusAtCloseRef.current = false;
     triggerRef.current = null;
     modalFlowRef.current = false;
     presentationOrderRef.current.clear();
-  }, [hasScrim, isFlowVisible]);
+  }, [hasScrim, holdsFocus, isFlowVisible]);
+
+  // A flow removed while a sheet is open runs no close, so focus would drop to
+  // the page. After the commit, the shared repair returns focus to the opener
+  // when the removal lost it, as a standalone sheet's does.
+  useLayoutEffect(() => {
+    const flow = flowRef.current;
+    if (!isFlowVisible || flow == null) {
+      return;
+    }
+    const repairOnRemoval = prepareFocusRepairOnRemoval(flow, {
+      keepRestingFocus: true,
+    });
+    return () => {
+      const opener = triggerRef.current;
+      repairOnRemoval(() => {
+        if (opener != null && opener.isConnected) {
+          returnFocusForLastInput(opener);
+        }
+      });
+    };
+  }, [isFlowVisible]);
 
   // A scrim flow is one level of the bottom-sheet stack while it is visible.
   // The step hosts present their own dialogs; the registry re-presents the
@@ -992,32 +1068,69 @@ export function BottomSheetSwitcher({
     },
     [],
   );
-  const handleClick = useCallback(
-    (event: ReactMouseEvent<HTMLDialogElement>) => {
-      // A `::backdrop` click targets its dialog element. Only the active
-      // sheet's backdrop is the flow's scrim; a retained dialog is inert and
-      // a hidden one closed, so neither can be clicked, but be explicit.
-      if (
-        hasScrim &&
-        event.target === event.currentTarget &&
-        event.currentTarget === hostDialogRef.current
-      ) {
-        dismissOnLightInteraction();
-      }
-    },
-    [dismissOnLightInteraction, hasScrim],
+  // A press on the ::backdrop targets the <dialog> itself. Only the active
+  // sheet's backdrop is the flow's scrim. A retained dialog is inert, so it
+  // cannot be clicked. A hidden dialog is closed, so it cannot be clicked. Each
+  // handler still checks for the active dialog. The press must start and end on
+  // the backdrop.
+  const handleScrimPress = useCallback(() => {
+    dismissOnLightInteraction();
+  }, [dismissOnLightInteraction]);
+  const {
+    onClick: onScrimClick,
+    onPointerDownCapture: onScrimPointerDownCapture,
+    onPointerUpCapture: onScrimPointerUpCapture,
+    onPointerCancelCapture: onScrimPointerCancelCapture,
+  } = useBackdropPress(
+    handleScrimPress,
+    hasScrim && isFlowOpen && allowsLightDismiss,
   );
   const onDialogCancel = useMemo(
     () => composeEventHandlers(onCancel, handleCancel),
     [handleCancel, onCancel],
   );
   const onDialogClick = useMemo(
-    () => composeEventHandlers(onClick, handleClick),
-    [handleClick, onClick],
+    () =>
+      composeEventHandlers(
+        onClick,
+        (event: ReactMouseEvent<HTMLDialogElement>) => {
+          if (event.currentTarget === hostDialogRef.current) {
+            onScrimClick(event);
+          }
+        },
+      ),
+    [onClick, onScrimClick],
   );
   const onDialogKeyDown = useMemo(
     () => composeEventHandlers(onKeyDown, handleKeyDown),
     [handleKeyDown, onKeyDown],
+  );
+  const onDialogPointerDownCapture = useMemo(
+    () =>
+      chainEventHandlers((event: ReactPointerEvent<HTMLDialogElement>) => {
+        if (event.currentTarget === hostDialogRef.current) {
+          onScrimPointerDownCapture(event);
+        }
+      }, onPointerDownCapture),
+    [onPointerDownCapture, onScrimPointerDownCapture],
+  );
+  const onDialogPointerUpCapture = useMemo(
+    () =>
+      chainEventHandlers((event: ReactPointerEvent<HTMLDialogElement>) => {
+        if (event.currentTarget === hostDialogRef.current) {
+          onScrimPointerUpCapture(event);
+        }
+      }, onPointerUpCapture),
+    [onPointerUpCapture, onScrimPointerUpCapture],
+  );
+  const onDialogPointerCancelCapture = useMemo(
+    () =>
+      chainEventHandlers((event: ReactPointerEvent<HTMLDialogElement>) => {
+        if (event.currentTarget === hostDialogRef.current) {
+          onScrimPointerCancelCapture(event);
+        }
+      }, onPointerCancelCapture),
+    [onPointerCancelCapture, onScrimPointerCancelCapture],
   );
 
   const contextValue = useMemo<BottomSheetSwitcherContextValue>(
@@ -1036,6 +1149,7 @@ export function BottomSheetSwitcher({
       registerSheetDialog,
       registerSheetPurpose,
       onBeforeSheetPresent,
+      onBeforeSheetShow,
       isCoveredInTopLayer,
       onSheetEnterStart,
       onSheetTransitionComplete,
@@ -1045,6 +1159,9 @@ export function BottomSheetSwitcher({
       onDialogCancel,
       onDialogClick,
       onDialogKeyDown,
+      onDialogPointerDownCapture,
+      onDialogPointerUpCapture,
+      onDialogPointerCancelCapture,
     }),
     [
       activeSheet,
@@ -1058,9 +1175,13 @@ export function BottomSheetSwitcher({
       isScrimOwner,
       onActiveSheetChange,
       onBeforeSheetPresent,
+      onBeforeSheetShow,
       onDialogCancel,
       onDialogClick,
       onDialogKeyDown,
+      onDialogPointerCancelCapture,
+      onDialogPointerDownCapture,
+      onDialogPointerUpCapture,
       onSheetEnterStart,
       onSheetScrimOpacityChange,
       onSheetTransitionComplete,

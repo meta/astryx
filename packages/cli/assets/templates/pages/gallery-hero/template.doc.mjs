@@ -19,5 +19,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'Gallery - Hero',
-  icons: {ArrowRightIcon: 'arrowRight'},
 };

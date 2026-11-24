@@ -11,7 +11,7 @@
 import type {ReactNode} from 'react';
 import {describe, expect, test} from 'vitest';
 import {renderHook} from '@testing-library/react';
-import {useListFormatter} from '../useListFormatter';
+import {useListFormatter, useListPartsFormatter} from '../useListFormatter';
 import {InternationalizationProvider} from '../InternationalizationProvider';
 
 const items = ['"a.png" is not an accepted file type', '"b.pdf" exceeds 1 MB'];
@@ -54,5 +54,23 @@ describe('useListFormatter', () => {
     const first = result.current;
     rerender();
     expect(result.current).toBe(first);
+  });
+});
+
+describe('useListPartsFormatter', () => {
+  test('gives the items and the locale separators, which join to the formatted list', () => {
+    const three = ['Design', 'עיצוב', '+2'];
+    for (const locale of ['en', 'de', 'ar']) {
+      const {result} = renderHook(() => useListPartsFormatter(), {
+        wrapper: wrapperFor(locale),
+      });
+      const parts = result.current(three);
+      expect(
+        parts.filter(part => part.type === 'element').map(part => part.value),
+      ).toEqual(three);
+      expect(parts.map(part => part.value).join('')).toBe(
+        oracle(locale, three),
+      );
+    }
   });
 });

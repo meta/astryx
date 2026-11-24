@@ -32,6 +32,7 @@ import {NavSurfaceMode} from './NavSurfaceMode';
 import {TemplatesPreview} from '../_landing/TemplatesPreview';
 import {ThemesPreview} from '../_landing/ThemesPreview';
 import {FrozenPreview} from '../_landing/FrozenPreview';
+import {githubAvatarImage} from '../../../lib/githubAvatarUrl';
 import {pageMetadata} from '../../../lib/pageMetadata';
 import * as stylex from '@stylexjs/stylex';
 import {Card} from '@astryxdesign/core/Card';
@@ -68,6 +69,10 @@ const WIKI_BASE = `${GITHUB_REPO}/wiki`;
 // =============================================================================
 // Styles
 // =============================================================================
+
+// The side of a wall avatar in CSS pixels. The wall asks GitHub for each
+// picture at this size.
+const WALL_AVATAR_SIZE = 48;
 
 const styles = stylex.create({
   // A plain wrapper, not Section's maxWidth prop: Section's
@@ -209,8 +214,8 @@ const styles = stylex.create({
   // AVATAR_SLOTS percentages refer to where the middle of the tile sits.
   wallAvatar: {
     position: 'absolute',
-    width: 48,
-    height: 48,
+    width: WALL_AVATAR_SIZE,
+    height: WALL_AVATAR_SIZE,
     borderRadius: 'var(--radius-element)',
     objectFit: 'cover' as const,
   },
@@ -372,7 +377,10 @@ const FALLBACK_AVATARS: ReadonlyArray<string> = [
 function WallCard({contributors}: {contributors: ReadonlyArray<Contributor>}) {
   // Real contributor avatars first, Unsplash placeholders for the rest.
   const avatars = AVATAR_SLOTS.map((slot, i) => ({
-    src: contributors[i]?.avatar_url ?? FALLBACK_AVATARS[i],
+    image: githubAvatarImage(
+      contributors[i]?.avatar_url ?? FALLBACK_AVATARS[i],
+      WALL_AVATAR_SIZE,
+    ),
     key: getKey(contributors[i]?.login, i),
     slot,
   }));
@@ -380,10 +388,10 @@ function WallCard({contributors}: {contributors: ReadonlyArray<Contributor>}) {
   return (
     <Card padding={0} xstyle={styles.wallCard}>
       <div {...stylex.props(styles.wallAvatarLayer)} aria-hidden="true">
-        {avatars.map(({src, key, slot}) => (
+        {avatars.map(({image, key, slot}) => (
           <img
             key={key}
-            src={src}
+            {...image}
             alt=""
             {...stylex.props(styles.wallAvatar)}
             style={{

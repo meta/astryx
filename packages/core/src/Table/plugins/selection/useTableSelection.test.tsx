@@ -100,6 +100,59 @@ function SelectionTable({
 // Tests
 // =============================================================================
 
+describe('useTableSelection: row paint', () => {
+  it('selecting a row paints it without rendering any row again', async () => {
+    const cellRenders: Record<string, number> = {};
+    const countedColumns: TableColumn<SelectableUser>[] = [
+      {
+        key: 'name',
+        header: 'Name',
+        renderCell: item => {
+          cellRenders[item.id] = (cellRenders[item.id] ?? 0) + 1;
+          return item.name;
+        },
+      },
+    ];
+    function CountedTable() {
+      const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+      const selection = useTableSelection<SelectableUser>({
+        getIsItemSelected: item => selected.has(item.id),
+        onSelectItem: ({item, isSelected}) => {
+          const next = new Set(selected);
+          if (isSelected) {
+            next.add(item.id);
+          } else {
+            next.delete(item.id);
+          }
+          setSelected(next);
+        },
+        onSelectAll: () => {},
+        getIsAllSelected: () => false,
+        getIsIndeterminate: () => selected.size > 0,
+      });
+      return (
+        <Table
+          data={selectableUsers}
+          columns={countedColumns}
+          idKey="id"
+          plugins={{selection}}
+        />
+      );
+    }
+    render(<CountedTable />);
+    const before = {...cellRenders};
+
+    await userEvent.click(screen.getAllByRole('checkbox')[1]);
+
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows[0].style.backgroundColor).toBe(
+      colorVars['--color-accent-muted'],
+    );
+    expect(rows[1].style.backgroundColor).toBe('');
+    expect(cellRenders).toEqual(before);
+  });
+});
+
 describe('useTableSelection', () => {
   it('renders selection checkboxes in header and body rows', () => {
     render(<SelectionTable />);
