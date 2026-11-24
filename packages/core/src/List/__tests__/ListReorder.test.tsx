@@ -1790,6 +1790,33 @@ describe('List reorderable', () => {
     }
   });
 
+  it('leaves no stacking or background on a row grabbed again during its drop glide and released in place', async () => {
+    stubPrimaryPointer(false);
+    render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+    const list = screen.getByRole('list');
+    layOut(list);
+    const handle = handleOf('A');
+    mouseDrag(handle, 322, 322 + 70);
+    act(() => {
+      fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+    });
+    expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+    // Grabbed again while the drop's glide still runs, and let go in place.
+    const again = handleOf('A');
+    const row = again.closest('li')!;
+    const top = 300 + 2 * 44 + 22;
+    mouseDrag(again, top, top);
+    act(() => {
+      fireEvent.pointerUp(again, {...MOUSE, clientY: top});
+    });
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    });
+    expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+    expect(row.style.zIndex).toBe('');
+    expect(row.style.backgroundColor).toBe('');
+  });
+
   it("reads a key move's glide spring once, however many rows slide", async () => {
     stubPrimaryPointer(true);
     const follow = vi.spyOn(touchMotion, 'follow');

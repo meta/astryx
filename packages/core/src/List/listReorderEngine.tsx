@@ -1181,7 +1181,6 @@ export class ListReorderController implements ListReorderSession {
     return dragged;
   }
 
-  /** This list's handle in `row`, if it has one: a nested list's are its own. */
   /**
    * The row's handle top inside the row, or 0 without a handle. It reads
    * layout; a transform on the row moves both boxes alike.
@@ -1193,6 +1192,7 @@ export class ListReorderController implements ListReorderSession {
       : handle.getBoundingClientRect().top - row.getBoundingClientRect().top;
   }
 
+  /** This list's handle in `row`, if it has one: a nested list's are its own. */
   private handleIn(row: HTMLElement): Element | null {
     for (const handle of reorderHandlesIn(row)) {
       if (this.keys.has(handle)) {

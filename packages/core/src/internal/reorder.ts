@@ -51,7 +51,7 @@ export function adaptReorderable<TKey extends string | number, TTo>(
   const adapted: ReorderableInternals = {
     options: {
       ...(options as unknown as ListReorderOptions),
-      // An adapter that names no handle shows the handle the owner chose.
+      // An adapted list places its handles as the owner's list does.
       handle: options.handle ?? source.options.handle,
       startedBy: source.options.startedBy ?? source.options,
     },
