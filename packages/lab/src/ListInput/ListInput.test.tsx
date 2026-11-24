@@ -397,10 +397,31 @@ describe('ListInput', () => {
     expect(getComputedStyle(emptyState!).justifyContent).toBe('center');
     expect(getComputedStyle(emptyState!).textAlign).toBe('center');
     expect(
-      screen.getByRole('heading', {name: 'No guests yet'}),
+      screen.getByRole('heading', {name: 'No guest added yet'}),
     ).toBeInTheDocument();
-    expect(screen.getByText('Add a guest to get started.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Each guest you add appears here.'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Add guest'})).toBeEnabled();
+  });
+
+  it('words the empty state with any noun as given, with no plural ending or article', () => {
+    const {unmount} = renderListInput({value: [], itemName: 'email address'});
+    expect(
+      screen.getByRole('heading', {name: 'No email address added yet'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Each email address you add appears here.'),
+    ).toBeInTheDocument();
+    unmount();
+
+    renderListInput({value: [], itemName: undefined});
+    expect(
+      screen.getByRole('heading', {name: 'No item added yet'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Each item you add appears here.'),
+    ).toBeInTheDocument();
   });
 
   it('names records with the translated catalog noun when itemName is absent', () => {
@@ -807,7 +828,7 @@ describe('ListInput', () => {
         Array.from(document.querySelectorAll('[aria-live="polite"]')).some(
           node =>
             node.textContent ===
-            'Removed guest 1. No guests yet Add a guest to get started.',
+            'Removed guest 1. No guest added yet Each guest you add appears here.',
         ),
       ).toBe(true);
     });
