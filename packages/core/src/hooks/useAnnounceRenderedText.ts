@@ -207,7 +207,7 @@ export function useAnnounceRenderedText(
       return;
     }
     // A live container speaks its own content. The ancestor walk is cheap, so
-    // it comes before the visibility read, which forces style and layout.
+    // it comes before the visibility read, which forces a style update.
     if (skipFirstRender && element.parentElement?.closest(LIVE_CONTAINER)) {
       return;
     }
