@@ -21,6 +21,7 @@ export const doc = {
       name: 'slug',
       param: 'slug',
       required: true,
+      names: 'theme',
     },
   ],
   examples: [
@@ -30,14 +31,15 @@ export const doc = {
     },
   ],
   outsideProject: 'refuse',
+  requires: ['themes.appModule'],
   exitCodes: [
     {
       code: 0,
-      when: 'the module is regenerated without the theme, or removed with the only added theme',
+      when: 'the module is regenerated without the theme; or, for the only added theme, the module is removed and the lines the app root must drop are printed',
     },
     {
       code: 1,
-      when: 'the theme is not added, is the default while other themes are added, is the only one and the module has changes the CLI did not write, or state is invalid',
+      when: 'the theme is not added; it is the default and other themes are still added (choose another default with theme use first); it is the only added theme and its module has changes the CLI did not write; or state is invalid',
     },
   ],
   related: [

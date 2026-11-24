@@ -6,7 +6,7 @@
  * @output Seed range, spacer structure, column positions, pinned runs and fallback tests
  * @position Colocated Table column virtualization runtime coverage
  */
-import {useEffect, useState} from 'react';
+import {Profiler, useEffect, useState} from 'react';
 import {afterEach, describe, it, expect, vi} from 'vitest';
 import {act, cleanup, render, renderHook, screen} from '@testing-library/react';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -701,6 +701,116 @@ describe('retained focused column', () => {
   });
 });
 
+describe('column range changes', () => {
+  it('builds only the cells of columns that enter the window', async () => {
+    const viewport = controlledViewport();
+    const built: string[] = [];
+    // Each body cell runs every plugin's cell transform when it is built.
+    const recorder: TablePlugin<Item> = {
+      rowModel: 'flat',
+      transformBodyCell: (props, column) => {
+        built.push(column.key);
+        return props;
+      },
+    };
+    const {container} = render(<Fixture extraPlugins={{recorder}} />);
+    await settle();
+    await viewport.scrollTo(200);
+    const before = mountedKeys(container);
+    built.length = 0;
+    // One more column enters at the inline end.
+    await viewport.scrollTo(300);
+    const after = mountedKeys(container);
+    const entering = after.filter(key => !before.includes(key));
+    expect(entering.length).toBeGreaterThan(0);
+    expect(after.length).toBeGreaterThan(entering.length);
+    expect([...new Set(built)].sort()).toEqual([...entering].sort());
+    expect(built).toHaveLength(entering.length * ROW_COUNT);
+  });
+
+  it('does not render the column window for a scroll inside the mounted range', async () => {
+    const viewport = controlledViewport();
+    let renders = 0;
+    // The header row's transform runs once each time the column window
+    // renders the table.
+    const recorder: TablePlugin<Item> = {
+      transformHeaderRow: props => {
+        renders++;
+        return props;
+      },
+    };
+    const {container} = render(<Fixture extraPlugins={{recorder}} />);
+    await settle();
+    await viewport.scrollTo(205);
+    const before = mountedKeys(container);
+    renders = 0;
+    // 90px more stays inside the same columns: none enters or leaves.
+    await viewport.scrollTo(295);
+    expect(mountedKeys(container)).toEqual(before);
+    expect(renders).toBe(0);
+  });
+
+  it('commits nothing for a scroll inside the mounted range', async () => {
+    const viewport = controlledViewport();
+    let commits = 0;
+    const {container} = render(
+      <Profiler id="table" onRender={() => commits++}>
+        <Fixture />
+      </Profiler>,
+    );
+    await settle();
+    await viewport.scrollTo(205);
+    const before = mountedKeys(container);
+    commits = 0;
+    // 90px more stays inside the same columns: none enters or leaves.
+    await viewport.scrollTo(295);
+    expect(mountedKeys(container)).toEqual(before);
+    expect(commits).toBe(0);
+    // A scroll that brings a column in still commits.
+    await viewport.scrollTo(900);
+    expect(mountedKeys(container)).not.toEqual(before);
+    expect(commits).toBeGreaterThan(0);
+  });
+});
+
+describe('pinning a mounted column', () => {
+  function pinnedState(container: HTMLElement, key: string) {
+    const header = container.querySelector(
+      `thead [data-column-key="${key}"]`,
+    ) as HTMLElement;
+    const index = header.getAttribute('aria-colindex');
+    const body = Array.from(
+      container.querySelectorAll(`tbody td[aria-colindex="${index}"]`),
+    );
+    return {
+      header: header.hasAttribute('data-astryx-table-pinned'),
+      body: body.map(cell => cell.hasAttribute('data-astryx-table-pinned')),
+    };
+  }
+
+  it('pins and unpins the header and body cells of a mounted column together', async () => {
+    controlledViewport();
+    const {container, rerender} = render(<Fixture />);
+    await settle();
+    expect(pinnedState(container, 'c1')).toEqual({
+      header: false,
+      body: Array(ROW_COUNT).fill(false),
+    });
+    rerender(<Fixture startKeys={['c0', 'c1']} />);
+    await settle();
+    expect(pinnedState(container, 'c1')).toEqual({
+      header: true,
+      body: Array(ROW_COUNT).fill(true),
+    });
+    rerender(<Fixture />);
+    await settle();
+    expect(pinnedState(container, 'c1')).toEqual({
+      header: false,
+      body: Array(ROW_COUNT).fill(false),
+    });
+  });
+});
+
 describe('first-visible-column anchor', () => {
   // 2050px into a run of 100px columns: c20 is first visible, half shown.
   async function mountAt(
@@ -790,6 +900,18 @@ describe('first-visible-column anchor', () => {
     expect(viewport.writes).toEqual([]);
     expect(viewport.getLeft()).toBe(3050);
     expect(mountedKeys(container)).toContain('c30');
+  });
+
+  it('writes no scroll when the last column is unpinned near the end of the run', async () => {
+    const viewport = controlledViewport();
+    const {rerender} = render(<Fixture endKeys={['c39']} />);
+    await settle();
+    // c34 is first visible, half shown, within one column of the run's end.
+    await viewport.scrollTo(3450);
+    rerender(<Fixture />);
+    await viewport.landWrites();
+    expect(viewport.writes).toEqual([]);
+    expect(viewport.getLeft()).toBe(3450);
   });
 
   it('keeps the first visible column when an earlier column is pinned', async () => {
@@ -952,6 +1074,11 @@ describe('rows and columns windowing together', () => {
     expect(cell).not.toBeNull();
     act(() => cell?.focus());
     await viewport.scrollBoth(2000, 2400);
+    // CI once read the first window here with the focused row still mounted,
+    // and the failure did not reproduce locally. A second scroll report
+    // publishes the scroll position again, and two more frames let it land,
+    // before the rows are read.
+    await viewport.landWrites();
     const rows = mountedRows(container);
     // Row 1 stays as the island before the window from row 47.
     expect(rows[0]).toHaveAttribute('aria-rowindex', '2');
@@ -961,6 +1088,7 @@ describe('rows and columns windowing together', () => {
     expect(document.activeElement).toBe(cell);
     expect(rows[1].querySelector('[aria-colindex="2"]')).not.toBeNull();
     await viewport.scrollBoth(0, 0);
+    await viewport.landWrites();
     expect(document.activeElement).toBe(cell);
     expect(mountedRows(container)[0]).toHaveAttribute('aria-rowindex', '2');
   });

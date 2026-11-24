@@ -37,8 +37,10 @@ import {Text} from '../Text';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useListFocus} from '../hooks/useListFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {focusForLastInput} from '../utils/focusReturn';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
+import {useTouchHitArea} from '../utils/touchHitArea';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
@@ -107,12 +109,13 @@ export interface PaginationProps extends Omit<
 
   // --- Data shape (provide one) ---
   /**
-   * Total number of items. Used to calculate page count.
-   * Takes precedence over totalPages if both provided.
+   * Total number of items. Used to calculate the page count when totalPages
+   * is not given.
    */
   totalItems?: number;
   /**
    * Total number of pages. Use when you know page count but not item count.
+   * Takes precedence over totalItems if both are given.
    */
   totalPages?: number;
   /**
@@ -234,12 +237,14 @@ const styles = stylex.create({
     minHeight: sizeVars['--size-element-md'],
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     userSelect: 'none',
   },
   ellipsisSm: {
     minWidth: sizeVars['--size-element-sm'],
     minHeight: sizeVars['--size-element-sm'],
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   infoText: {
     display: 'flex',
@@ -252,6 +257,7 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-1'],
   },
   dot: {
+    position: 'relative',
     width: spacingVars['--spacing-2'],
     height: spacingVars['--spacing-2'],
     borderWidth: 0,
@@ -264,7 +270,10 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     transitionProperty: 'background-color',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   dotSm: {
@@ -291,18 +300,22 @@ const styles = stylex.create({
   inputLabel: {
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     userSelect: 'none',
   },
   inputLabelSm: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   inputTotal: {
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     userSelect: 'none',
   },
   inputTotalSm: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   pageSizeSelector: {
     display: 'flex',
@@ -400,9 +413,29 @@ function navigatesHere(event: React.MouseEvent<HTMLElement>): boolean {
  * Button replaces the element when the control starts or stops being a link.
  * The new element takes the focus.
  */
-function PaginationButton(props: React.ComponentProps<typeof Button>) {
+function PaginationButton({
+  isCurrent = false,
+  rowEnd,
+  ...props
+}: React.ComponentProps<typeof Button> & {
+  isCurrent?: boolean;
+  rowEnd?: 'first' | 'last';
+}) {
   const ref = useFocusAcrossSwap<HTMLButtonElement>();
-  return <Button {...props} ref={ref} />;
+  return (
+    <Button
+      {...props}
+      {...themeProps('pagination-item', {
+        selected: isCurrent ? 'selected' : null,
+        // A theme that joins the controls into one strip reads the row's ends
+        // here. A control with a tooltip renders its layer after it in the
+        // row, so `:last-child` can miss the last control.
+        first: rowEnd === 'first' ? 'first' : null,
+        last: rowEnd === 'last' ? 'last' : null,
+      })}
+      ref={ref}
+    />
+  );
 }
 
 // =============================================================================
@@ -536,6 +569,9 @@ export function Pagination({
   // The click's focus takes the ring of the dots' own document's last input.
   const {ref: modalityRef} = useInteractionModalityTracking();
   const dotsRef = useMergedRefs(dotsListRef, modalityRef);
+  // Under a coarse pointer each dot's target grows toward 44 px, clamped to
+  // half the gap to its neighbours. One ref watches every dot.
+  const dotHitAreaRef = useTouchHitArea(variant === 'dots' && !isDisabled);
 
   const computedTotalPages =
     totalPagesProp ??
@@ -696,9 +732,9 @@ export function Pagination({
                   <span
                     key={`ellipsis-${previousPage}-${nextPage}`}
                     aria-hidden="true"
-                    {...stylex.props(
-                      styles.ellipsis,
-                      isSm && styles.ellipsisSm,
+                    {...mergeProps(
+                      themeProps('pagination-ellipsis'),
+                      stylex.props(styles.ellipsis, isSm && styles.ellipsisSm),
                     )}>
                     …
                   </span>
@@ -717,6 +753,7 @@ export function Pagination({
                   {...controlProps(item, true)}
                   isDisabled={isDisabled}
                   aria-current={isActive ? 'page' : undefined}
+                  isCurrent={isActive}
                   xstyle={isActive && styles.activePage}>
                   {item}
                 </PaginationButton>
@@ -780,6 +817,7 @@ export function Pagination({
               return (
                 <button
                   key={i + 1}
+                  ref={dotHitAreaRef}
                   type="button"
                   role="radio"
                   data-page={i + 1}
@@ -808,6 +846,7 @@ export function Pagination({
                     }),
                     focusOutlineProps.focusVisible(
                       styles.dot,
+                      !isDisabled && touchHitAreaStyles.layer,
                       isSm && styles.dotSm,
                       isActive && styles.dotActive,
                       isDisabled && styles.dotDisabled,
@@ -920,7 +959,10 @@ export function Pagination({
         </div>
       )}
       <div
-        {...stylex.props(styles.controls)}
+        {...mergeProps(
+          themeProps('pagination-list', {variant, size}),
+          stylex.props(styles.controls),
+        )}
         // A key or pointer press can arrive before that task. The click that
         // it starts counts from the current page too.
         onKeyDownCapture={countFromCurrentPage}
@@ -941,6 +983,7 @@ export function Pagination({
             {...controlProps(1, hasPrevious)}
             isDisabled={isDisabled || !hasPrevious}
             isIconOnly
+            rowEnd="first"
             xstyle={variant === 'compact' && styles.compactFirst}
           />
         )}
@@ -960,6 +1003,7 @@ export function Pagination({
           {...controlProps(clampPage(linkPage - step), hasPrevious)}
           isDisabled={isDisabled || !hasPrevious}
           isIconOnly
+          rowEnd={showFirstLast ? undefined : 'first'}
         />
 
         {renderIndicator()}
@@ -979,6 +1023,7 @@ export function Pagination({
           {...controlProps(clampPage(linkPage + step), hasNext)}
           isDisabled={isDisabled || !hasNext}
           isIconOnly
+          rowEnd={showFirstLast ? undefined : 'last'}
         />
 
         {showFirstLast && (
@@ -997,6 +1042,7 @@ export function Pagination({
             {...controlProps(computedTotalPages ?? optimisticPage, hasNext)}
             isDisabled={isDisabled || !hasNext}
             isIconOnly
+            rowEnd="last"
             xstyle={variant === 'compact' && styles.compactLast}
           />
         )}

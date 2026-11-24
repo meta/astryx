@@ -63,12 +63,20 @@ permissions: {}
 # dispatches keep longer limits; macOS-only `test-native-swift` keeps 30). Split
 # a job that nears the limit (shard, scope, cache); do not raise it.
 #
+# A git fetch can hang in actions/checkout. A shallow checkout therefore stops
+# after five minutes (four in a job of ten minutes), runs once more when its
+# first try failed, and the job stops with "checkout failed twice" when both
+# tries failed. A checkout in a job of eight minutes or less, and a
+# full-history checkout, keep one try: their jobs have no time for a second
+# (ci-checkout-timeout.test.mjs owns the bounds).
+#
 # Each job that owns tests decides its own scope in its first steps
 # (.github/actions/test-scope: the PR's file list against the base's trusted
 # classifier) and skips its work, reporting success, when nothing in its scope
 # changed; anything undecidable runs everything. The one scope job,
 # swizzle-proof-scope, reads the swizzle proof's own scope, so its eight legs
-# start only when the change proves a target.
+# start only when the change proves a target, and on a pull request only with
+# the `ci:run-swizzle` label: the proof runs on main (spec:AST-110/DEC-3).
 #
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
 # pr-rtl*) do not run on pull request updates (a shared primitive's dependent
@@ -107,9 +115,10 @@ permissions: {}
 # (spec:AST-030 FR23, DEC-17).
 # A pull request's newer push cancels its older run. A re-run takes a group of
 # its own, so re-running an older head never cancels the run for the pull
-# request's current head. The superseded-runs job cancels the other way: each
-# run cancels this pull request's unfinished runs for a head that is no longer
-# its head, and `room` stops a run whose own head is superseded.
+# request's current head. The superseded-runs job cancels the other way, at
+# the start of each run: the newest run wins, so a run cancels this pull
+# request's older unfinished runs for another head, and `room` stops a run
+# that a newer run for another head supersedes.
 concurrency:
   group: "ci-${{ github.event.pull_request.number && (github.run_attempt == '1' && github.event.pull_request.number || format('{0}-rerun-{1}', github.event.pull_request.number, github.run_id)) || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && 'interaction-full') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && github.ref == 'refs/heads/main' && 'webkit-weekly') || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}
@@ -119,9 +128,10 @@ jobs:
   # (spec:AST-030 FR16, DEC-16), in two jobs (slim on a pull request, standard
   # on a dispatch): `room` waits until the
   # Storybook build has room and starts it, and `admission` waits for the rest
-  # of the run unless it already fit. Every job here but build-storybook and
-  # ci-full needs admission, directly or through the jobs it needs, so a
-  # waiting run holds only its one waiting job and a build that found room.
+  # of the run unless it already fit. Every job here but build-storybook,
+  # ci-full and superseded-runs needs admission, directly or through the jobs
+  # it needs, so a waiting run holds only its one waiting job, a build that
+  # found room, and the superseded-runs sweep while it runs.
   # Like every other job both skip for a draft or an unlabelled fork, which run
   # no CI (FR17); the required contexts still report through their own status
   # rules. Neither fails, so each job's own condition decides exactly as before,
@@ -162,31 +172,64 @@ jobs:
       node-reason: ${{ steps.node-legs.outputs.reason }}
     steps:
       - name: Check out the admission action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           # scripts/lib brings the scripts/ files beside it too: the Node leg
           # planner, the modules it imports and the recorded Node times;
-          # .github/scripts/lib holds the glob matcher it shares.
+          # .github/scripts/lib holds the glob matcher it shares, and brings
+          # the .github/scripts files the release-critical label check reads
+          # (run-labels.cjs and review-signal-decision.cjs).
+          # The Node leg planner reads the real-Chrome test files' sources
+          # (scripts/vitest-node-legs.mjs nodeLegsApart).
           sparse-checkout: |
             .github/actions/ci-admission
             .github/actions/superseded-runs
             .github/scripts/lib
             scripts/lib
+            packages/cli/api/theme-edit
           path: .ci-admission
           persist-credentials: false
 
-      # A run for a head that is no longer the pull request's head (a re-run
-      # of an older head) stops before it takes room, and the required
-      # contexts fail with the reason, never pass. superseded-runs cancels it.
+      - name: Check out the admission action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          # The Node leg planner reads the real-Chrome test files' sources
+          # (scripts/vitest-node-legs.mjs nodeLegsApart).
+          sparse-checkout: |
+            .github/actions/ci-admission
+            .github/actions/superseded-runs
+            .github/scripts/lib
+            scripts/lib
+            packages/cli/api/theme-edit
+          path: .ci-admission
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
+      # A run that a newer run for another head supersedes (a re-run of an
+      # older head) stops before it takes room, and the required contexts
+      # fail with the reason, never pass. superseded-runs cancels it.
       - name: Check the pull request's head
         id: head
         uses: ./.ci-admission/.github/actions/superseded-runs
+        with:
+          rule: newest-run
 
       - name: Stop for a superseded head
         if: steps.head.outputs.superseded == 'true'
         run: |
-          echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports the checks."
+          echo "::error title=Superseded head::A newer run of this pull request is for another head, so this run stops. The newest run reports the checks."
           exit 1
 
       # The one Node leg count (scripts/vitest-node-legs.mjs): test-node's
@@ -200,8 +243,7 @@ jobs:
         continue-on-error: true
         working-directory: .ci-admission
         run: |
-          node scripts/vitest-node-legs.mjs plan --github-output \
-            --other-widths '{"swizzle-proof": {"tight": 2, "full": 8}}'
+          node scripts/vitest-node-legs.mjs plan --github-output
 
       # Another run's admission reads from this step's name how many jobs this
       # run adds at full width (count.mjs).
@@ -216,11 +258,11 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 21 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 48 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
-          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 13, "ci:run-swizzle": 8}'
           # A dispatch runs neither widening matrix.
           leg-widths: ${{ github.event_name == 'workflow_dispatch' && '{}' || steps.node-legs.outputs.leg-widths }}
 
@@ -239,9 +281,11 @@ jobs:
     # fifteen-minute cap, so it waits on a standard runner (spec:AST-030 DEC-16).
     runs-on: ${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 130 || 15 }}
+    # pull-requests: read reads who applied a release-critical label.
     permissions:
       actions: read
       contents: read
+      pull-requests: read
     outputs:
       full: ${{ steps.rest.outputs.full }}
       # How many legs of each widening matrix run at once (ci-admission).
@@ -254,12 +298,38 @@ jobs:
           exit 1
 
       - name: Check out the admission action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
-          sparse-checkout: .github/actions/ci-admission
+          # .github/scripts/lib brings the .github/scripts files beside it, the
+          # ones the release-critical label check reads (run-labels.cjs and
+          # review-signal-decision.cjs).
+          sparse-checkout: |
+            .github/actions/ci-admission
+            .github/scripts/lib
           path: .ci-admission
           persist-credentials: false
+
+      - name: Check out the admission action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: |
+            .github/actions/ci-admission
+            .github/scripts/lib
+          path: .ci-admission
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Wait for room under the CI ceiling
         id: rest
@@ -276,11 +346,11 @@ jobs:
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
           wide: ${{ needs.room.outputs.wide }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 21 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 48 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
-          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 13, "ci:run-swizzle": 8}'
           # A dispatch runs neither widening matrix.
           leg-widths: ${{ github.event_name == 'workflow_dispatch' && '{}' || needs.room.outputs.leg-widths }}
 
@@ -323,18 +393,19 @@ jobs:
           gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" || true
           exit 1
 
-  # Cancels this pull request's unfinished runs for a head that is no longer
-  # its head, this run included (.github/actions/superseded-runs). A re-run
-  # takes a concurrency group of its own, so a new push does not cancel it:
-  # the run for the new head does it here. It is the one job with
+  # Cancels this pull request's older unfinished runs for another head, or
+  # this run when a newer run for another head supersedes it
+  # (.github/actions/superseded-runs). A re-run takes a concurrency group of
+  # its own, so a new push does not cancel it: the run for the new head does
+  # it here. It starts with the run, before the run waits for room, so a run
+  # that waits or that CI turns away still frees the room the older runs
+  # hold; their results can pass no required check. It is the one job with
   # `actions: write` for this, and it runs only for a pull request from this
-  # repository, since a fork's token is read-only. It starts once admission
-  # found room for the run, or once `room` stopped this run for a superseded
-  # head, so it takes room like every other job. No job needs it, and no
+  # repository, since a fork's token is read-only. `peak` counts it, and a
+  # waiting run's count holds it while it runs. No job needs it, and no
   # required context reads it, so its own failure fails nothing else.
   superseded-runs:
-    needs: [room, admission]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (needs.admission.result == 'success' || needs.room.outputs.superseded == 'true')) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     continue-on-error: true
@@ -669,24 +740,31 @@ jobs:
   # code and theme, nothing sent to a document the code navigated to), and
   # only the production build has the opaque-origin sandbox at all. The
   # spec-only lane validates spec records here, where it always has.
-  # Whether this push defers the heavy suites (spec:AST-030 FR20, DEC-14): a
-  # push to a ready agent-lane pull request (the shared agent login), in its
-  # first attempt, runs only the fast checks (lint, typecheck). The heavy jobs
-  # skip, and the required checks fail with the reason until the pull request
-  # is marked ready or reopened, or its run is re-run in full before merge
-  # (any later attempt runs everything). A spec-only change is never deferred.
+  # Whether this push defers the heavy suites (spec:AST-030 FR20, DEC-32): a
+  # pull request's run into main, from any author, in its first attempt, runs
+  # only the fast checks (lint, typecheck): on a push, and when the pull
+  # request is opened, reopened or marked ready. The heavy jobs skip, and the
+  # required checks fail with the reason until review passes: at the first
+  # head whose review and spec gates pass, ci-review-pass.yml runs the run
+  # again in full, and so does merge-guard before merge (any later attempt
+  # runs everything). A spec-only or Lab-only change is never deferred, nor a
+  # release merge-back, a release-branch pull request or a pull request whose
+  # release-critical label someone with write access applied last.
   # Every other run skips this job at once, so it delays nothing; every job
   # below it carries a status check, so the skip never skips them. It needs
   # only room, beside admission, so the Storybook build it gates still starts
   # with room (spec:AST-030 FR16), and like room it holds one slim job.
   heavy-ci:
     needs: [room]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.run_attempt == '1' && contains(fromJSON('["cixzhang"]'), github.event.pull_request.user.login) && github.base_ref == 'main' && !startsWith(github.head_ref, 'chore/merge-v')) && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true') }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name == 'pull_request' && github.run_attempt == '1' && github.base_ref == 'main' && !startsWith(github.head_ref, 'chore/merge-v')) && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true') }}
     runs-on: ubuntu-slim
-    timeout-minutes: 5
+    timeout-minutes: 6
     permissions:
+      # checks: read lets the review read when the head was pushed.
+      checks: read
       contents: read
       pull-requests: read
+      statuses: read
     outputs:
       deferred: ${{ steps.decide.outputs.deferred }}
     steps:
@@ -694,7 +772,12 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 3
         with:
-          sparse-checkout: .github/actions/test-scope
+          # .github/scripts/lib brings the .github/scripts files beside it, the
+          # ones the release-critical label check reads (run-labels.cjs and
+          # review-signal-decision.cjs).
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts/lib
           path: .test-scope
           persist-credentials: false
 
@@ -702,20 +785,84 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
+      # A release-critical label counts only when someone with write access
+      # applied it last (DEC-30), as admission and the heavy-suite caps check.
+      - name: Read whether the release-critical label counts
+        id: release
+        if: contains(github.event.pull_request.labels.*.name, 'release-critical')
+        uses: actions/github-script@v9
+        env:
+          RUN_LABELS_MODULE: ${{ github.workspace }}/.test-scope/.github/scripts/run-labels.cjs
+        with:
+          script: |
+            const {pathToFileURL} = await import('node:url');
+            let counts = false;
+            try {
+              const {decideRunLabel} = await import(pathToFileURL(process.env.RUN_LABELS_MODULE).href);
+              counts = await decideRunLabel({github, context, core: {...core, notice: () => {}}, suite: 'release-critical', label: 'release-critical'});
+            } catch (error) {
+              core.warning(`Could not check who applied release-critical: ${error.message}`);
+            }
+            core.setOutput('counts', String(counts === true));
+
+      # A head already reviewed when its run starts would get its review-pass
+      # run at once, so it runs every suite in this run instead. Review signal writes the gate a moment after the
+      # push: look for up to three minutes.
+      - name: Read whether the review gate already passes at this head
+        id: gate
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only != 'true' && steps.release.outputs.counts != 'true'
+        uses: actions/github-script@v9
+        env:
+          HEAVY_MODULE: ${{ github.workspace }}/.test-scope/.github/scripts/lib/heavy-turn.mjs
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ENG_OWNERS: ${{ vars.ENGOWNERS }}
+          REVIEW_APP: ${{ vars.REVIEW_APP }}
+        with:
+          script: |
+            const {pathToFileURL} = await import('node:url');
+            let passes = false;
+            try {
+              const turn = await import(pathToFileURL(process.env.HEAVY_MODULE).href);
+              let status = null;
+              for (let look = 0; look < 12; look += 1) {
+                status = await turn.reviewStatus({github, ...context.repo, sha: process.env.HEAD_SHA});
+                if (status != null && status.state !== 'pending') break;
+                await new Promise(resolve => setTimeout(resolve, 15_000));
+              }
+              // The heavy turn (DEC-32): a review of this exact head, never
+              // the author's own push. It clears no gate.
+              passes =
+                status != null &&
+                (await turn.heavyReviewPasses({
+                  github,
+                  ...context.repo,
+                  pull: context.payload.pull_request,
+                  engOwners: turn.ownerHandles(process.env.ENG_OWNERS),
+                  reviewApp: process.env.REVIEW_APP,
+                }));
+            } catch (error) {
+              core.warning(`Could not read the review gate: ${error.message}`);
+            }
+            core.setOutput('passes', String(passes));
+
       - name: Defer the heavy suites unless the change is spec-only or Lab-only
         id: decide
         env:
           SPEC_ONLY: ${{ steps.scope.outputs.spec_only }}
           LAB_ONLY: ${{ steps.scope.outputs.lab_only }}
+          RELEASE_CRITICAL: ${{ steps.release.outputs.counts }}
+          REVIEW_PASSES: ${{ steps.gate.outputs.passes }}
         run: |
           # A Lab-only change runs only fast work, so nothing is deferred (FR26).
-          if [ "$SPEC_ONLY" = true ] || [ "$LAB_ONLY" = true ]; then
+          # Nor is a pull request whose release-critical label counts (DEC-30),
+          # or a head whose review gate already passes (DEC-32).
+          if [ "$SPEC_ONLY" = true ] || [ "$LAB_ONLY" = true ] || [ "$RELEASE_CRITICAL" = true ] || [ "$REVIEW_PASSES" = true ]; then
             echo 'deferred=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo 'deferred=true' >> "$GITHUB_OUTPUT"
-          echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when marked ready and before merge. Mark the pull request ready, reopen it, or re-run all jobs of this run to run everything."
-          echo "Heavy CI deferred: runs when marked ready and before merge." >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when review passes and before merge. It starts on its own once the review app or an engineering owner approves this exact head and the spec gate passes, while this run is at most six hours old. After that, mark the pull request draft, then ready, for a fresh run on the current main (a fork head needs its ci:run label first); a push or a main merge also works."
+          echo "Heavy CI deferred: runs when review passes and before merge." >> "$GITHUB_STEP_SUMMARY"
 
   docsite-build:
     needs: [room, admission, heavy-ci]
@@ -749,12 +896,31 @@ jobs:
       # harnesses, Storybook config, a shared test), as for every owner
       # (spec:AST-030 FR13).
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's scope
         id: scope
@@ -771,9 +937,25 @@ jobs:
         if: steps.scope.outputs.tooling_only == 'true'
         run: echo "Node-tooling PR — docsite generation is not an owned check"
 
-      - uses: actions/checkout@v7
-        timeout-minutes: 8
+      - name: Check out the repository
+        id: checkout_2
         if: steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Check out the repository (second try)
+        id: checkout_2_again
+        if: (steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       # Spec validation imports the canonical CLI discovery path, so the
       # lightweight docs path needs workspace dependencies too.
@@ -900,8 +1082,24 @@ jobs:
       NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN: https://docs.example.test
       NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: https://probe.example.test
     steps:
-      - uses: actions/checkout@v7
-        timeout-minutes: 8
+      - name: Check out the repository
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Check out the repository (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - uses: ./.github/actions/setup
 
@@ -971,13 +1169,32 @@ jobs:
       # The head can move after room's look, and a re-run of only the failed
       # jobs keeps that look, so this check reads the head again as it reports.
       - name: Check out the superseded-runs action
+        id: checkout
         if: github.event_name == 'pull_request'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/superseded-runs
           path: .superseded-runs
           persist-credentials: false
+
+      - name: Check out the superseded-runs action (second try)
+        id: checkout_again
+        if: (github.event_name == 'pull_request') && steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/superseded-runs
+          path: .superseded-runs
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: (github.event_name == 'pull_request') && steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Check the pull request's head
         id: head
@@ -990,12 +1207,12 @@ jobs:
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1
 
-      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
+      # A push defers the heavy suites until review passes (spec:AST-030 FR20): the
       # required check fails with the reason, never passes as skipped.
       - name: Heavy CI deferred
         if: needs.heavy-ci.outputs.deferred == 'true'
         run: |
-          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
+          echo "::error::Heavy CI deferred: runs when review passes and before merge (spec:AST-030 FR20)."
           exit 1
 
       - name: 'Lab-only: Lab tests + Storybook build'
@@ -1061,16 +1278,41 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's scope
         id: scope
@@ -1091,11 +1333,28 @@ jobs:
       # leg runs this project's readers; the lister needs only git and Node,
       # so a change no test here reads sets up nothing.
       - name: Check out the change for the tests that read its records
+        id: checkout_2
         if: matrix.shard == 1 && steps.scope.outputs.spec_only == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           fetch-depth: 2
+
+      - name: Check out the change for the tests that read its records (second try)
+        id: checkout_2_again
+        if: (matrix.shard == 1 && steps.scope.outputs.spec_only == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          fetch-depth: 2
+
+      - name: Stop when the checkout failed twice
+        if: (matrix.shard == 1 && steps.scope.outputs.spec_only == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: List the tests that read a changed record
         id: spec-readers
@@ -1123,11 +1382,29 @@ jobs:
 
       # Two commits: a pull request's merge commit and its base parent, the
       # diff a scoped run follows.
-      - uses: actions/checkout@v7
-        timeout-minutes: 8
+      - name: Check out the repository
+        id: checkout_3
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           fetch-depth: 2
+
+      - name: Check out the repository (second try)
+        id: checkout_3_again
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          fetch-depth: 2
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - uses: ./.github/actions/setup
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
@@ -1191,19 +1468,21 @@ jobs:
               .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
             fi
           elif [ "$SCOPED" = true ]; then
-            .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:ui --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
-            # Tests no module graph relates to the change run too: guards
-            # that read sources, and tests that load a changed package from
-            # its build (by name or its dist/).
-            # The list goes through a file so a failing lister fails the step.
-            # The guard run leaves out the tests the run above already ran, so
-            # no test runs twice. Every leg splits the same reduced list, so a
-            # leg that cannot list them fails rather than split a different one.
-            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
-            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
-            mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
-            if [ "${#GUARDS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+            # One run covers the tests the change reaches and the tests no
+            # module graph relates to it: guards that read sources, and tests
+            # that load a changed package from its build (by name or its
+            # dist/). Vitest walks the module graph once, for the list; a
+            # second `--changed` walk would cost each leg as long again.
+            # The lists go through files so a failing lister fails the step.
+            # Every leg splits the same list, so a leg that cannot list the
+            # tests fails rather than split a different one. Vitest runs
+            # directly, each path its own argument: a package script joins
+            # them into one shell string, which Linux caps at 128 KiB.
+            .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project ui --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"
+            .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/ui-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
+            mapfile -t TESTS < "$RUNNER_TEMP/ui-tests.txt"
+            if [ "${#TESTS[@]}" -gt 0 ]; then
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm exec vitest run --project ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${TESTS[@]}"
             fi
           else
             pnpm test:ui --shard=${{ matrix.shard }}/${{ strategy.job-total }}
@@ -1217,9 +1496,98 @@ jobs:
         run: pnpm test:ui:isolated
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
+  # Builds the core package once for every test-node leg, which downloads the
+  # output instead of building it again. The output is every file the build
+  # writes under packages/core that git ignores. A specialized lane builds
+  # nothing and uploads nothing, as its legs skip their work.
+  build-core:
+    needs: [admission, heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out the scope action
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+
+      - name: Check out the repository
+        id: checkout_2
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Check out the repository (second try)
+        id: checkout_2_again
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
+      - uses: ./.github/actions/setup
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+
+      - name: Build core package
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        run: pnpm -F @astryxdesign/core build
+
+      - name: Pack the core build output
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        run: |
+          git ls-files -z --others --ignored --exclude-standard -- packages/core ':!:packages/core/node_modules/**' > "$RUNNER_TEMP/core-output.list"
+          tar --null -T "$RUNNER_TEMP/core-output.list" -cf "$RUNNER_TEMP/core-build.tar"
+          echo "Packed $(tr -cd '\0' < "$RUNNER_TEMP/core-output.list" | wc -c) files."
+
+      - name: Upload the core build output
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: core-build
+          path: ${{ runner.temp }}/core-build.tar
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1
+          compression-level: 6
+
   test-node:
     name: test-node (${{ matrix.shard }}/${{ strategy.job-total }})
-    needs: [room, admission, heavy-ci]
+    needs: [room, admission, heavy-ci, build-core]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
     # One runner ran the Node project in ~12 minutes. Vitest's --shard splits
     # the files across the legs; `test` joins them.
@@ -1231,12 +1599,12 @@ jobs:
       # (its `leg-widths`).
       max-parallel: ${{ fromJSON(needs.admission.outputs.widths)['test-node'] }}
       # As many legs as the recorded Node times need for each leg to finish
-      # inside the job limit, at most eight (room's Node leg plan,
+      # inside the job limit, at most twelve (room's Node leg plan,
       # scripts/vitest-node-legs.mjs). The fallback, the most legs a plan
       # gives, applies only when room did not plan, and then every leg stops
-      # at its first step.
+      # before any setup.
       matrix:
-        shard: ${{ fromJSON(needs.room.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8]') }}
+        shard: ${{ fromJSON(needs.room.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]') }}
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: ubuntu-latest
@@ -1245,6 +1613,12 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       # A Node suite that does not fit its legs fails every leg with room's
       # reason, before any setup, so the run cannot pass on legs that would
       # outrun their job limit.
@@ -1260,12 +1634,31 @@ jobs:
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's scope
         id: scope
@@ -1275,17 +1668,44 @@ jobs:
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true'
         run: echo "Specialized PR lane — skipping unrelated test suite"
 
+      # This job runs even when build-core failed (its gate uses
+      # `!cancelled()`), so name the cause here before checkout and install.
+      - name: Stop when build-core did not build Core
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && needs.build-core.result != 'success'
+        env:
+          RESULT: ${{ needs.build-core.result }}
+        run: |
+          echo "::error title=Core build missing::build-core ended with '${RESULT}', so this leg has no Core build to test; see the build-core job."
+          exit 1
+
       # A spec-only change runs no other test here, so it runs the tests that
       # read a record it changes: a record such a test reads can break it, and
       # the break would otherwise show first on main (spec:AST-030 FR2). One
       # leg runs this project's readers; the lister needs only git and Node,
       # so a change no test here reads sets up nothing.
       - name: Check out the change for the tests that read its records
+        id: checkout_2
         if: matrix.shard == 1 && steps.scope.outputs.spec_only == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           fetch-depth: 2
+
+      - name: Check out the change for the tests that read its records (second try)
+        id: checkout_2_again
+        if: (matrix.shard == 1 && steps.scope.outputs.spec_only == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          fetch-depth: 2
+
+      - name: Stop when the checkout failed twice
+        if: (matrix.shard == 1 && steps.scope.outputs.spec_only == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: List the tests that read a changed record
         id: spec-readers
@@ -1311,11 +1731,29 @@ jobs:
           mapfile -t READERS < "$RUNNER_TEMP/spec-readers.txt"
           pnpm test:node "${READERS[@]}"
 
-      - uses: actions/checkout@v7
-        timeout-minutes: 8
+      - name: Check out the repository
+        id: checkout_3
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           fetch-depth: 2
+
+      - name: Check out the repository (second try)
+        id: checkout_3_again
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          fetch-depth: 2
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - uses: ./.github/actions/setup
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
@@ -1325,10 +1763,20 @@ jobs:
       # unresolvable Core, an optional peer of the CLI, with a stub it caches
       # for the run: every theme-build test then fails with "Could not resolve
       # "@astryxdesign/core/theme" imported by "@astryxdesign/cli"". The global
-      # setup then finds Core built and skips its own build.
-      - name: Build core package
+      # setup then finds Core built and skips its own build. build-core built it
+      # from this same commit; `-m` stamps the unpacked files with the time
+      # they land, after this job's checkout, so the global setup reads the
+      # build as fresh instead of rebuilding it.
+      - name: Download the core build output
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
-        run: pnpm -F @astryxdesign/core build
+        uses: actions/download-artifact@v8
+        with:
+          name: core-build
+          path: ${{ runner.temp }}
+
+      - name: Unpack the core build output
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        run: tar -m -xf "$RUNNER_TEMP/core-build.tar"
 
       # Scoped like test-ui's run. The shard watchdog
       # (scripts/vitest-shard-watchdog.mjs) fires a minute before the job's
@@ -1357,12 +1805,14 @@ jobs:
             # share of guards.
             # The lists go through files so a failing lister fails the step.
             # Every leg splits the same list, so a leg that cannot list the
-            # tests fails rather than split a different one.
+            # tests fails rather than split a different one. Vitest runs
+            # directly, each path its own argument: a package script joins
+            # them into one shell string, which Linux caps at 128 KiB.
             .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"
             .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
             mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"
             if [ "${#TESTS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${TESTS[@]}"
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm exec vitest run --project node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${TESTS[@]}"
             fi
           else
             pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}"
@@ -1370,19 +1820,22 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
 
       # A test file this change touches that now runs far past its recorded
-      # time fails here, naming both times, so the pull request that slows it
-      # updates the record before a later pull request's leg runs over its
-      # job limit. Files the change does not touch are not checked.
+      # time, or has none, gets a notice naming both times. It never fails the
+      # leg: after each full unit run of main, a job regenerates the record
+      # from that run's Node legs when an entry is missing or has drifted
+      # (node-record-refresh.yml). Files the change does not touch are not
+      # checked.
       - name: Check the recorded times of the test files this change touches
         if: always() && github.event_name == 'pull_request' && steps.node-tests.outcome != 'skipped'
         run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
 
-      # A Lab-only change may carry a Lab component's CLI discovery entry; the
-      # committed list must match its generator (spec:AST-030 FR26).
+      # A Lab-only change can change the CLI's official package list, which the
+      # CLI derives when it is packed: the list must still build from the
+      # repository (spec:AST-030 FR26).
       - name: 'Lab-only: CLI official-packages check'
         if: matrix.shard == 1 && steps.scope.outputs.lab_only == 'true'
         # One Node-project test file: Vitest finds its project from the path.
-        run: pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1
+        run: pnpm exec vitest run packages/cli/scripts/generate-official-packages.test.mjs --maxWorkers=1
 
   # The Node project's browser contracts run in a job of their own, beside the
   # Node legs: theme-family compilation (owned by `theme-build`, not Build,
@@ -1400,22 +1853,59 @@ jobs:
       pull-requests: read
     steps:
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
 
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
-      - uses: actions/checkout@v7
-        timeout-minutes: 8
+      - name: Check out the repository
+        id: checkout_2
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           fetch-depth: 2
+
+      - name: Check out the repository (second try)
+        id: checkout_2_again
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          fetch-depth: 2
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - uses: ./.github/actions/setup
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
@@ -1460,6 +1950,45 @@ jobs:
           ASTRYX_RENDER_CHART_BROWSER: '1'
         run: pnpm exec vitest run packages/cli/api/render/render.charts.browser.test.mjs --maxWorkers=1
 
+      # template-phone-fit.browser.test.mjs builds every ready page template
+      # into one Vite app and shows each in Chromium's phone emulation at
+      # 390 px, with touch and with a mouse; it fails on horizontal overflow
+      # and on a chart label its chart clips.
+      # It needs the build package's Vite plugin, built here. The Node legs
+      # skip it; with ASTRYX_TEMPLATE_PHONE_FIT_BROWSER set, a missing browser
+      # fails it.
+      - name: Template phone fit browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_TEMPLATE_PHONE_FIT_BROWSER: '1'
+        run: |
+          pnpm -F @astryxdesign/build build
+          pnpm exec vitest run .github/scripts/template-phone-fit.browser.test.mjs --maxWorkers=1
+
+      # render-interaction-parity.browser.test.mjs builds one page into a Vite
+      # app and renders it to one file, then takes the same clicks, keys and
+      # typing in both in Chromium, the file inside a sandboxed frame under a
+      # strict content security policy, and compares what shows after each
+      # step. It needs the build package's Vite plugin, built in the step
+      # before. The Node legs skip it; with ASTRYX_RENDER_PARITY_BROWSER set,
+      # a missing browser fails it.
+      - name: Render interaction parity browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_RENDER_PARITY_BROWSER: '1'
+        run: pnpm exec vitest run .github/scripts/render-interaction-parity.browser.test.mjs --maxWorkers=1
+
+      # template-noscript-first-paint.browser.test.mjs renders the page
+      # templates people share as a file to static HTML and checks their
+      # first paint with script off at a phone's and a desktop's width. The
+      # Node legs skip it; with ASTRYX_TEMPLATE_NOSCRIPT_BROWSER set, a
+      # missing browser fails it.
+      - name: Template no-script first paint browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_TEMPLATE_NOSCRIPT_BROWSER: '1'
+        run: pnpm exec vitest run .github/scripts/template-noscript-first-paint.browser.test.mjs --maxWorkers=1
+
       # The contract runs in the time the job's 15-minute limit leaves, less a
       # minute, counted from the job's start: a contract that runs out of
       # it fails by name with its last lines, before the limit cancels the job
@@ -1485,15 +2014,19 @@ jobs:
           fi
           exit "$rc"
 
-  # The swizzle proof (spec:AST-110 FR7) runs in legs of its own, one slice
-  # each, beside the Node legs rather than inside them. When a change reaches
-  # every copy, its slices take about 2,300 s of test time, more than the Node
-  # legs hold under their limit with the rest of the suite. This job reads the
-  # proof's scope first, with Node alone and nothing installed; the legs start
-  # only when the change proves a target, as each slice decides. `test`
-  # requires this job, and the legs whenever the scope is not `none`.
+  # The swizzle proof (spec:AST-110 FR7) runs on main: Main's Node legs prove
+  # the targets each validated main commit affects, and the release re-check
+  # proves every target before a cut (spec:AST-110/DEC-3). A pull request runs
+  # it only with the `ci:run-swizzle` label (run-labels), for a change to the
+  # swizzle tooling; it then runs in legs of its own, one slice each, beside
+  # the Node legs rather than inside them. When a change reaches every copy,
+  # its slices take about 2,300 s of test time, more than the Node legs hold
+  # under their limit with the rest of the suite. This job reads the proof's
+  # scope first, with Node alone and nothing installed; the legs start only
+  # when the change proves a target, as each slice decides. `test` requires
+  # this job, and the legs whenever the scope is not `none`.
   swizzle-proof-scope:
-    needs: [admission, heavy-ci]
+    needs: [admission, heavy-ci, run-labels]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
     runs-on: ubuntu-slim
     timeout-minutes: 10
@@ -1504,30 +2037,73 @@ jobs:
       mode: ${{ steps.proof.outputs.mode }}
     steps:
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 4
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
 
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 4
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
-      - uses: actions/checkout@v7
-        timeout-minutes: 8
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+      - name: Check out the repository
+        id: checkout_2
+        if: (github.event_name != 'pull_request' || needs.run-labels.outputs.swizzle == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        uses: actions/checkout@v7
+        timeout-minutes: 4
+        continue-on-error: true
         with:
           fetch-depth: 2
 
-      # A docsite-only or spec-only change runs no Node test, so no slice.
+      - name: Check out the repository (second try)
+        id: checkout_2_again
+        if: ((github.event_name != 'pull_request' || needs.run-labels.outputs.swizzle == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 4
+        continue-on-error: true
+        with:
+          fetch-depth: 2
+
+      - name: Stop when the checkout failed twice
+        if: ((github.event_name != 'pull_request' || needs.run-labels.outputs.swizzle == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
+      # A pull request without the ci:run-swizzle label proves no target here:
+      # main proves them. A docsite-only or spec-only change runs no Node
+      # test, so no slice.
       - name: Decide the proof's scope
         id: proof
         env:
+          OPTED_OUT: ${{ github.event_name == 'pull_request' && needs.run-labels.outputs.swizzle != 'true' }}
           SPECIALIZED: ${{ steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' }}
         run: |
-          if [ "$SPECIALIZED" = true ]; then
+          if [ "$OPTED_OUT" = true ]; then
+            echo "The swizzle proof runs on main: Main's Node legs prove the targets each main commit affects, and the release re-check proves every target. A pull request that changes the swizzle tooling runs it here with the ci:run-swizzle label."
+            echo 'mode=none' >> "$GITHUB_OUTPUT"
+          elif [ "$SPECIALIZED" = true ]; then
             echo "Specialized PR lane: the swizzle proof proves no target"
             echo 'mode=none' >> "$GITHUB_OUTPUT"
           else
@@ -1540,10 +2116,9 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch' && (needs.swizzle-proof-scope.outputs.mode == 'affected' || needs.swizzle-proof-scope.outputs.mode == 'all')))) }}
     strategy:
       fail-fast: false
-      # All eight legs at once when admission found room for them, else two
-      # at a time, as the Node legs (admission's `leg-widths`).
-      max-parallel: ${{ fromJSON(needs.admission.outputs.widths)['swizzle-proof'] }}
-      # One leg per swizzle-proof.<n>.test.mjs file.
+      # One leg per swizzle-proof.<n>.test.mjs file. The ci:run-swizzle label
+      # adds all eight legs to the run's admission (label-legs), so they start
+      # together.
       matrix:
         slice: [1, 2, 3, 4, 5, 6, 7, 8]
     runs-on: ubuntu-latest
@@ -1551,17 +2126,107 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
-        timeout-minutes: 8
+      - name: Check out the repository
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           fetch-depth: 2
+
+      - name: Check out the repository (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          fetch-depth: 2
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - uses: ./.github/actions/setup
 
       - name: Build core package
         run: pnpm -F @astryxdesign/core build
 
+      # The shard watchdog (scripts/vitest-shard-watchdog.mjs) fires a minute
+      # before the job's 15-minute limit, as in test-node, so a slow slice
+      # fails and names its file instead of being cancelled. It also writes
+      # the slice's seconds for the recorded-time check below.
       - name: Run this slice of the swizzle proof
+        id: slice
+        env:
+          VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/node-file-times.json
+        run: |
+          started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
+          VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))
+          export VITEST_SHARD_WATCHDOG_SECONDS
+          WATCHDOG=(--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs)
+          pnpm test:node "${WATCHDOG[@]}" packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs
+
+      # As in test-node: a slice file this change touches that now runs far
+      # past its recorded time gets a notice naming both times.
+      - name: Check the recorded time of this slice
+        if: always() && github.event_name == 'pull_request' && steps.slice.outcome != 'skipped'
+        run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
+
+  # Every release proves every swizzle target (spec:AST-110 FR7, DEC-3): the
+  # release-check of the commit a release is cut from runs the full swizzle
+  # proof, Chromium included, one slice per leg, and release-check requires
+  # every leg. A pull request runs the proof only with ci:run-swizzle
+  # (swizzle-proof, above), and Main's Node legs prove the targets each main
+  # commit affects; this is the one run that proves them all before a cut.
+  release-swizzle-proof:
+    name: release-swizzle-proof (${{ matrix.slice }}/${{ strategy.job-total }})
+    needs: [admission]
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
+    strategy:
+      fail-fast: false
+      # One leg per swizzle-proof.<n>.test.mjs file, as swizzle-proof.
+      matrix:
+        slice: [1, 2, 3, 4, 5, 6, 7, 8]
+    runs-on: ubuntu-latest
+    # Every target and its Chromium render: longer than a pull request's slice.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Check out the repository (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
+      - uses: ./.github/actions/setup
+
+      - name: Build core package
+        run: pnpm -F @astryxdesign/core build
+
+      - name: Install Chromium for the swizzle proof
+        run: npx playwright install chromium
+
+      - name: Prove every swizzle target in this slice
+        env:
+          SWIZZLE_PROOF_ALL: '1'
+          SWIZZLE_PROOF_BROWSER: '1'
         run: pnpm test:node packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs
 
   # The one pre-job left: a runner must be picked before its job starts, so
@@ -1622,9 +2287,25 @@ jobs:
         if: needs.native-swift-runner.outputs.applies != 'true'
         run: echo "No native Swift change in this scope."
 
-      - uses: actions/checkout@v7
-        timeout-minutes: 8
+      - name: Check out the repository
+        id: checkout
         if: needs.native-swift-runner.outputs.applies == 'true'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Check out the repository (second try)
+        id: checkout_again
+        if: (needs.native-swift-runner.outputs.applies == 'true') && steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Stop when the checkout failed twice
+        if: (needs.native-swift-runner.outputs.applies == 'true') && steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       # The steps live in native-swift.sh, which is in the native Swift scope,
       # so a change to them runs on its own pull request.
@@ -1658,8 +2339,24 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
-        timeout-minutes: 8
+      - name: Check out the repository
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Check out the repository (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - uses: ./.github/actions/setup
 
@@ -1721,6 +2418,7 @@ jobs:
         pr-interaction,
         pr-interaction-webkit,
         pr-component-a11y-contracts,
+        a11y-dependent-audits-plan,
         pr-a11y-dependent-audits,
       ]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
@@ -1746,13 +2444,32 @@ jobs:
       # The head can move after room's look, and a re-run of only the failed
       # jobs keeps that look, so this check reads the head again as it reports.
       - name: Check out the superseded-runs action
+        id: checkout
         if: github.event_name == 'pull_request'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/superseded-runs
           path: .superseded-runs
           persist-credentials: false
+
+      - name: Check out the superseded-runs action (second try)
+        id: checkout_again
+        if: (github.event_name == 'pull_request') && steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/superseded-runs
+          path: .superseded-runs
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: (github.event_name == 'pull_request') && steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Check the pull request's head
         id: head
@@ -1781,21 +2498,40 @@ jobs:
           path: heavy-ci-deferred.json
           retention-days: 7
 
-      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
+      # A push defers the heavy suites until review passes (spec:AST-030 FR20): the
       # required check fails with the reason, never passes as skipped.
       - name: Heavy CI deferred
         if: needs.heavy-ci.outputs.deferred == 'true'
         run: |
-          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
+          echo "::error::Heavy CI deferred: runs when review passes and before merge (spec:AST-030 FR20)."
           exit 1
 
       - name: Check out the scope action
+        id: checkout_2
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_2_again
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's scope
         id: scope
@@ -1807,13 +2543,31 @@ jobs:
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. The test owners ran the Lab package's tests and the source-reading guard tests (spec:AST-030 FR26)."
 
       # A release-branch pull request is spec-only by classification, but its
-      # join still runs: it requires the release bump's own validation.
-      - uses: actions/checkout@v7
-        timeout-minutes: 8
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'
+      # join still runs: it requires the release bump's own validation. So
+      # does a change only to the recorded Node test times: the Node leg
+      # plan's check, which fails test-node, is the check that gates it.
+      - name: Check out the repository
+        id: checkout_3
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Check out the repository (second try)
+        id: checkout_3_again
+        if: (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Require expected test-owner outcomes
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
         env:
           RELEASE_BUMP: ${{ steps.scope.outputs.release_bump }}
           RELEASE_BUMP_RESULT: ${{ needs.release-bump.result }}
@@ -1833,6 +2587,8 @@ jobs:
           PR_INTERACTION_WEBKIT_RESULT: ${{ needs.pr-interaction-webkit.result }}
           PR_COMPONENT_A11Y_CONTRACTS_RESULT: ${{ needs.pr-component-a11y-contracts.result }}
           PR_A11Y_DEPENDENT_AUDITS_RESULT: ${{ needs.pr-a11y-dependent-audits.result }}
+          A11Y_DEPENDENT_AUDITS_PLAN_RESULT: ${{ needs.a11y-dependent-audits-plan.result }}
+          A11Y_DEPENDENT_AUDITS_COUNT: ${{ needs.a11y-dependent-audits-plan.outputs.count }}
         run: node .github/scripts/ci-test-join.mjs
 
   # Build the packages and Storybook, and analyze components (parallel with
@@ -1859,6 +2615,7 @@ jobs:
       visual: ${{ steps.decide.outputs.visual }}
       a11y: ${{ steps.decide.outputs.a11y }}
       rtl: ${{ steps.decide.outputs.rtl }}
+      swizzle: ${{ steps.decide.outputs.swizzle }}
     steps:
       - name: Check out the decision script
         uses: actions/checkout@v7
@@ -1912,12 +2669,31 @@ jobs:
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's scope
         id: scope
@@ -1936,9 +2712,11 @@ jobs:
         run: echo "Specialized PR lane — skipping unrelated build"
 
       - name: Checkout
+        id: checkout_2
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           # Component evidence artifacts are named for and reviewed at the PR
           # head, so build their Storybook bytes from that exact tree rather
@@ -1948,6 +2726,22 @@ jobs:
           # can find a merge base — depth 1 breaks it ("no merge base") and
           # the analysis silently reported zero changed components.
           fetch-depth: 50
+
+      - name: Checkout (second try)
+        id: checkout_2_again
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 50
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Verify Storybook source checkout
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
@@ -2379,12 +3173,31 @@ jobs:
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's scope
         id: scope
@@ -2400,11 +3213,28 @@ jobs:
         run: echo "Specialized PR lane — skipping typechecks"
 
       - name: Checkout
+        id: checkout_2
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout (second try)
+        id: checkout_2_again
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Setup Node and pnpm
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
@@ -2464,13 +3294,32 @@ jobs:
       # The head can move after room's look, and a re-run of only the failed
       # jobs keeps that look, so this check reads the head again as it reports.
       - name: Check out the superseded-runs action
+        id: checkout
         if: github.event_name == 'pull_request'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/superseded-runs
           path: .superseded-runs
           persist-credentials: false
+
+      - name: Check out the superseded-runs action (second try)
+        id: checkout_again
+        if: (github.event_name == 'pull_request') && steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/superseded-runs
+          path: .superseded-runs
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: (github.event_name == 'pull_request') && steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Check the pull request's head
         id: head
@@ -2483,12 +3332,12 @@ jobs:
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1
 
-      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
+      # A push defers the heavy suites until review passes (spec:AST-030 FR20): the
       # required check fails with the reason, never passes as skipped.
       - name: Heavy CI deferred
         if: needs.heavy-ci.outputs.deferred == 'true'
         run: |
-          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
+          echo "::error::Heavy CI deferred: runs when review passes and before merge (spec:AST-030 FR20)."
           exit 1
 
       - name: 'Lab-only: Lab tests + Storybook build'
@@ -2532,10 +3381,27 @@ jobs:
       contents: read
     steps:
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup
@@ -2585,10 +3451,27 @@ jobs:
           fi
 
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup
@@ -2641,12 +3524,31 @@ jobs:
       # the step reads the PR's file list and the base's trusted classifiers.
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's component scope
         id: scope
@@ -2655,10 +3557,27 @@ jobs:
           component-audit: 'true'
 
       - name: Checkout
+        id: checkout_2
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout (second try)
+        id: checkout_2_again
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Verify evidence checkout
         if: (github.event_name == 'pull_request') && steps.scope.outputs.has_components == 'true'
@@ -2759,8 +3678,8 @@ jobs:
   # Plans the browser accessibility specs once: this pull request's component
   # scope, the specs it selects and each leg's share, from the specs' recorded
   # times. Only the legs it plans start, so a selection that needs one leg
-  # starts one. It fails here, by name, when even five legs would leave one
-  # past the time a leg's job has. A release check plans one leg with every
+  # starts one, and a wide selection gets up to ten. It fails here, by name,
+  # when even ten legs would leave one past the time a leg's job has. A release check plans one leg with every
   # spec.
   pr-a11y-plan:
     name: pr-a11y (plan the browser specs)
@@ -2782,12 +3701,31 @@ jobs:
       # reads the PR's file list and the base's trusted classifiers. Outside a
       # pull request every audit applies in full.
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 4
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 4
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's component scope
         id: scope
@@ -2796,11 +3734,28 @@ jobs:
           component-audit: 'true'
 
       - name: Checkout
+        id: checkout_2
         if: steps.scope.outputs.has_components == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 4
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout (second try)
+        id: checkout_2_again
+        if: (steps.scope.outputs.has_components == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 4
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.has_components == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Setup Node and pnpm
         if: steps.scope.outputs.has_components == 'true'
@@ -2843,7 +3798,7 @@ jobs:
           git show "$WORKFLOW_SHA:scripts/lib/duration-split.mjs" > "$RUNNER_TEMP/a11y/scripts/lib/duration-split.mjs"
           BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")
           export BASE_SHA
-          node "$runner" --count-legs ${{ github.event_name == 'workflow_dispatch' && 1 || 5 }}
+          node "$runner" --count-legs ${{ github.event_name == 'workflow_dispatch' && 1 || 10 }}
 
   # Browser accessibility specs get their own budget. The scoped axe sweep and
   # the always-on Chromium guards consume most of a pull request's 15-minute
@@ -2857,9 +3812,9 @@ jobs:
     if: (((github.event_name == 'pull_request' && needs.run-labels.outputs.a11y == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))) && !cancelled() && needs.build-storybook.result == 'success' && needs.run-labels.result == 'success' && needs.pr-a11y-plan.result == 'success'
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
-    # A pull request's selection splits into up to five legs by recorded time,
-    # each about ten minutes or less on one worker, and only the legs the plan
-    # needs start. A release check runs every spec in one job.
+    # A pull request's selection splits into as many legs as keep each at ten
+    # minutes or less of recorded time on one worker, up to ten, and only the
+    # legs the plan needs start. A release check runs every spec in one job.
     strategy:
       fail-fast: false
       matrix:
@@ -2877,11 +3832,28 @@ jobs:
         run: echo "This selection runs no browser accessibility specs."
 
       - name: Checkout
+        id: checkout
         if: env.RUNS == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout (second try)
+        id: checkout_again
+        if: (env.RUNS == 'true') && steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: (env.RUNS == 'true') && steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Verify evidence checkout
         if: (github.event_name == 'pull_request') && env.RUNS == 'true'
@@ -2985,13 +3957,16 @@ jobs:
     # A status check: heavy-ci, which skips on every run but an agent push,
     # is an ancestor (spec:AST-030 FR20); its skip must not skip this job.
     if: (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check') && !cancelled() && needs.admission.result == 'success' && needs.build-storybook.result == 'success'
-    # Six legs: at three, the slowest leg took ~20 minutes, held by its longest
+    # Seven legs: at three, the slowest leg took ~20 minutes, held by its longest
     # spec file; files longer than a leg's share are now cut across legs
-    # (spec:AST-030 FR23).
+    # (spec:AST-030 FR23). One leg is the isolated Table virtualization spec;
+    # the other six plan at about 8 minutes of tests each, leaving room under
+    # the 15-minute job for setup and a slow runner.
+    # a11y-contract-shard.yml splits the same number of ways.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7]
     # One core per worker: on two cores, four workers starved the CPU-bound
     # "every expectation" specs past their timeouts.
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
@@ -3000,10 +3975,27 @@ jobs:
       contents: read
     steps:
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup
@@ -3023,6 +4015,7 @@ jobs:
       # validation and the fast interaction guards in pr-a11y; they must not
       # pay for every component's browser bindings on every change.
       - name: Run accessibility spec-test contracts
+        id: contracts
         if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -3063,6 +4056,22 @@ jobs:
           name: component-audit-evidence-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.shard }}
           path: test-results/chat-layout-audit-evidence/
           retention-days: 30
+          if-no-files-found: ignore
+
+      # A failing contract leaves error-context.md under test-results/, with a
+      # page snapshot only when its page is still open at the failure. A
+      # component audit closes its own page and writes the frames and receipt
+      # of every state it checked to <name>-audit-evidence/. This keeps both
+      # for the leg's attempt.
+      - name: Keep the failing contracts' Playwright results
+        if: failure() && steps.contracts.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-contracts-results-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: |
+            test-results/
+            *-audit-evidence/
+          retention-days: 14
           if-no-files-found: ignore
 
   # Joins the contract shards for release-check: every shard must pass, and
@@ -3137,6 +4146,8 @@ jobs:
       chromium: ${{ steps.matrix.outputs.chromium }}
       webkit: ${{ steps.matrix.outputs.webkit }}
       chromium_specs: ${{ steps.select-chromium.outputs.specs }}
+      # Whether pr-firefox-hover runs (true when the scope cannot be decided).
+      firefox: ${{ steps.scope-firefox.outputs.applies }}
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
@@ -3184,6 +4195,17 @@ jobs:
           lab-only-specs: '\.interaction\.browser\.spec\.ts$'
           # Lists the changed files, so the planner adds a changed spec.
           component-audit: 'true'
+
+      # The Firefox hover specs (pr-firefox-hover): a change to the five hover
+      # components' code or specs, or to the shared hover and dismiss code,
+      # the Firefox spec list, its known failures or its report.
+      - name: Decide the Firefox hover specs' scope
+        id: scope-firefox
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          paths: '^(packages/core/src/(?:DropdownMenu|HoverCard|InfoTip|NavMenu|Tooltip)/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.stories\.[^/]+|\.interaction\.browser\.spec\.ts)$)|packages/core/src/hooks/useMenuHover\.ts$|packages/core/src/Layer/(?:useLayer|useLayerDismissal|useTouchTrigger|layerSurfacePress|outsidePress)\.tsx?$|packages/core/src/utils/(?:interactionModality|triggerFocus|focusReturn)\.ts$|playwright\.config\.ts$|internal/a11y-spec/|\.github/firefox-known-failures\.json$|\.github/scripts/firefox-hover-report\.mjs$|\.github/scripts/lib/a11y-spec-files\.mjs$)'
+          outside-pull-request: skip
+          requires-head-file: playwright.config.ts
 
       - name: Keep the leg planner from the workflow's commit
         if: steps.scope-chromium.outputs.applies == 'true' || steps.scope-webkit.outputs.applies == 'true'
@@ -3393,8 +4415,10 @@ jobs:
       # the shared splitter it imports and the recorded times (in .github, a
       # parent of the action, so the checkout's cone holds it).
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -3402,6 +4426,26 @@ jobs:
             scripts/lib
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+            scripts/lib
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's scope
         id: scope
@@ -3501,13 +4545,38 @@ jobs:
       # head: a head that predates the step does not have it. The head
       # checkout below replaces this directory.
       - name: Check out the heavy-suite caps
+        id: checkout_2
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           path: .heavy-caps
-          sparse-checkout: .github/actions/heavy-caps
+          # .github/scripts/lib brings the .github/scripts files beside it,
+          # the ones the release-critical label check reads.
+          sparse-checkout: |
+            .github/actions/heavy-caps
+            .github/scripts/lib
           persist-credentials: false
+
+      - name: Check out the heavy-suite caps (second try)
+        id: checkout_2_again
+        if: (steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          path: .heavy-caps
+          sparse-checkout: |
+            .github/actions/heavy-caps
+            .github/scripts/lib
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Per-author heavy-suite caps
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
@@ -3520,11 +4589,28 @@ jobs:
 
       # The pull request's head, or the main commit a nightly run checks.
       - name: Checkout
+        id: checkout_3
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout (second try)
+        id: checkout_3_again
+        if: (steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Verify evidence checkout
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
@@ -3627,6 +4713,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      # A proof that keeps its failure output (BottomSheetDragRestyle: its
+      # Playwright trace and screenshot) uploads it here. Its rendering
+      # events go with the interaction evidence above.
+      - name: Upload failure traces
+        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: interaction-failure-traces-${{ matrix.leg }}-${{ github.run_attempt }}
+          path: |
+            interaction-proof-output/**/trace.zip
+            interaction-proof-output/**/test-failed-*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
   # The gesture, motion and harness interaction proofs in WebKit, the engine
   # of every iOS browser, for the code where WebKit and Chromium differ on
   # touch: the gesture host and recognizers, the motion runtime, the touch and
@@ -3709,8 +4809,10 @@ jobs:
       # the shared splitter it imports and the recorded times (in .github, a
       # parent of the action, so the checkout's cone holds it).
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -3718,6 +4820,26 @@ jobs:
             scripts/lib
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+            scripts/lib
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's scope
         id: scope
@@ -3840,13 +4962,38 @@ jobs:
       # head: a head that predates the step does not have it. The head
       # checkout below replaces this directory.
       - name: Check out the heavy-suite caps
+        id: checkout_2
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           path: .heavy-caps
-          sparse-checkout: .github/actions/heavy-caps
+          # .github/scripts/lib brings the .github/scripts files beside it,
+          # the ones the release-critical label check reads.
+          sparse-checkout: |
+            .github/actions/heavy-caps
+            .github/scripts/lib
           persist-credentials: false
+
+      - name: Check out the heavy-suite caps (second try)
+        id: checkout_2_again
+        if: (steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          path: .heavy-caps
+          sparse-checkout: |
+            .github/actions/heavy-caps
+            .github/scripts/lib
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Per-author heavy-suite caps
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
@@ -3858,11 +5005,28 @@ jobs:
         run: 'true'
 
       - name: Checkout
+        id: checkout_3
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout (second try)
+        id: checkout_3_again
+        if: (steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       # The container runs as root over a workspace the runner owns, and git
       # refuses a repository another user owns unless it is marked safe.
@@ -4027,11 +5191,29 @@ jobs:
       contents: read
     steps:
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+
+      - name: Checkout (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Trust the checkout in the container
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -4088,16 +5270,241 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
 
+  # The weekly run's Firefox hover specs: playwright.config.ts's `firefox`
+  # project (FIREFOX_HOVER_SPECS). Firefox orders pointer and mouse events
+  # differently from Chromium and WebKit. Report-only, like the WebKit
+  # accessibility contracts: the specs cannot fail this job, and
+  # webkit-weekly-verdict does not read it. The report counts the failures
+  # .github/firefox-known-failures.json lists apart from new ones.
+  firefox-weekly-hover:
+    needs: [webkit-weekly-request, build-storybook]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && !cancelled() && needs.webkit-weekly-request.result == 'success' && needs.build-storybook.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The Playwright image the WebKit legs use: Firefox and its system
+    # libraries are already installed.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Checkout (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
+      - name: Trust the checkout in the container
+        env:
+          # The same HOME as the spec step's, so the specs' git reads it.
+          HOME: /root
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright Firefox
+        run: pnpm install --frozen-lockfile && npx playwright install firefox
+
+      # Report-only: a failing spec leaves this step red and the job green.
+      - name: Run the Firefox hover specs
+        id: specs
+        continue-on-error: true
+        env:
+          # The image runs as root, and a container job's HOME is a folder the
+          # runner's user owns: Firefox does not start as root there.
+          HOME: /root
+          A11Y_CONTRACT_WORKERS: '4'
+          PLAYWRIGHT_JSON_OUTPUT_NAME: firefox-hover.json
+        run: pnpm exec playwright test --config playwright.config.ts --project firefox --reporter list,json --output firefox-hover-output
+
+      - name: Report the Firefox hover results
+        if: always()
+        run: |
+          node .github/scripts/firefox-hover-report.mjs firefox-hover.json firefox-hover-report
+          cat firefox-hover-report/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the Firefox hover report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: firefox-weekly-hover-report
+          path: |
+            firefox-hover-report
+            firefox-hover-output
+          if-no-files-found: ignore
+          retention-days: 90
+
+  # A pull request's Firefox hover specs, when it changes what they reach
+  # (interaction-legs decides it). Report-only: the specs cannot fail this job,
+  # no join reads it, and no check requires it. The report counts the failures
+  # .github/firefox-known-failures.json lists apart from new ones, and annotates
+  # each new one as an error, so a change that adds a Firefox failure shows in
+  # review. It runs only once the heavy suites run (spec:AST-030 FR20) and waits
+  # for room like the other heavy legs (FR16).
+  pr-firefox-hover:
+    needs: [room, admission, heavy-ci, build-storybook, interaction-legs]
+    if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) && !cancelled() && needs.heavy-ci.outputs.deferred != 'true' && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true' && needs.build-storybook.result == 'success' && needs.interaction-legs.outputs.firefox == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The Playwright image the WebKit legs use: Firefox and its system
+    # libraries are already installed.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
+    # Report-only, so no per-author heavy-suite cap holds it (FR16 caps the
+    # interaction proofs and the Build contracts).
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Checkout (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
+      - name: Trust the checkout in the container
+        env:
+          # The same HOME as the spec step's, so the specs' git reads it.
+          HOME: /root
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # A head from before the Firefox project has no Firefox specs to run.
+      - name: Find the Firefox project in the head
+        id: project
+        run: |
+          if grep -q "name: 'firefox'" playwright.config.ts; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node and pnpm
+        if: steps.project.outputs.present == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        if: steps.project.outputs.present == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright Firefox
+        if: steps.project.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install firefox
+
+      # Report-only: a failing spec leaves this step red and the job green.
+      - name: Run the Firefox hover specs
+        id: specs
+        if: steps.project.outputs.present == 'true'
+        continue-on-error: true
+        env:
+          # The image runs as root, and a container job's HOME is a folder the
+          # runner's user owns: Firefox does not start as root there.
+          HOME: /root
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          A11Y_CONTRACT_WORKERS: '4'
+          PLAYWRIGHT_JSON_OUTPUT_NAME: firefox-hover.json
+        run: pnpm exec playwright test --config playwright.config.ts --project firefox --reporter list,json --output firefox-hover-output
+
+      - name: Name a head without the Firefox project
+        if: always() && steps.project.outputs.present != 'true'
+        run: echo "::notice::This head predates the Firefox hover specs; merge main to run them."
+
+      - name: Name a head without the Firefox hover report
+        if: (always()) && hashFiles('.github/scripts/firefox-hover-report.mjs') == ''
+        run: echo "::notice::This head has no Firefox hover report; merge main for the report."
+
+      - name: Report the Firefox hover results
+        if: always() && hashFiles('.github/scripts/firefox-hover-report.mjs') != ''
+        env:
+          # The head this job checked out, not GitHub's test merge commit.
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node .github/scripts/firefox-hover-report.mjs firefox-hover.json firefox-hover-report
+          cat firefox-hover-report/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the Firefox hover report
+        if: always() && steps.project.outputs.present == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: firefox-hover-report-${{ github.run_attempt }}
+          path: |
+            firefox-hover-report
+            firefox-hover-output
+          if-no-files-found: ignore
+          retention-days: 14
+
   # Build package test owner. The plugin's production CSS partition is a Build
   # integration contract: source inspection cannot prove which declaration
   # paints after Vite emits the final bundle. The `test-build` name makes that
   # package ownership explicit; the historical `test` join above projects its
   # result. Until runtime:build has a specialized route, broad CI dispatches it.
+  # It runs in two parts, each inside ten minutes: the Build package's
+  # contracts, and the vibe-tests fixtures that need the same Playwright setup.
   test-build:
     needs: [admission, heavy-ci]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [contracts, fixtures]
     permissions:
       # The heavy-suite caps read the author's pull requests and runs.
       actions: read
@@ -4108,12 +5515,31 @@ jobs:
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's scope
         id: scope
@@ -4124,9 +5550,25 @@ jobs:
         run: |
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
 
-      - uses: actions/checkout@v7
-        timeout-minutes: 8
+      - name: Check out the repository
+        id: checkout_2
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Check out the repository (second try)
+        id: checkout_2_again
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Per-author heavy-suite caps
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
@@ -4147,20 +5589,19 @@ jobs:
       # production CSS-layer cascade, and cross-package StyleX markers in a
       # real browser. `pnpm test:build` owns the list.
       - name: Run Build package contracts
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && matrix.part == 'contracts'
         run: pnpm test:build
 
-      # The vibe-tests fixtures share this Playwright-equipped runner: the
-      # canonical setup compositions and the guest fixture contrast need a
-      # production browser render.
+      # The fixtures part: the vibe-tests canonical setup compositions and the
+      # guest fixture contrast need a production browser render.
       - name: Verify canonical setup compositions
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && matrix.part == 'fixtures'
         env:
           ASTRYX_CANONICAL_SETUP_BROWSER: '1'
         run: pnpm vitest run internal/vibe-tests/setup-test/setup-canonical.test.ts --project node --maxWorkers=1
 
       - name: Verify guest fixture contrast
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && matrix.part == 'fixtures'
         run: pnpm -F @astryxdesign/vibe-tests fixtures:contrast
 
   # The full visual plan first loads every Core story to learn which theming
@@ -4194,12 +5635,31 @@ jobs:
       # the step reads the PR's file list and the base's trusted classifiers.
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's component scope
         id: scope
@@ -4208,8 +5668,23 @@ jobs:
           component-audit: 'true'
 
       - name: Checkout
+        id: checkout_2
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Checkout (second try)
+        id: checkout_2_again
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       # Stable visual scope: Core and the non-private shipped themes take
       # part; canaryOnly packages do not. A change to the gate's probe fixture
@@ -4239,14 +5714,34 @@ jobs:
       # compares: a branch behind a main baseline refresh would otherwise show
       # main's accepted pixel changes as its own.
       - name: Check out the head's visual baseline
+        id: checkout_3
         if: steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: .head-visual-baseline
           sparse-checkout: .github/visual-baseline
           persist-credentials: false
+
+      - name: Check out the head's visual baseline (second try)
+        id: checkout_3_again
+        if: (steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: .head-visual-baseline
+          sparse-checkout: .github/visual-baseline
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: (steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Setup Node and pnpm
         if: steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true'
@@ -4328,12 +5823,31 @@ jobs:
       # the step reads the PR's file list and the base's trusted classifiers.
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's component scope
         id: scope
@@ -4342,8 +5856,23 @@ jobs:
           component-audit: 'true'
 
       - name: Checkout
+        id: checkout_2
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Checkout (second try)
+        id: checkout_2_again
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       # Stable visual scope: Core and the non-private shipped themes take
       # part; canaryOnly packages do not. A change to the gate's probe fixture
@@ -4373,14 +5902,34 @@ jobs:
       # compares: a branch behind a main baseline refresh would otherwise show
       # main's accepted pixel changes as its own.
       - name: Check out the head's visual baseline
+        id: checkout_3
         if: github.event_name == 'pull_request' && steps.visual-scope.outputs.has_stable_visual == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: .head-visual-baseline
           sparse-checkout: .github/visual-baseline
           persist-credentials: false
+
+      - name: Check out the head's visual baseline (second try)
+        id: checkout_3_again
+        if: (github.event_name == 'pull_request' && steps.visual-scope.outputs.has_stable_visual == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: .head-visual-baseline
+          sparse-checkout: .github/visual-baseline
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: (github.event_name == 'pull_request' && steps.visual-scope.outputs.has_stable_visual == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Setup Node and pnpm
         if: github.event_name != 'pull_request' || steps.visual-scope.outputs.has_stable_visual == 'true'
@@ -4727,12 +6276,31 @@ jobs:
       # the step reads the PR's file list and the base's trusted classifiers.
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's component scope
         id: scope
@@ -4741,10 +6309,27 @@ jobs:
           component-audit: 'true'
 
       - name: Checkout
+        id: checkout_2
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout (second try)
+        id: checkout_2_again
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Verify RTL checkout
         if: (github.event_name == 'pull_request') && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
@@ -4929,12 +6514,31 @@ jobs:
       # the step reads the PR's file list and the base's trusted classifiers.
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's component scope
         id: scope
@@ -4943,10 +6547,27 @@ jobs:
           component-audit: 'true'
 
       - name: Checkout
+        id: checkout_2
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout (second try)
+        id: checkout_2_again
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Setup Node and pnpm
         if: (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
@@ -5104,12 +6725,31 @@ jobs:
       # The shared scope action lists the pull request's changed files, which
       # decide a wide change.
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: List the changed files
         id: scope
@@ -5120,17 +6760,36 @@ jobs:
       # The tested merge commit, as pr-visual checks out: a branch that
       # predates this check has none of its scripts at its own head.
       - name: Checkout
+        id: checkout_2
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           persist-credentials: false
+
+      - name: Checkout (second try)
+        id: checkout_2_again
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       # The accessibility and visual baselines are read from the head, which
       # built the Storybook this job audits: a branch behind a main fix that
       # dropped a baseline entry would otherwise report that entry as new.
       - name: Check out the head's accessibility baseline
+        id: checkout_3
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: .head-baseline
@@ -5139,6 +6798,27 @@ jobs:
             .github/visual-baseline/manifest.json
           sparse-checkout-cone-mode: false
           persist-credentials: false
+
+      - name: Check out the head's accessibility baseline (second try)
+        id: checkout_3_again
+        if: steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: .head-baseline
+          sparse-checkout: |
+            .github/a11y-baseline.json
+            .github/visual-baseline/manifest.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       # A spec-only, docsite-only or tooling-only change has no analysis; it
       # has no component either.
@@ -5336,14 +7016,35 @@ jobs:
       # environment marker and its check (in .github, a parent of the scripts,
       # so the checkout's cone holds the marker).
       - name: Check out the scope action
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: |
             .github/actions/test-scope
             .github/scripts
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Decide this job's scope
         id: scope
@@ -5376,11 +7077,28 @@ jobs:
       # head that predates these scripts does not have them. The specs run at
       # the head (see "Check out the head that built the Storybook").
       - name: Check out the selection scripts
+        id: checkout_2
         if: steps.scope.outputs.applies == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           persist-credentials: false
+
+      - name: Check out the selection scripts (second try)
+        id: checkout_2_again
+        if: (steps.scope.outputs.applies == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.applies == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       # When the scope could not be decided (a diff GitHub truncates at 3,000
       # files, say), everything is in scope: every file counts as changed, and
@@ -5465,12 +7183,30 @@ jobs:
       # does not have, and those specs fail. Merge-level interactions are the
       # job of the post-merge and release checks.
       - name: Check out the head that built the Storybook
+        id: checkout_3
         if: steps.touched.outputs.contract_owners != '' || steps.specs.outputs.has_specs == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Check out the head that built the Storybook (second try)
+        id: checkout_3_again
+        if: (steps.touched.outputs.contract_owners != '' || steps.specs.outputs.has_specs == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: (steps.touched.outputs.contract_owners != '' || steps.specs.outputs.has_specs == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       # The head's specs run in this lane's environment, which comes from the
       # merge commit. A head older than that environment stops here.
@@ -5648,12 +7384,31 @@ jobs:
       contents: read
     steps:
       - name: Check out the workflow's scripts
+        id: checkout
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: .github/scripts
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the workflow's scripts (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/scripts
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Require this pull request's Storybook build
         if: needs.build-storybook.result != 'success'
@@ -5675,11 +7430,29 @@ jobs:
       # built the Storybook, as the release check runs them against its own
       # build.
       - name: Check out the head that built the Storybook
+        id: checkout_2
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Check out the head that built the Storybook (second try)
+        id: checkout_2_again
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Require this lane's environment in the branch
         run: >-
@@ -5867,30 +7640,33 @@ jobs:
           retention-days: 30
 
   # Each leg runs its share of the plan at the head that built the Storybook.
-  # A leg without a share runs on a slim runner and only says so. The `test`
-  # join reads the legs' result, so a failing audit blocks the merge.
+  # A plan that owes no audit starts no leg. A plan that did not succeed
+  # starts one leg on a slim runner, which fails with an error that says to
+  # re-run. The `test` join reads the legs' result, so a failing audit blocks
+  # the merge.
   pr-a11y-dependent-audits:
     name: Dependent audits (${{ matrix.leg }}/${{ strategy.job-total }})
     needs:
       [room, admission, heavy-ci, a11y-dependent-audits-plan, build-storybook]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true')) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true' && (needs.a11y-dependent-audits-plan.result != 'success' || needs.a11y-dependent-audits-plan.outputs.count != '0'))) }}
     # An empty count (the plan skipped) compares as 0.
     runs-on: ${{ needs.a11y-dependent-audits-plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: 15
     # A first run plans at most three legs; a later run at the same head may
     # plan up to six to run every owed audit. The matrix starts only the
-    # planned legs; without a plan it starts all six, which then stop.
+    # planned legs; a plan that owes no audit starts none (the condition above),
+    # and a plan that did not succeed starts exactly one, which fails.
     strategy:
       fail-fast: false
       matrix:
-        leg: ${{ fromJSON(needs.a11y-dependent-audits-plan.outputs.legs || '[1, 2, 3, 4, 5, 6]') }}
+        leg: ${{ fromJSON(needs.a11y-dependent-audits-plan.result == 'success' && needs.a11y-dependent-audits-plan.outputs.legs || '[1]') }}
     permissions:
       contents: read
     steps:
       - name: Require the dependent-audit plan
         if: needs.a11y-dependent-audits-plan.result != 'success'
         run: |
-          echo "The dependent-audit plan did not succeed (${{ needs.a11y-dependent-audits-plan.result }}), so the audits to run are unknown."
+          echo "::error title=Dependent-audit plan did not run::The dependent-audit plan ended ${{ needs.a11y-dependent-audits-plan.result }}, so the audits this change owes are unknown. Re-run all jobs."
           exit 1
 
       - name: Decide this leg
@@ -5917,15 +7693,36 @@ jobs:
       # marker). The head checkout below replaces the workspace, so they move
       # out first.
       - name: Check out the scope action
+        id: checkout
         if: steps.leg.outputs.runs == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: |
             .github/actions/test-scope
             .github/scripts
           path: .test-scope
           persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: (steps.leg.outputs.runs == 'true') && steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: (steps.leg.outputs.runs == 'true') && steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       - name: Keep this lane's environment marker from the workflow's commit
         if: steps.leg.outputs.runs == 'true'
@@ -5935,12 +7732,30 @@ jobs:
           cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/lane-environment/.github/"
 
       - name: Check out the head that built the Storybook
+        id: checkout_2
         if: steps.leg.outputs.runs == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Check out the head that built the Storybook (second try)
+        id: checkout_2_again
+        if: (steps.leg.outputs.runs == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: (steps.leg.outputs.runs == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
 
       # The audits run the same specs and config as the contract job, in its
       # environment. A head older than that environment stops here.
@@ -6015,6 +7830,7 @@ jobs:
         a11y-contracts,
         pr-a11y-audit,
         pr-rtl,
+        release-swizzle-proof,
       ]
     if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' }}
     runs-on: ubuntu-slim
@@ -6032,7 +7848,7 @@ jobs:
         with:
           script: |
             const needs = JSON.parse(process.env.RELEASE_NEEDS);
-            for (const name of ['release-authority', 'test-registry-e2e', 'build-storybook', 'typecheck', 'pr-visual', 'pr-a11y', 'a11y-contracts', 'pr-a11y-audit', 'pr-rtl']) {
+            for (const name of ['release-authority', 'test-registry-e2e', 'build-storybook', 'typecheck', 'pr-visual', 'pr-a11y', 'a11y-contracts', 'pr-a11y-audit', 'pr-rtl', 'release-swizzle-proof']) {
               if (needs[name]?.result !== 'success') {
                 throw new Error(`Required release job ${name} did not succeed: ${needs[name]?.result}`);
               }

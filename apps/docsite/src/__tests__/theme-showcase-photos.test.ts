@@ -11,6 +11,7 @@ import {
 } from '../components/themeShowcaseContent';
 import {
   OPTIMIZED_IMAGE_QUALITY,
+  optimizedImageSources,
   optimizedImageUrl,
 } from '../lib/optimizedImageUrl.mjs';
 
@@ -22,6 +23,17 @@ describe('optimizedImageUrl', () => {
     expect(optimizedImageUrl('/images/matcha/preview-watch.png', 828)).toBe(
       '/_next/image?url=%2Fimages%2Fmatcha%2Fpreview-watch.png&w=828&q=75',
     );
+  });
+});
+
+describe('optimizedImageSources', () => {
+  it('offers the image at each width, names the slot, and falls back to the widest', () => {
+    expect(optimizedImageSources('/landing/a.webp', [48, 96], '44px')).toEqual({
+      src: '/_next/image?url=%2Flanding%2Fa.webp&w=96&q=75',
+      srcSet:
+        '/_next/image?url=%2Flanding%2Fa.webp&w=48&q=75 48w, /_next/image?url=%2Flanding%2Fa.webp&w=96&q=75 96w',
+      sizes: '44px',
+    });
   });
 });
 

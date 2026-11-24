@@ -40,6 +40,10 @@ import {
   selectIntegrationCodemodsFor,
   runIntegrationCodemodsStep,
   withCodemodOutcomes,
+  upgradeAgentDocsVersion,
+  upgradeBase,
+  upgradeReadsCore,
+  upgradeTargetLabel,
 } from '../_adapter.mjs';
 import {
   logRegistryCompositionSummary,
@@ -460,12 +464,13 @@ function regenerationErrors(outcomes, protection, cwd) {
  * report nothing changed while the files it lists remain modified
  * (spec:AST-040 FR7).
  *
- * @param {{from: string, to: string, codemods: number, integrations: string[], sourcePathFound: boolean, cwd: string, changedFiles: string[], transformsApplied: number, protectedRows: Array<{file: string, codemod: string, reason: string, declaration: string, generated: boolean, command?: string}>, outcomes?: import('../_adapter.mjs').CodemodOutcomeRecord[], errors: Array<{file: string, codemod: string, error: string}>, declinedRows?: Array<{file: string, codemod: string, location?: string, reason: string}>, errorCode: string, cliBehindCore?: import('../upgrade.type.mjs').CliBehindCore | null, registryCompositions?: import('../upgrade.type.mjs').RegistryCompositionSummary}} facts
+ * @param {{from: string, to: string, agentDocsVersion: string, codemods: number, integrations: string[], sourcePathFound: boolean, cwd: string, changedFiles: string[], transformsApplied: number, protectedRows: Array<{file: string, codemod: string, reason: string, declaration: string, generated: boolean, command?: string}>, outcomes?: import('../_adapter.mjs').CodemodOutcomeRecord[], errors: Array<{file: string, codemod: string, error: string}>, declinedRows?: Array<{file: string, codemod: string, location?: string, reason: string}>, errorCode: string, cliBehindCore?: import('../upgrade.type.mjs').CliBehindCore | null, registryCompositions?: import('../upgrade.type.mjs').RegistryCompositionSummary}} facts
  * @returns {import('../upgrade.type.mjs').UpgradeRunResponse['data']}
  */
 function stoppedReceipt({
   from,
   to,
+  agentDocsVersion,
   codemods,
   integrations,
   sourcePathFound,
@@ -495,11 +500,12 @@ function stoppedReceipt({
     agentDocsRefreshed: false,
     agentDocs: {
       status: 'current',
-      installedVersion: to,
+      installedVersion: agentDocsVersion,
       fromVersions: [],
       files: [],
       refreshed: false,
       action: 'none',
+      skills: [],
     },
     sourcePathFound,
     filesChanged: modifiedFiles.length,
@@ -589,17 +595,19 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
     logger.log(`Project root: ${path.relative(origin, cwd) || '.'}`);
     logger.log(`Source folder: ${path.relative(origin, path_) || '.'}`);
   }
-  const installed = detectInstalledTargetVersion(cwd);
+  const base = await upgradeBase(cwd);
+  const installed = detectInstalledTargetVersion(cwd, base);
   if (!installed) {
     // Outside a project there is no version to install (spec AST-081 FR3).
     const msg = isOutsideProject(cwd)
       ? 'Could not find installed @astryxdesign/core (or legacy @xds/core). This folder is outside a project; upgrade migrates the code of an app project that installs @astryxdesign/core.'
-      : `Could not find installed @astryxdesign/core (or legacy @xds/core). Install the target version first, then rerun \`${getCliInvocation()} upgrade --from <old-version>\`.`;
+      : `Could not find installed ${upgradeTargetLabel(base)}. Install the target version first, then rerun \`${getCliInvocation()} upgrade --from <old-version>\`.`;
     logger.error(msg);
     logger.log('Aborted\n');
     throw new AstryxError(msg, undefined, ERROR_CODES.ERR_VERSION_DETECT);
   }
   const targetVersion = installed.version;
+  const agentDocsVersion = upgradeAgentDocsVersion(cwd, targetVersion, base);
 
   const reconcileCompositions = async () => {
     if (options.codemod) return null;
@@ -608,6 +616,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
       {
         cwd,
         origin,
+        readsCore: upgradeReadsCore(base),
         expectedVersion:
           installed.packageName === '@astryxdesign/core'
             ? targetVersion
@@ -631,7 +640,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
     const agentDocsPlan = await prepareAgentDocsRefresh({
       cwd,
       origin,
-      installedVersion: targetVersion,
+      installedVersion: agentDocsVersion,
       apply,
     });
     const agentDocs = apply
@@ -659,6 +668,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
   const versionManifests = await getCoreVersionManifests(
     currentVersion,
     targetVersion,
+    base,
   );
 
   const coreConfigCodemodNames = [];
@@ -769,11 +779,12 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
           agentDocsRefreshed: false,
           agentDocs: {
             status: 'current',
-            installedVersion: targetVersion,
+            installedVersion: agentDocsVersion,
             fromVersions: [],
             files: [],
             refreshed: false,
             action: 'none',
+            skills: [],
           },
           sourcePathFound,
           filesChanged: coreResult?.totalFilesChanged ?? 0,
@@ -811,7 +822,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
     if (!apply && codemodWouldFixConfig) {
       // Lightweight inspection — no config/Project load (config is still broken
       // in dry-run; the codemod previewed a fix but did not write it).
-      const inspection = inspectAgentDocs(cwd, targetVersion);
+      const inspection = inspectAgentDocs(cwd, agentDocsVersion);
       return statusConfigFixable({
         from: currentVersion,
         to: targetVersion,
@@ -821,11 +832,12 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
         agentDocs:
           /** @type {import('../upgrade.type.mjs').AgentDocsSummary} */ ({
             status: inspection.status,
-            installedVersion: targetVersion,
+            installedVersion: agentDocsVersion,
             fromVersions: inspection.blockVersions,
             files: inspection.staleFiles,
             refreshed: false,
             action: inspection.status === 'missing' ? 'nudge-init' : 'none',
+            skills: [],
           }),
       });
     }
@@ -842,6 +854,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
       const stopped = stoppedReceipt({
         from: currentVersion,
         to: targetVersion,
+        agentDocsVersion,
         codemods: totalTransforms,
         integrations: [],
         sourcePathFound,
@@ -906,7 +919,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
     const agentDocsPlan = await prepareAgentDocsRefresh({
       cwd,
       origin,
-      installedVersion: targetVersion,
+      installedVersion: agentDocsVersion,
       apply,
     });
     const agentDocs = apply
@@ -945,11 +958,12 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
     agentDocsRefreshed: false,
     agentDocs: /** @type {import('../upgrade.type.mjs').AgentDocsSummary} */ ({
       status: 'current',
-      installedVersion: targetVersion,
+      installedVersion: agentDocsVersion,
       fromVersions: [],
       files: [],
       refreshed: false,
       action: 'none',
+      skills: [],
     }),
     // A missing source directory is the one way this command can migrate
     // nothing and still look complete: every codemod is skipped, filesChanged
@@ -1075,6 +1089,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
           stoppedReceipt({
             from: currentVersion,
             to: targetVersion,
+            agentDocsVersion,
             codemods: totalTransforms,
             integrations: receipt.integrations,
             sourcePathFound,
@@ -1140,6 +1155,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
       const stopped = stoppedReceipt({
         from: currentVersion,
         to: targetVersion,
+        agentDocsVersion,
         codemods: totalTransforms,
         integrations: receipt.integrations,
         sourcePathFound,
@@ -1307,7 +1323,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
     const agentDocsPlan = await prepareAgentDocsRefresh({
       cwd,
       origin,
-      installedVersion: targetVersion,
+      installedVersion: agentDocsVersion,
       apply,
       fresh: true,
     });

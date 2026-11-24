@@ -14,7 +14,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {useState, type ReactNode} from 'react';
+import {Activity, useEffect, useState, type ReactNode} from 'react';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {
@@ -109,6 +109,16 @@ describe('NavigationStack', () => {
     expect(screen.getByRole('button', {name: 'General'})).toBeInTheDocument();
   });
 
+  // A card is a stacking context at rest, as it is during a transition (a
+  // transform makes one), so screen content with any z-index stays under the
+  // bar, whose z-index is 1.
+  it("gives every card isolation: 'isolate' at rest", () => {
+    render(<Harness initial={['General']} />);
+    for (const title of ['Settings', 'General']) {
+      expect(getComputedStyle(screenCard(title)!).isolation).toBe('isolate');
+    }
+  });
+
   it('pushes a screen: its title shows, Back reads the previous title, the root is covered', async () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', {name: 'General'}));
@@ -138,6 +148,118 @@ describe('NavigationStack', () => {
     expect(screenCard('Settings')).not.toHaveAttribute('inert');
   });
 
+  describe('after the platform animated a history traversal', () => {
+    // An app that keeps its path in the history: a traversal (Safari's edge
+    // swipe, an iOS Home Screen app's back gesture) sets the path it reaches.
+    function HistoryHarness() {
+      const [path, setPath] = useState<string[]>(['General']);
+      useEffect(() => {
+        const onPopState = (event: PopStateEvent) =>
+          setPath((event.state as {path: string[]}).path);
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+      }, []);
+      return (
+        <NavigationStack
+          label="Settings"
+          root={
+            <NavigationScreen title="Settings">
+              <Root />
+            </NavigationScreen>
+          }
+          path={path}
+          onPathChange={setPath}
+          getKey={entry => entry}
+          renderScreen={entry => (
+            <NavigationScreen title={entry}>
+              <Detail entry={entry} />
+            </NavigationScreen>
+          )}
+        />
+      );
+    }
+
+    const traverse = (path: string[], hasUAVisualTransition: boolean) => {
+      const event = new PopStateEvent('popstate', {state: {path}});
+      Object.defineProperty(event, 'hasUAVisualTransition', {
+        value: hasUAVisualTransition,
+      });
+      act(() => {
+        window.dispatchEvent(event);
+      });
+    };
+
+    it('applies a platform-animated back at once: the popped screen leaves with no slide', () => {
+      render(<HistoryHarness />);
+      traverse([], true);
+      expect(screen.queryByText('General content')).toBeNull();
+      expect(screenCard('Settings')).not.toHaveAttribute('inert');
+    });
+
+    it('still slides a back the platform did not animate', () => {
+      render(<HistoryHarness />);
+      traverse([], false);
+      expect(screen.getByText('General content')).toBeInTheDocument();
+      expect(screenCard('General')).toHaveAttribute('inert');
+    });
+
+    it('applies a platform-animated forward at once: the pushed screen is on top with no slide', () => {
+      render(<HistoryHarness />);
+      traverse([], true);
+      traverse(['General'], true);
+      expect(screenCard('General')).toHaveAttribute('data-navigation-top');
+      expect(document.activeElement).toBe(
+        screen.getByRole('heading', {name: 'General'}),
+      );
+    });
+
+    it('still slides the next push when a platform-animated traversal hides the stack before the mark clears', () => {
+      let showStack: () => void = () => {};
+      function HiddenHarness() {
+        const [isVisible, setIsVisible] = useState(true);
+        const [path, setPath] = useState<string[]>([]);
+        showStack = () => setIsVisible(true);
+        useEffect(() => {
+          // The traversal goes to a route that hides the stack, without
+          // changing the stack's own path.
+          const onPopState = () => setIsVisible(false);
+          window.addEventListener('popstate', onPopState);
+          return () => window.removeEventListener('popstate', onPopState);
+        }, []);
+        return (
+          <Activity mode={isVisible ? 'visible' : 'hidden'}>
+            <NavigationStack
+              label="Settings"
+              root={
+                <NavigationScreen title="Settings">
+                  <Root />
+                </NavigationScreen>
+              }
+              path={path}
+              onPathChange={setPath}
+              getKey={entry => entry}
+              renderScreen={entry => (
+                <NavigationScreen title={entry}>
+                  <Detail entry={entry} />
+                </NavigationScreen>
+              )}
+            />
+          </Activity>
+        );
+      }
+      render(<HiddenHarness />);
+      traverse([], true);
+      act(() => showStack());
+
+      fireEvent.click(screen.getByRole('button', {name: 'General'}));
+
+      // A slid push moves focus to the new title once it settles, not at once.
+      expect(document.activeElement).not.toBe(
+        screen.getByRole('heading', {name: 'General'}),
+      );
+    });
+  });
+
   it('moves focus to the new title after a push, and back to the pushing control after the pop', async () => {
     render(<Harness />);
     const general = screen.getByRole('button', {name: 'General'});
@@ -154,6 +276,48 @@ describe('NavigationStack', () => {
 
     fireEvent.click(screen.getByRole('button', {name: 'Settings'}));
     await waitFor(() => expect(general).toHaveFocus(), {timeout: 3000});
+  });
+
+  it('keeps focus a person moved into the new screen before the push settles', async () => {
+    function Composer() {
+      return <input aria-label="Message" />;
+    }
+    function ComposerHarness() {
+      const [path, setPath] = useState<string[]>([]);
+      return (
+        <NavigationStack
+          label="Settings"
+          root={
+            <NavigationScreen title="Settings">
+              <button type="button" onClick={() => setPath(['Compose'])}>
+                Compose
+              </button>
+            </NavigationScreen>
+          }
+          path={path}
+          onPathChange={setPath}
+          getKey={entry => entry}
+          renderScreen={entry => (
+            <NavigationScreen title={entry}>
+              <Composer />
+            </NavigationScreen>
+          )}
+        />
+      );
+    }
+    render(<ComposerHarness />);
+    const compose = screen.getByRole('button', {name: 'Compose'});
+    compose.focus();
+    fireEvent.click(compose);
+    // Mid-push, the person moves focus into the new screen, as a tap on its
+    // composer does.
+    const field = screen.getByRole('textbox', {name: 'Message'});
+    field.focus();
+    expect(field).toHaveFocus();
+    // Wait past the push's settle (well under a second in jsdom); the bar
+    // title must not take focus from the field then.
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    expect(field).toHaveFocus();
   });
 
   it('labels Back with the previous screen’s backTitle when it has one', () => {

@@ -15,20 +15,39 @@
  */
 
 import {
+  Fragment,
+  isValidElement,
   use,
   useCallback,
   useEffect,
   useRef,
   useState,
   type ReactNode,
+  type RefCallback,
+  useSyncExternalStore,
 } from 'react';
+import {createPortal} from 'react-dom';
 import {useCommittedRef} from '../hooks/useCommittedRef';
+import {getNodeText} from '../utils/getNodeText';
+import {holdMouseMoves, isMouseMove} from '../utils/inputStream';
+import {createStore, type SharedStore} from '../utils/sharedRealm';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {TooltipPresentInterestContext} from './tooltipPresentInterest';
+import {
+  DESCRIPTION_SUFFIX,
+  TooltipDescribesContext,
+  TooltipDescriptionIdContext,
+  TooltipPresentInterestContext,
+} from './tooltipPresentInterest';
 import type {TooltipBridge, TooltipOptions, TooltipReturn} from './useTooltip';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
+import {getInteractionModality} from '../utils/interactionModality';
+import {NON_TEXT_INPUT_TYPES} from '../keyboard/keyboardHeight';
 import * as stylex from '@stylexjs/stylex';
-import {useLayerInternal, type ContextRenderProps} from '../Layer/useLayer';
+import {
+  noInvoker,
+  useLayerInternal,
+  type ContextRenderProps,
+} from '../Layer/useLayer';
 import {useTouchTriggerInternal} from '../Layer/useTouchTrigger';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -44,6 +63,23 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {tooltipDescriptionProps} from '../privateAttributes/tooltipDescription.stylex';
+
+/**
+ * Whether `element` is a text field in any state: a text-like `<input>`, a
+ * `<textarea>` or an editable element, also when it is read-only, disabled
+ * or brings up no keyboard.
+ */
+function isTextField(element: HTMLElement): boolean {
+  if (element.localName === 'input') {
+    return !NON_TEXT_INPUT_TYPES.has(
+      (element.getAttribute('type') ?? 'text').toLowerCase(),
+    );
+  }
+  return element.matches(
+    'textarea, [contenteditable]:not([contenteditable="false"])',
+  );
+}
 
 /**
  * Grace period (ms) before hiding on pointer-leave when no explicit `hideDelay`
@@ -76,6 +112,79 @@ const styles = stylex.create({
 });
 
 /**
+ * The trigger's description until the layer first mounts: a hidden copy of
+ * the tooltip text (the `hidden` attribute). `aria-describedby` reads a hidden
+ * node it names directly, and browse mode skips it. It is a sibling after the
+ * trigger, never inside it, and the commit that mounts the layer removes it.
+ * Group rules that find the last member (ButtonGroup's trailing radius) skip
+ * it. A Core component that renders the
+ * tooltip under `TooltipDescribesContext` `false` gets none.
+ */
+function TooltipDescription({
+  id,
+  onMount,
+  children,
+}: {
+  id: string;
+  /** Reports that the description element exists. */
+  onMount: RefCallback<HTMLSpanElement>;
+  children: ReactNode;
+}): ReactNode {
+  const describes = use(TooltipDescribesContext);
+  // The host span reaches render through a store, so no DOM node is in
+  // state.
+  const [hostStore] = useState(createHostStore);
+  const hostRefs = useMergedRefs<HTMLSpanElement>(hostStore.set, onMount);
+  const host = useSyncExternalStore(
+    hostStore.subscribe,
+    hostStore.get,
+    readNoHost,
+  );
+  if (!describes) {
+    return null;
+  }
+  if (!hasComponent(children)) {
+    return (
+      <span ref={onMount} id={id} hidden {...tooltipDescriptionProps}>
+        {getNodeText(children)}
+      </span>
+    );
+  }
+  // Content that holds a component renders as it is, so its text reaches the
+  // description. Its markup can hold a block, which must not sit in an
+  // enclosing paragraph. So the copy starts empty, server markup included,
+  // and the client renders the content into it through a portal.
+  return (
+    <span ref={hostRefs} id={id} hidden {...tooltipDescriptionProps}>
+      {host != null ? createPortal(children, host) : null}
+    </span>
+  );
+}
+
+const readNoHost = (): HTMLElement | null => null;
+
+/** A store for the element a description renders its content into. */
+const createHostStore = (): SharedStore<HTMLElement | null> =>
+  createStore<HTMLElement | null>(null);
+
+/**
+ * Whether tooltip content holds a component element, whose text only its own
+ * rendering knows.
+ */
+function hasComponent(node: ReactNode): boolean {
+  if (Array.isArray(node)) {
+    return node.some(hasComponent);
+  }
+  if (!isValidElement(node)) {
+    return false;
+  }
+  if (typeof node.type !== 'string' && node.type !== Fragment) {
+    return true;
+  }
+  return hasComponent((node.props as {children?: ReactNode}).children);
+}
+
+/**
  * The tooltip's behavior on the trigger elements the bridge records, and its
  * layer. The layer reports its ids from its own commit, so the trigger names
  * it only once it exists.
@@ -102,11 +211,16 @@ function useTooltipSurface(
   // over the trigger: content taller than the room above and below opens
   // beside it, or on the roomier side sized to that room, and scrolls what does not
   // fit inside the surface, which stays hoverable (spec:AST-059 FR4).
+  // The layer mounts at its first show and then stays. A page of closed
+  // tooltips mounts no layers.
   const layer = useLayerInternal({
     mode: 'context',
     onShow,
     onHide,
     keepsAnchorClear: true,
+    lazyMount: true,
+    keepsMountAfterShow: true,
+    getInvoker: noInvoker,
   });
   const {
     ref: layerRef,
@@ -117,6 +231,13 @@ function useTooltipSurface(
     id: layerId,
     render: renderLayer,
   } = layer;
+  // The trigger's description is a hidden copy of the tooltip text until the
+  // layer first mounts: it is in server and client markup before the first
+  // show. Once the layer is mounted, its content is the description, and the
+  // copy is gone.
+  const describes = use(TooltipDescribesContext);
+  const givenDescriptionId = use(TooltipDescriptionIdContext);
+  const descriptionId = givenDescriptionId ?? `${layerId}${DESCRIPTION_SUFFIX}`;
 
   const popoverXstyle = styles.container;
 
@@ -274,15 +395,20 @@ function useTooltipSurface(
   // description.
   const contentRef = useRef<HTMLDivElement | null>(null);
   useAnnounceRenderedText(contentRef, isHoldShown, 'pinned');
+  // The description element (the hidden copy, then the layer's content)
+  // reports from its own commit, so the trigger never names a missing element.
   const reportsLayer = useCallback(
-    (element: HTMLDivElement | null) => {
+    (element: HTMLElement | null) => {
       if (element == null) {
         return;
       }
-      reportLayer({describedBy: layerId, anchorId: layerAnchorId});
+      reportLayer({
+        describedBy: describes ? descriptionId : '',
+        anchorId: layerAnchorId,
+      });
       return () => reportLayer(null);
     },
-    [reportLayer, layerId, layerAnchorId],
+    [reportLayer, describes, descriptionId, layerAnchorId],
   );
   const contentRefs = useMergedRefs<HTMLDivElement>(
     contentRef,
@@ -337,7 +463,7 @@ function useTooltipSurface(
   }, []);
 
   // Event handlers
-  const handleMouseEnter = useCallback(
+  const handleHover = useCallback(
     (elapsed = 0) => {
       // A tap synthesizes mouseenter. On touch the tap path owns the
       // decision, so hover must not also fire — including the tap that just
@@ -350,8 +476,37 @@ function useTooltipSurface(
     [isTouchPointerRef, scheduleShow],
   );
 
+  // Set from a mouse or pen's arrival on the trigger until it first moves
+  // there. A browser also sends the arrival when the trigger appears or
+  // moves under a still pointer, after a layout change or a scroll. The user
+  // did not point at the trigger then, so only a move over it opens the
+  // tooltip. A pointer that moves onto the trigger also moves over it in the
+  // same frame, so a real hover opens after `delay`. Firefox sends that
+  // `pointermove` before the `mouseenter`, so the `mousemove` that follows it
+  // counts too. After a scroll WebKit also sends a move at the point where
+  // the mouse already was; that is not a move (isMouseMove).
+  const isArrivalUnmovedRef = useRef(false);
+  const handleMouseEnter = useCallback(() => {
+    isArrivalUnmovedRef.current = !isTouchPointerRef.current;
+  }, [isTouchPointerRef]);
+  const handlePointerMove = useCallback(
+    (event: MouseEvent) => {
+      if (
+        !isArrivalUnmovedRef.current ||
+        (event as Partial<PointerEvent>).pointerType === 'touch' ||
+        !isMouseMove(event)
+      ) {
+        return;
+      }
+      isArrivalUnmovedRef.current = false;
+      handleHover();
+    },
+    [handleHover],
+  );
+
   const handleMouseLeave = useCallback(
     (event: Event) => {
+      isArrivalUnmovedRef.current = false;
       // On touch the synthesized mouseleave arrives with the next tap elsewhere,
       // which the outside-tap dismissal already handles — and handling it here
       // too would close the tooltip behind the tap-open bookkeeping's back.
@@ -383,6 +538,14 @@ function useTooltipSurface(
   const opensOnFocus = useCallback(
     (target: HTMLElement, trigger: HTMLElement | null): boolean => {
       if (trigger != null && !isFocusOnTrigger(target, trigger, focusTrigger)) {
+        return false;
+      }
+      // Browsers mark a pointer's focus on a text field focus-visible, so
+      // after a pointer press only a text field opens the tooltip.
+      if (
+        !isTextField(target) &&
+        getInteractionModality(target) === 'pointer'
+      ) {
         return false;
       }
       return !isTouchInteraction() && target.matches(':focus-visible');
@@ -472,6 +635,9 @@ function useTooltipSurface(
 
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
+      // A press before the first move ends that arrival too, so a later move
+      // over the pressed trigger opens nothing until the pointer leaves.
+      isArrivalUnmovedRef.current = false;
       trackTriggerPress();
       // The app's hide() closes a held tooltip. A press neither hides it here
       // nor waits for a tap verdict. A show() in a capture handler of this
@@ -509,7 +675,9 @@ function useTooltipSurface(
   // The trigger's listeners call the committed handlers through this ref, so
   // the trigger ref callback keeps one identity.
   const handlersRef = useCommittedRef({
+    handleHover,
     handleMouseEnter,
+    handlePointerMove,
     handleMouseLeave,
     handleFocusIn,
     handleFocusOut,
@@ -559,6 +727,43 @@ function useTooltipSurface(
     settleDetach();
   });
 
+  // Keeps the input stream of the trigger's window hearing mouse moves
+  // (isMouseMove) while a hover can open this tooltip. A hover can open it
+  // when a trigger is attached, the tooltip is enabled, and `isOpen` does not
+  // control it.
+  const mouseMoveHoldRef = useRef<{
+    view: Window;
+    release: () => void;
+  } | null>(null);
+  const syncMouseMoveHold = useCallback(() => {
+    const latest = handlersRef.current;
+    const view =
+      latest.isEnabled && latest.isOpen === undefined
+        ? (triggerRef.current?.ownerDocument.defaultView ?? null)
+        : null;
+    const held = mouseMoveHoldRef.current;
+    if ((held?.view ?? null) === view) {
+      return;
+    }
+    held?.release();
+    mouseMoveHoldRef.current =
+      view == null ? null : {view, release: holdMouseMoves(view)};
+  }, [handlersRef]);
+  const opensOnHover = isEnabled && isOpen === undefined;
+  // Effect: follows a change to `isEnabled` or `isOpen` after the trigger
+  // attached.
+  useEffect(() => {
+    syncMouseMoveHold();
+  }, [opensOnHover, syncMouseMoveHold]);
+  // Effect: releases the hold when the hook unmounts.
+  useEffect(
+    () => () => {
+      mouseMoveHoldRef.current?.release();
+      mouseMoveHoldRef.current = null;
+    },
+    [],
+  );
+
   // The trigger's ref callback owns every trigger listener, and reads the
   // trigger's state when it attaches and detaches.
   const interactionRef = useCallback(
@@ -579,6 +784,7 @@ function useTooltipSurface(
       const onPointerEnter = (e: PointerEvent) =>
         latest().handlePointerEnter(e);
       const onMouseEnter = () => latest().handleMouseEnter();
+      const onPointerMove = (e: MouseEvent) => latest().handlePointerMove(e);
       const onMouseLeave = (e: Event) => latest().handleMouseLeave(e);
       // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
       const onPointerDown = (e: PointerEvent) => latest().handlePointerDown(e);
@@ -598,12 +804,15 @@ function useTooltipSurface(
       const onHeldFocusOut = (e: FocusEvent) => latest().handleHeldFocusOut(e);
       el.addEventListener('pointerenter', onPointerEnter);
       el.addEventListener('mouseenter', onMouseEnter);
+      el.addEventListener('pointermove', onPointerMove);
+      el.addEventListener('mousemove', onPointerMove);
       el.addEventListener('mouseleave', onMouseLeave);
       el.addEventListener('pointerdown', onPointerDown);
       el.addEventListener('focusin', onFocusIn);
       el.addEventListener('focusout', onFocusOut);
       el.addEventListener('focusout', onHeldFocusOut);
       triggerRef.current = el;
+      syncMouseMoveHold();
 
       // A trigger that attaches again after its wiring was removed
       // (DropdownMenu's Button as its menu closes) missed the focus that
@@ -638,8 +847,10 @@ function useTooltipSurface(
       }
       if (latest().isEnabled && latest().isOpen === undefined) {
         if (interest === 'hover') {
+          // The anchor saw the hover before this tooltip mounted. A hover
+          // the bridge held before the load waits only the rest of the delay.
           const hoverStartedAt = state?.hoverStartedAt;
-          latest().handleMouseEnter(
+          latest().handleHover(
             hoverStartedAt == null ? 0 : performance.now() - hoverStartedAt,
           );
         } else if (interest === 'tap') {
@@ -661,6 +872,8 @@ function useTooltipSurface(
         }
         el.removeEventListener('pointerenter', onPointerEnter);
         el.removeEventListener('mouseenter', onMouseEnter);
+        el.removeEventListener('pointermove', onPointerMove);
+        el.removeEventListener('mousemove', onPointerMove);
         el.removeEventListener('mouseleave', onMouseLeave);
         el.removeEventListener('pointerdown', onPointerDown);
         el.removeEventListener('focusin', onFocusIn);
@@ -669,6 +882,10 @@ function useTooltipSurface(
         stopPressTrackingRef.current?.();
         if (triggerRef.current === el) {
           triggerRef.current = null;
+          // React re-attaches a trigger whose ref changes identity in the
+          // same commit. The release waits for that, so the window keeps the
+          // mouse's last point.
+          queueMicrotask(syncMouseMoveHold);
         }
         // This cleanup runs before the commit's insertion Effects write the
         // flags, so the detach settles once they are written.
@@ -678,7 +895,7 @@ function useTooltipSurface(
       detachTriggerRef.current = detach;
       return detach;
     },
-    [handlersRef, settleDetach],
+    [handlersRef, settleDetach, syncMouseMoveHold],
   );
 
   // Combined ref - shorthand for calling both positionRef and interactionRef
@@ -798,20 +1015,47 @@ function useTooltipSurface(
         onMouseLeave: scheduleHide,
       };
 
-      return renderLayer(
-        // FR11: React bubbles a press on the surface to the trigger's
-        // ancestors, portaled or not. A registered surface counts as
-        // something else in the shared interactive-ancestor walk, so a
-        // clickable container around the trigger leaves the press alone while
-        // document listeners still see it.
-        // The hold's announcement reads this element's text.
-        <div ref={contentRefs} {...stylex.props(styles.content)}>
-          {children}
-        </div>,
-        renderProps,
+      return (
+        <>
+          {renderLayer(
+            // FR11: React bubbles a press on the surface to the trigger's
+            // ancestors, portaled or not. A registered surface counts as
+            // something else in the shared interactive-ancestor walk, so a
+            // clickable container around the trigger leaves the press alone
+            // while document listeners still see it.
+            // The hold's announcement reads this element's text.
+            <div
+              ref={contentRefs}
+              // Once the layer is mounted, its content is the trigger's
+              // description, so the text renders once.
+              id={describes ? descriptionId : undefined}
+              // Without a description, the trigger already reads this text
+              // (its own label, or a reason it names). A pinned tooltip stays
+              // readable: its text is announced and the pinning button
+              // controls it.
+              aria-hidden={describes || isHoldShown ? undefined : true}
+              {...stylex.props(styles.content)}>
+              {children}
+            </div>,
+            {
+              ...renderProps,
+              // Before the layer first mounts, a hidden copy of the text
+              // describes the trigger. The commit that mounts the layer
+              // removes it.
+              whileUnmounted: describes ? (
+                <TooltipDescription id={descriptionId} onMount={reportsLayer}>
+                  {children}
+                </TooltipDescription>
+              ) : null,
+            },
+          )}
+        </>
       );
     },
     [
+      describes,
+      descriptionId,
+      isHoldShown,
       renderLayer,
       placement,
       alignment,
@@ -819,6 +1063,7 @@ function useTooltipSurface(
       cancelHide,
       scheduleHide,
       contentRefs,
+      reportsLayer,
     ],
   );
 
@@ -859,7 +1104,7 @@ function useTooltipSurface(
     positionRef: layerRef,
     interactionRef,
     anchorId: layerAnchorId,
-    describedBy: layerId,
+    describedBy: describes ? descriptionId : '',
     renderTooltip,
     show,
     hide,

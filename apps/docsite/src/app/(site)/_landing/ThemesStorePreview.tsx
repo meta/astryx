@@ -17,22 +17,15 @@ import {
 } from '@astryxdesign/core/AppShell';
 import type {ThemeShowcaseProps} from '../../../../../../packages/cli/assets/templates/pages/theme-showcase/page';
 import {getThemeShowcaseContent} from '../../../components/themeShowcaseContent';
+import {THEMES_STORE_PHOTOS} from './themesStorePhotos.mjs';
 
 // Butter's bespoke showcase content (breakfast products + inventory), the
 // same source of truth the /themes page feeds ThemeShowcaseStore.
 // The card shows the store at about a third of its size, so its photos are
-// about 100 px wide. These 320 px WebP copies are sharp at 3x pixel density
-// and replace the 704 px PNGs.
+// about 100 px wide. THEMES_STORE_PHOTOS names small copies for that size.
 const butterContent = {
   ...getThemeShowcaseContent('butter'),
-  images: {
-    watch: '/landing/themes/butter-watch.webp',
-    headphones: '/landing/themes/butter-headphones.webp',
-    backpack: '/landing/themes/butter-backpack.webp',
-    wallet: '/landing/themes/butter-wallet.webp',
-    tumbler: '/landing/themes/butter-tumbler.webp',
-    throw_: '/landing/themes/butter-throw.webp',
-  },
+  images: THEMES_STORE_PHOTOS,
 };
 
 // The store template's internal responsive grids read useAppShellMobile().

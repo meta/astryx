@@ -63,7 +63,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditNewResponse
  * @property {'themeEdit.new'} type
- * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[], wiring: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `notes`: font loading; `wiring`: the steps that put the theme into this app (`theme add <theme>` for its app copy in src/themes/<theme>/, else the root file, its imports and the Theme around the app; what builds it).
+ * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[], wiring: string[], missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `missed`, `missedParts`, `missedOn`, `missedWhere`: what those settings did not reach, as a change reports it (left out when none); `notes`: font loading, and with `png` the text the sample page's pictures draw cut short; `wiring`: the steps that put the theme into this app (`theme add <theme>` for its app copy in src/themes/<theme>/, else the root file, its imports and the Theme around the app; what builds it).
  */
 
 /**
@@ -76,23 +76,44 @@
  */
 
 /**
+ * One problem a theme has, with the command that fixes it: the text token
+ * set where the text sits, or the border color, for the mode, to the black
+ * or white that reads there. `fix` is null when no one command does (a
+ * color the palette cannot make read: its note says what to change).
+ * @experimental May change or be removed in a patch release.
+ * @typedef {{problem: string, fix: string | null}} ThemeEditProblem
+ */
+
+/**
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditChangeData
  * @property {string} theme
  * @property {'set' | 'undo'} action
  * @property {ThemeEditSetting} setting - The setting written, or for `undo` the one removed.
+ * @property {{thing: string, value: string, sides: ThemeEditSetting[]}} [asSides] - On `set` of a box shorthand a part takes one length of (a menu's `padding '5px 0'`): the value typed and the sides written for it in this change, `setting` being the first.
  * @property {string} [now] - On `undo`: what applies instead of the setting removed: a dial that still writes the token (such as the generated accent color), a whole-theme setting of the same thing, or the base theme's value.
  * @property {ThemeEditSetting} [removed] - On `undo`: the setting removed (the same as `setting`); the value now in effect is the base theme's, and `changedTokens` lists it.
+ * @property {ThemeEditSetting[]} [alsoRemoved] - On `undo` of a setting listed more than once by hand: the other entries, removed with it.
  * @property {ThemeEditSetting | null} replaced - The setting this one replaced.
  * @property {string | null} was - For `base`, `mode` and a whole-theme dial: the value before.
  * @property {string[]} parts - The parts it styles (a group's members when it spread).
  * @property {{name: string, members: string[], onlyHint: boolean} | null} group - The group it spread to; `onlyHint` when `--only` would style one member.
- * @property {string[]} changedTokens - Resolved token changes, `name (mode): before -> after`.
+ * @property {string[]} changedTokens - Resolved token changes, `name (mode): before -> after`. The category colors (badges, tokens, card tints) and chart colors that moved with the look are counted in one line each.
+ * @property {string[]} [changedPartTokens] - Changes to the custom properties the built stylesheet sets on parts, `name on <rule> (mode): before -> after` (a readable text color on a selected row). With `changedTokens`, every custom property whose built value moved.
  * @property {string[]} styled - Part styles and typography the change wrote.
  * @property {string[]} kept - Part settings a whole-theme dial left in place (a part setting wins).
  * @property {string[]} lifted - Variant keys the setting was newly repeated on, so a more specific base rule cannot beat it.
- * @property {string[]} notes - What else to know: the shade a color's main token uses and any shade contrast moved, then the generated color files; font loading; what a token feeds.
+ * @property {string[]} notes - What else to know: the shade a color's main token uses and any shade contrast moved, then the generated color files; font loading; what a token feeds; with `png`, the text the sample page's pictures draw cut short and the words they break inside the word, as the browser measured them (one note for each part, with its labels).
+ * @property {Array<{note: string, run: string[]}>} leftOut - What a whole-theme change leaves out, each with the commands that reach it, one per part: the parts drawn as pills that square corners leave round; the surfaces a border width does not reach, and the dividers it moves. The text output prints it right under the status line.
+ * @property {Array<{family: string, run: string[]}>} [fontNotLoaded] - The open fonts this set names whose package is not installed, each with the command that installs it; the previews and the app draw the next font in the stack until then. Left out when every one loads. The text output prints it right under the status line.
  * @property {string[]} problems - Text this theme made unreadable (below 4.5:1, and not that low in the base theme).
+ * @property {ThemeEditProblem[]} newProblems - What this change made unreadable or unseen, each with the command that fixes it: text and borders that read well before it, and the contrast checks the colors it made fail; with `png`, text the sample page's pictures draw cut short, with `flex-shrink 0` on its part when the browser measured that drawing it whole. The text output leads with them, under the status line.
+ * @property {ThemeEditProblem[]} [leftProblems] - Problems the theme had that this change moved but left failing (a fill made darker, still not dark enough), each with what it was and the command that fixes it; left out when none. The text output says them under the new problems.
+ * @property {number} [missed] - How many misses the theme's own changes left (show --json lists each, with the line that reaches it); the text output counts them near its top.
+ * @property {number} [missedParts] - On how many parts those misses are (a part can miss two ways, its border and its shadow).
+ * @property {string[]} [missedOn] - Those parts, in show's order; the text output names them.
+ * @property {string[]} [missedWhere] - Where each of those parts keeps the base theme's look: the part, the variant its miss is in when it is one (`type:error`), then the state, or `at rest`; the text output names them.
+ * @property {number} [missedNew] - How many of those misses this change brought (not there before it); the text output says the missed line only when it brought one.
  * @property {string[]} warnings - Warnings from the theme build.
  * @property {string | null} preview
  * @property {string[]} pictures
@@ -111,6 +132,7 @@
  * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [section] - Only one section of the sheet: actions, inputs, selection, navigation, feedback, data, containers, overlays, or pages.
  * @property {boolean} [png] - Also take PNG pictures of the previews.
+ * @property {string} [on] - Only what one part shows, as a lookup that writes nothing (`themeEdit.showPart`); the theme may then be any theme the project builds.
  */
 
 /**
@@ -125,11 +147,14 @@
  * @property {Array<ThemeEditSetting & {parts: string[], masked?: string}>} data.settings - Each setting with the parts it styles; `masked` says what a later or stronger setting hides of it.
  * @property {Record<string, Record<string, string | null> | string | null>} data.resolved - Key tokens: colors and shadows per mode; sizes, numbers and fonts, which are the same in both modes, as one value.
  * @property {string[]} data.partValues - Each corners or spacing setting on a part or group, with what its parts get and the whole-theme value beside it.
+ * @property {Array<{part: string, state?: string, why: string, line: string}>} data.missed - The parts the theme's own changes should have reached and did not, most flagged first, each with why and the line that reaches it (its steps joined with &&, the text on a fill changed with it): with the accent changed, a disabled variant drawn as the accent at reduced opacity, a selected look on the base's fill, a status fill whose color is not generated; with the page surfaces changed, an inverted surface that no longer stands out from the page; with the corners changed, a pill; with the border width changed, a borderless surface. A setting that covers the aspect takes a part off.
+ * @property {string[]} data.unreached - The parts with a fill of their own the theme leaves on its base's look, most visible first: no setting is on them, and their fill or text color is still the base's (empty for a theme with no settings).
  * @property {number | null} data.vibrancy - How saturated the generated colors are (0 to 100); null when the theme sets no color.
  * @property {ThemeEditColor[]} data.colors - Each color the theme sets, with the shade each token uses.
  * @property {string[]} data.colorNotes - What the color config keeps or replaced of a hand edit, tokens that use another shade than usual so they read, and any that still do not.
  * @property {string[]} data.problems
- * @property {string[]} data.notes
+ * @property {ThemeEditProblem[]} data.openProblems - Every contrast problem the theme has now: its text, its borders, and the checks its colors fail, each with the command that fixes it; with `png`, text the sample page's pictures draw cut short, with `flex-shrink 0` on its part when the browser measured that drawing it whole. The text output ends with them.
+ * @property {string[]} data.notes - What else to know; with `png`, the text the sample page's pictures draw cut short and the words they break inside the word, as the browser measured them (one note for each part, with its labels).
  * @property {string} data.preview
  * @property {string[]} [data.previewStale] - In-app preview files changed by hand, so they were not written again and still show the theme as it was.
  * @property {string} data.sheet - The theme-building page with every component.
@@ -137,10 +162,38 @@
  * @property {string[]} data.skipped - Template pages left out, with the install line each needs.
  * @property {string[]} data.pictures
  * @property {string | null} data.pictureProblem
+ * @property {string} [data.look] - With `png`, when the run took them: the pictures to open: with show's full sheet, the picture of each family of components the theme sets a part of (of the buttons when it sets none) first (sheet-<family>.png, or, for a family taller than 1600px, the pictures cut from it in order: sheet-<family>-1.png, -2 …); with --section pages, the pages pictures (sheet-pages-1.png, -2 … for a tall one); then the sample page's and the open states' (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list drawn open). The text output says it first and last.
  * @property {{config: string, module: string, receipt: string} | null} data.colorFiles - The generated color files: the input (in the shape `theme palette generate` reads), the module the theme imports, and the receipt; null when the theme sets no color.
  * @property {{wrote: string[]}} [data.appCopy] - Only the first time the theme's app copy is written: the files written in src/themes/<theme>/.
  * @property {string} [data.appCopyStale] - Set when the app copy was not written: a file, folder or link of yours at one of its names; a link on the way to it (src/, src/themes/ or the copy's folder; the editor writes nothing through one); a file where src/, src/themes/ or the copy's folder goes; or a folder that cannot be written, or a write that failed (with the system's reason, such as not writable or the disk is full).
  * @property {string[]} data.wiring - The steps that put the theme into this app: the root file, its imports, the Theme around the app, and what builds it (`theme add <theme>`, for the app copy the editor writes in src/themes/<theme>/; the imports by hand when a folder of yours is there).
+ */
+
+/**
+ * `astryx --json experimental theme editor show <theme> --on <part>`: what one
+ * part of a theme shows. Nothing is written.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditShowPartResponse
+ * @property {'themeEdit.showPart'} type
+ * @property {object} data
+ * @property {string} data.theme
+ * @property {'editor' | 'local' | 'package' | 'bundled'} data.kind - Where the theme comes from: the editor's themes/ folder, a local theme of the app, an installed package's theme, or a bundled theme package. An editor theme is read from its saved settings: what a person adds by hand below them in its theme file is not shown yet.
+ * @property {string} data.part
+ * @property {ThemeEditPartValue[]} data.values - Each CSS property the part reads, at rest (`when` null) and in each variant. Which setting gives a value (a token, a dial, a rule on the part) is not shown yet; `source` says whose it is.
+ */
+
+/**
+ * One property of a part, as `show --on` gives it.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditPartValue
+ * @property {string} property - The CSS property.
+ * @property {string | null} when - The variant, as `set` takes `--when` (`variant:outlined`); null at rest. For a condition no flag of `set` reaches, the condition as Core writes it, with `notSettable`.
+ * @property {string | null} state - The state, as `set` takes `--state`; null for none (and for a condition no flag reaches).
+ * @property {string} [notSettable] - Only for a condition no flag of `set` reaches (a CSS selector such as `:first-child`): why, as `how <part>` says it.
+ * @property {string | {light?: string | null, dark?: string | null} | null} value - The final value, every token written out; per mode when the modes differ; null when a token it reads has no value. A mode is left out where it is not shown yet (the other mode of a property or token a one-mode block sets on the part, with nothing else under that condition).
+ * @property {string | {light?: string, dark?: string}} expression - The declaration that gives it, as written: Core's, or the rule on the part; per mode when a rule sets one mode (a one-mode theme, or a `--mode` setting).
+ * @property {string[] | {light?: string[], dark?: string[]}} tokens - The tokens it reads, and the tokens those read in turn, in order; per mode when the modes read different ones.
+ * @property {'core' | 'base' | 'theme'} source - Who decides the value (not a setting's source, as in `show`'s settings): Core's default, the base theme the theme extends, or the theme's own file, a setting on the part included.
  */
 
 /**
@@ -172,7 +225,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditUndoResponse
  * @property {'themeEdit.undo'} type
- * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], settings: number, stepsLeft: number, changedTokens: string[], problems: string[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it.
+ * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], next?: string, settings: number, stepsLeft: number, changedTokens: string[], changedPartTokens?: string[], problems: string[], newProblems: ThemeEditProblem[], notes?: string[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it; `next` names the change now on top, which the next undo takes back; `notes`, with `png`, the text the sample page's pictures draw cut short.
  */
 
 /**
@@ -196,7 +249,7 @@
  * @property {string[]} data.added - Pages added by this call.
  * @property {string[]} data.refreshed - Pages that were there already and are written again.
  * @property {Array<{page: string, why: string}>} data.matched - Each template page added for a description or --template, and why it was picked.
- * @property {Array<{page: string, reason: string, installCommand: string | null}>} data.skipped - Template pages not added: why (packages the app lacks, or a StyleX compiler it does not have), with the command that installs what is missing.
+ * @property {Array<{page: string, reason: string, installCommand: string | null, installGuidance?: string}>} data.skipped - Template pages not added: why (packages the app lacks, or a StyleX compiler it does not have), with the command that installs what is missing, and `installGuidance`, the line a loaded integration gives for adding them, when one is given.
  * @property {string[]} data.notes - What else to know.
  * @property {string[]} data.pages - Every page of the preview, in order.
  * @property {string[]} data.files - Every file the preview wrote.
@@ -268,11 +321,22 @@
  */
 
 /**
+ * One result of a plain-words question (`data.results`, `kind: 'question'`).
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditHowResult
+ * @property {string} text - What the result does, or why it does nothing.
+ * @property {string[]} commands - The commands, each checked as `set` checks it.
+ * @property {boolean} [sequence] - Run every command in order.
+ * @property {Array<{command: string, why: string, run?: string[]}>} [refused] - Commands left out, with the reason.
+ * @property {boolean} [offer] - More than the ask (a colored variant changed too): never first, never the answer itself.
+ */
+
+/**
  * `astryx --json experimental theme editor how <subject>`. `kind` says which answer it is.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditHowResponse
  * @property {'themeEdit.how'} type
- * @property {{kind: 'part' | 'group' | 'setting' | 'aspect' | 'question' | 'picture' | 'list', subject: string, [key: string]: any}} data
+ * @property {{kind: 'part' | 'group' | 'setting' | 'aspect' | 'question' | 'picture' | 'list', subject: string, results?: ThemeEditHowResult[], [key: string]: any}} data
  */
 
 export {};

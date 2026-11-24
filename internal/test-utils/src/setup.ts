@@ -5,7 +5,8 @@
  * @input Uses @testing-library/jest-dom/vitest
  * @output Extends Vitest expect with jest-dom matchers (toBeInTheDocument, etc.),
  *   jsdom polyfills, and keeps the group last-member rule out of jsdom's
- *   stylesheet
+ *   stylesheet. Waits for each file's pending `import()` calls before its
+ *   environment closes
  * @position Test setup; loaded by vitest.config.ts before all tests
  *
  * SYNC: When modified, update this header and /internal/test-utils/src/README.md
@@ -14,7 +15,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import '@testing-library/jest-dom/vitest';
 import {configure} from '@testing-library/react';
-import {afterEach, beforeAll} from 'vitest';
+import {afterAll, afterEach, beforeAll, vi} from 'vitest';
 import {__loadTooltipForTest} from '../../../packages/core/src/Tooltip/useTooltip';
 import {__resetClickGuardForTest} from '../../../packages/core/src/utils/clickGuard';
 import {GROUP_LAST_MEMBER} from './jsdomRefusedRules';
@@ -28,8 +29,14 @@ import {GROUP_LAST_MEMBER} from './jsdomRefusedRules';
 // after interaction). That makes such assertions liable to flaky "found multiple
 // elements" failures under load. Ignore live regions in text matching (tests
 // that assert an announcement query the region directly, e.g. by role="status").
+// A tooltip's description is a hidden copy of its text after the
+// trigger (`<span hidden>`); text queries skip it too, and tests that
+// assert the description read it through the trigger's accessible description.
 // Keeps the jsdom defaults (script, style).
-configure({defaultIgnore: 'script, style, [data-astryx-live-region]'});
+configure({
+  defaultIgnore:
+    'script, style, [data-astryx-live-region], span[hidden][id$="-description"]',
+});
 
 // A tooltip loads its behavior and visible layer after the page's first paint
 // (Tooltip/useTooltip.tsx). Most tests exercise the loaded tooltip, so each
@@ -45,6 +52,15 @@ beforeAll(async () => {
 // guard as each test ends.
 afterEach(() => {
   __resetClickGuardForTest();
+});
+
+// A component can start an `import()` that no test waits for: Tokenizer
+// preloads its sheet module while the sheet presentation is active. When a
+// file ends before that module loads, Vitest loads it after it closes the
+// environment, and reports an unhandled error. Wait for every pending import
+// as each file ends.
+afterAll(async () => {
+  await vi.dynamicImportSettled();
 });
 
 // jsdom's selector engine evaluates the group last-member rule,

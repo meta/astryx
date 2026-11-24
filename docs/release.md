@@ -6,6 +6,14 @@ is the operational authority. This page explains the repository and npm mechanic
 Astryx publishes its public `@astryxdesign/*` packages from GitHub Actions through
 npm trusted publishing (OIDC). CI carries no long-lived npm publish token. Every
 stable package is built from an immutable release tag and published with provenance.
+A missed release that created a tag but published nothing recuts the same version
+from current `main`. The release owner supplies a SHA-256-verified owner-recut
+receipt that matches the version and the tag's commit object. Admission and
+Changeset versioning omit only that authenticated archived tag when selecting the
+release base; the release plan and marker bind the omission to the receipt digest.
+The archived tag stays
+in place through the replacement final gate; its deletion is recorded immediately
+before the replacement tag is created. A published version is never reused.
 
 ## Release sequence
 
@@ -76,6 +84,11 @@ stable package is built from an immutable release tag and published with provena
 6. In a separate owner PR, declare the next plan across the fixed-group versions,
    exact internal pins, and lockfile. The released version's patch successor is the
    default. A minor successor is used only when the owner explicitly names it.
+   `next-plan-version` validates the named release ref's marker and plan against
+   the released version. For every tagged release, it reads the stable packages' live npm version documents and dist-tags
+   and refuses the successor until at least one package records the released
+   version. Tag deletion or replacement alone cannot admit the plan, and an
+   unreadable registry fails closed.
 
 After a cut, main's declaration remains its future plan and may change independently
 of the frozen release branch. Required pull-request lint does not compare it with the

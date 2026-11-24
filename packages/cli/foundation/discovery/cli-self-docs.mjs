@@ -18,6 +18,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_SELF_DOC_DIRS, skipCliSelfDocFolder} from './name-roots.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {AUTHORING_SELF_DOCS, selfDocSection} from './authoring-self-docs.mjs';
@@ -26,15 +27,12 @@ import {
   oversizedDocSections,
 } from './docs-output-budget.mjs';
 import {routeSegment} from './docs-section-key.mjs';
+import {definitionRelatives} from './icon-definition-discovery.mjs';
+import {
+  publishedOptionDescription,
+  publishedSummary,
+} from './command-pointers.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
-
-/** The directories, relative to the CLI root, that hold the CLI's own docs. */
-export const CLI_SELF_DOC_DIRS = [
-  'clients/cli/commands',
-  'api',
-  'authoring',
-  'foundation',
-];
 
 /** The doc kinds that declare a namespace. */
 const NAMESPACED_KINDS = new Set(['command', 'function', 'schema', 'enum']);
@@ -68,13 +66,7 @@ export function discoverCliSelfDocSources(root = CLI_ROOT) {
   const walk = dir => {
     if (!fs.existsSync(dir)) return;
     for (const entry of listDirEntries(dir)) {
-      if (
-        entry.name === 'node_modules' ||
-        entry.name.startsWith('__') ||
-        entry.name.startsWith('.')
-      ) {
-        continue;
-      }
+      if (skipCliSelfDocFolder(entry.name)) continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
       else if (entry.name.endsWith('.doc.mjs')) {
@@ -110,7 +102,14 @@ export async function loadCliSelfDocs(
       if (typeof doc.name !== 'string' || doc.name === '') {
         throw new Error('exports no doc with a name');
       }
-      loaded.push({source, doc});
+      // The docs and search read a command's summary with its pointers.
+      loaded.push({
+        source,
+        doc:
+          doc.type === 'command' && doc.pointers?.length
+            ? {...doc, summary: publishedSummary(doc)}
+            : doc,
+      });
     } catch (error) {
       failed.push({
         source,
@@ -127,6 +126,8 @@ export async function loadCliSelfDocs(
  * @typedef {object} CliDocIndex
  * @property {Map<string, any>} functions
  * @property {Set<string>} commands
+ * @property {any[]} iconDefinitions the loaded icon definition docs, the
+ *   first of each name only
  * @property {(kind: string, name: string) => string | null} route
  */
 
@@ -141,6 +142,14 @@ export function cliDocIndex(docs, route = () => null) {
       docs.filter(d => d.type === 'function').map(d => [d.name, d]),
     ),
     commands: new Set(docs.filter(d => d.type === 'command').map(d => d.name)),
+    iconDefinitions: [
+      ...new Map(
+        docs
+          .filter(d => d.type === 'icon-definition')
+          .reverse()
+          .map(d => [d.name, d]),
+      ).values(),
+    ].reverse(),
     route,
   };
 }
@@ -179,6 +188,20 @@ function entryText(entry, fn) {
     (/** @type {any} */ p) => p.name === entry.param,
   );
   return typeof param?.description === 'string' ? param.description : '';
+}
+
+/**
+ * The text for a command option: its own or its API parameter's, then the
+ * text of every part it declares.
+ * @param {{description?: string, param?: string, pointers?: Array<string | {text: string}>}} option
+ * @param {any} fn the FunctionDoc the command calls, if any
+ * @returns {string}
+ */
+function optionText(option, fn) {
+  return publishedOptionDescription(
+    option,
+    entryText({param: option.param}, fn),
+  );
 }
 
 /**
@@ -246,7 +269,7 @@ function commandSection(cmd, index) {
         ].filter(Boolean);
         return [
           `\`${option.flag}\``,
-          [sentence(entryText(option, fn), extra.length > 0), ...extra]
+          [sentence(optionText(option, fn), extra.length > 0), ...extra]
             .filter(Boolean)
             .join(' '),
         ];
@@ -427,11 +450,13 @@ function enumSection(doc) {
 
 /**
  * What `astryx docs <route>` prints for one icon definition: its description,
- * its words, whether it is built in, and the command
- * that finds the icon each installed set draws for it.
+ * its words, whether it is built in, its group with the other members and
+ * the routes that open them, and the command that finds the icon each
+ * installed set draws for it.
  * @param {any} doc
+ * @param {CliDocIndex} index
  */
-function iconDefinitionSection(doc) {
+function iconDefinitionSection(doc, index) {
   /** @type {string[][]} */
   const rows = [
     [
@@ -439,22 +464,53 @@ function iconDefinitionSection(doc) {
       doc.words.map((/** @type {string} */ w) => `\`${w}\``).join(', '),
     ],
   ];
+  if (doc.replaces) {
+    rows.push([
+      'Replaces',
+      `\`${doc.replaces}\`: that name answers with this meaning.`,
+    ]);
+  }
   if (doc.builtIn) {
     rows.push([
       'Built in',
       'Yes: every icon set maps it, and Core renders it.',
     ]);
   }
+  /** @type {string[]} */
+  const groupRoutes = [];
+  if (doc.group) {
+    const others = definitionRelatives([doc.name], index.iconDefinitions).map(
+      each => each.definition,
+    );
+    rows.push([
+      'Group',
+      others.length > 0
+        ? `\`${doc.group}\`: ${others.map(name => `\`${name}\``).join(', ')}`
+        : `\`${doc.group}\``,
+    ]);
+    for (const name of others) {
+      const route = index.route('icon-definition', name);
+      if (route) groupRoutes.push(`\`astryx docs ${route}\``);
+    }
+  }
   const content = [
     {type: 'prose', text: doc.description},
     {type: 'table', headers: ['Field', 'Value'], rows},
+    ...(groupRoutes.length > 0
+      ? [
+          {
+            type: 'prose',
+            text: `Read the other meanings in its group: ${groupRoutes.join(', ')}.`,
+          },
+        ]
+      : []),
     {
       type: 'prose',
-      text: `An icon set registers the icon that draws this definition in its data file: \`"map": {"${doc.name}": "<icon id>"}\`. Find it in each installed set: \`astryx experimental icon ${doc.name}\`.`,
+      text: `An icon set maps this meaning to the icon that draws it, in its data file: \`"map": {"${doc.name}": "<icon id>"}\`. Find it in each installed set: \`astryx experimental icon ${doc.name}\`.`,
     },
     {
       type: 'prose',
-      text: 'Icon definitions are experimental: they may change or be removed in a patch release.',
+      text: 'Icon meanings are experimental: they may change or be removed in a patch release.',
     },
   ];
   return {id: routeSegment(doc.name), title: doc.name, content};
@@ -469,7 +525,7 @@ function iconDefinitionSection(doc) {
  */
 export function cliDocSection(doc, index) {
   if (doc.type === 'command') return commandSection(doc, index);
-  if (doc.type === 'icon-definition') return iconDefinitionSection(doc);
+  if (doc.type === 'icon-definition') return iconDefinitionSection(doc, index);
   if (doc.type === 'function') return functionSection(doc, index);
   if (doc.type === 'enum') return enumSection(doc);
   if (doc.type === 'namespace')

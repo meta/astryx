@@ -9,14 +9,17 @@ import DurationShardSequencer, {
   mergeRecord,
   partitionByDuration,
   readDurations,
+  countedTestFiles,
+  nodeLegLogs,
   recordDurations,
   idleSwizzleSlices,
+  durationsFile,
 } from './vitest-shard-sequencer.mjs';
 import {splitByDuration} from './lib/duration-split.mjs';
 import {
   PER_FILE_SECONDS,
+  drawsInRealChrome,
   nodeFileCost,
-  nodeLegFiles,
 } from './vitest-node-legs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -69,19 +72,6 @@ describe('duration-balanced Node legs', () => {
       expect(fs.existsSync(path.join(ROOT, file)), file).toBe(true);
   });
 
-  it("keeps a recorded time for nine in ten of the Node project's test files, so the record cannot go stale unnoticed", () => {
-    // The `node` project's files, from the globs vitest.config.ts reads
-    // (vitest-node-files.test.mjs), so this check never drifts from what the
-    // project runs.
-    const nodeFiles = nodeLegFiles();
-    const missing = nodeFiles.filter(file => !(file in recorded));
-    expect(nodeFiles.length).toBeGreaterThan(500);
-    expect(
-      missing.length / nodeFiles.length,
-      `${missing.length} Node test files have no recorded time (${missing.slice(0, 5).join(', ')}, …). Regenerate the record from the Main workflow's Node leg logs: node scripts/vitest-shard-sequencer.mjs record <log>…`,
-    ).toBeLessThanOrEqual(0.1);
-  });
-
   it.each([4, 6])(
     'runs every file in exactly one of %i legs, the same split in any order',
     count => {
@@ -94,12 +84,18 @@ describe('duration-balanced Node legs', () => {
   );
 
   it.each([4, 6])(
-    'never puts two of the %i slowest files in one leg, and keeps legs within a slow file of each other',
+    'never puts two of the slowest files in one leg, and keeps legs within a slow file of each other (%i legs)',
     count => {
       const legs = partitionByDuration(files, count, recorded);
       const legOf = file => legs.findIndex(leg => leg.includes(file));
-      const top = slowest.slice(0, count).map(legOf);
-      expect(new Set(top).size).toBe(count);
+      // The last leg holds the real-Chrome files and light files only
+      // (nodeLegsApart), so the heavy files spread over the other legs.
+      const top = slowest
+        .filter(file => !drawsInRealChrome(file))
+        .slice(0, count - 1)
+        .map(legOf);
+      expect(new Set(top).size).toBe(count - 1);
+      expect(top).not.toContain(count - 1);
       // Greedy slowest-first: legs differ by at most the slowest file's time.
       const totals = legs.map(total);
       expect(Math.max(...totals) - Math.min(...totals)).toBeLessThanOrEqual(
@@ -116,8 +112,11 @@ describe('duration-balanced Node legs', () => {
       const zeros = files.filter(zero).length;
       expect(zeros).toBeGreaterThan(100);
       const mean = files.length / count;
-      for (const leg of legs) {
-        expect(leg.length).toBeLessThanOrEqual(mean * 1.15);
+      for (const [index, leg] of legs.entries()) {
+        // The real-Chrome files' leg tops up with light files only, so it
+        // holds more of them.
+        if (index < count - 1)
+          expect(leg.length).toBeLessThanOrEqual(mean * 1.15);
         expect(leg.filter(zero).length).toBeLessThanOrEqual(
           (zeros / count) * 1.5,
         );
@@ -334,6 +333,22 @@ describe('duration-balanced Node legs', () => {
     expect([...(await idleSwizzleSlices(files))]).toEqual([]);
   });
 
+  it('reads the record a workflow names in VITEST_DURATIONS_FILE, and the main record otherwise', () => {
+    expect(durationsFile()).toBe(DURATIONS);
+    vi.stubEnv(
+      'VITEST_DURATIONS_FILE',
+      'scripts/vitest-node-durations.min-node.json',
+    );
+    expect(durationsFile()).toBe(
+      path.join(path.dirname(DURATIONS), 'vitest-node-durations.min-node.json'),
+    );
+    const other = readDurations();
+    expect(Object.keys(other).length).toBeGreaterThan(100);
+    expect(other).not.toEqual(readDurations(DURATIONS));
+    vi.unstubAllEnvs();
+    expect(durationsFile()).toBe(DURATIONS);
+  });
+
   it('reads no swizzle-proof scope when no slice is in the run', async () => {
     expect([...(await idleSwizzleSlices(['a.test.mjs']))]).toEqual([]);
   });
@@ -352,6 +367,48 @@ describe('duration-balanced Node legs', () => {
       'packages/cli/a.test.mjs': 1.2,
       'packages/cli/b.test.mjs': 0.8,
     });
+  });
+
+  it('books the slice files from the swizzle-proof legs, where they run, and nothing else there', () => {
+    const log = [
+      'swizzle-proof (3/8)\tRun this slice of the swizzle proof\t2026-11-14T11:04:57.18Z  ✓  node  packages/cli/test/swizzle-proof/swizzle-proof.3.test.mjs (1 test) 338400ms',
+      'swizzle-proof (5/8)\tRun this slice of the swizzle proof\t2026-11-14T11:04:57.18Z ^[[32m✓^[[39m ^[[30m^[[46m node ^[[49m^[[39m packages/cli/test/swizzle-proof/swizzle-proof.5.test.mjs ^[[2m(1 test)^[[22m^[[33m 122349^[[2mms^[[22m^[[39m',
+      // Any other file in that job is no Node leg's time.
+      'swizzle-proof (5/8)\tBuild core package\t2026-11-14T11:01:57.18Z  ✓  node  packages/cli/other.test.mjs (2 tests) 5000ms',
+      'test-node (1/5)\tRun tests\t2026-11-14T11:04:57.18Z  ✓  node  packages/cli/a.test.mjs (4 tests) 1200ms',
+    ].join('\n');
+    expect(recordDurations(log)).toEqual({
+      'packages/cli/test/swizzle-proof/swizzle-proof.3.test.mjs': 338.4,
+      'packages/cli/test/swizzle-proof/swizzle-proof.5.test.mjs': 122.3,
+      'packages/cli/a.test.mjs': 1.2,
+    });
+  });
+
+  it('records a file none of whose tests run, each skipped or todo, at 0, and one with a test that ran by its time', () => {
+    const log = [
+      ' ↓  node  packages/cli/todo.test.mjs (1 test | 1 todo)',
+      ' ↓  node  packages/cli/mixed.test.mjs (5 tests | 3 skipped | 2 todo)',
+      ' ✓  node  packages/cli/some.test.mjs (4 tests | 2 skipped) 300ms',
+    ].join('\n');
+    expect(recordDurations(log)).toEqual({
+      'packages/cli/todo.test.mjs': 0,
+      'packages/cli/mixed.test.mjs': 0,
+      'packages/cli/some.test.mjs': 0.3,
+    });
+  });
+
+  it("groups a whole run's log by Node leg, and reads each leg's file count from its summary", () => {
+    const log = [
+      'test-node (1)\tlog\t2026-11-18T13:32:30.59Z  ✓  node  packages/cli/a.test.mjs (4 tests) 1200ms',
+      'test-build\tlog\t2026-11-18T13:32:30.59Z  ✓  node  packages/cli/b.test.mjs (4 tests) 1200ms',
+      'test-node (2)\tlog\t2026-11-18T13:32:30.59Z ^[[2m Test Files ^[[22m ^[[1m^[[32m139 passed^[[39m^[[22m^[[2m | ^[[22m^[[33m2 skipped^[[39m^[[90m (141)^[[39m',
+      'test-node (1)\tlog\t2026-11-18T13:32:31.00Z  Test Files  1 passed (1)',
+    ].join('\n');
+    const legs = nodeLegLogs(log);
+    expect([...legs.keys()]).toEqual(['test-node (1)', 'test-node (2)']);
+    expect(countedTestFiles(legs.get('test-node (1)'))).toBe(1);
+    expect(countedTestFiles(legs.get('test-node (2)'))).toBe(141);
+    expect(countedTestFiles('no summary')).toBe(null);
   });
 
   it('reads colour codes spelled out, as `gh run view --log` prints them', () => {

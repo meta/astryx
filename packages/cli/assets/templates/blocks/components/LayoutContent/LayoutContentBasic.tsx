@@ -14,7 +14,7 @@ import {Text, Heading} from '@astryxdesign/core/Text';
 
 export default function LayoutContentBasic() {
   return (
-    <Center width={400}>
+    <Center width={400} maxWidth="100%">
       <Layout
         style={{width: '100%'}}
         height="fill"

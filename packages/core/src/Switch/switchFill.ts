@@ -3,8 +3,8 @@
 /**
  * @file switchFill.ts
  * @input Switch's track element and the props its other state renders with
- * @output Exports TrackState, sameTrackState, trackStateOf, readInState and
- *   readFillOf: an element read in its other state, in place
+ * @output Exports TrackState, sameTrackState, trackStateOf, stateOf,
+ *   readInState and readFillOf: an element read in another state, in place
  * @position Shared by Switch.tsx and useSwitchTouch.ts for the colour fade
  *   under a finger
  *
@@ -15,7 +15,7 @@
  * SYNC: When modified, update Switch.tsx and useSwitchTouch.ts.
  */
 
-/** A track state: its class name and its data attributes. */
+/** A state of the track or the thumb: its class name and data attributes. */
 export interface TrackState {
   readonly className: string;
   readonly attributes: Readonly<Record<string, string>>;
@@ -52,6 +52,20 @@ export function trackStateOf(props: object): TrackState {
     }
   }
   return {className, attributes};
+}
+
+/**
+ * The state `element` renders in now. It is read from the DOM alone: no
+ * style or layout is read.
+ */
+export function stateOf(element: HTMLElement): TrackState {
+  const attributes: Record<string, string> = {};
+  for (const attribute of Array.from(element.attributes)) {
+    if (attribute.name.startsWith('data-')) {
+      attributes[attribute.name] = attribute.value;
+    }
+  }
+  return {className: element.className, attributes};
 }
 
 /**

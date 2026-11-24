@@ -478,6 +478,7 @@ const styles = stylex.create({
     padding: spacingVars['--spacing-3'],
     textAlign: 'center',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
   },
   // The indicator a direct caller gets. In flow, where it has always been, so
@@ -885,6 +886,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // in the closure are stale (a selection cleared them) and shouldn't
   // be re-shown.
   const resultsGenRef = useRef(0);
+  // The typed text the shown rows answer: a search's text, '' for the focus
+  // list, or text below the threshold for rows derived from it.
+  const listQueryRef = useRef<string | null>(null);
   // The generation at which the current searchSource took over. Results
   // populated before it (resultsGenRef below this) came from a replaced
   // source: they can never be re-shown, so focus bootstraps the new source.
@@ -1110,6 +1114,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   }, [onOpenChange, dismiss, outsidePress, replaceResults]);
 
   const popover = usePopoverInternal({
+    surfaceTarget: 'typeahead-popup',
     onShow: handleLayerShow,
     onHide: handleLayerHide,
     // A manual popover: the browser's light dismiss counts a press in the
@@ -1229,9 +1234,15 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       let shownRows: T[] | null = null;
       let shownState: T[] | null = null;
       let shownEntryCount = 0;
+      // The result count names every match, not only the rows shown.
+      let hiddenMatchCount = 0;
 
       const showList = (list: T[], isFinal: boolean): T[] => {
         const fetched = list.slice(0, maxMenuItems);
+        // A kept list is already capped, so it keeps the earlier count.
+        if (list !== shownRows) {
+          hiddenMatchCount = list.length - fetched.length;
+        }
         if (
           shownRows != null &&
           !startsWithRows(displayOrder(fetched), displayOrder(shownRows))
@@ -1253,6 +1264,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           : [];
         const shown = [...fetched, ...entries];
         resultsGenRef.current = gen;
+        listQueryRef.current = searchQuery;
         const firstRow = shown.length > 0 ? 0 : -1;
         const previous = shownState;
         const previousEntryCount = shownEntryCount;
@@ -1334,7 +1346,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         if (dismissed) {
           keptAnswerRef.current = true;
           if (searchQuery.length > 0) {
-            keptCountRef.current = shown.length;
+            keptCountRef.current = shown.length + hiddenMatchCount;
           }
           return;
         }
@@ -1347,7 +1359,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           // would follow it, so it is dropped (spec:AST-086 FR8).
           settleBusyAnnouncement();
         }
-        announceCount(shown.length);
+        announceCount(shown.length + hiddenMatchCount);
       } catch {
         if (searchGenRef.current !== gen) {
           return;
@@ -1374,7 +1386,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           if (shownRows != null) {
             // A failed server answer keeps the last non-empty list the source
             // showed for this query, which settles it.
-            announceCount(showList(shownRows, true).length);
+            announceCount(showList(shownRows, true).length + hiddenMatchCount);
           } else {
             replaceResults([]);
             setHighlightedIndex(-1);
@@ -1409,6 +1421,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         return;
       }
       resultsGenRef.current = gen;
+      listQueryRef.current = '';
       const shown = bootstrapResults.slice(0, maxMenuItems);
       const nextHighlightedIndex = shown.length > 0 ? 0 : -1;
       // A focus load that yields no choice, or fails (it arrives here empty),
@@ -1607,6 +1620,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         // never reports "no results" for a query nobody looked for.
         const derived = __queryEntries?.(newQuery, []) ?? [];
         resultsGenRef.current = searchGenRef.current;
+        listQueryRef.current = newQuery;
         replaceResults(derived, derived.length);
         setHeldHeight(null);
         setHighlightedIndex(derived.length > 0 ? 0 : -1);
@@ -2054,6 +2068,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           break;
         case 'Enter':
           e.preventDefault();
+          // Until the typed text's own rows show, the list still answers an
+          // earlier query, so Enter picks nothing from it.
+          if (listQueryRef.current !== query) {
+            break;
+          }
           if (highlightedIndex >= 0 && highlightedIndex < results.length) {
             handleSelect(displayedResults[highlightedIndex]);
           }
@@ -2323,11 +2342,19 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                 // the option the user was shown, not the one that
                 // happened to appear under the cursor.
                 onMouseMove={() => highlightOnHover(index)}
-                {...stylex.props(
-                  styles.item,
-                  itemSizeStyles[size],
-                  index === highlightedIndex && styles.itemHighlighted,
-                  isSelected && styles.itemSelected,
+                {...mergeProps(
+                  themeProps('typeahead-option', {
+                    size,
+                    highlighted:
+                      index === highlightedIndex ? 'highlighted' : null,
+                    selected: isSelected ? 'selected' : null,
+                  }),
+                  stylex.props(
+                    styles.item,
+                    itemSizeStyles[size],
+                    index === highlightedIndex && styles.itemHighlighted,
+                    isSelected && styles.itemSelected,
+                  ),
                 )}>
                 <span {...stylex.props(styles.itemContent)}>
                   {renderItem ? (

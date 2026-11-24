@@ -19,6 +19,7 @@
 
 import {
   use,
+  useEffect,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -172,15 +173,23 @@ export interface TooltipReturn {
 
   /**
    * ID for aria-describedby on the trigger element.
-   * Caller should compose with other IDs using mergeIds utility.
-   * Empty until the tooltip's layer exists, after the page's first paint, so
-   * the trigger never names a missing element; skip it when empty.
+   * Caller should compose with other IDs using mergeIds utility. It is empty
+   * until the tooltip loads, after the page's first paint, so skip it when
+   * empty. Then it names the tooltip's text description: until the tooltip
+   * first shows, a hidden copy of the tooltip text that `renderTooltip`
+   * renders after the trigger; after that, the tooltip's content. It is not
+   * the tooltip element's id.
    */
   describedBy: string;
 
   /**
    * Render function for tooltip content.
    * Returns anchor-positioned popover element.
+   *
+   * Once the tooltip loads and until it first shows, the content also renders
+   * as the trigger's hidden description, so a component inside it runs its
+   * effects before then. The tooltip renders it again inside the layer when it
+   * first shows.
    *
    * `positioning` is excluded: the tooltip always derives its position from
    * placement/alignment, so accepting the custom opt-out here would be a
@@ -201,8 +210,8 @@ export interface TooltipReturn {
    * `isEnabled` is false.
    *
    * Use `show()` and `hide()` to build a toggle-style trigger: your own button
-   * calls them, sets `aria-describedby` and `aria-controls` to `describedBy`
-   * and `aria-expanded` (true while shown), and keeps its own accessible name.
+   * calls them, sets `aria-describedby` to `describedBy` and `aria-expanded`
+   * (true while shown), and keeps its own accessible name.
    */
   show: () => void;
 
@@ -351,6 +360,8 @@ export interface TooltipBridge {
   ) => () => void;
   /** The loaded layer reports its ids when it exists, and null when it goes. */
   readonly reportLayer: (ids: TooltipLayerIds | null) => void;
+  /** Schedules the page's load for an attached trigger, if enabled. */
+  readonly scheduleLoad: () => void;
 }
 
 function attach(
@@ -409,6 +420,7 @@ function canHover(trigger: HTMLElement): boolean {
 function createTooltipBridge(
   reportLayer: (ids: TooltipLayerIds | null) => void,
   onShowDropped: () => void,
+  isEnabled: () => boolean,
 ): TooltipBridge {
   const interestRef: RefObject<TooltipPresentInterestState> = {
     current: {interest: null, tapEvent: null, isRead: true},
@@ -448,7 +460,19 @@ function createTooltipBridge(
     if (!wasTapped) {
       hoverStartedAt = performance.now();
     }
-    retryFailedLoad();
+    retryIfEnabled();
+  };
+  const retryIfEnabled = () => {
+    if (isEnabled()) {
+      retryFailedLoad();
+    }
+  };
+  // A disabled tooltip starts no load: a field that keeps a disabled-reason
+  // tooltip attached adds no tooltip code to its page until it can show.
+  const scheduleFor = (element: HTMLElement | null) => {
+    if (element != null && isEnabled()) {
+      scheduleTooltipLoad(element.ownerDocument.defaultView);
+    }
   };
   const notePress = (event: PointerEvent) => {
     if (event.pointerType !== 'mouse') {
@@ -464,7 +488,7 @@ function createTooltipBridge(
       return;
     }
     if (surface == null) {
-      scheduleTooltipLoad(element.ownerDocument.defaultView);
+      scheduleFor(element);
     } else {
       detachPosition = attach(surface.positionRef, element);
     }
@@ -474,7 +498,7 @@ function createTooltipBridge(
     detachInteraction = null;
     interactionElement?.removeEventListener('pointerenter', noteEntry);
     interactionElement?.removeEventListener('pointerdown', notePress);
-    interactionElement?.removeEventListener('focusin', retryFailedLoad);
+    interactionElement?.removeEventListener('focusin', retryIfEnabled);
     interactionElement = element;
     hoverStartedAt = undefined;
     wasTapped = false;
@@ -482,10 +506,10 @@ function createTooltipBridge(
       return;
     }
     if (surface == null) {
-      scheduleTooltipLoad(element.ownerDocument.defaultView);
+      scheduleFor(element);
       element.addEventListener('pointerenter', noteEntry);
       element.addEventListener('pointerdown', notePress);
-      element.addEventListener('focusin', retryFailedLoad);
+      element.addEventListener('focusin', retryIfEnabled);
     } else {
       detachInteraction = attach(surface.interactionRef, element);
     }
@@ -537,10 +561,16 @@ function createTooltipBridge(
     positionRef,
     interactionRef,
     reportLayer,
+    scheduleLoad: () => {
+      scheduleFor(positionElement ?? interactionElement);
+    },
     show: () => {
       if (surface == null) {
-        setShowRequested(true);
-        retryFailedLoad();
+        // While disabled, show() does nothing (FR12).
+        if (isEnabled()) {
+          setShowRequested(true);
+          retryFailedLoad();
+        }
       } else {
         surface.actionsRef.current.show();
       }
@@ -558,7 +588,7 @@ function createTooltipBridge(
       surface = next;
       interactionElement?.removeEventListener('pointerenter', noteEntry);
       interactionElement?.removeEventListener('pointerdown', notePress);
-      interactionElement?.removeEventListener('focusin', retryFailedLoad);
+      interactionElement?.removeEventListener('focusin', retryIfEnabled);
       if (positionElement != null) {
         detachPosition = attach(next.positionRef, positionElement);
       }
@@ -624,8 +654,21 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const [layerIds, setLayerIds] = useState<TooltipLayerIds | null>(null);
   const optionsRef = useCommittedRef(options);
   const [bridge] = useState(() =>
-    createTooltipBridge(setLayerIds, () => optionsRef.current.onHide?.()),
+    createTooltipBridge(
+      setLayerIds,
+      () => optionsRef.current.onHide?.(),
+      () => optionsRef.current.isEnabled !== false,
+    ),
   );
+  const isEnabled = options.isEnabled !== false;
+  // Syncs the page's tooltip load with this tooltip becoming enabled while
+  // its trigger is attached. The trigger's ref callback schedules it for a
+  // trigger that attaches enabled.
+  useEffect(() => {
+    if (isEnabled) {
+      bridge.scheduleLoad();
+    }
+  }, [bridge, isEnabled]);
   // Set only by a Core component that mounts the tooltip on interaction.
   const heldInterestRef = use(TooltipPresentInterestContext);
   const Surface = useSyncExternalStore(subscribe, getSurface, getServerSurface);
@@ -665,6 +708,16 @@ function retryFailedLoad(): void {
   }
   hasFailed = false;
   startLoad();
+}
+
+/**
+ * Whether the page has loaded the tooltip surface. A Core component that
+ * renders a tooltip's description id in its own markup (CheckboxInput's
+ * disabled reason) names it only once this is true: the description renders
+ * in the same commit.
+ */
+export function useIsTooltipLoaded(): boolean {
+  return useSyncExternalStore(subscribe, getSurface, getServerSurface) != null;
 }
 
 /** Test only: loads the tooltip surface now and makes every tooltip see it. */

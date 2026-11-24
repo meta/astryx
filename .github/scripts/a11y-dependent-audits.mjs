@@ -105,7 +105,8 @@ export function listAuditSpecs(root) {
 
 /**
  * Legs for the files, each ten minutes or less when `maxLegs` allows, from
- * `planLegs`'s count; an audit longer than that runs in a leg of its own.
+ * `planLegs`'s count; an audit longer than that runs in a leg of its own,
+ * unless, at `maxLegs`, an even split is shorter (`fitLegsToBudget`).
  * @param {string[]} files
  * @param {Record<string, number>} seconds
  * @param {number} maxLegs
@@ -272,8 +273,9 @@ export function undecidedMessage(plan, truncated) {
 }
 
 /**
- * The legs job's matrix: one entry per planned leg, or a single leg that only
- * says it has no share.
+ * The legs job's matrix: one entry per planned leg. A plan with no leg gives
+ * one entry: a pull request's legs job reads the count and starts no leg, and
+ * the at-head dispatch's one leg only says it has no share.
  * @param {number} count
  */
 export function legsFor(count) {

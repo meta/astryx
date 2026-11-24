@@ -29,9 +29,11 @@ import {renderToString} from 'react-dom/server';
 import type {ReactElement} from 'react';
 import type * as UseTooltipModule from './useTooltip';
 import type * as TooltipModule from './Tooltip';
+import type * as SurfaceModule from './tooltipSurface';
 
 const loads = {
   surface: 0,
+  surfaceContents: [] as unknown[],
   layer: 0,
   failures: 0,
 };
@@ -43,7 +45,14 @@ function mockLoads() {
       loads.failures -= 1;
       throw new Error('offline');
     }
-    return importOriginal();
+    const surface = await importOriginal<typeof SurfaceModule>();
+    return {
+      ...surface,
+      TooltipSurface: async (props: SurfaceModule.TooltipSurfaceProps) => {
+        loads.surfaceContents.push(props.content);
+        return surface.TooltipSurface(props);
+      },
+    };
   });
   vi.doMock('../Layer/useLayer', async importOriginal => {
     loads.layer += 1;
@@ -96,6 +105,7 @@ let Tooltip: typeof TooltipModule.Tooltip;
 beforeEach(async () => {
   vi.resetModules();
   loads.surface = 0;
+  loads.surfaceContents = [];
   loads.layer = 0;
   loads.failures = 0;
   hovered = null;
@@ -126,10 +136,15 @@ const TIP = 'Saves your changes';
 
 function Harness(props: {
   isOpen?: boolean;
+  isEnabled?: boolean;
   onHide?: () => void;
   onReady?: (tooltip: UseTooltipModule.TooltipReturn) => void;
 }): ReactElement {
-  const tooltip = useTooltip({isOpen: props.isOpen, onHide: props.onHide});
+  const tooltip = useTooltip({
+    isOpen: props.isOpen,
+    isEnabled: props.isEnabled,
+    onHide: props.onHide,
+  });
   props.onReady?.(tooltip);
   return (
     <>
@@ -153,6 +168,11 @@ function layerOf(text = TIP): HTMLElement | null {
       layer => layer.textContent === text,
     ) ?? null
   );
+}
+
+/** Whether the loaded surface describes the trigger: the load has landed. */
+function isLoaded(): boolean {
+  return trigger().hasAttribute('aria-describedby');
 }
 
 function shows(): boolean {
@@ -193,7 +213,12 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
     await paintAndLoad();
     expect(loads.surface).toBe(1);
-    expect(screen.getAllByRole('tooltip', {hidden: true})).toHaveLength(2);
+    // Each trigger is described by its hidden copy; no layer mounts before a
+    // first show.
+    for (const button of screen.getAllByRole('button', {name: 'Save'})) {
+      expect(button).toHaveAccessibleDescription(TIP);
+    }
+    expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
   });
 
   it('no hover, focus or press starts the load before first paint', async () => {
@@ -280,7 +305,9 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
       vi.advanceTimersByTime(1000);
     });
     expect(shows()).toBe(false);
+    // A hover is a pointer that moves onto the trigger.
     fireEvent.mouseEnter(trigger());
+    fireEvent.pointerMove(trigger(), {pointerType: 'mouse'});
     act(() => {
       vi.advanceTimersByTime(200);
     });
@@ -290,6 +317,7 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
   it('keyboard focus still on the trigger when the load lands shows the tooltip at once', async () => {
     render(<Harness />);
     isFocusVisible = true;
+    fireEvent.keyDown(document.body, {key: 'Tab'});
     act(() => trigger().focus());
     await paintAndLoad();
     expect(shows()).toBe(true);
@@ -380,7 +408,7 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     render(<Harness />);
     await paintAndLoad();
     expect(loads.surface).toBe(2);
-    expect(layerOf()).not.toBeNull();
+    expect(isLoaded()).toBe(true);
     warn.mockRestore();
   });
 
@@ -406,7 +434,7 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
       await pendingTooltipLoad();
     });
     expect(loads.surface).toBe(2);
-    expect(layerOf()).not.toBeNull();
+    expect(isLoaded()).toBe(true);
     expect(shows()).toBe(false);
     warn.mockRestore();
   });
@@ -447,7 +475,7 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
       await pendingTooltipLoad();
     });
     expect(loads.surface).toBe(2);
-    expect(layerOf()).not.toBeNull();
+    expect(isLoaded()).toBe(true);
     warn.mockRestore();
   });
 
@@ -468,7 +496,59 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     render(<Harness />);
     await paintAndLoad();
     expect(loads.surface).toBe(1);
-    expect(layerOf()).not.toBeNull();
+    expect(isLoaded()).toBe(true);
+  });
+
+  it('a tooltip whose isEnabled is false starts no load; enabling it with its trigger attached starts one (INV10)', async () => {
+    const {rerender} = render(<Harness isEnabled={false} />);
+    await paintAndLoad();
+    expect(loads.surface).toBe(0);
+    fireEvent.pointerEnter(trigger(), {pointerType: 'mouse'});
+    act(() => trigger().focus());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(loads.surface).toBe(0);
+
+    rerender(<Harness isEnabled />);
+    await paintAndLoad();
+    expect(loads.surface).toBe(1);
+  });
+
+  it('form fields with no disabled message or tooltip status load no tooltip code (INV10)', async () => {
+    const {TextInput} = await import('../TextInput/TextInput');
+    const {CheckboxInput} = await import('../CheckboxInput/CheckboxInput');
+    const {Switch} = await import('../Switch/Switch');
+    render(
+      <>
+        <TextInput label="Name" value="" onChange={() => {}} />
+        <CheckboxInput label="Agree" value={false} onChange={() => {}} />
+        <Switch label="Alerts" value={false} onChange={() => {}} />
+      </>,
+    );
+    await paintAndLoad();
+    expect(loads.surface).toBe(0);
+  });
+
+  it('a Button with no tooltip and an Avatar with tooltip={false} start no load and render no tooltip surface', async () => {
+    const {Button} = await import('../Button/Button');
+    const {Avatar} = await import('../Avatar/Avatar');
+    render(
+      <>
+        <Button label="Save draft" />
+        <Avatar name="Ada Lovelace" tooltip={false} />
+      </>,
+    );
+    await paintAndLoad();
+    expect(loads.surface).toBe(0);
+
+    // Once another tooltip on the page loads the surface, only that tooltip
+    // renders one.
+    render(<Harness />);
+    await paintAndLoad();
+    expect(loads.surface).toBe(1);
+    expect(loads.surfaceContents.length).toBeGreaterThan(0);
+    expect(new Set(loads.surfaceContents)).toEqual(new Set([TIP]));
   });
 
   it('the load waits for a trigger to attach: a tooltip whose trigger never attaches starts none', async () => {
@@ -494,13 +574,29 @@ describe('the description reference and the load (architecture:component-import-
     expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
   });
 
-  it('after the load the trigger names the role="tooltip" layer, which exists', async () => {
-    render(<Harness />);
+  it('after the load the trigger names a hidden copy of the text until the first show, then the tooltip content (FR2, AR1)', async () => {
+    let tooltip: UseTooltipModule.TooltipReturn | null = null;
+    render(
+      <Harness
+        onReady={t => {
+          tooltip = t;
+        }}
+      />,
+    );
     await paintAndLoad();
-    const id = trigger().getAttribute('aria-describedby');
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
-    expect(id).toBe(tooltip.id);
-    expect(tooltip).toHaveTextContent(TIP);
+    const id = trigger().getAttribute('aria-describedby') ?? '';
+    const copy = document.getElementById(id);
+    expect(copy).not.toBeNull();
+    expect(copy).toHaveAttribute('hidden');
+    expect(copy).not.toHaveAttribute('role');
+    expect(copy).toHaveTextContent(TIP);
+    expect(trigger()).toHaveAccessibleDescription(TIP);
+
+    act(() => tooltip?.show());
+    const layer = screen.getByRole('tooltip', {hidden: true});
+    expect(trigger()).toHaveAttribute('aria-describedby', id);
+    expect(layer).toContainElement(document.getElementById(id));
+    expect(document.querySelectorAll(`[id="${id}"]`)).toHaveLength(1);
     expect(trigger()).toHaveAccessibleDescription(TIP);
   });
 

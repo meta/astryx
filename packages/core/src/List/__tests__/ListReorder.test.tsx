@@ -477,6 +477,43 @@ describe('List reorderable', () => {
     warn.mockRestore();
   });
 
+  it('announces a row whose label holds inline markup by its words as they read', async () => {
+    const user = userEvent.setup();
+    function Rows() {
+      const [items, setItems] = useState(['water', 'salt', 'sugar']);
+      const reorderable = createReorderable({
+        onReorder: move =>
+          setItems(previous => moveKey(previous, move.key, move.to)),
+      });
+      const labels: Record<string, ReactNode> = {
+        water: (
+          <>
+            H<sub>2</sub>O
+          </>
+        ),
+        salt: 'Salt',
+        sugar: 'Sugar',
+      };
+      return (
+        <List reorderable={reorderable}>
+          {items.map(item => (
+            <ListItem key={item} itemKey={item} label={labels[item]} />
+          ))}
+        </List>
+      );
+    }
+    render(<Rows />);
+    const handle = handleOf('H2O');
+    handle.focus();
+    await user.keyboard('{Enter}');
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() =>
+      expect(document.body).toHaveTextContent(
+        'H2O, position 2 of 3, after Salt, before Sugar',
+      ),
+    );
+  });
+
   it('keeps reorder mode through a move that renames its row, and announces the rows by their new names', async () => {
     const user = userEvent.setup();
     function RowsNamedByPlace() {

@@ -81,7 +81,11 @@ async function mountStory(
     .waitFor({state: 'attached'});
 }
 
-/** Whether the element the trigger's `aria-describedby` names is showing. */
+/**
+ * Whether the tooltip the trigger's `aria-describedby` describes is showing.
+ * The trigger names the tooltip's hidden text copy, whose id is the layer's
+ * id with `-description` added.
+ */
 async function tooltipIsOpen(
   page: Page,
   triggerName = 'Options',
@@ -90,9 +94,13 @@ async function tooltipIsOpen(
     .locator('#storybook-root')
     .getByRole('button', {name: triggerName})
     .evaluate(trigger => {
-      const id = trigger.getAttribute('aria-describedby');
-      const tooltip = id == null ? null : document.getElementById(id);
-      return tooltip != null && tooltip.matches(':popover-open');
+      const ids = (trigger.getAttribute('aria-describedby') ?? '')
+        .split(/\s+/)
+        .filter(id => id.endsWith('-description'))
+        .map(id => id.slice(0, -'-description'.length));
+      return ids.some(
+        id => document.getElementById(id)?.matches(':popover-open') === true,
+      );
     });
 }
 

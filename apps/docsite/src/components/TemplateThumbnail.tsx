@@ -294,7 +294,7 @@ export function TemplateThumbnail({
                 </div>
               }>
               <Theme theme={neutralTheme} mode={mode}>
-                <div className={previewCss.viewport}>
+                <div className={`${previewCss.viewport} ${previewCss.still}`}>
                   <Template />
                   <ThumbnailRenderSettled onSettled={settleRender} />
                 </div>

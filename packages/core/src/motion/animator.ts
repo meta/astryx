@@ -203,7 +203,7 @@ import {
   registerReducedMotionCrossFade,
 } from './uikit/timing';
 import {planReducedMotion, type ReducedMotionView} from './reducedMotionPlan';
-import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {devWarn} from '../utils/devWarning';
 
 declare const process: {readonly env: {readonly NODE_ENV?: string}};
@@ -1211,20 +1211,16 @@ export function motionNow(): number {
 }
 
 /**
- * Whether the user asked for reduced motion (`prefers-reduced-motion:
- * reduce`), read at the moment of the call: the preference the animator uses
- * by default for its Reduce Motion substitution. A component never reads it
+ * Whether the person's Reduce Motion setting is on (`prefers-reduced-motion:
+ * reduce`), read at the moment of the call, without a theme's `'always'`
+ * (`reducesMotion` adds that, and the animator calls it). A component never reads it
  * to pick a curve of its own: its motion settings do not override the
  * policy (design:reduced-motion DR4); `animator.reducedMotion()` or
  * `reducedMotionFade()` gives the policy's answer. False without a window
  * (server rendering).
  */
 export function defaultPrefersReducedMotion(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  );
+  return reducesMotion();
 }
 
 /** Whether the primary pointer is coarse: `(pointer: coarse)`. */
@@ -1365,8 +1361,7 @@ export function createMotionEngine(
   // Reduced Motion reads the person's settings and nothing else: no option
   // overrides them (design:reduced-motion DR4). A theme that reduces motion
   // for everyone counts as the setting.
-  const prefersReducedMotion = () =>
-    defaultPrefersReducedMotion() || themeReducesMotion(target);
+  const prefersReducedMotion = () => reducesMotion(target);
   const isCoarsePointer = defaultIsCoarsePointer;
   const resting: Record<MotionProperty, number> = {
     ...IDENTITY,

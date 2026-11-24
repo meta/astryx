@@ -199,6 +199,18 @@ describe('required lint routing', () => {
     });
   });
 
+  it('gives the full ESLint pass a 6 GB heap, and the baseline check the same', () => {
+    // The type-aware pass outgrew 4 GB on main; 6 GB stays well inside the
+    // 16 GB runner.
+    const eslint = steps.find(step => step.name === 'Run ESLint');
+    expect(lint.jobs.lint['runs-on']).toBe('ubuntu-24.04-arm');
+    expect(eslint.env.NODE_OPTIONS).toMatch(/^--max-old-space-size=6144( |$)/);
+    expect(
+      steps.find(step => step.name === 'Check the comment-provenance baseline')
+        .env.NODE_OPTIONS,
+    ).toBe(eslint.env.NODE_OPTIONS);
+  });
+
   it('checks the comment-provenance baseline in full lint, and a baseline-only change runs it', () => {
     const check = steps.find(
       step => step.name === 'Check the comment-provenance baseline',
@@ -377,5 +389,122 @@ describe('required lint routing', () => {
         encoding: 'utf8',
       }).status,
     ).not.toBe(0);
+  });
+});
+
+describe('formatting of changed files', () => {
+  const format = steps.find(
+    step => step.name === 'Check formatting of changed files',
+  );
+  // The repository's own Prettier package folder, which the stand-in npm
+  // links where the step installs Prettier.
+  const prettierPackage = fs.realpathSync(
+    path.join(root, 'node_modules/prettier'),
+  );
+  const lockedPrettier = fs
+    .readFileSync(path.join(root, 'pnpm-lock.yaml'), 'utf8')
+    .match(
+      /^ {2}\.:\n[\s\S]*?^ {6}prettier:\n {8}specifier: .*\n {8}version: ([^\s(]+)/m,
+    )[1];
+
+  /**
+   * Runs the step on a spec-only change, in a checkout with no installed
+   * dependencies, as the spec lane has. A stand-in `npm` records what the step
+   * installs and links the repository's own Prettier in its place.
+   * @param {string} spec the changed record's text
+   * @param {{file?: string, npmFails?: boolean}} [options] the changed file,
+   *   and whether the stand-in npm fails as a failed download does
+   */
+  function checkSpecOnly(
+    spec,
+    {file = 'docs/specs/AST-999-example/spec.md', npmFails = false} = {},
+  ) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-format-'));
+    scratch.push(dir);
+    const workspace = path.join(dir, 'ws');
+    for (const file of [
+      '.prettierrc.json',
+      '.prettierignore',
+      'pnpm-lock.yaml',
+    ])
+      write(workspace, file, fs.readFileSync(path.join(root, file), 'utf8'));
+    git(workspace, 'init', '-q');
+    git(workspace, 'add', '-A');
+    git(workspace, 'commit', '-q', '-m', 'base');
+    write(workspace, file, spec);
+    git(workspace, 'add', '-A');
+    git(workspace, 'commit', '-q', '-m', 'the pull request');
+    const bin = path.join(dir, 'bin');
+    write(
+      bin,
+      'npm',
+      [
+        '#!/bin/bash',
+        `echo "$*" > ${JSON.stringify(path.join(dir, 'npm-args'))}`,
+        ...(npmFails ? ['exit 1'] : []),
+        'while [ $# -gt 0 ]; do [ "$1" = --prefix ] && prefix=$2; shift; done',
+        'mkdir -p "$prefix/node_modules/.bin"',
+        `ln -s ${JSON.stringify(prettierPackage)} "$prefix/node_modules/prettier"`,
+        'ln -s ../prettier/bin/prettier.cjs "$prefix/node_modules/.bin/prettier"',
+      ].join('\n'),
+    );
+    fs.chmodSync(path.join(bin, 'npm'), 0o755);
+    const result = spawnSync(
+      'bash',
+      ['--noprofile', '--norc', '-eo', 'pipefail', '-c', format.run],
+      {
+        cwd: workspace,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          MERGE_SHA: git(workspace, 'rev-parse', 'HEAD'),
+          RUNNER_TEMP: dir,
+        },
+      },
+    );
+    const npmArgs = fs.existsSync(path.join(dir, 'npm-args'))
+      ? fs.readFileSync(path.join(dir, 'npm-args'), 'utf8').trim()
+      : '';
+    return {...result, npmArgs};
+  }
+
+  it('runs for a spec-only pull request, and still skips the docs lane', () => {
+    expect(format.if).toContain("steps.scope.outputs.docsite_only != 'true'");
+    expect(format.if).not.toContain('spec_only');
+  });
+
+  it('fails a spec-only pull request whose record Prettier would reformat', () => {
+    const result = checkSpecOnly(
+      '# Example\n\n| a | b |\n|---|---|\n| a longer cell | x |\n',
+    );
+    expect(result.status, result.stdout + result.stderr).toBe(1);
+    expect(result.stdout).toContain('docs/specs/AST-999-example/spec.md');
+    expect(result.npmArgs).toContain(`prettier@${lockedPrettier}`);
+  });
+
+  it('passes a spec-only pull request whose record is formatted', () => {
+    const result = checkSpecOnly('# Example\n\nA formatted record.\n');
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout).toContain('Every changed file is formatted.');
+  });
+
+  it('installs nothing when no TypeScript or Markdown file changed', () => {
+    const result = checkSpecOnly('{"a": 1}\n', {
+      file: 'scripts/vitest-node-durations.json',
+    });
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.npmArgs).toBe('');
+    expect(result.stdout).toContain('No changed TypeScript or Markdown files.');
+  });
+
+  it('names a failed Prettier install with an error annotation', () => {
+    const result = checkSpecOnly('# Example\n\nA formatted record.\n', {
+      npmFails: true,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      `::error title=Prettier install::Prettier ${lockedPrettier} could not be installed`,
+    );
   });
 });

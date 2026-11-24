@@ -2,7 +2,8 @@
 'use client';
 /**
  * @file TableVirtualization.release.fixture.tsx
- * @input Synthetic flat rows and public Table/plugin configuration
+ * @input Synthetic flat rows, a synthetic wide corpus, and public Table/plugin
+ *   configuration
  * @output Test-only mount, update and operation-count controls
  * @position Production-compiled browser fixture; no alternate window algorithm
  */
@@ -12,6 +13,8 @@ import {flushSync} from 'react-dom';
 import {Table} from '../Table';
 import {VStack} from '../../Stack';
 import {useTableRowsVirtualization} from '../plugins/virtualization/useTableRowsVirtualization';
+import {useTableColumnsVirtualization} from '../plugins/virtualization/useTableColumnsVirtualization';
+import {pixel} from '../columnUtils';
 import {useTableSelection} from '../plugins/selection/useTableSelection';
 import {useTableRowIndex} from '../plugins/rowIndex/useTableRowIndex';
 import {useTableStickyColumns} from '../plugins/stickyColumns/useTableStickyColumns';
@@ -29,6 +32,10 @@ export interface RowReleaseAPI {
   noop(): number;
   remove(id: string): void;
   append(): void;
+  /** Builds a wide corpus: a pinned name column and `columns` metric columns. */
+  prepareColumns(columns: number, rows: number): void;
+  /** Mounts the column-windowed Table and returns the synchronous mount time. */
+  mountColumns(): number;
   /** Starts recording scroll-to-commit spans on the mounted viewport. */
   startRangeProbe(): void;
   /** Stops recording and returns the spans in milliseconds. */
@@ -131,6 +138,30 @@ function Rows({
     </VStack>
   );
 }
+type WideRow = Record<string, string>;
+let wideColumns: TableColumn<WideRow>[] = [];
+let wideRows: WideRow[] = [];
+
+function Columns() {
+  const virtualization = useTableColumnsVirtualization({
+    initialViewportWidth: 900,
+  });
+  const sticky = useTableStickyColumns<WideRow>({startKeys: ['name']});
+  const plugins = useMemo(() => ({sticky}), [sticky]);
+  return (
+    <VStack width={900}>
+      <Table
+        data={wideRows}
+        columns={wideColumns}
+        idKey="id"
+        virtualization={virtualization}
+        plugins={plugins}
+        aria-label="Release columns"
+        dividers="grid"
+      />
+    </VStack>
+  );
+}
 function SupportedRows({density}: {density?: Density}) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const selection = useTableSelection<Row>({
@@ -167,6 +198,29 @@ window.__rowRelease = {
       name: `Product ${index + 1}`,
       value: index,
     }));
+  },
+  prepareColumns(columnCount, rowCount) {
+    wideColumns = [
+      {key: 'name', header: 'Name', width: pixel(160)},
+      ...Array.from({length: columnCount}, (_, index) => ({
+        key: `metric${index + 1}`,
+        header: `Metric ${index + 1}`,
+        width: pixel(120),
+      })),
+    ];
+    wideRows = Array.from({length: rowCount}, (_, row) => {
+      const item: WideRow = {id: String(row), name: `Account ${row + 1}`};
+      for (let index = 1; index <= columnCount; index++) {
+        item[`metric${index}`] = `${row + 1}.${index}`;
+      }
+      return item;
+    });
+  },
+  mountColumns() {
+    const start = performance.now();
+    // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the timing sample needs a synchronous commit
+    flushSync(() => root.render(<Columns />));
+    return performance.now() - start;
   },
   mount(combination, density) {
     const start = performance.now();

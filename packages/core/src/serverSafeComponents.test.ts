@@ -79,6 +79,7 @@ const EXTENSIONS = ['.tsx', '.ts', '.mjs', '.js', '.jsx'];
 const CLIENT_ISLANDS = new Set([
   'hooks/AnnounceRenderedText.tsx',
   'hooks/StackItemScrollRegion.tsx',
+  'Layout/LayoutContainerScope.tsx',
 ]);
 
 const isSourceFile = (name: string) =>

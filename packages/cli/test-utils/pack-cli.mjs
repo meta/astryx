@@ -25,10 +25,17 @@ const REPO_DIR = path.resolve(CLI_DIR, '..', '..');
 
 /**
  * The files `prepack` writes into the published package, each with the
- * script that writes it.
- * @type {{file: string, script: string}[]}
+ * script that writes it and the script's arguments.
+ * @type {{file: string, script: string, args?: string[]}[]}
  */
 export const PREPACK_FILES = [
+  {
+    file: 'assets/discover/official-packages.json',
+    script: 'scripts/generate-official-packages.mjs',
+    // The copy holds only packages/cli and packages/core: the list is read
+    // from the repository.
+    args: ['--root', REPO_DIR],
+  },
   {
     file: 'assets/templates/components.generated.json',
     script: 'scripts/generate-template-components.mjs',
@@ -50,6 +57,10 @@ export const PREPACK_FILES = [
     script: 'scripts/generate-self-audit.mjs',
   },
   {
+    file: 'assets/docs-routes.generated.json',
+    script: 'scripts/generate-docs-routes.mjs',
+  },
+  {
     file: 'clients/cli/manifest.generated.json',
     script: 'scripts/generate-manifest.mjs',
   },
@@ -68,16 +79,20 @@ export const PREPACK_FILES = [
  * what an earlier one wrote, and the scripts within a stage are independent.
  */
 const PREPACK_STAGES = [
+  // The official list reads only the repository. It comes first because the
+  // self-audit, docs routes and manifest record the package's files.
+  ['scripts/generate-official-packages.mjs'],
   [
     'scripts/generate-template-components.mjs',
     'scripts/generate-stored-docs.mjs',
     'scripts/generate-command-list.mjs',
   ],
-  // The two that copy a package's published files run side by side, each
+  // The ones that copy a package's published files run side by side, each
   // waiting mostly on `npm pack --dry-run`.
   [
     'scripts/generate-self-audit.mjs',
     'scripts/generate-component-list.mjs',
+    'scripts/generate-docs-routes.mjs',
     'scripts/generate-manifest.mjs',
   ],
   // Search's catalog reads every store above.
@@ -90,8 +105,8 @@ const SIDE_BY_SIDE = `
 const {spawn} = require('node:child_process');
 const scripts = JSON.parse(process.argv[1]);
 let failed = 0;
-Promise.all(scripts.map(script => new Promise(done => {
-  const child = spawn(process.execPath, [script], {stdio: ['ignore', 'ignore', 'pipe']});
+Promise.all(scripts.map(([script, ...args]) => new Promise(done => {
+  const child = spawn(process.execPath, [script, ...args], {stdio: ['ignore', 'ignore', 'pipe']});
   let stderr = '';
   child.stderr.on('data', d => (stderr += d));
   child.on('close', status => {
@@ -107,13 +122,17 @@ Promise.all(scripts.map(script => new Promise(done => {
 /**
  * Run each generator in `copy` at once, and wait for all of them; throw if one
  * fails or writes no file.
- * @param {{file: string, script: string}[]} entries
+ * @param {{file: string, script: string, args?: string[]}[]} entries
  * @param {string} copy
  */
 function runSideBySide(entries, copy) {
   const result = spawnSync(
     process.execPath,
-    ['-e', SIDE_BY_SIDE, JSON.stringify(entries.map(({script}) => script))],
+    [
+      '-e',
+      SIDE_BY_SIDE,
+      JSON.stringify(entries.map(({script, args = []}) => [script, ...args])),
+    ],
     {cwd: copy, encoding: 'utf8'},
   );
   if (result.status !== 0) throw new Error(result.stderr);

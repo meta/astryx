@@ -5,11 +5,11 @@
  * @file TooltipAfterPaint.a11y.browser.spec.ts
  * @input The `Core/Tooltip` Default story in a built Storybook, in Chromium
  *   and WebKit
- * @output Real-browser proof of component:Tooltip FR2 and FR14: the trigger
- *   carries no `aria-describedby` before the tooltip's layer loads, the
- *   reference never names a missing element, axe passes before and after the
- *   load, and after it Chromium's accessibility tree describes the trigger by
- *   the tooltip text, with no input
+ * @output Real-browser proof of component:Tooltip FR2, AR1 and FR14: the
+ *   trigger carries no `aria-describedby` before the tooltip loads, then
+ *   names a hidden copy of the text until the first show and the tooltip's
+ *   content after it, never a missing element; axe passes at each step, and
+ *   Chromium's accessibility tree describes the trigger by the tooltip text
  * @position Run with `pnpm test:a11y-contract`. The load waits for a real
  *   paint and idle period, which only a real engine produces.
  */
@@ -52,7 +52,7 @@ interface ReferenceRecord {
   readonly dangling: boolean;
 }
 
-test('the trigger names its tooltip only once the tooltip layer exists, and the accessibility tree reads the description', async ({
+test('the trigger names its description only once the tooltip loads, a hidden copy until the first show and then the tooltip, and the accessibility tree reads it', async ({
   page,
   browserName,
 }) => {
@@ -99,12 +99,24 @@ test('the trigger names its tooltip only once the tooltip layer exists, and the 
   expect(log[0]?.hasReference).toBe(false);
   expect(log.filter(entry => entry.dangling)).toEqual([]);
 
+  // Until the first show the trigger names a hidden copy of the text, which
+  // is not a tooltip; no layer is in the page.
   const id = await trigger.getAttribute('aria-describedby');
-  const tooltip = page.locator(`[id="${id}"]`);
-  await expect(tooltip).toHaveAttribute('role', 'tooltip');
-  const text = (await tooltip.textContent())?.trim() ?? '';
+  const copy = page.locator(`[id="${id}"]`);
+  await expect(copy).toBeHidden();
+  expect(await copy.getAttribute('role')).toBeNull();
+  await expect(page.getByRole('tooltip', {includeHidden: true})).toHaveCount(0);
+  const text = (await copy.textContent())?.trim() ?? '';
   expect(text).not.toBe('');
+  expect(await axeViolations(page)).toEqual([]);
 
+  // The first show mounts the tooltip; the same id now names its content.
+  await trigger.hover();
+  const tooltip = page.getByRole('tooltip');
+  await expect(tooltip).toBeVisible();
+  await expect(trigger).toHaveAttribute('aria-describedby', id ?? '');
+  await expect(tooltip.locator(`[id="${id}"]`)).toHaveText(text);
+  await expect(page.locator(`[id="${id}"]`)).toHaveCount(1);
   expect(await axeViolations(page)).toEqual([]);
 
   // Chromium's accessibility tree: the trigger's computed description. WebKit

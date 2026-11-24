@@ -16,7 +16,7 @@ import {Text, Heading} from '@astryxdesign/core/Text';
 
 export default function LayoutContentShowcase() {
   return (
-    <Center width={500}>
+    <Center width={500} maxWidth="100%">
       <Layout
         style={{width: '100%'}}
         height="fill"

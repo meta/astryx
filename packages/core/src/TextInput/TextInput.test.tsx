@@ -11,7 +11,14 @@
  */
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
@@ -19,6 +26,7 @@ import {TestIcon} from '../__tests__/TestIcon';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 import {InputGroup} from '../InputGroup';
 import {TextInput} from './TextInput';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
 const RING = stylex
@@ -382,7 +390,11 @@ describe('TextInput', () => {
           status={{type: 'error'}}
         />,
       );
-      expect(screen.queryByText(/invalid/i)).not.toBeInTheDocument();
+      // No message box renders; only the hidden fallback text describes the
+      // error.
+      expect(
+        document.querySelector('.astryx-field-status'),
+      ).not.toBeInTheDocument();
     });
 
     it('sets aria-invalid when status type is error', () => {
@@ -437,7 +449,7 @@ describe('TextInput', () => {
       const describedBy = input.getAttribute('aria-describedby');
       expect(describedBy).toBeTruthy();
       // The status message should be reachable via the described-by ID
-      const messageElement = screen.getByText('Invalid email');
+      const messageElement = screen.getByText('Invalid email').parentElement!;
       expect(messageElement).toHaveAttribute('id');
       expect(describedBy).toContain(messageElement.id);
     });
@@ -1199,17 +1211,20 @@ describe('TextInput', () => {
 
       const input = screen.getByRole('textbox');
       const container = input.parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        );
       });
     });
 
@@ -1225,11 +1240,10 @@ describe('TextInput', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('textbox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
     });
 
@@ -1279,7 +1293,7 @@ describe('TextInput', () => {
         />,
       );
       const input = screen.getByRole('textbox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -1371,7 +1385,7 @@ describe('TextInput statusVariant forwarding', () => {
         statusVariant="tooltip"
       />,
     );
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent('Invalid email');
   });
 
@@ -1386,7 +1400,7 @@ describe('TextInput statusVariant forwarding', () => {
       />,
     );
     const input = screen.getByRole('textbox');
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 
@@ -1418,12 +1432,11 @@ describe('TextInput statusVariant forwarding', () => {
         statusVariant="tooltip"
       />,
     );
-    const tooltip = screen.getByRole('tooltip', h);
     // Tab from the input to the status button; keyboard focus reveals the tip.
     await user.tab();
     await user.tab();
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
     });
   });
 
@@ -1438,7 +1451,7 @@ describe('TextInput statusVariant forwarding', () => {
       />,
     );
     const statusButton = screen.getByRole('button', {name: /error details/i});
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 });
@@ -1561,5 +1574,111 @@ describe('TextInput in a narrow row', () => {
     );
     const root = container.querySelector('.astryx-field')!;
     expect(getComputedStyle(root).minWidth).toBe('0');
+  });
+
+  it('keeps the written order of a tooltip-placement status message under right-to-left', async () => {
+    render(
+      <div dir="rtl">
+        <TextInput
+          label="Website"
+          value=""
+          onChange={() => {}}
+          status={{type: 'error', message: 'Prefix https://'}}
+          statusVariant="tooltip"
+        />
+      </div>,
+    );
+    // The tooltip mounts on the first hover; its text keeps the written order.
+    await userEvent.hover(screen.getByRole('button', {name: /error details/i}));
+    const tooltip = await screen.findByRole('tooltip', {hidden: true});
+    expect(within(tooltip).getByText('Prefix https://')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
+    expect(
+      screen.getByRole('textbox', {name: 'Website'}),
+    ).toHaveAccessibleDescription('Prefix https://');
+  });
+});
+
+describe('TextInput error without a message', () => {
+  const messagelessWarnings = (warn: {mock: {calls: unknown[][]}}) =>
+    warn.mock.calls.filter(call =>
+      String(call[0]).includes('an error status has no message'),
+    );
+
+  it('describes the field by hidden translated fallback text and warns once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const {rerender} = render(
+      <TextInput
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'error'}}
+      />,
+    );
+    const field = screen.getByRole('textbox', {name: 'Email'});
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveAccessibleDescription('Invalid value');
+    rerender(
+      <TextInput
+        label="Email"
+        value="x"
+        onChange={() => {}}
+        status={{type: 'error'}}
+      />,
+    );
+    expect(messagelessWarnings(warn)).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it('uses the caller message and no fallback when a message is given', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <TextInput
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'error', message: 'Enter an email address'}}
+      />,
+    );
+    expect(
+      screen.getByRole('textbox', {name: 'Email'}),
+    ).toHaveAccessibleDescription('Enter an email address');
+    expect(screen.queryByText('Invalid value')).toBeNull();
+    expect(messagelessWarnings(warn)).toHaveLength(0);
+    warn.mockRestore();
+  });
+
+  it('adds no fallback for a warning without a message', () => {
+    render(
+      <TextInput
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'warning'}}
+      />,
+    );
+    expect(screen.queryByText('Invalid value')).toBeNull();
+  });
+
+  it('leaves an error inside an InputGroup to the group status', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <InputGroup
+        label="Contact"
+        status={{type: 'error', message: 'Fix the contact'}}>
+        <TextInput
+          label="Email"
+          isLabelHidden
+          value=""
+          onChange={() => {}}
+          status={{type: 'error'}}
+        />
+      </InputGroup>,
+    );
+    expect(screen.queryByText('Invalid value')).toBeNull();
+    expect(messagelessWarnings(warn)).toHaveLength(0);
+    warn.mockRestore();
   });
 });

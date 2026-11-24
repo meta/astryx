@@ -1,7 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {describe, expect, it} from 'vitest';
-import {auditTranscript, pathsInCommand, resolveCommandPaths} from './transcript-audit.mjs';
+import {auditTranscript, isPlainBackup, pathsInCommand, resolveCommandPaths} from './transcript-audit.mjs';
 
 const WORKSPACE = '/runs/r1/runs/task__arm__r1/workspace';
 const SENSITIVE = ['/runs/r1', '/repo', '/home/agent'];
@@ -59,6 +62,82 @@ describe('auditTranscript', () => {
     expect(audit.warnings).toEqual([{tool: 'Bash', path: '/opt/thing'}]);
   });
 
+  it('lists the temp paths of a plain cp or mv backup apart from the warnings', () => {
+    const audit = auditTranscript(
+      [
+        toolUse('Bash', {command: 'cp src/astryx-themes.ts /tmp/themes.bak'}),
+        toolUse('Bash', {command: 'mkdir -p /tmp/bak && mv src/App.tsx /tmp/bak/App.tsx'}),
+      ],
+      WORKSPACE,
+      SENSITIVE,
+      '/home/agent',
+      {tempRoots: ['/tmp']},
+    );
+    expect(audit.violations).toEqual([]);
+    expect(audit.warnings).toEqual([]);
+    expect(audit.tempPaths.map(item => item.path)).toEqual(['/tmp/themes.bak', '/tmp/bak', '/tmp/bak/App.tsx']);
+  });
+
+  it('keeps every other use of a temp path on the warning list', () => {
+    const commands = [
+      'cat /tmp/themes.bak',
+      'cp src/App.tsx /tmp/App.bak 2>&1',
+      'cp src/App.tsx /tmp/${NAME}.bak',
+      'cp src/App.tsx /tmp/*.bak',
+      "cp src/App.tsx /tmp/App.bak && cat > src/App.tsx <<'EOF'\nexport default 1;\nEOF",
+      'cp src/App.tsx /tmp/App.bak\nnode /tmp/App.bak',
+      'cp src/App.tsx /tmp/App.bak; ln -s astryx-vibe-eval /tmp/q',
+    ];
+    for (const command of commands) {
+      const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
+      expect(audit.tempPaths).toEqual([]);
+      expect(audit.warnings.length).toBeGreaterThan(0);
+    }
+    const read = auditTranscript([toolUse('Read', {file_path: '/tmp/themes.bak'})], WORKSPACE, SENSITIVE, '/home/agent', {
+      tempRoots: ['/tmp'],
+    });
+    expect(read.warnings).toEqual([{tool: 'Read', path: '/tmp/themes.bak'}]);
+  });
+
+  it('still fails another run under the temp folder in a plain backup', () => {
+    const other = '/tmp/astryx-vibe-eval/old/runs/x/workspace/src/App.tsx';
+    const audit = auditTranscript([toolUse('Bash', {command: `cp ${other} /tmp/y`})], WORKSPACE, [...SENSITIVE, '/tmp/astryx-vibe-eval'], '/home/agent', {
+      tempRoots: ['/tmp'],
+    });
+    expect(audit.violations).toEqual([{tool: 'Bash', path: other}]);
+  });
+
+  it('keeps a temp path that links into a run on the warning list', () => {
+    const temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vibe-audit-')));
+    const run = path.join(temp, 'run');
+    fs.mkdirSync(path.join(run, 'src'), {recursive: true});
+    fs.writeFileSync(path.join(run, 'src', 'App.tsx'), 'x');
+    fs.symlinkSync(run, path.join(temp, 'q'));
+    try {
+      const audit = auditTranscript(
+        [toolUse('Bash', {command: `cp ${temp}/q/src/App.tsx src/App.tsx`})],
+        WORKSPACE,
+        [...SENSITIVE, run],
+        '/home/agent',
+        {tempRoots: [temp]},
+      );
+      expect(audit.tempPaths).toEqual([]);
+      expect(audit.warnings).toEqual([{tool: 'Bash', path: `${temp}/q/src/App.tsx`}]);
+    } finally {
+      fs.rmSync(temp, {recursive: true, force: true});
+    }
+  });
+
+  it('allows the agent its own temp folder inside its run', () => {
+    const ownTemp = '/runs/r1/runs/task__arm__r1/tmp';
+    const audit = auditTranscript([toolUse('Bash', {command: `cat ${ownTemp}/App.bak`})], WORKSPACE, SENSITIVE, '/home/agent', {
+      ownTemp,
+      tempRoots: ['/tmp'],
+    });
+    expect(audit.violations).toEqual([]);
+    expect(audit.warnings).toEqual([]);
+  });
+
   it('treats web tools and sub-agents as violations', () => {
     const lines = [toolUse('WebFetch', {url: 'https://example.com'}), toolUse('Task', {prompt: 'x'})];
     expect(auditTranscript(lines, WORKSPACE, SENSITIVE).violations).toHaveLength(2);
@@ -66,6 +145,21 @@ describe('auditTranscript', () => {
 
   it('skips lines that are not JSON', () => {
     expect(auditTranscript(['not json', ''], WORKSPACE, SENSITIVE).toolCalls).toBe(0);
+  });
+});
+
+describe('isPlainBackup', () => {
+  it('accepts only cp, mv and mkdir -p on literal paths', () => {
+    expect(isPlainBackup('cp -r src /tmp/src.bak')).toBe(true);
+    expect(isPlainBackup('mkdir -p /tmp/bak && cp src/App.tsx /tmp/bak/')).toBe(true);
+    expect(isPlainBackup('cp src/App.tsx /tmp/../tmp/x')).toBe(false);
+    expect(isPlainBackup('cp src/App.tsx "/tmp/x"')).toBe(false);
+    expect(isPlainBackup('cp /tmp/themes.bak src/astryx-themes.ts')).toBe(true);
+    expect(isPlainBackup('mkdir /tmp/x')).toBe(false);
+    expect(isPlainBackup('mkdir -m 777 /tmp/x')).toBe(false);
+    expect(isPlainBackup('cp  src/App.tsx /tmp/x')).toBe(false);
+    expect(isPlainBackup('cp src/App.tsx')).toBe(false);
+    expect(isPlainBackup('cat /tmp/x')).toBe(false);
   });
 });
 
