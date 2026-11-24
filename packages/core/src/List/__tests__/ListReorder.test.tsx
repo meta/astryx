@@ -123,8 +123,8 @@ function stubPrimaryPointer(coarse: boolean) {
 }
 
 /**
- * jsdom lays nothing out: 44 px rows from 300 px down the viewport. Each read
- * of a row's layout top calls `onRead`.
+ * jsdom lays nothing out: 44 px rows from 300 px down the viewport, each
+ * handle at its row's top. Each read of a row's layout top calls `onRead`.
  */
 function layOut(list: HTMLElement, onRead?: () => void) {
   const place = (row: Element) => Array.from(list.children).indexOf(row);
@@ -148,6 +148,11 @@ function layOut(list: HTMLElement, onRead?: () => void) {
         width: 300,
         height: 44,
       });
+    for (const handle of Array.from(
+      row.querySelectorAll<HTMLElement>('[data-astryx-list-reorder]'),
+    )) {
+      handle.getBoundingClientRect = () => row.getBoundingClientRect();
+    }
   }
 }
 
@@ -1722,6 +1727,29 @@ describe('List reorderable', () => {
       glide.mockRestore();
       follow.mockRestore();
       spring.mockRestore();
+    }
+  });
+
+  it("glides a mouse drop's rows on the finger's spring, the dropped row at the release's velocity", () => {
+    stubPrimaryPointer(false);
+    const glide = vi.spyOn(touchMotion, 'glide');
+    const follow = vi.spyOn(touchMotion, 'follow');
+    try {
+      render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+      const list = screen.getByRole('list');
+      layOut(list);
+      const handle = handleOf('A');
+      mouseDrag(handle, 322, 322 + 70);
+      act(() => {
+        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+      });
+      expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+      expect(glide).toHaveBeenCalledTimes(1);
+      expect(typeof glide.mock.calls[0]?.[4]).toBe('number');
+      expect(follow).toHaveBeenCalledTimes(2);
+    } finally {
+      glide.mockRestore();
+      follow.mockRestore();
     }
   });
 
