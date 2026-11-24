@@ -91,6 +91,29 @@ describe('the typecheck scope', () => {
     expect(short(choice.packages)).toContain('cli');
   });
 
+  it('counts a file a package imports by a relative path as touching that package', () => {
+    const tracked = execFileSync('git', ['ls-files', '-z'], {
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    })
+      .split('\0')
+      .filter(Boolean);
+    const externalInputs = readExternalInputs(root, manifests, tracked);
+    // Storybook's stories import CLI block templates by relative path.
+    const block =
+      'packages/cli/assets/templates/blocks/components/BaseTypeahead/BaseTypeaheadMenu';
+    expect(externalInputs['apps/storybook']).toContain(block);
+    const choice = chooseTypecheck({
+      fullSuite: 'false',
+      mergeBase: BASE,
+      manifests,
+      externalInputs,
+      changedFiles: () => [`${block}.tsx`],
+    });
+    expect(short(choice.packages)).toContain('storybook');
+  });
+
   it('never selects the packages the root typecheck leaves out', () => {
     for (const changed of [
       ['packages/core/src/Button/Button.tsx'],

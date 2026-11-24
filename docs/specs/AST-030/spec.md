@@ -350,8 +350,9 @@ they are separately named.
   interaction proofs and the repository-wide lint included.
   A change with any other shared path runs every Vitest test. Without shared
   infrastructure, the typecheck owner checks the packages the change touches
-  (a file in a package, or one the package's own tsconfig maps or includes;
-  a moved file touches the package it left too), the packages that depend on them at run time (`dependencies` and
+  (a file in a package, one the package's own tsconfig maps or includes, or
+  one its source imports by a relative path; a moved file touches the package
+  it left too), the packages that depend on them at run time (`dependencies` and
   `peerDependencies`, followed on), and the packages whose own checks use any
   of those (`devDependencies`, one step); it checks every package when it
   cannot read the merge base or the package list, and names the packages it

@@ -3,7 +3,8 @@
 /**
  * @file Which workspace packages a pull request's typecheck covers
  *   (spec:AST-030 FR13): the packages its change touches (a file under a
- *   package, or one its tsconfig maps or includes), the packages that
+ *   package, one its tsconfig maps or includes, or one its source imports by
+ *   a relative path), the packages that
  *   depend on those at run time (through `dependencies` or
  *   `peerDependencies`, followed on), and the packages that use any of them
  *   in their own checks (`devDependencies`, not followed on). A shared or
@@ -70,7 +71,12 @@ export function chooseTypecheck({
       if (
         manifests[owner] &&
         inputs.some(input =>
-          input.endsWith('/') ? file.startsWith(input) : file === input,
+          input.endsWith('/')
+            ? file.startsWith(input)
+            : // A relative import names a file with or without its extension.
+              file === input ||
+              file.startsWith(`${input}.`) ||
+              file.startsWith(`${input}/`),
         )
       )
         touched.add(manifests[owner].name);
@@ -145,16 +151,52 @@ function parseJsonc(text) {
 }
 
 /**
- * Each package's typecheck inputs outside its folder: what its own tsconfig
- * files map (`paths`) or include (`include`, `files`) there, as repository
- * paths. A folder ends in `/`; a glob is cut at its first `*`.
+ * Each package's typecheck inputs outside its folder, as repository paths:
+ * what its own tsconfig files map (`paths`) or include (`include`, `files`),
+ * and what its source files import by a relative path that leaves the folder
+ * (Storybook's stories import CLI block templates that way). A folder ends
+ * in `/`; a glob is cut at its first `*`; an import names a file with or
+ * without its extension.
  * @param {string} root
  * @param {Record<string, object>} manifests
+ * @param {string[]} [files] tracked repository paths, for the import scan
  * @returns {Record<string, string[]>}
  */
-export function readExternalInputs(root, manifests) {
+export function readExternalInputs(root, manifests, files = []) {
   /** @type {Record<string, string[]>} */
   const inputs = {};
+  const add = (folder, entry) => {
+    inputs[folder] ??= [];
+    if (!inputs[folder].includes(entry)) inputs[folder].push(entry);
+  };
+  const folders = Object.keys(manifests).sort((a, b) => b.length - a.length);
+  const SOURCE = /\.(?:[cm]?[jt]sx?)$/;
+  const SPECIFIER =
+    /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)(['"])(\.{1,2}\/[^'"\n]+)\1/gm;
+  for (const file of files) {
+    if (!SOURCE.test(file) || file.includes('node_modules/')) continue;
+    const folder = folders.find(each => file.startsWith(`${each}/`));
+    if (folder == null) continue;
+    let source;
+    try {
+      source = fs.readFileSync(path.join(root, file), 'utf8');
+    } catch {
+      continue;
+    }
+    if (!source.includes('../')) continue;
+    for (const [, , specifier] of source.matchAll(SPECIFIER)) {
+      const target = path.posix.normalize(
+        path.posix.join(path.posix.dirname(file), specifier),
+      );
+      if (
+        target.startsWith('..') ||
+        target === folder ||
+        target.startsWith(`${folder}/`)
+      )
+        continue;
+      add(folder, target.replace(/\.(?:[cm]?[jt]sx?)$/, ''));
+    }
+  }
   for (const folder of Object.keys(manifests)) {
     const dir = path.join(root, folder);
     let names = [];
@@ -199,9 +241,7 @@ export function readExternalInputs(root, manifests) {
         } catch {
           // A path that does not exist yet names itself.
         }
-        const entry = isFolder ? `${relative}/` : relative;
-        inputs[folder] ??= [];
-        if (!inputs[folder].includes(entry)) inputs[folder].push(entry);
+        add(folder, isFolder ? `${relative}/` : relative);
       }
     }
   }
@@ -235,7 +275,17 @@ function main() {
         fullSuite: process.env.FULL_SUITE ?? 'true',
         mergeBase: process.env.MERGE_BASE ?? '',
         manifests,
-        externalInputs: readExternalInputs(root, manifests),
+        externalInputs: readExternalInputs(
+          root,
+          manifests,
+          execFileSync('git', ['ls-files', '-z'], {
+            cwd: root,
+            encoding: 'utf8',
+            maxBuffer: 64 * 1024 * 1024,
+          })
+            .split('\0')
+            .filter(Boolean),
+        ),
         // Both sides of a move: the package a file left changes too.
         changedFiles: base =>
           execFileSync(
