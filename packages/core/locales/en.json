@@ -671,6 +671,10 @@
     "defaultMessage": "Reorder cancelled, back to position {position, number} of {total, number}",
     "description": "Screen-reader announcement when a reorder in a List is cancelled and the row returns to where it was. `{position}` is that 1-based place, `{total}` the number of rows."
   },
+  "@astryx.listInput.defaultItemName": {
+    "defaultMessage": "item",
+    "description": "The noun for one record in a lab ListInput when the app gives no noun of its own. The other ListInput messages put it in their `{itemName}` placeholder, as in \"Add item\" and \"Remove item 2\". Give the form of the noun that fits there."
+  },
   "@astryx.listInput.emptyTitle": {
     "defaultMessage": "No {itemName}s yet",
     "description": "EmptyState title shown inside a lab ListInput when its collection has no records. `{itemName}` is the consumer's singular noun for one record (e.g. \"guest\"); the source appends a literal \"s\" to pluralize it, which only works for regular English plurals. If your language cannot pluralize an interpolated noun this way, rephrase around `{itemName}` instead (e.g. \"No {itemName} added yet\")."
