@@ -810,7 +810,9 @@ export function ContextMenu({
 
   // The drill-in view stack for sub-menus on a phone; the bottom sheet has
   // its own drill-in.
-  const {drillIn, wrapContent} = useMenuDrillIn(isOpen && !usesBottomSheet);
+  const {drillIn, isDrilled, wrapContent} = useMenuDrillIn(
+    isOpen && !usesBottomSheet,
+  );
   const contextValue = useMemo<DropdownMenuContextValue>(
     () => ({closeMenu, menuSize: size, drillIn, menuLabel: label}),
     [closeMenu, size, drillIn, label],
@@ -840,10 +842,12 @@ export function ContextMenu({
     <div
       ref={listRef}
       id={menuId}
-      role="menu"
+      // While a sub-menu's view shows in place of the rows, that view is the
+      // one menu, so this box stops being a menu around it.
+      role={isDrilled ? 'none' : 'menu'}
       data-autofocus={usesBottomSheet ? '' : undefined}
       tabIndex={usesBottomSheet ? 0 : -1}
-      aria-label={label}
+      aria-label={isDrilled ? undefined : label}
       onKeyDown={listKeyDown}
       onContextMenu={e => e.preventDefault()}
       {...menuPress.menuProps}
