@@ -112,7 +112,6 @@ beforeEach(async () => {
   vi.resetModules();
   // The load is page state every copy of Core shares, so a fresh page forgets it.
   resetSharedStateForTest('tooltip/use-tooltip/');
-  resetSharedStateForTest('utils/module-loader/');
   loads.surface = 0;
   loads.surfaceContents = [];
   loads.surfaceGate = null;
@@ -196,8 +195,8 @@ async function paintAndLoad() {
     vi.advanceTimersToNextFrame();
   });
   await act(async () => {
-    // The task after the frame ends the shared after-paint wait, and an idle
-    // callback runs at the latest when its timeout ends.
+    // The task after the frame queues an idle callback, which runs at the
+    // latest when its timeout ends.
     await vi.advanceTimersByTimeAsync(2000);
     await pendingTooltipLoad();
   });
