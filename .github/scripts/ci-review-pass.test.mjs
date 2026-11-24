@@ -432,6 +432,11 @@ describe('starting the heavy suites', () => {
     expect(said).toMatch(
       /run 11 is from 2026-11-17T07:59:00Z, more than 6 hours ago/,
     );
+    // The cheap path first: a draft-and-ready toggle merges the same head
+    // with today's main, so its review still holds.
+    expect(said).toContain(
+      "Mark the pull request draft, then ready, to start a fresh run on today's main (no new head, so no new review); a push or a main merge also works.",
+    );
   });
 
   it("reads the newest run at the head, not an older head's", async () => {

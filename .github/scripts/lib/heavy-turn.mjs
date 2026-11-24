@@ -339,7 +339,7 @@ export async function startHeavy({
   if (run == null) return `${at}: no CI run`;
   if (run.status !== 'completed') return `${at}: run ${run.id} still runs`;
   if (Date.now() - Date.parse(run.created_at) > RERUN_MAX_AGE_MS)
-    return `${at}: run ${run.id} is from ${run.created_at}, more than ${RERUN_MAX_AGE_MS / 3_600_000} hours ago, so its merge with main is stale; a push or a main merge starts a fresh run`;
+    return `${at}: run ${run.id} is from ${run.created_at}, more than ${RERUN_MAX_AGE_MS / 3_600_000} hours ago, so its merge with main is stale. Mark the pull request draft, then ready, to start a fresh run on today's main (no new head, so no new review); a push or a main merge also works.`;
   const {
     data: {jobs},
   } = await github.rest.actions.listJobsForWorkflowRun({
