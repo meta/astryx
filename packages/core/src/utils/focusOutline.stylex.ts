@@ -7,10 +7,11 @@
  * @position Internal utility for consistent keyboard focus outlines across core components
  */
 
-// Every ring in core and lab comes from here, except Switch's: its condition
-// is a component-scoped ancestor marker, which cannot be shared without
-// leaking focus state. A floating surface's ring also sits beside its
-// forced-colors edge in `Popover/surfaceEdge.stylex.ts`, from the same tokens. A plain TreeList row reads the variables that
+// Every ring in core and lab comes from here, except two. Switch's ring keys
+// off a component-scoped ancestor marker, which cannot be shared without
+// leaking focus state. A floating surface's ring sits beside its
+// forced-colors edge in `Popover/surfaceEdge.stylex.ts`, from the same
+// tokens. A plain TreeList row reads the variables that
 // `publishFocusVisibleVars` sets, with no focus-inside branch; its ring stays
 // in TreeListItem, so this file adds no public member. A component may
 // override only the offset. The values come from the `--focus-outline-*`
