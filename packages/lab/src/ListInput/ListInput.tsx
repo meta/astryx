@@ -134,7 +134,10 @@ export interface ListInputProps<T> extends Omit<
   createItem: () => T;
   /** Column definitions and cell renderers. */
   columns: ListInputColumn<T>[];
-  /** Singular name used in action labels and announcements. @default 'item' */
+  /**
+   * Singular noun for one record, used in action labels and announcements.
+   * @default A translated "item"
+   */
   itemName?: string;
   /** Validation status for the whole list. */
   status?: InputStatus;
@@ -691,7 +694,7 @@ export function ListInput<T>({
   getItemKey,
   createItem,
   columns,
-  itemName = 'item',
+  itemName: itemNameProp,
   status,
   getItemStatus,
   getFieldStatus,
@@ -725,6 +728,7 @@ export function ListInput<T>({
   );
   const activeMutationAnimationsRef = useRef(new Map<HTMLElement, Animation>());
   const t = useTranslator();
+  const itemName = itemNameProp ?? t('@astryx.listInput.defaultItemName');
   const announce = useAnnounce();
   const {tokens: themeTokens} = useTheme();
   const mutationDuration = parseDuration(

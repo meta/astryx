@@ -65,7 +65,7 @@ export const docs = {
       name: 'itemName',
       type: 'string',
       description:
-        'Singular noun used in built-in action labels and live announcements, such as "guest" in "Add guest".',
+        'Singular noun used in built-in action labels and live announcements, such as "guest" in "Add guest". Without it, ListInput uses the translated catalog noun, "item" in English.',
     },
     {
       name: 'description',
