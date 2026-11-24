@@ -317,6 +317,6 @@ describe('BottomSheet: a window resize while the sheet settles', () => {
     resizeTo(806);
 
     expect(layoutHeight(sheet)).toBeCloseTo(halfDetentLayoutHeightFor(806), 1);
-    expect(sheet.style.transition).toBe('none');
+    expect(snapshot(sheet).visible).toBeCloseTo(0.5 * 806, 1);
   });
 });

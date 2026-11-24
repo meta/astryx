@@ -1041,10 +1041,14 @@ export function useSheetGestures({
     };
   }, [isOpen, reanchorToSettledDetent]);
 
-  // The other input to the same geometry: the snap points themselves. A host
-  // that swaps them while the sheet rests has moved the stops out from under
-  // it, exactly as a rotation does, so re-anchor the same way. Skipped on the
-  // first run — the sheet is already anchored to the detents it opened with.
+  // The other inputs to the same geometry: the snap points themselves and the
+  // reserve below the screen. A host that swaps the points while the sheet
+  // rests has moved the stops out from under it, exactly as a rotation does,
+  // so re-anchor the same way. The reserve follows the viewport, but the host
+  // writes it on the render after the resize event, so the re-anchor in the
+  // resize listener measures the old one; re-anchor again once it is written.
+  // Skipped on the first run — the sheet is already anchored to the detents
+  // it opened with.
   const hasAnchoredSnapHeightsRef = useRef(false);
   useLayoutEffect(() => {
     if (!hasAnchoredSnapHeightsRef.current) {
@@ -1052,7 +1056,7 @@ export function useSheetGestures({
       return;
     }
     reanchorToSettledDetent();
-  }, [reanchorToSettledDetent, snapHeights]);
+  }, [reanchorToSettledDetent, snapHeights, offscreenBlockEndInset]);
 
   // The one write a finger sample costs: the sheet's compositor transform,
   // on the element, with no render between the input and the paint. The
