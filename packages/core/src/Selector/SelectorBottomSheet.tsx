@@ -11,16 +11,16 @@
  * @position Internal presentation host for selection controls
  *
  * The sheet frame (BottomSheet, Section and Heading) loads on the trigger's
- * first intent: a pointer down, focus, or an open request. Once it has
- * loaded, the host renders it directly, with no suspended render. An open
- * that comes before the load ends waits for it and then opens once.
+ * first intent: a pointer down, focus, or an open request. The host renders
+ * nothing until the frame has loaded, and then renders it directly, with no
+ * suspended render. An open that comes before the load ends stays requested,
+ * so the sheet opens once when the frame arrives.
  *
  * The host renders nothing on the server or in the render that hydrates
  * server HTML (spec:AST-013 FR9). The closed sheet has no visible markup.
  */
 
-import {Suspense, use, type ReactElement} from 'react';
-import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSyncExternalStore, type ReactElement} from 'react';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type * as FrameModule from './SelectorBottomSheetFrame';
 import type {SelectorBottomSheetProps} from './SelectorBottomSheetFrame';
@@ -31,47 +31,44 @@ const frame = createModuleLoader<typeof FrameModule>(
   async () => import('./SelectorBottomSheetFrame'),
 );
 
-// One promise for `use()` while the load runs, so a render that waits again
-// reads the same promise. A failed load is not kept.
-let pendingFrame: Promise<typeof FrameModule> | null = null;
-function frameLoad(): Promise<typeof FrameModule> {
-  pendingFrame ??= frame.load().catch((error: unknown) => {
-    pendingFrame = null;
-    throw error;
-  });
-  return pendingFrame;
+// Hosts that wait for the frame. Each one renders again when it arrives.
+const frameListeners = new Set<() => void>();
+let pendingFrame: Promise<void> | null = null;
+
+function subscribeToFrame(listener: () => void): () => void {
+  frameListeners.add(listener);
+  return () => {
+    frameListeners.delete(listener);
+  };
 }
+
+const readFrame = (): typeof FrameModule | null => frame.loaded();
+const readNoFrame = (): null => null;
 
 /**
- * Starts loading the sheet frame. The trigger calls it on intent. A failed
- * load is not kept, so the next intent or the open asks again.
+ * Starts loading the sheet frame. The trigger's intent and the open call it.
+ * A failed load is not kept, so the next intent or open asks again.
  */
 export function preloadSelectorBottomSheet(): void {
-  frameLoad().catch(() => {});
-}
-
-function SelectorBottomSheetHost(
-  props: SelectorBottomSheetProps,
-): ReactElement | null {
-  const loaded = frame.loaded();
-  if (loaded == null && !props.isOpen) {
-    return null;
-  }
-  const {SelectorBottomSheetFrame} = loaded ?? use(frameLoad());
-  return <SelectorBottomSheetFrame {...props} />;
+  pendingFrame ??= frame.load().then(
+    () => {
+      for (const listener of frameListeners) {
+        listener();
+      }
+    },
+    () => {
+      pendingFrame = null;
+    },
+  );
 }
 
 export function SelectorBottomSheet(
   props: SelectorBottomSheetProps,
 ): ReactElement | null {
-  if (useIsHydrating()) {
+  const loaded = useSyncExternalStore(subscribeToFrame, readFrame, readNoFrame);
+  if (loaded == null) {
     return null;
   }
-  // The same boundary wraps the host before and after the load, so the
-  // frame never remounts when its module arrives.
-  return (
-    <Suspense fallback={null}>
-      <SelectorBottomSheetHost {...props} />
-    </Suspense>
-  );
+  const {SelectorBottomSheetFrame} = loaded;
+  return <SelectorBottomSheetFrame {...props} />;
 }

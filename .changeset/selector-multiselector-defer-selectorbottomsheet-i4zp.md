@@ -2,6 +2,7 @@
 '@astryxdesign/core': patch
 ---
 
-[perf] Selector, MultiSelector: a pointer `Selector` or `MultiSelector` (the default presentation on desktop and non-compact screens) no longer statically carries the bottom-sheet frame (`Section`, `Heading` and the sheet markup). The frame leaves the first load and loads with `BottomSheet` after the first client render when the bottom-sheet presentation is active. A page using `Selector` loads about 4.0 KB less JavaScript (gzip) on first paint. A selector with `presentation="bottom-sheet"`, or `adaptive` on a compact touch screen, loads its sheet chunk after mount and opens as before (#12018).
+[perf] Selector, MultiSelector: the bottom-sheet frame (`BottomSheet`, `Section`, `Heading` and the sheet markup) no longer loads with the page. A page using `Selector` loads about 4.3 KB less JavaScript (gzip) on first paint. A selector that presents its list as a bottom sheet (`presentation="bottom-sheet"`, or `adaptive` on a compact touch screen) loads the frame when a finger or pointer lands on the trigger, the trigger takes focus, or the list is asked to open. A tap made before the frame arrives opens the sheet once it does, with focus in the list, as before (#12018).
 
 @MuhammadAusafJamal
+@cixzhang

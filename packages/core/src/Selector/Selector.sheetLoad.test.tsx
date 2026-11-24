@@ -97,11 +97,14 @@ describe('Selector bottom-sheet load', () => {
     // No intent yet, and a read-only selector's focus is no intent: nothing
     // loads.
     readOnlyTrigger.focus();
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
     expect(frameModule.requests).toBe(0);
 
     // The finger lands: the load starts before the tap ends.
     fireEvent.pointerDown(trigger, {pointerType: 'touch'});
-    expect(frameModule.requests).toBe(1);
+    await vi.waitFor(() => expect(frameModule.requests).toBe(1));
 
     // The tap ends and opens the list while the frame still loads. Focus
     // and the open add no second load.
