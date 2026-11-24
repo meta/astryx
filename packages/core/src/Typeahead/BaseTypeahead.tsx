@@ -2070,7 +2070,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           e.preventDefault();
           // Until the typed text's own rows show, the list still answers an
           // earlier query, so Enter picks nothing from it.
-          if (query.length > 0 && listQueryRef.current !== query) {
+          if (listQueryRef.current !== query) {
             break;
           }
           if (highlightedIndex >= 0 && highlightedIndex < results.length) {

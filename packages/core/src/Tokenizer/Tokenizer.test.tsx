@@ -1350,6 +1350,34 @@ describe('Tokenizer', () => {
       );
     });
 
+    it('creates nothing for erased text when the field is cleared and Enter is pressed at once', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          hasEntriesOnFocus
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        input.focus();
+        fireEvent.change(input, {target: {value: 'Zig'}});
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      // The "Zig" rows still show while the focus list waits.
+      await act(async () => {
+        fireEvent.change(input, {target: {value: ''}});
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
     it('still offers Create below minQueryLength, and does not search', async () => {
       // The threshold exists to avoid a fetch too broad to be worth making.
       // Creating costs no fetch, so a field that can create `QA` should not
@@ -1869,7 +1897,7 @@ describe('Tokenizer', () => {
       expect(bootstrap).toHaveBeenCalledTimes(1);
     });
 
-    it('closes after Enter on typed results while the cleared query waits for its debounce', async () => {
+    it('closes after a pick on typed results while the cleared query waits for its debounce', async () => {
       const user = userEvent.setup();
       function Debounced() {
         const [value, setValue] = useState<SearchableItem[]>([]);
@@ -1892,8 +1920,9 @@ describe('Tokenizer', () => {
         expect(option('Diana')).toBeInTheDocument();
       });
       // Clearing the text starts a focus-list reload that waits for the
-      // debounce. Enter acts before it runs.
-      await user.keyboard('{Backspace}{Enter}');
+      // debounce. A press on a row acts before it runs.
+      await user.keyboard('{Backspace}');
+      fireEvent.click(option('Diana') as HTMLElement);
       await act(async () => {
         await new Promise(r => setTimeout(r, 20));
       });
