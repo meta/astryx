@@ -26,7 +26,7 @@ import {
   type RefObject,
 } from 'react';
 import type {LayerPlacement} from '../Layer';
-import {createModuleLoader} from '../utils/moduleLoader';
+import {afterFirstPaint, createModuleLoader} from '../utils/moduleLoader';
 import type {UndescribedTooltip as UndescribedTooltipType} from '../Tooltip/Tooltip';
 import {holdMouseMoves, isMouseMove} from '../utils/inputStream';
 import {useTapRecognizer} from '../Layer/gestureCounter';
@@ -44,15 +44,11 @@ const tooltipModule = createModuleLoader(
   async () => import('../Tooltip/Tooltip'),
 );
 
-// The page's texts share one preload. It waits a frame and a task for the
-// paint, then loads the module once. The shared loader keeps no failed load,
-// so the next text tries again.
+// The page's texts share one preload. It waits for the page's first paint,
+// then loads the module once. The shared loader keeps no failed load, so the
+// next text tries again.
 const afterPaintModule = createModuleLoader(async () => {
-  await new Promise<void>(resolve => {
-    requestAnimationFrame(() => {
-      setTimeout(resolve, 0);
-    });
-  });
+  await afterFirstPaint(window);
   return tooltipModule.load();
 });
 const loadAfterNextPaint = afterPaintModule.load;

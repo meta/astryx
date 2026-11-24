@@ -109,6 +109,7 @@ beforeEach(async () => {
   vi.resetModules();
   // The load is page state every copy of Core shares, so a fresh page forgets it.
   resetSharedStateForTest('tooltip/use-tooltip/');
+  resetSharedStateForTest('utils/module-loader/');
   loads.surface = 0;
   loads.surfaceContents = [];
   loads.layer = 0;
@@ -191,9 +192,9 @@ async function paintAndLoad() {
     vi.advanceTimersToNextFrame();
   });
   await act(async () => {
-    vi.advanceTimersByTime(0);
-    // An idle callback runs at the latest when its timeout ends.
-    vi.advanceTimersByTime(2000);
+    // The task after the frame ends the shared after-paint wait, and an idle
+    // callback runs at the latest when its timeout ends.
+    await vi.advanceTimersByTimeAsync(2000);
     await pendingTooltipLoad();
   });
 }
@@ -554,6 +555,25 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     expect(loads.surface).toBe(1);
     expect(loads.surfaceContents.length).toBeGreaterThan(0);
     expect(new Set(loads.surfaceContents)).toEqual(new Set([TIP]));
+  });
+
+  it("a click on a Typeahead's status info-tip before the load keeps focus on it (component:Typeahead FR15)", async () => {
+    const {Typeahead} = await import('../Typeahead/Typeahead');
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={{search: () => [], bootstrap: () => []}}
+        value={null}
+        onChange={() => {}}
+        status={{type: 'error', message: 'Please make a selection'}}
+        statusVariant="tooltip"
+      />,
+    );
+    const infoTip = screen.getByRole('button', {name: 'Error details'});
+    act(() => infoTip.focus());
+    fireEvent.click(infoTip);
+    expect(loads.surface).toBe(0);
+    expect(infoTip).toHaveFocus();
   });
 
   it('the load waits for a trigger to attach: a tooltip whose trigger never attaches starts none', async () => {

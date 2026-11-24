@@ -34,7 +34,7 @@ import type {
 import type {LayerTouchTrigger} from '../Layer/useTouchTrigger';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {warnOnce} from '../utils/devWarning';
-import {createModuleLoader} from '../utils/moduleLoader';
+import {afterFirstPaint, createModuleLoader} from '../utils/moduleLoader';
 import {sharedState, sharedStore} from '../utils/sharedRealm';
 import {isElement} from '../utils/nodeType';
 import {
@@ -300,17 +300,14 @@ function scheduleTooltipLoad(view: Window | null): void {
     return;
   }
   loader.scheduledViews.add(view);
-  // The timers belong to the trigger's window, so they end with its document.
-  // A frame callback runs before the frame paints. The task it queues runs
-  // after that paint.
-  view.requestAnimationFrame(() => {
-    view.setTimeout(() => {
-      if (typeof view.requestIdleCallback === 'function') {
-        view.requestIdleCallback(startLoad, {timeout: LOAD_CAP_MS});
-      } else {
-        view.setTimeout(startLoad, 0);
-      }
-    }, 0);
+  // The wait and the timers belong to the trigger's window, so they end with
+  // its document.
+  void afterFirstPaint(view).then(() => {
+    if (typeof view.requestIdleCallback === 'function') {
+      view.requestIdleCallback(startLoad, {timeout: LOAD_CAP_MS});
+    } else {
+      view.setTimeout(startLoad, 0);
+    }
   });
 }
 
