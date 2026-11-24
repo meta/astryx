@@ -643,6 +643,12 @@ export function useSheetGestures({
   const scrollPreservationInsetRef = useRef(0);
   const settlingLayoutOffsetRef = useRef<number | null>(null);
   const pendingScrollPreservationInsetRef = useRef<number | null>(null);
+  // What a settle in flight computes its landing inset from. A resize that
+  // moves the settle's detent computes the inset again from the same basis.
+  const settleInsetBasisRef = useRef<{
+    baseLayoutOffset: number;
+    naturalEndGap: number;
+  } | null>(null);
   const offscreenBlockEndInsetRef = useRef(offscreenBlockEndInset);
   offscreenBlockEndInsetRef.current = Math.max(0, offscreenBlockEndInset);
   const recordSettledLayoutOffset = useCallback((offset: number) => {
@@ -666,6 +672,7 @@ export function useSheetGestures({
     // not start a second transition. The layouts have identical visible
     // geometry, so reconcile them with transitions disabled for one frame.
     setIsScrollAreaReconciling(true);
+    settleInsetBasisRef.current = null;
     settlingLayoutOffsetRef.current = null;
     setSettlingLayoutOffset(null);
     const pendingInset = pendingScrollPreservationInsetRef.current;
@@ -695,11 +702,13 @@ export function useSheetGestures({
         !reducesMotion(sheetElRef.current)
       ) {
         pendingScrollPreservationInsetRef.current = targetInset;
+        settleInsetBasisRef.current = {baseLayoutOffset, naturalEndGap};
         settlingLayoutOffsetRef.current = layoutOffset;
         setSettlingLayoutOffset(layoutOffset);
         return;
       }
       pendingScrollPreservationInsetRef.current = null;
+      settleInsetBasisRef.current = null;
       settlingLayoutOffsetRef.current = null;
       setSettlingLayoutOffset(null);
       // Released on the detent, so there is no travel left to animate — but
@@ -935,15 +944,12 @@ export function useSheetGestures({
   // half-height sheet shows 75% of a shorter window, or a peek slides past the
   // whole window while the dialog stays modal. So re-resolve the same detent
   // by index and re-anchor without animating, because the geometry moved, not
-  // the finger.
+  // the finger. A settle in flight keeps moving, toward the same detent in the
+  // new geometry.
   const reanchorToSettledDetent = useCallback(() => {
     // A closed sheet re-anchors on its way back open; a live drag re-measures
-    // on its own, and a settle in flight owns the layout until it lands.
-    if (
-      !isOpenRef.current ||
-      dragStateRef.current != null ||
-      settlingLayoutOffsetRef.current != null
-    ) {
+    // on its own.
+    if (!isOpenRef.current || dragStateRef.current != null) {
       return;
     }
     const height = measureFullyOpenHeight();
@@ -972,15 +978,28 @@ export function useSheetGestures({
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- corrects settled geometry from a measurement
     setSheetHeight(height);
     settledDetentIndexRef.current = index;
-    prepareScrollAreaSettle(
-      baseLayoutOffset,
-      target,
-      targetLayoutOffset,
-      target,
-      baseLayoutOffset,
-      naturalEndGapFor(bodyNodeRef.current),
-      false,
-    );
+    const settleInsetBasis = settleInsetBasisRef.current;
+    if (settlingLayoutOffsetRef.current != null && settleInsetBasis != null) {
+      // The settle keeps its layout split until it lands. Only its end
+      // point moves: the transform transition turns toward the new target
+      // from where the sheet is now, and the landing swaps in the new
+      // layout offset.
+      pendingScrollPreservationInsetRef.current = preservationInsetForOffset(
+        settleInsetBasis.baseLayoutOffset,
+        targetLayoutOffset,
+        settleInsetBasis.naturalEndGap,
+      );
+    } else {
+      prepareScrollAreaSettle(
+        baseLayoutOffset,
+        target,
+        targetLayoutOffset,
+        target,
+        baseLayoutOffset,
+        naturalEndGapFor(bodyNodeRef.current),
+        false,
+      );
+    }
     recordSettledLayoutOffset(targetLayoutOffset);
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- corrects settled geometry from a measurement
     setSettledOffset(target);
