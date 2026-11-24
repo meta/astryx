@@ -4,14 +4,17 @@
  * @file focusReturn.ts
  * @input The document's current active element and the shared interaction
  *   modality.
- * @output Whether focus would be lost if a surface hid now; a focus move whose
- *   ring follows the last input; an overlay's focus return that never
- *   scrolls the page; the path that moves focus out of removed or hidden
- *   content; and the focus return that Popover, Dialog and DropdownMenu run
- *   as they close (`trackLayerFocus`, `restoreLayerFocus`).
- * @position Utility; used by the focus trap (Popover, Drawer) and by Dialog,
- *   DropdownMenu, BottomSheet and disclosures that hide focused content.
- *   isFocusDetached lives in isFocusDetached.ts, outside this module.
+ * @output Focus ownership and availability through shadow hosts and frames
+ *   (`ownsFocus`, `isFocusUnclaimed`); whether focus would be lost if a
+ *   surface hid now; a focus move whose ring follows the last input; an
+ *   overlay's focus return that never scrolls the page; the path that moves
+ *   focus out of removed or hidden content; and the focus return that
+ *   Popover, Dialog and DropdownMenu run as they close (`trackLayerFocus`,
+ *   `restoreLayerFocus`).
+ * @position Utility; used by the focus trap (Popover, Drawer), by Dialog,
+ *   DropdownMenu, BottomSheet and disclosures that hide focused content, and
+ *   by useFocusAcrossSwap. isFocusDetached lives in isFocusDetached.ts,
+ *   outside this module.
  */
 
 import {
@@ -25,8 +28,64 @@ import {
   type InteractionModality,
 } from './interactionModality';
 import {isFocusDetached} from './isFocusDetached';
-import {isElement, isHTMLElement, isModalDialog} from './nodeType';
+import {
+  isElement,
+  isHTMLElement,
+  isModalDialog,
+  isShadowRoot,
+} from './nodeType';
 import {devWarn} from './devWarning';
+
+function focusRoot(node: Node): Document | ShadowRoot | null {
+  const root = node.getRootNode();
+  if (!('activeElement' in root)) {
+    return null;
+  }
+  return root as Document | ShadowRoot;
+}
+
+/** Whether the element owns focus through its shadow hosts and frames. Internal. */
+export function ownsFocus(element: Element): boolean {
+  // An iframe can retain activeElement after focus leaves its document.
+  const root = focusRoot(element);
+  if (!root || root.activeElement !== element) {
+    return false;
+  }
+  const owner = isShadowRoot(root) ? root.host : root.defaultView?.frameElement;
+  return owner == null || ownsFocus(owner);
+}
+
+/** Whether a replacement can take focus without displacing another owner. Internal. */
+export function isFocusUnclaimed(node: Node): boolean {
+  let root = focusRoot(node);
+  let surface: Element | null = null;
+  while (root) {
+    if (isShadowRoot(root)) {
+      if (root.activeElement != null) {
+        return (
+          surface != null &&
+          surface.contains(root.activeElement) &&
+          ownsFocus(root.host)
+        );
+      }
+      // A host fallback can be a caller's chosen focus target.
+      // Do not restore focus when that ownership is ambiguous.
+      surface = null;
+      root = focusRoot(root.host);
+    } else {
+      if (!isFocusLost(surface, root)) {
+        return false;
+      }
+      const frame = root.defaultView?.frameElement;
+      if (frame == null) {
+        return true;
+      }
+      surface = frame;
+      root = focusRoot(frame);
+    }
+  }
+  return false;
+}
 
 /**
  * True when focus would be lost if `surface` hid now: nothing is focused (see
@@ -319,6 +378,11 @@ export interface LayerFocusRecord {
   hadFocusInside: boolean;
   /** Its opening is still to move focus in. */
   awaitsFocus: boolean;
+  /**
+   * The element outside the layer that focus is moving to, while the move
+   * is in progress: from the layer's `blur` to the next `focusin`.
+   */
+  focusMovingTo: Element | null;
   isClosing: boolean;
   isDone: boolean;
   stopListening: () => void;
@@ -445,15 +509,41 @@ export function trackLayerFocus(
     awaitsFocus:
       options.isFocusMovedInOnOpen === true &&
       !(layer != null && layer.contains(active)),
+    focusMovingTo: null,
     isClosing: false,
     isDone: false,
     stopListening: () => {},
   };
   const markFocusInside = (event: FocusEvent) => {
+    record.focusMovingTo = null;
     const target = event.target;
     if (isElement(target) && record.getLayer()?.contains(target)) {
       record.hadFocusInside = true;
       record.awaitsFocus = false;
+    }
+  };
+  // A close during a focus move sees nothing focused. The control outside the
+  // layer takes focus when the move ends, so focus is not stranded. The
+  // capture-phase `blur` reaches the document before the element's own `blur`
+  // and `focusout` listeners, so a close from either sees the note.
+  const markFocusMoving = (event: FocusEvent) => {
+    const next = event.relatedTarget;
+    const layer = record.getLayer();
+    if (
+      isElement(next) &&
+      isElement(event.target) &&
+      layer != null &&
+      layer.contains(event.target) &&
+      !layer.contains(next)
+    ) {
+      record.focusMovingTo = next;
+      // A target that cannot take focus when the move ends gets no focusin.
+      // Clear the note after one task.
+      setTimeout(() => {
+        if (record.focusMovingTo === next) {
+          record.focusMovingTo = null;
+        }
+      }, 0);
     }
   };
   // The layer may render in another document than its opener (a same-origin
@@ -464,22 +554,16 @@ export function trackLayerFocus(
   }
   for (const each of docs) {
     each.addEventListener('focusin', markFocusInside, true);
+    each.addEventListener('blur', markFocusMoving, true);
   }
   record.stopListening = () => {
     for (const each of docs) {
       each.removeEventListener('focusin', markFocusInside, true);
+      each.removeEventListener('blur', markFocusMoving, true);
     }
   };
   openLayerRecords.add(record);
   return record;
-}
-
-/** Whether focus in `layerDoc` is inside `layer` or on nothing. */
-function isInsideOrLost(layerDoc: Document, layer: Element | null): boolean {
-  return (
-    isFocusDetached(layerDoc) ||
-    (layer != null && layer.contains(layerDoc.activeElement))
-  );
 }
 
 /**
@@ -601,8 +685,8 @@ function nameOf(record: LayerFocusRecord, layer: Element | null): string {
   return id ? `layer "${id}"` : 'a layer';
 }
 
-/** The element itself when it takes focus, else its first tab stop. */
-function focusableWithin(element: Element | null): HTMLElement | null {
+/** The element itself when it takes focus, else its first tab stop. Internal. */
+export function focusableWithin(element: Element | null): HTMLElement | null {
   if (element == null) {
     return null;
   }
@@ -692,6 +776,14 @@ export function isLayerFocusStranded(record: LayerFocusRecord): boolean {
   if (!(record.hadFocusInside || isInside)) {
     return false;
   }
+  const movingTo = record.focusMovingTo;
+  if (
+    movingTo != null &&
+    movingTo.isConnected &&
+    canTakeReturnedFocus(movingTo)
+  ) {
+    return false;
+  }
   // A layer in a frame holds the page's focus as the frame element's.
   const frameHost =
     layerDoc === doc ? null : (layerDoc.defaultView?.frameElement ?? null);
@@ -700,7 +792,7 @@ export function isLayerFocusStranded(record: LayerFocusRecord): boolean {
     isInside ||
     (frameHost != null &&
       active === frameHost &&
-      isInsideOrLost(layerDoc, layer)) ||
+      isFocusLost(layer, layerDoc)) ||
     (active != null && isInsideClosingLayer(active))
   );
 }

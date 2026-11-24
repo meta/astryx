@@ -363,9 +363,10 @@ export function useChatDictation(
     const span = document.createElement('span');
     span.setAttribute('data-astryx-dictation-interim', '');
     span.contentEditable = 'false';
-    span.style.color = 'var(--color-text-disabled, #999)';
+    // Words not yet confirmed differ from confirmed words by italics and
+    // the secondary text color, which keeps 4.5:1 on the composer.
+    span.style.color = 'var(--color-text-secondary)';
     span.style.fontStyle = 'italic';
-    span.style.opacity = '0.7';
     span.style.pointerEvents = 'none';
     editable.appendChild(span);
     interimSpanRef.current = span;

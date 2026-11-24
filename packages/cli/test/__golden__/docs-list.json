@@ -74,6 +74,11 @@
         "topic": "typography",
         "description": "Font families, geometric type scale, weight, line-height, and semantic text tokens for consistent, accessible text styling.",
         "package": "@astryxdesign/cli"
+      },
+      {
+        "topic": "visualization",
+        "description": "Build theme-aware charts across SVG, Canvas, and configuration-driven renderers, like Recharts, D3, and Vega-Lite.",
+        "package": "@astryxdesign/cli"
       }
     ],
     "answeredBy": {

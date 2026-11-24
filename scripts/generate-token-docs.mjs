@@ -417,6 +417,7 @@ function listed(names) {
 const FAMILIES = {
   status: familyOf(/^--color-on-([a-z]+)-muted$/),
   color: familyOf(/^--color-data-categorical-([a-z]+)$/),
+  ramp: familyOf(/^--color-data-([a-z]+)-5$/),
 };
 
 const CORE_TOKEN_LINES = [
@@ -452,7 +453,11 @@ const CORE_TOKEN_LINES = [
   ],
   [
     'Charts',
-    `--color-data-categorical-<color> for each series, where <color> is ${listed(FAMILIES.color)}, from dataVars in @astryxdesign/core/theme/dataTokens.stylex`,
+    `--color-data-categorical-<color> for each series, where <color> is ${listed(FAMILIES.color)}, from dataVars in @astryxdesign/core/theme/dataTokens.stylex; --color-data-neutral for labels and reference lines`,
+  ],
+  [
+    'Ordered scales and heatmaps',
+    `--color-data-<ramp>-1 (lightest) to --color-data-<ramp>-5 (darkest), where <ramp> is ${listed(FAMILIES.ramp)}`,
   ],
 ];
 

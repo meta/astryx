@@ -127,13 +127,20 @@ describe('the single contract-leg dispatch', () => {
     // 4-core-ubuntu (ci-free-runners.test.mjs).
     expect(job['runs-on']).toBe('ubuntu-latest');
     expect(releaseLeg['runs-on']).toContain("'4-core-ubuntu'");
-    expect(step('Find the leg that holds the spec').run).toContain(
-      'node .github/scripts/a11y-contract-shard.mjs --shard "$leg/6" > "leg-$leg.txt"',
+    // The single-leg tool splits as many ways as the release-check has legs,
+    // so it finds the leg the release-check ran the spec in.
+    const legs = releaseLeg.strategy.matrix.shard.length;
+    const find = step('Find the leg that holds the spec').run;
+    expect(find).toContain(
+      `node .github/scripts/a11y-contract-shard.mjs --shard "$leg/${legs}" > "leg-$leg.txt"`,
+    );
+    expect(find).toContain(
+      `for leg in ${releaseLeg.strategy.matrix.shard.join(' ')}; do`,
     );
     expect(releaseStep.run).toContain(
       'node .github/scripts/a11y-contract-shard.mjs --shard "${{ matrix.shard }}/${{ strategy.job-total }}" > contract-tests.txt',
     );
-    expect(releaseLeg.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(releaseLeg.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7]);
     const release =
       'pnpm exec playwright test --test-list contract-tests.txt --config playwright.config.ts --project chromium';
     expect(releaseStep.run).toContain(release);

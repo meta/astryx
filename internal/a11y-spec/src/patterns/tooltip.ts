@@ -126,9 +126,11 @@ const AST_020_FR15: AstryxRecord = {
 /**
  * What a binding knows about one tooltip. The subject is the trigger: the
  * element the tooltip describes, which takes focus and hover. Relations:
- * `tooltip` (the element with role tooltip, present in the page whether or
- * not it is showing), `before` and `after` (focusable controls on either side
- * of the trigger in the page Tab order).
+ * `tooltip` (the element with role tooltip, present in the page once it has
+ * shown, whether or not it is showing now), `before` and `after` (focusable
+ * controls on either side of the trigger in the page Tab order). A binding
+ * whose trigger is described by a copy also names `description` (the hidden
+ * copy of the tooltip's text that the trigger's aria-describedby names).
  */
 export interface TooltipStateFacts {
   /**
@@ -139,6 +141,20 @@ export interface TooltipStateFacts {
   readonly showsOnHover: boolean;
   /** How long the binding waits after the pointer arrives before it shows the tooltip, in milliseconds. */
   readonly showDelayMs: number;
+  /**
+   * Whether the tooltip has not shown yet. A tooltip whose layer mounts at
+   * its first show is not in the page before then, so the rows that read the
+   * tooltip apply once it has shown, and the before-first-show row applies
+   * until then.
+   */
+  readonly isBeforeFirstShow?: boolean;
+  /**
+   * Whether the trigger's aria-describedby names a description element
+   * instead of the tooltip itself: a hidden copy of the tooltip's text, or,
+   * once the binding mounts the tooltip, the tooltip's content in its place,
+   * so the text renders and reads once.
+   */
+  readonly describesWithCopy?: boolean;
 }
 
 /** How long a tooltip gets to appear or disappear beyond its declared delay. */
@@ -152,14 +168,31 @@ const SETTLE_BUDGET_MS = 1000;
 const PERSIST_MS = 1000;
 const POLL_MS = 25;
 
-const ALWAYS = {
-  condition: 'the binding designates a tooltip and its trigger',
-  test: () => true,
+const ONCE_SHOWN = {
+  condition:
+    'the binding designates a tooltip and its trigger, and the tooltip has shown once, so it is in the page',
+  test: (facts: TooltipStateFacts) => facts.isBeforeFirstShow !== true,
+};
+
+const DESCRIBED_BY_TOOLTIP = {
+  condition:
+    'the tooltip has shown once, so it is in the page, and the trigger is described by the tooltip itself',
+  test: (facts: TooltipStateFacts) =>
+    facts.isBeforeFirstShow !== true && facts.describesWithCopy !== true,
+};
+
+const DESCRIBED_BY_COPY = {
+  condition:
+    'the trigger is described by a hidden copy of the tooltip text: the tooltip has not shown yet, or the binding describes with a copy',
+  test: (facts: TooltipStateFacts) =>
+    facts.isBeforeFirstShow === true || facts.describesWithCopy === true,
 };
 
 const ON_HOVER = {
-  condition: 'resting the pointer on the trigger shows the tooltip',
-  test: (facts: TooltipStateFacts) => facts.showsOnHover,
+  condition:
+    'resting the pointer on the trigger shows the tooltip, and the tooltip has shown once',
+  test: (facts: TooltipStateFacts) =>
+    facts.showsOnHover && facts.isBeforeFirstShow !== true,
 };
 
 function pause(ms: number): Promise<void> {
@@ -245,7 +278,7 @@ export const TOOLTIP_PATTERN: PatternContract<TooltipStateFacts> =
           'The popup is a tooltip, so assistive technology treats it as a description of its trigger and not as a separate widget to visit.',
         sources: [WCAG_4_1_2, APG_ROLE],
         covers: ['4.1.2-name-role-value', 'apg-interaction'],
-        appliesWhen: ALWAYS,
+        appliesWhen: ONCE_SHOWN,
         evidenceLayer: 'dom',
         enforcement: 'required',
         run: async ({harness}) => {
@@ -265,7 +298,7 @@ export const TOOLTIP_PATTERN: PatternContract<TooltipStateFacts> =
           "The trigger's aria-describedby names the tooltip, so the relationship between the control and its hint is in the markup, not only in where the hint is painted.",
         sources: [WCAG_1_3_1, APG_DESCRIBEDBY],
         covers: ['1.3.1-info-and-relationships', 'apg-interaction'],
-        appliesWhen: ALWAYS,
+        appliesWhen: DESCRIBED_BY_TOOLTIP,
         evidenceLayer: 'dom',
         enforcement: 'required',
         run: async ({harness, subject}) => {
@@ -281,12 +314,89 @@ export const TOOLTIP_PATTERN: PatternContract<TooltipStateFacts> =
         },
       },
       {
+        id: 'tooltip.trigger.described-by-copy',
+        outcome:
+          "The trigger's aria-describedby names a hidden copy of the tooltip text that is not itself a tooltip, present before the tooltip first shows, so a screen-reader user hears the hint on the control and the page holds one tooltip per trigger.",
+        sources: [WCAG_1_3_1, APG_DESCRIBEDBY],
+        covers: ['1.3.1-info-and-relationships', 'apg-interaction'],
+        appliesWhen: DESCRIBED_BY_COPY,
+        evidenceLayer: 'dom',
+        enforcement: 'required',
+        run: async ({harness, subject, facts}) => {
+          const description = await harness.related('description');
+          if (
+            !(await harness.references(
+              subject,
+              'aria-describedby',
+              description,
+            ))
+          ) {
+            const value = await subject.attribute('aria-describedby');
+            throw new Error(
+              `the trigger's aria-describedby (${value == null ? 'absent' : `"${value}"`}) does not name the hidden description`,
+            );
+          }
+          if ((await description.attribute('role')) === 'tooltip') {
+            throw new Error(
+              'the hidden description has role tooltip, so the trigger has two tooltips once the tooltip shows',
+            );
+          }
+          const text = (await description.textContent())
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (text === '') {
+            throw new Error('the hidden description has no text');
+          }
+          if (facts.isBeforeFirstShow !== true) {
+            const tooltip = await harness.related('tooltip');
+            if (
+              await harness.references(subject, 'aria-describedby', tooltip)
+            ) {
+              throw new Error(
+                "the trigger's aria-describedby names both the copy and the tooltip, so the hint is read twice",
+              );
+            }
+          }
+        },
+      },
+      {
+        id: 'tooltip.trigger.description-from-copy',
+        outcome:
+          "The browser computes the hidden copy's text into the trigger's accessible description once, before and after the tooltip shows, so a screen-reader user hears the hint on the control one time.",
+        sources: [WCAG_4_1_2, APG_DESCRIBEDBY],
+        covers: ['4.1.2-name-role-value', 'apg-interaction'],
+        appliesWhen: DESCRIBED_BY_COPY,
+        evidenceLayer: 'accessibility-tree',
+        alsoNeeds: ['dom'],
+        enforcement: 'required',
+        run: async ({harness, subject}) => {
+          const text = (
+            await (await harness.related('description')).textContent()
+          )
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (text === '') {
+            throw new Error('the hidden description has no text');
+          }
+          const description = (await subject.computed()).description.replace(
+            /\s+/g,
+            ' ',
+          );
+          const count = description.split(text).length - 1;
+          if (count !== 1) {
+            throw new Error(
+              `the trigger's accessible description ("${description}") holds the hidden description ("${text}") ${count} times, not once`,
+            );
+          }
+        },
+      },
+      {
         id: 'tooltip.trigger.description',
         outcome:
           "The browser computes the tooltip's text into the trigger's accessible description, so a screen-reader user hears the hint on the control without hovering it.",
         sources: [WCAG_4_1_2, APG_DESCRIBEDBY],
         covers: ['4.1.2-name-role-value', 'apg-interaction'],
-        appliesWhen: ALWAYS,
+        appliesWhen: ONCE_SHOWN,
         evidenceLayer: 'accessibility-tree',
         alsoNeeds: ['dom'],
         enforcement: 'required',
@@ -317,7 +427,7 @@ export const TOOLTIP_PATTERN: PatternContract<TooltipStateFacts> =
           AST_020_FR15,
         ],
         covers: ['2.1.1-keyboard', 'apg-interaction'],
-        appliesWhen: ALWAYS,
+        appliesWhen: ONCE_SHOWN,
         evidenceLayer: 'real-browser',
         alsoNeeds: ['dom'],
         enforcement: 'required',
@@ -354,7 +464,7 @@ export const TOOLTIP_PATTERN: PatternContract<TooltipStateFacts> =
           'Escape hides the tooltip without moving focus or the pointer, whether keyboard focus or (where it can) hover showed it, so a user can clear a hint that covers what they want to read.',
         sources: [WCAG_1_4_13, APG_ESCAPE],
         covers: ['2.1.1-keyboard', 'apg-interaction'],
-        appliesWhen: ALWAYS,
+        appliesWhen: ONCE_SHOWN,
         evidenceLayer: 'real-browser',
         alsoNeeds: ['dom'],
         enforcement: 'required',
@@ -402,7 +512,7 @@ export const TOOLTIP_PATTERN: PatternContract<TooltipStateFacts> =
         wcagOutcome:
           'Supports WCAG 2.2 2.4.11 Focus Not Obscured by keeping a hint for a control the user has left from lingering over the control they Tab to next; 2.4.11 itself is a placement outcome owned by the layer runtime and the page, so this row reports the shipped behaviour without gating.',
         covers: ['apg-interaction'],
-        appliesWhen: ALWAYS,
+        appliesWhen: ONCE_SHOWN,
         evidenceLayer: 'real-browser',
         alsoNeeds: ['dom'],
         enforcement: 'advisory',

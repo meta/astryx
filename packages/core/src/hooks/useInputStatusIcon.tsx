@@ -28,6 +28,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/hooks/useInputStatusIcon.generated';
+import {withTextDirection} from '../utils/textDirection';
 
 registerEnglishFallback(english);
 
@@ -217,7 +218,7 @@ export function useInputStatusIcon({
           type="button"
           ref={tooltip.ref}
           aria-label={t(STATUS_BUTTON_LABEL_KEY[status.type])}
-          aria-describedby={tooltip.describedBy}
+          aria-describedby={tooltip.describedBy || undefined}
           onClick={handleButtonClick}
           onBlur={handleButtonBlur}
           {...stylex.props(
@@ -226,7 +227,7 @@ export function useInputStatusIcon({
           )}>
           {icon}
         </button>
-        {tooltip.renderTooltip(status.message)}
+        {tooltip.renderTooltip(withTextDirection(status.message))}
       </>
     ),
     describedBy: tooltip.describedBy,

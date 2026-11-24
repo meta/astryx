@@ -1165,8 +1165,14 @@ async function answerStrayOption(err, rejected, message, exitCode) {
   const stray = /unknown option '([^']+)'/.exec(message)?.[1] ?? '';
   const {strayOptionAnswer, withoutStray} = await import('./stray-option.mjs');
   if (!rejected.parent) {
-    const {findEntry, firstWord, unknownCommandAnswer} =
-      await import('./unknown-command.mjs');
+    const {
+      findEntry,
+      firstWord,
+      iconFeaturesOn,
+      projectScript,
+      unknownCommandAnswer,
+    } = await import('./unknown-command.mjs');
+    const context = {findEntry, iconFeatures: iconFeaturesOn, projectScript};
     // Only a word before the stray option is read as the command: after it,
     // the word may be the option's value (`astryx --format text component
     // Table`), and the unknown option stays the fault.
@@ -1179,13 +1185,15 @@ async function answerStrayOption(err, rejected, message, exitCode) {
     ) {
       /** @param {Awaited<ReturnType<typeof unknownCommandAnswer>>} a */
       const withRun = a =>
-        a?.suggestions.some(s => s.name.startsWith('astryx ')) ? a : null;
+        a && !a.fallback && a.suggestions.some(s => !a.near?.includes(s.name))
+          ? a
+          : null;
       // The whole run first: a command the words point at can take the
       // option (`migrate --from 0.6.0` is `upgrade --from 0.6.0`). Without a
       // run, the run without the option.
       const answer =
-        withRun(await unknownCommandAnswer(rejected, words, {findEntry})) ??
-        (await unknownCommandAnswer(rejected, cleaned, {findEntry}));
+        withRun(await unknownCommandAnswer(rejected, words, context)) ??
+        (await unknownCommandAnswer(rejected, cleaned, context));
       setOutcome('parse-error', {
         exitCode: exitCode || 1,
         error: new Error(answer?.message ?? message),
@@ -1198,15 +1206,27 @@ async function answerStrayOption(err, rejected, message, exitCode) {
         exitCode,
         answer && {
           message: answer.message,
-          // Only the runs: a near or listed command name is no run to print
-          // after `Run:`, so the program's help stands in for those.
-          suggestions: answer.suggestions.some(s =>
-            s.name.startsWith('astryx '),
-          )
-            ? answer.suggestions
-                .filter(s => s.name.startsWith('astryx '))
-                .map(s => ({name: formatCliCommand(s.name), reason: s.reason}))
-            : [{name: formatCliCommand('--help'), reason: 'every command'}],
+          // Only runs: a near command name is no run to print after `Run:`,
+          // so the help run, with the options typed, stands in for those. A
+          // run of the project's own script keeps its package manager.
+          suggestions: [
+            ...answer.suggestions
+              .filter(s => !answer.near?.includes(s.name))
+              .map(s => ({
+                name: s.name.startsWith('astryx ')
+                  ? formatCliCommand(s.name)
+                  : s.name,
+                reason: s.reason,
+              })),
+            ...(answer.near
+              ? [
+                  {
+                    name: formatCliCommand(answer.help.name),
+                    reason: answer.help.reason,
+                  },
+                ]
+              : []),
+          ],
         },
         ERROR_CODES.ERR_UNKNOWN_COMMAND,
       );

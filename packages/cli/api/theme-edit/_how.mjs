@@ -25,8 +25,10 @@ import {
   LIKE,
   P,
   familyOf,
+  pageColorNote,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
+import {pixelScale, readTraits} from './_picture-traits.mjs';
 import {baseInstalled, installLine} from './_project.mjs';
 import {
   editedThemes,
@@ -40,6 +42,14 @@ import {
   themeSourceParseError,
   themeSourceProblem,
   baseRedraws,
+  groupsOf,
+  selfSizedBox,
+  selfSizedBoxLines,
+  selfSizedWhy,
+  sizesItsOwnBox,
+  givesEdge,
+  isRowFrame,
+  roundsCorners,
 } from './_settings.mjs';
 import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -47,7 +57,8 @@ import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
 import {checked, exampleStep, howTheme, render} from './_how-commands.mjs';
-import {draftAnswer, partLexicon, valueAsked} from './_how-question.mjs';
+import {draftAnswer, partLexicon} from './_how-question.mjs';
+import {valueAsked} from './_how-values.mjs';
 import {
   getCliInvocation,
   quoteCommandArgument,
@@ -114,7 +125,7 @@ function dialHelp(key, env) {
  * setting (a dial's rungs, a token's type and readers, a CSS property), an
  * aspect (text, corners...: the whole-theme tokens and dial), `colors` (how
  * the theme's colors are made), a plain-words question (exact commands), a
- * PNG picture (its main colors, or the color at points), or with `list` a
+ * PNG picture (its main colors and the look's traits measured from it, or the color at points), or with `list` a
  * list of dials, tokens, parts, groups or CSS properties.
  * @experimental
  * @param {string} subject a part, group, setting, aspect, question, or PNG file; with `list`, a filter
@@ -172,12 +183,14 @@ export async function themeEditHow(subject, options = {}) {
  * @returns {T}
  */
 function withPrefix(value, cwd) {
-  const stem = `${getCliInvocation(cwd)} experimental theme`;
-  if (stem === 'astryx experimental theme') return value;
+  const cli = getCliInvocation(cwd);
+  if (cli === 'astryx') return value;
+  // (A line may name the stable theme commands too, "astryx theme add
+  // neutral"; each runs as the app runs the CLI.)
   /** @param {any} v @returns {any} */
   const walk = v =>
     typeof v === 'string'
-      ? v.split('astryx experimental theme').join(stem)
+      ? v.replace(/\bastryx (experimental theme|theme)\b/g, `${cli} $1`)
       : Array.isArray(v)
         ? v.map(walk)
         : v && typeof v === 'object'
@@ -190,9 +203,11 @@ function withPrefix(value, cwd) {
  * @param {string} subject
  * @param {import('./theme-edit.type.mjs').ThemeEditHowOptions} options
  * @param {string} cwd
+ * @param {boolean} [blindSaid] the color-blind pieces were answered
+ *   already: the rest is asked as said, never split for them again
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditHowResponse['data']>}
  */
-async function answer(subject, options, cwd) {
+async function answer(subject, options, cwd, blindSaid = false) {
   const {list, at = [], count} = options;
   // "½rem": a fraction is a number before anything reads the question.
   const t = (subject ?? '')
@@ -289,8 +304,16 @@ async function answer(subject, options, cwd) {
       };
     return {kind: 'list', subject: t, ...(await listItems(kind, t, cwd))};
   }
-  if (isPicture(t, cwd))
-    return {kind: 'picture', subject: t, ...pictureColors(t, cwd, at, count)};
+  if (isPicture(t, cwd)) {
+    const {traits, ...read} = pictureColors(t, cwd, at, count);
+    if (!traits) return {kind: 'picture', subject: t, ...read};
+    return {
+      kind: 'picture',
+      subject: t,
+      ...read,
+      ...(await pictureLook(cwd, options.theme, traits)),
+    };
+  }
   // What runs instead: the same subject without the picture option (a
   // real command), never a made-up file name.
   const without = t ? `${HOW} ${quoteCommandArgument(t)}` : `${HOW} --help`;
@@ -366,12 +389,12 @@ async function answer(subject, options, cwd) {
     const kind = listKind(key);
     return {kind: 'list', subject: '', ...(await listItems(kind, '', cwd))};
   }
-  if (Object.hasOwn(FAMILIES, key)) {
+  if (Object.hasOwn(groupsOf(ctx), key)) {
     return {
       kind: 'group',
       subject: t,
       group: key,
-      members: FAMILIES[key],
+      members: groupsOf(ctx)[key],
       spreads: AUTO_SPREAD.includes(key),
     };
   }
@@ -580,6 +603,27 @@ async function answer(subject, options, cwd) {
         ?.toLowerCase() ?? 'kinds';
     return answer('', {...options, list: kind}, cwd);
   }
+  // (Color-blind readers asked about in a list of asks: the other pieces
+  // are answered as typed, in their case and order, and the color-blind
+  // answer follows them, before the first offer, as every answer does.)
+  const blind = blindSaid
+    ? {blind: false, rest: ''}
+    : colorBlindPieces(t.trim().replace(/[?.!]+$/, ''));
+  if (!tool && blind.blind && blind.rest) {
+    const rest = await answer(blind.rest, options, cwd, true);
+    const results = rest.results ?? [];
+    const firstOffer = results.findIndex(r => r.offer);
+    const at = firstOffer < 0 ? results.length : firstOffer;
+    return {
+      ...rest,
+      subject: t,
+      results: [
+        ...results.slice(0, at),
+        ...colorBlindAnswer(env),
+        ...results.slice(at),
+      ],
+    };
+  }
   if (tool)
     return {
       kind: 'question',
@@ -635,7 +679,7 @@ async function answer(subject, options, cwd) {
     const q = draftAnswer(ctx, env, t);
     const groups = q.aspects.filter(a => Object.hasOwn(GROUPS, a));
     const results = q.parts
-      .map(p => (FAMILIES[p] ? FAMILIES[p][0] : p))
+      .map(p => (groupsOf(ctx)[p] ? groupsOf(ctx)[p][0] : p))
       .filter(p => ctx.project.target.has(p))
       .map(p => {
         const toks = (groups.length ? groups : [null]).flatMap(g =>
@@ -680,7 +724,11 @@ async function answer(subject, options, cwd) {
   if (matchAsk && env.exists) {
     const q = draftAnswer(ctx, env, t.replace(matchAsk[0], ' '));
     const parts = q.parts.flatMap(p =>
-      FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
+      groupsOf(ctx)[p]
+        ? groupsOf(ctx)[p]
+        : ctx.project.target.has(p)
+          ? [p]
+          : [],
     );
     if (parts.length) {
       const res = await resolvedTokens(ctx, env.slug).catch(() => null);
@@ -704,7 +752,7 @@ async function answer(subject, options, cwd) {
         subject: t,
         understood: {parts: q.parts, aspects: q.aspects},
         ...themeFields,
-        results: finish(env, /** @type {any} */ (drafts)),
+        results: finish(env, /** @type {any} */ (drafts), ctx),
         ...unknown,
       };
     }
@@ -729,7 +777,11 @@ async function answer(subject, options, cwd) {
       h.aspects.some(a => a === 'background' || a === 'text'))
   ) {
     const parts = h.parts.flatMap(p =>
-      FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
+      groupsOf(ctx)[p]
+        ? groupsOf(ctx)[p]
+        : ctx.project.target.has(p)
+          ? [p]
+          : [],
     );
     const res = await resolvedTokens(ctx, env.slug).catch(() => null);
     // (A missed entry never says otherwise than the question: where the
@@ -779,8 +831,9 @@ async function answer(subject, options, cwd) {
     h.drafts.unshift(...entries.filter((_, k) => !written.has(mine[k].part)));
     h.drafts.push(...entries.filter((_, k) => written.has(mine[k].part)));
   }
-  const results = finish(env, h.drafts);
+  const results = finish(env, h.drafts, ctx);
   const empty = !results.some(r => r.commands.length);
+  const already = results.length > 0 && results.every(r => ALREADY.has(r));
   return {
     kind: 'question',
     subject: t,
@@ -788,21 +841,25 @@ async function answer(subject, options, cwd) {
     ...themeFields,
     results,
     ...unknown,
-    ...(empty
+    ...(empty && already
       ? {
-          hint: `${
-            results.length
-              ? `No command does all of "${t}" on ${env.slug}; each result says why.`
-              : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`
-          } See ${HOW} --help for the asks it understands.`,
-          run: [
-            `${HOW} --help`,
-            `${HOW} --list parts`,
-            `${HOW} "rounder buttons"`,
-            `${HOW} colors`,
-          ],
+          hint: `"${t}" is already so in ${env.slug}: nothing to change. Each result says what it found.`,
         }
-      : {}),
+      : empty
+        ? {
+            hint: `${
+              results.length
+                ? `No command does all of "${t}" on ${env.slug}; each result says why.`
+                : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`
+            } See ${HOW} --help for the asks it understands.`,
+            run: [
+              `${HOW} --help`,
+              `${HOW} --list parts`,
+              `${HOW} "rounder buttons"`,
+              `${HOW} colors`,
+            ],
+          }
+        : {}),
   };
 }
 
@@ -885,8 +942,10 @@ export function questionOnly(q) {
       t,
     ) ||
     /^(?:why not|what about|how about|what if)\b/.test(t) ||
-    // ("why are my headings not bold": a complaint is an ask.)
-    /^why\b.*\b(?:not|n'?t)\b/.test(t)
+    // ("why are my headings not bold", "why is everything so round": a
+    // complaint is an ask.)
+    /^why\b.*\b(?:not|n'?t)\b/.test(t) ||
+    /^why (?:is|are)\b.*\bso [a-z]+\b/.test(t)
   )
     return false;
   // A verb that asks for a change anywhere after the question's first
@@ -909,13 +968,21 @@ export function questionOnly(q) {
 }
 
 /**
+ * The results that say the theme already does what was asked: when every
+ * result is one, the answer leads with that, never with a failure.
+ * @type {WeakSet<object>}
+ */
+const ALREADY = new WeakSet();
+
+/**
  * Check each draft's commands and keep what passes; a draft whose commands
  * are all refused says why, and points to the lookup that helps.
  * @param {import('./_how-commands.mjs').HowTheme} env
  * @param {import('./_how-question.mjs').Draft[]} drafts
+ * @param {import('./_settings.mjs').Ctx} ctx
  */
-function finish(env, drafts) {
-  /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string, run?: string[]}>}>} */
+function finish(env, drafts, ctx) {
+  /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string, run?: string[]}>, offer?: boolean}>} */
   const out = [];
   // The measured check runs first on the drafts that carry what their
   // clause asks; a draft that joins them ("all of it, in order") then keeps
@@ -937,12 +1004,18 @@ function finish(env, drafts) {
   const kept = new Set();
   /** @type {Map<object, string[]>} */
   const unmetOf = new Map();
+  // ("…, and make headings bigger": where an answer's first line fails the
+  // check and a later line of it passes, a joined answer takes that line
+  // in its place, never drops the ask unsaid.)
+  /** @type {Map<string, import('./_how-commands.mjs').Step[]>} */
+  const joinsInstead = new Map();
   if (typeof env.measure === 'function')
     for (const d of drafts) {
       if (!d.intent) continue;
       const intent = d.intent;
       /** @type {string[]} */
       const unmet = [];
+      const first = d.options[0];
       d.options = d.options.flatMap(o => {
         const why = env.measure(o, intent);
         if (why) {
@@ -964,6 +1037,8 @@ function finish(env, drafts) {
         if (why) unmet.push(why);
         return why ? [] : [o];
       });
+      if (first?.length === 1 && d.options.length && d.options[0] !== first)
+        joinsInstead.set(key(first[0]), d.options[0]);
       // One change in growing amounts: the first kept is the answer, and
       // the smaller amounts that fell short are no reason to tell.
       if (d.smallest && d.options.length) {
@@ -975,7 +1050,13 @@ function finish(env, drafts) {
   for (const d of drafts) {
     if (!d.intent && dropped.size) {
       d.options = d.options
-        .map(o => o.filter(st => !dropped.has(key(st)) || kept.has(key(st))))
+        .map(o =>
+          o.flatMap(st =>
+            !dropped.has(key(st)) || kept.has(key(st))
+              ? [st]
+              : (joinsInstead.get(key(st)) ?? []),
+          ),
+        )
         .filter(o => o.length);
       // A joined answer left holding what another answer already says is
       // that answer: it is not given twice (and never as "all of it").
@@ -1031,10 +1112,48 @@ function finish(env, drafts) {
       )
         continue;
     }
+    afterAskedEdge(ctx, env, d, drafts);
     const {commands, refused} = checked(env, d.options);
+    // (A choice whose options hold more than one step, a fill with the text
+    // that reads on it: each option is one line, so a line is one whole
+    // choice.)
+    if (d.joined) {
+      const whole = d.options
+        .map(o => checked(env, [o]))
+        .filter(r => r.commands.length && !r.refused.length)
+        .map(r => r.commands.join(' && '));
+      commands.splice(0, commands.length, ...whole);
+    }
     const lookups = d.lookup ? [d.lookup] : [];
+    // (The draft found it in place already: said, with no command.)
+    if (d.already) {
+      const r = {text: d.text, commands: lookups};
+      ALREADY.add(r);
+      out.push(r);
+      continue;
+    }
     if (!commands.length && !d.options.length && unmet.length) {
       out.push({text: d.text, commands: lookups});
+      continue;
+    }
+    // (What the ask writes is in place already: said so, first, with no
+    // command, so an offer beside it is never taken for the answer.)
+    if (
+      !commands.length &&
+      d.options.length &&
+      !d.offer &&
+      refused.length &&
+      refused.every(r => /^it changes nothing/.test(r.why))
+    ) {
+      const steps = d.options[0];
+      const values = [...new Set(steps.map(st => String(st.value)))];
+      const parts = [...new Set(steps.map(st => st.on).filter(Boolean))];
+      const r = {
+        text: `already ${values.join(', ')}${parts.length ? ` on the ${parts.join(', ')}` : ''} in ${env.slug}, nothing to change (${d.text})`,
+        commands: lookups,
+      };
+      ALREADY.add(r);
+      out.push(r);
       continue;
     }
     if (!commands.length && d.options.length && !lookups.length) {
@@ -1053,6 +1172,7 @@ function finish(env, drafts) {
       commands: [...commands, ...lookups],
       ...(d.sequence && commands.length ? {sequence: true} : {}),
       ...(refused.length ? {refused} : {}),
+      ...(d.offer ? {offer: true} : {}),
     });
   }
   if (!env.exists && out.some(r => r.commands.some(c => / set /.test(c))))
@@ -1064,8 +1184,16 @@ function finish(env, drafts) {
   // Changes first; a lookup ("how card") after the commands that change.
   const changes = (/** @type {{commands: string[]}} */ r) =>
     r.commands.some(c => / editor (set|undo|new) /.test(c)) ? 0 : 1;
+  // An offer, more than the ask, is never first or the answer: it follows
+  // every other result; left alone, a first line says the ask itself
+  // writes nothing here.
+  const offered = (/** @type {{offer?: boolean}} */ r) => (r.offer ? 1 : 0);
+  // (Its words first, with no command: "the mode the app shows first is
+  // set where it renders the theme"; the line it offers follows.)
+  if (out.length && out.every(r => r.offer))
+    out.unshift({text: out[0].text, commands: []});
   return out
-    .sort((a, b) => changes(a) - changes(b))
+    .sort((a, b) => offered(a) - offered(b) || changes(a) - changes(b))
     .filter(r => {
       const k = `${r.text}\n${r.commands.join('\n')}`;
       if (seen.has(k)) return false;
@@ -1088,7 +1216,7 @@ function lookupKey(t, ctx) {
     .trim();
   if (/\s/.test(k)) return t;
   const known = (/** @type {string} */ x) =>
-    Object.hasOwn(FAMILIES, x) ||
+    Object.hasOwn(groupsOf(ctx), x) ||
     ctx.project.target.has(x) ||
     ASPECTS.includes(x) ||
     Object.hasOwn(DIALS, x) ||
@@ -1137,7 +1265,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
       const v = blocks[t]?.base?.[token];
       const to =
         typeof v === 'string'
-          ? /^var\((--[\w-]+)\)$/.exec(v.trim())?.[1]
+          ? /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim())?.[1]
           : null;
       if (to) return {token: to, on: t};
     }
@@ -1192,7 +1320,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     components,
     recorded,
     group,
-    groupMembers: group ? FAMILIES[group] : [],
+    groupMembers: group ? groupsOf(ctx)[group] : [],
     spreads: group ? AUTO_SPREAD.includes(group) : false,
     variants: C.variantValues(key),
     states,
@@ -1424,6 +1552,10 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
   return {
     kind: 'setting',
     subject,
+    // (The page color shows inside AppShell only: said first.)
+    ...(key === '--color-background-body'
+      ? {note: pageColorNote(env.data?.mode)}
+      : {}),
     source: 'token',
     tokenType: type,
     default: String(ctx.project.core.tokenDefaults[key]),
@@ -1491,6 +1623,88 @@ function colorsAnswer(env, dialCommands) {
   ];
 }
 
+/** A word for color-vision deficiency, as a pattern's source. */
+const COLOR_BLIND_WORD = String.raw`(?:colou?r[- ]?blind\w*|colou?r[- ]vision|cvd|deuteran\w*|protan\w*|tritan\w*)`;
+const COLOR_BLIND = new RegExp(String.raw`\b${COLOR_BLIND_WORD}\b`, 'i');
+
+/**
+ * An ask's pieces, split at commas and at an "and" that joins two asks
+ * ("color-blind friendly statuses and a blue accent"; "red and green for
+ * color-blind people" is one ask): whether a piece asks about color-blind
+ * readers, and the pieces that do not.
+ * @param {string} q
+ */
+function colorBlindPieces(q) {
+  const pieces = q
+    .split(
+      new RegExp(
+        String.raw`[,;:]|\s(?:and|plus|&)\s(?!(?:[\w-]+\s+){0,3}${COLOR_BLIND_WORD})`,
+        'i',
+      ),
+    )
+    .map(x => x.trim())
+    .filter(Boolean);
+  const blind = pieces.filter(x => COLOR_BLIND.test(x));
+  if (!blind.length) return {blind: false, rest: ''};
+  // (A color-blind piece that says a change, "warnings darker for
+  // color-blind users", is asked as said; a piece that is only about
+  // color-blind readers is read as the status colors it is about, so the
+  // list keeps its shape.)
+  const own = (/** @type {string} */ x) => {
+    const left = x
+      .replace(
+        new RegExp(
+          String.raw`\s*\b(?:that|which|so(?:\s+that)?|for|to)\s+(?:[\w-]+\s+){0,3}?${COLOR_BLIND_WORD}(?:\s+[\w-]+){0,5}\s*$`,
+          'i',
+        ),
+        '',
+      )
+      .replace(
+        new RegExp(
+          String.raw`\b${COLOR_BLIND_WORD}(?:[- ](?:friendly|safe|proof|readers?|users?|people))?`,
+          'gi',
+        ),
+        '',
+      )
+      .replace(/\s+/g, ' ')
+      .trim();
+    // (What is left is a change unless it is only words about the ask
+    // itself: "color-blind friendly statuses", "a color-blind safe
+    // palette".)
+    const said = left
+      .replace(
+        /\b(?:make|makes|making|it|its|this|that|the|a|an|be|is|are|please|our|my|your|theme|app|site|ui|friendly|safe|proof|accessible|people|users?|readers?|staff|folks|viewers?|visitors?|for|with|to|so|also|and|status(?:es)?|colou?rs?|palette|statuses|can|tell|apart|them)\b/gi,
+        '',
+      )
+      .replace(/[^\w#]+/g, '');
+    return said ? x : 'status colors';
+  };
+  const kept = blind.map(own);
+  if (blind.length === pieces.length && kept.every(x => x === 'status colors'))
+    return {blind: true, rest: ''};
+  const rest = blind
+    .reduce((t, x, k) => t.replace(x, ` ${kept[k]} `), q)
+    .replace(/\s+/g, ' ')
+    .trim();
+  return {blind: true, rest};
+}
+
+/**
+ * The answer about color-blind readers.
+ * @param {import('./_how-commands.mjs').HowTheme} env
+ */
+function colorBlindAnswer(env) {
+  return [
+    {
+      text: `color-blind readers: the editor checks that the status fills (info, success, warning, danger) stay apart for someone red-weak or green-weak, and show and set note a pair that may look alike, with a line that moves one of them lighter or darker. A status shown with its words or an icon does not rest on color alone; a status dot does, so its colors need lightness apart too. To choose the colors yourself, set each status color; keep warning light and danger dark so lightness, not only hue, tells them apart.`,
+      commands: [
+        ...(env.exists ? [`${P} show ${env.slug}`] : []),
+        `${HOW} "status colors"`,
+      ],
+    },
+  ];
+}
+
 /**
  * The answer to a question about the tool itself: help, a list, how to see
  * a change, or the difference between two things it names. 'list' means
@@ -1522,6 +1736,10 @@ function toolAnswer(t, env, targets) {
     )
   )
     return 'list';
+  // (Only an ask about color-blind readers alone; in a list of asks the
+  // other pieces are answered too (answer).)
+  if (colorBlindPieces(q).blind && !colorBlindPieces(q).rest)
+    return colorBlindAnswer(env);
   if (/\b(see|view|preview|check) (my |the )?(changes?|theme|edits?)\b/.test(q))
     return [
       {
@@ -1619,7 +1837,10 @@ function toolAnswer(t, env, targets) {
     // A question about a part's value now is answered with that value.
     (asks && !valueAsked(q)) ||
     /^which parts (are|does|do)\b/.test(q) ||
-    (/^why (is|are|does|do)\b/.test(q) && !/\bnot\b|n'?t\b/.test(q))
+    (/^why (is|are|does|do)\b/.test(q) &&
+      !/\bnot\b|n'?t\b/.test(q) &&
+      // ("why is everything so round": a complaint, an ask.)
+      !/^why (?:is|are)\b.*\bso [a-z]+\b/.test(q))
   ) {
     // The part or setting the question names gets its own lookup.
     const named = q
@@ -1779,7 +2000,7 @@ async function listItems(kind, filter, cwd) {
   if (kind === 'groups')
     return {
       list: kind,
-      items: Object.entries(FAMILIES)
+      items: Object.entries(groupsOf(await context(cwd)))
         .filter(([k, v]) => f(k) || v.some(f))
         .map(([name, members]) => ({
           name,
@@ -1953,8 +2174,10 @@ function pictureColors(file, cwd, at, count) {
     );
   /** @type {import('./_png.mjs').Picture} */
   let pic;
+  /** @type {Buffer} */
+  let bytes;
   try {
-    pic = decodePng(fs.readFileSync(abs));
+    pic = decodePng((bytes = fs.readFileSync(abs)));
   } catch (e) {
     throw new AstryxError(
       `Could not read ${file} as a PNG picture: ${e instanceof Error ? e.message : String(e)}.`,
@@ -1986,6 +2209,8 @@ function pictureColors(file, cwd, at, count) {
     };
   }
   const colors = mainColors(pic, count ?? 14);
+  // The look's traits, measured from the same pixels.
+  const traits = colors.length ? readTraits(pic, pixelScale(bytes)) : null;
   // Every pixel see-through: no color shows, as with a 0-pixel picture.
   if (!colors.length)
     throw new AstryxError(
@@ -1999,5 +2224,211 @@ function pictureColors(file, cwd, at, count) {
     height: pic.height,
     colors,
     points: null,
+    traits,
   };
+}
+
+/**
+ * The aspects a setting changes, so a dial and the tokens it writes count as
+ * one: corners (the corners dial and every radius token), the control size
+ * (its size tokens, and the spacing dial, which scales control heights), the
+ * spacing tokens (and the spacing dial), the line height (the leading
+ * tokens), the text size (the text-size dial and the text
+ * size tokens), and the heading weight (the headings dial, and the type
+ * dial, which sets it). A checks size is its box: its width and its height.
+ * Anything else is its own aspect.
+ * @param {string} thing
+ * @returns {string[]}
+ */
+function aspectsOf(thing) {
+  if (thing === 'corners' || /^--radius-/.test(thing)) return ['corners'];
+  if (/^--size-element-/.test(thing)) return ['control-size'];
+  if (thing === 'spacing') return ['control-size', 'spacing'];
+  if (/^--spacing-/.test(thing)) return ['spacing'];
+  if (/^--text-[\w-]*leading$|^--line-height/.test(thing)) return ['leading'];
+  if (thing === 'text-size' || /^--text-[\w-]*-size$/.test(thing))
+    return ['text-size'];
+  if (thing === 'headings' || thing === 'type') return ['heading-weight'];
+  if (thing === 'width' || thing === 'height') return ['box-size'];
+  return [thing];
+}
+
+/**
+ * The lines that give the checks a measured box: width and height at the
+ * same px on each member that sizes its own box (sizesItsOwnBox), so a box
+ * stays square and a radio stays round. The measured box is the size drawn;
+ * each size moves by the same step from its own box (selfSizedBox), with a
+ * `--when size:` line per size when the member has more than one, one
+ * `--on checks` line where every member has the same box, else a line per
+ * member. A size whose box the editor does not know keeps its own, named in
+ * `kept`. No steps, with why, when no size can be read.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').Setting[]} settings
+ * @param {number} px the measured box
+ * @returns {{steps: import('./_how-commands.mjs').Step[], kept: string[], why?: undefined} | {steps?: undefined, kept?: undefined, why: string}}
+ */
+function checksBoxSteps(ctx, settings, px) {
+  const C = /** @type {any} */ (ctx).C;
+  const members = (FAMILIES.checks ?? []).filter(m => sizesItsOwnBox(C, m));
+  if (!members.length) return {why: 'no member of checks sets its own box'};
+  const drawn = selfSizedBox(ctx, settings, members[0]);
+  if (!drawn)
+    return {
+      why:
+        selfSizedWhy(ctx, settings, members[0]) ?? 'no size the editor knows',
+    };
+  const step = px - drawn.h;
+  const sizes = /** @type {string[]} */ (
+    C.variantValues(members[0])?.size ?? []
+  );
+  const {lines, unknown} = selfSizedBoxLines(
+    ctx,
+    settings,
+    'checks',
+    sizes.length > 1 ? sizes : [undefined],
+    box => {
+      const side = Math.max(1, Math.round(Math.max(box.w, box.h) + step));
+      return {w: side, h: side};
+    },
+    sizes.length > 1,
+  );
+  const kept = unknown.map(u => `${u.sz ? `size ${u.sz}: ` : ''}${u.why}`);
+  /** @type {import('./_how-commands.mjs').Step[]} */
+  const steps = lines.flatMap(l => [
+    {verb: 'set', thing: 'width', value: `${l.next.w}px`, ...l.flags},
+    {verb: 'set', thing: 'height', value: `${l.next.h}px`, ...l.flags},
+  ]);
+  if (!steps.length) return {why: kept.join('; ')};
+  return {steps, kept};
+}
+
+/**
+ * The commands that make a picture's measured look, each checked as `set`
+ * checks it: one result per trait, saying where it was read and how sure.
+ * A trait the theme already sets keeps the theme's own value (what was typed
+ * wins) and is named with the picture's reading instead.
+ * @param {string} cwd
+ * @param {string | undefined} name the theme asked for
+ * @param {ReturnType<typeof readTraits>} read
+ */
+async function pictureLook(cwd, name, read) {
+  const ctx = await context(cwd);
+  const groups = groupsOf(ctx);
+  /** @param {string} family @param {string} on */
+  const familyHolds = (family, on) => {
+    const families =
+      family === 'controls' ? ['button-like', 'inputs'] : [family];
+    // (The family itself holds what is set on it: a height set on a
+    // control is saved on the controls.)
+    return (
+      on === family ||
+      families.some(f => on === f || (groups[f] ?? []).includes(on))
+    );
+  };
+  const env = await howTheme(ctx, cwd, name);
+  const own = env.data.settings;
+  /** @type {Array<{text: string, commands: string[], refused?: Array<{command: string, why: string, run?: string[]}>}>} */
+  const results = [];
+  const unsure = read.unsure.map(u => ({
+    text: `${u.trait} on ${u.on}: ${u.why}`,
+    ...(u.options ? {options: u.options.map(st => render(st, env.slug))} : {}),
+  }));
+  for (const tr of read.traits) {
+    const step = tr.step;
+    // What the theme sets itself wins over a reading of the same aspect
+    // (the corners dial and the radius tokens are one aspect, as are the
+    // control size tokens), unless the two are on different parts.
+    // A checks size is its box: width and height at the same px, per size.
+    const checksSize = step.on === 'checks' && step.thing === 'height';
+    // (A box the theme sizes, on the checks or on any one of them with
+    // --only, its width or its height, is the theme's own.)
+    const kept = own.find(s =>
+      checksSize
+        ? /^(?:width|height)$/.test(s.thing) &&
+          (s.on === 'checks' ||
+            (FAMILIES.checks ?? []).includes(String(s.on ?? '')))
+        : aspectsOf(s.thing).some(a => aspectsOf(step.thing).includes(a)) &&
+          // (A part's own setting keeps a reading only for the family the
+          // reading is of, or a member of it: `corners --on button` keeps a
+          // button-like reading, never a theme-wide radius the card sets
+          // apart from.)
+          (!s.on || familyHolds(step.on ?? tr.on, String(s.on))),
+    );
+    const box = checksSize
+      ? checksBoxSteps(ctx, own, Number.parseFloat(String(step.value)))
+      : null;
+    if (kept) {
+      unsure.push({
+        text: `${tr.trait} on ${tr.on}: the picture reads ${tr.value} (${tr.read}); ${env.slug} sets ${kept.thing}${kept.on ? ` on ${kept.on}` : ''} ${kept.value} already, which stays`,
+        options: (box?.steps ?? [step]).map(st => render(st, env.slug)),
+      });
+      continue;
+    }
+    if (box?.why) {
+      unsure.push({
+        text: `${tr.trait} on ${tr.on}: the picture reads ${tr.value} (${tr.read}); ${box.why}, so the box is not written`,
+      });
+      continue;
+    }
+    const {commands, refused} = checked(env, [box?.steps ?? [step]]);
+    results.push({
+      text: `${tr.trait} on ${tr.on}: ${tr.value}, read from ${tr.read}${tr.sure === 'about' ? ' (about: few boxes)' : ''}${box?.kept?.length ? `; width and height at each size, by the same step; kept: ${box.kept.join('; ')}` : box?.steps ? '; width and height at each size, by the same step' : ''}`,
+      commands,
+      ...(refused.length ? {refused} : {}),
+    });
+  }
+  return {
+    theme: env.slug,
+    themeChosenBy: env.chosenBy,
+    ...(env.note ? {themeNote: env.note} : {}),
+    look: {
+      source: 'picture',
+      scale: read.scale,
+      traits: read.traits.map(({step: _step, ...tr}) => tr),
+      slots: read.slots,
+    },
+    results,
+    unsure,
+  };
+}
+
+/**
+ * Corners asked of a pager's row with the edge the same ask gives it
+ * ("pagination: 6px radius, 1px border"). Alone they show nothing, as the
+ * row has no edge yet; the whole ask runs them after its edge. So the
+ * corners' own answer takes that edge first, as the whole ask does, and
+ * says so.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {any} env
+ * @param {any} d
+ * @param {any[]} drafts
+ */
+function afterAskedEdge(ctx, env, d, drafts) {
+  const isCorner = (/** @type {any} */ st) =>
+    st.verb === 'set' && roundsCorners(st.thing);
+  if (
+    d.sequence ||
+    !d.options.length ||
+    !d.options.every(
+      (/** @type {any[]} */ o) => o.length === 1 && isCorner(o[0]),
+    )
+  )
+    return;
+  const on = d.options[0][0].on;
+  if (!on || !isRowFrame(ctx, on)) return;
+  const edge = drafts
+    .filter(x => x !== d && x.sequence)
+    .flatMap(x => x.options[0] ?? [])
+    .find(
+      (/** @type {any} */ x) =>
+        x.verb === 'set' && x.on === on && givesEdge(x, d.options[0][0].state),
+    );
+  if (!edge || d.options.some((/** @type {any[]} */ o) => env.check(o).ok))
+    return;
+  const withEdge = d.options
+    .map((/** @type {any[]} */ o) => [edge, ...o])
+    .find((/** @type {any[]} */ o) => env.check(o).ok);
+  if (!withEdge) return;
+  d.options = [withEdge];
+  d.text = `${d.text}, after the ${edge.thing} this ask gives it (alone, its corners would show nothing)`;
 }

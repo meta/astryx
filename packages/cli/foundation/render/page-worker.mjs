@@ -49,13 +49,15 @@ import {assetDataUri, isAssetPath} from './assets.mjs';
 import {NOT_AN_IMAGE, showsImage} from './image-attributes.mjs';
 import {parseSrcset} from './srcset.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed, servedImportTarget} from './served-packages.mjs';
-import {packageResolveHooks} from './package-resolve-hooks.mjs';
+import {noteLinkedFolder, packageLookups, packageResolveHooks} from './package-resolve-hooks.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {sha256} from './source-block.mjs';
 import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs';
 import {droppedImports, importUses} from './value-uses.mjs';
-import {coreComponentOf} from '../discovery/core-elements.mjs';
+import {OTHER_JSX_RUNTIME, coreComponentOf} from '../discovery/core-elements.mjs';
+import {corePropUsesOf} from '../discovery/core-props.mjs';
+import {writtenValue} from '../discovery/written-prop-values.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -183,11 +185,20 @@ const texts = [];
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
 /**
- * Each string a page's own file gives a Core component's prop
- * (`<Button variant="danger">`), for the unknown-prop-value warning.
- * @type {{component: string, prop: string, value: string, file: string, line: number}[]}
+ * What a page's own file certainly gives a Core component's prop
+ * (`<Button variant="danger">`, each branch of
+ * `variant={busy ? 'ghost' : 'danger'}`, `status="error"`), for the
+ * unknown-prop-value warning.
+ * @type {(import('../discovery/written-prop-values.mjs').WrittenValue & {component: string, prop: string, file: string, line: number})[]}
  */
 const propValues = [];
+/**
+ * Each prop a page's own file gives a Core component by name, for the
+ * unknown-prop warning; a file that compiles its JSX with another runtime
+ * gives none.
+ * @type {(import('../discovery/core-props.mjs').CorePropUse & {file: string, element: {line: number, column: number}})[]}
+ */
+const propNames = [];
 /** Each media query the page's own code asks in JavaScript, for the screen-query warning. */
 /** @type {{call: string, file: string, line: number}[]} */
 const screenQueries = [];
@@ -313,6 +324,20 @@ const isLocal = file =>
   !file.includes(NODE_MODULES) && (file === entry || file.startsWith(SCOPE_PREFIX));
 
 /**
+ * A folder the page's own modules live in, or one that holds the page: never
+ * the folder of another package. @param {string} folder with a trailing separator
+ */
+const pageFolder = folder => isLocal(folder) || entry.startsWith(folder);
+
+/**
+ * What the package resolve hook keeps (see package-resolve-hooks.mjs). The
+ * linked packages are noted as linkedPackageRoots reads the links, so imports
+ * inside a linked package resolve by path even when its first file is
+ * imported by its path, not by the package's name.
+ */
+const PACKAGE_LOOKUPS = packageLookups();
+
+/**
  * The real folders of the packages that a `node_modules` folder links to
  * inside the folder whose modules the page carries (`npm link`, a `file:`
  * dependency, a workspace package). Node loads such a package's modules by
@@ -333,8 +358,8 @@ function linkedPackageRoots() {
   const scanned = new Set();
   /** @type {string[]} */
   const found = [];
-  /** @param {string} link */
-  const addIfLinkedIn = link => {
+  /** @param {string} link @param {string} name the package the link is named for */
+  const addIfLinkedIn = (link, name) => {
     let real;
     try {
       if (!fs.lstatSync(link).isSymbolicLink()) return;
@@ -342,6 +367,7 @@ function linkedPackageRoots() {
     } catch {
       return;
     }
+    noteLinkedFolder(name, real, PACKAGE_LOOKUPS, pageFolder);
     const folder = real + path.sep;
     if (isLocal(folder) && !entry.startsWith(folder) && !roots.has(folder)) {
       roots.add(folder);
@@ -364,11 +390,11 @@ function linkedPackageRoots() {
         for (const name of names) {
           const link = path.join(modules, name);
           if (!name.startsWith('@')) {
-            addIfLinkedIn(link);
+            addIfLinkedIn(link, name);
             continue;
           }
           try {
-            for (const scoped of fs.readdirSync(link)) addIfLinkedIn(path.join(link, scoped));
+            for (const scoped of fs.readdirSync(link)) addIfLinkedIn(path.join(link, scoped), `${name}/${scoped}`);
           } catch {
             // A scope that cannot be read holds no package that Node can load.
           }
@@ -622,6 +648,49 @@ async function drawCharts(markup, Page) {
 }
 
 /**
+ * The markup of a part's open layers. A layer opened from inside another
+ * (its opener, the control naming it in aria-controls, sits in that layer:
+ * a submenu's flyout) is drawn once, beside the layer it opens from, in a
+ * row with it, as a browser places it; never again inside that layer, where
+ * the document holds it too.
+ * @param {any[]} open the open layers, in the order they opened
+ * @returns {string}
+ */
+function nestedLayers(open) {
+  /** @param {any} layer */
+  const parentOf = layer => {
+    const ids = new Set(
+      [layer, ...layer.querySelectorAll('[id]')].map(e => e.id).filter(Boolean),
+    );
+    return (
+      open.find(
+        other =>
+          other !== layer &&
+          !layer.contains(other) &&
+          [...other.querySelectorAll('[aria-controls]')].some(c =>
+            ids.has(c.getAttribute('aria-controls')),
+          ),
+      ) ?? null
+    );
+  };
+  const parents = new Map(open.map(layer => [layer, parentOf(layer)]));
+  /** @param {any} layer @returns {string} */
+  const draw = layer => {
+    const kids = open.filter(o => parents.get(o) === layer);
+    if (!kids.length) return layer.outerHTML;
+    const own = layer.cloneNode(true);
+    for (const inner of own.querySelectorAll('[data-astryx-layer-root]'))
+      inner.remove();
+    return `<div data-astryx-layer-nest="">${own.outerHTML}${kids.map(draw).join('')}</div>`;
+  };
+  return open
+    .filter(layer => !parents.get(layer))
+    .map(draw)
+    .join('');
+}
+
+
+/**
  * Parts the page asked to be drawn, in the order asked: open (`ifOpen`: drawn
  * as nothing when nothing opens), or `mounted`, as the browser shows the part
  * once it runs, nothing opened.
@@ -725,10 +794,12 @@ async function drawLayers(markup, server) {
           );
           if (open.length) {
             // The part as drawn, then each overlay open now, after it; never a
-            // closed one, nor the markers that place them.
+            // closed one, nor the markers that place them. A layer opened from
+            // inside another (a submenu's flyout) is drawn beside the layer it
+            // opens from, as a browser places it.
             const part = host.cloneNode(true);
             for (const layer of part.querySelectorAll('[data-astryx-layer-root]')) layer.remove();
-            out = part.innerHTML.replace(/<template><\/template>/g, '') + open.map(layer => layer.outerHTML).join('');
+            out = part.innerHTML.replace(/<template><\/template>/g, '') + nestedLayers(open);
           }
         }
       } catch {
@@ -798,7 +869,11 @@ async function drawOpenLayers(elements, React) {
       flushSync(() => root.render(createElement(Alone, null, element)));
       // (A part that opens nothing on a press and holds a layer, a context
       // menu's area, is right-clicked, as one drawn in its own place is.)
-      layers.push(...(await openLayerMarkup(host, flushSync)));
+      // A layer opened from inside another is drawn beside it (nestedLayers).
+      const box = g.document.createElement('div');
+      box.innerHTML = (await openLayerMarkup(host, flushSync)).join('');
+      const drawn = nestedLayers([...box.children]);
+      if (drawn) layers.push(drawn);
     } catch {
       // A part that cannot be drawn there adds no overlays.
     }
@@ -1126,8 +1201,11 @@ function carriedName(p, t) {
  * recorded it already.
  * @param {string} filename
  * @param {boolean} [browser]
+ * @param {boolean} [reactJsx] whether the module compiles its JSX with
+ *   React's runtime, so its Core props are recorded for the unknown-prop
+ *   warning
  */
-function pagePlugin(filename, browser = false) {
+function pagePlugin(filename, browser = false, reactJsx = true) {
   const dir = path.dirname(filename);
   /**
    * Record an https image address the page builds in code (a template with
@@ -1319,16 +1397,17 @@ function pagePlugin(filename, browser = false) {
         if (browser) return;
         const component = coreComponentOf(p.node.name, p.scope);
         if (!component) return;
-        for (const attr of p.node.attributes) {
+        const attrs = p.node.attributes;
+        // A spread after an attribute can replace its value.
+        const lastSpread = attrs.findLastIndex((/** @type {any} */ a) => a.type === 'JSXSpreadAttribute');
+        for (const attr of attrs.slice(lastSpread + 1)) {
           if (attr.type !== 'JSXAttribute' || attr.name.type !== 'JSXIdentifier') continue;
-          const value =
-            attr.value?.type === 'StringLiteral'
-              ? attr.value.value
-              : attr.value?.type === 'JSXExpressionContainer' && attr.value.expression.type === 'StringLiteral'
-                ? attr.value.expression.value
-                : null;
-          if (value === null) continue;
-          propValues.push({component, prop: attr.name.name, value, file: filename, line: attr.loc?.start.line ?? 0});
+          const written = writtenValue(attr, p.scope);
+          if (written) propValues.push({component, prop: attr.name.name, ...written, file: filename, line: attr.loc?.start.line ?? 0});
+        }
+        if (reactJsx) {
+          const element = {line: p.node.loc?.start.line ?? 0, column: (p.node.loc?.start.column ?? 0) + 1};
+          for (const use of corePropUsesOf(p)) propNames.push({...use, file: filename, element});
         }
       },
       JSXText(/** @type {any} */ p) {
@@ -1580,12 +1659,16 @@ if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
     data: {parent: pathToFileURL(servedParent.filename).href, names: Object.keys(SINGLE_COPY_ALIASES)},
   });
 }
-// Imports between the files of an installed package resolve by path (a
-// Node without in-thread hooks resolves them itself). The hook answers only
-// relative imports inside a package, and single-copy-hooks.mjs answers only
-// package names, so neither changes what the other resolves.
+// Imports between the files of an installed or a linked package resolve by
+// path (a Node without in-thread hooks resolves them itself). The hook
+// answers relative imports inside a package, and a package name only with
+// the answer the next resolvers, single-copy-hooks.mjs among them, gave from
+// the same folder, so it never changes what single-copy-hooks.mjs resolves.
+// The page's own folders, and a folder that holds the page, are never a
+// linked package's: the page's modules compile as its own.
 const registerHooks = /** @type {any} */ (Module).registerHooks;
-if (typeof registerHooks === 'function') registerHooks(packageResolveHooks());
+if (typeof registerHooks === 'function')
+  registerHooks(packageResolveHooks(PACKAGE_LOOKUPS, {skip: pageFolder}));
 
 /** What the StyleX compiler reads as a theme or constants file, by name. */
 const STYLEX_THEME_FILE = /\.(?:stylex(?:\.const)?|transformed)(?:\.(?:js|ts|tsx|jsx|mjs|cjs))?$/;
@@ -1754,7 +1837,7 @@ function compilePageModule(source, filename, browser = false) {
       compact: false,
       plugins: [
         aliasPlugin(),
-        pagePlugin(filename, browser),
+        pagePlugin(filename, browser, !OTHER_JSX_RUNTIME.test(source)),
         ...(source.includes('stylex') ? [stylexPluginFor(source, filename)] : []),
       ],
     });
@@ -2585,6 +2668,7 @@ try {
     remoteNamedOnly: [...namedOnlyLiterals].filter(url => !placedLiterals.has(url)),
     builtRemote,
     propValues: propValues.map(v => ({...v, file: path.relative(path.dirname(entry), v.file).split(path.sep).join('/')})),
+    propNames,
     logs,
     script: script?.code ?? null,
     scriptModules: script?.modules ?? 0,

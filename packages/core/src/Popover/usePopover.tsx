@@ -4,7 +4,8 @@
 
 /**
  * @file usePopover.tsx
- * @input Uses useLayer, useFocusTrap, React hooks, and Layer's outside-pan watch (outsidePanClaim)
+ * @input Uses useLayer, useFocusTrap, useAnnounce, React hooks, and Layer's
+ *   outside watches (outsidePanClaim)
  * @output Exports the public usePopover hook with derived focus, guarded opening
  *   and an optional anchor apart from the trigger.
  *   For Popover.tsx (internal), exports usePopoverInternal and
@@ -27,13 +28,16 @@ import React, {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useLayerInternal, type ContextRenderProps} from '../Layer/useLayer';
-import {watchOutsidePans} from '../Layer/outsidePanClaim';
+import {watchOutsidePans, watchOutsidePresses} from '../Layer/outsidePanClaim';
+import {currentInputTarget} from '../Layer/gestureCounter';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {resolvePopoverAnchor} from './popoverAnchor';
+import {useAnnounce} from '../hooks/useAnnounce';
+import {containsAlongFlatTree, deepActiveElement} from '../utils/flatTree';
 import {useFocusTrapInternal} from '../hooks/useFocusTrap';
 import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
-import {isHTMLElement} from '../utils/nodeType';
-import {takesFocusAsIs} from '../utils/focusReturn';
+import {isElement, isHTMLElement} from '../utils/nodeType';
+import {focusableWithin, takesFocusAsIs} from '../utils/focusReturn';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {
@@ -51,6 +55,7 @@ import {
 import {rtlStyles} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {surfaceEdgeStyles} from './surfaceEdge.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {isFocusDetached} from '../utils/isFocusDetached';
 import {themeProps} from '../utils/themeProps';
@@ -64,6 +69,10 @@ import {
 import english from '../i18n/generated-english/Popover/usePopover.generated';
 
 registerEnglishFallback(english);
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 /**
  * The fallback close button's wrapper (anchored layer) or button (sheet,
@@ -100,6 +109,14 @@ function focusFirstContentControl(container: HTMLElement): boolean {
   return false;
 }
 
+/** The surface's focus ring with its forced-colors edge, then `styles`. */
+function surfaceEdgeProps(...styles: unknown[]) {
+  return stylex.props(
+    surfaceEdgeStyles.edgeWithFocusRing,
+    ...(styles as never[]),
+  );
+}
+
 const styles = stylex.create({
   // Default popover surface — background, radius, shadow.
   // Applied automatically unless hasSurface is false.
@@ -109,19 +126,8 @@ const styles = stylex.create({
     '--_popover-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_popover-radius)',
     boxShadow: shadowVars['--shadow-low'],
-    // Forced colors removes box-shadow, which is this surface's only edge.
-    borderWidth: {
-      default: null,
-      '@media (forced-colors: active)': '1px',
-    },
-    borderStyle: {
-      default: null,
-      '@media (forced-colors: active)': 'solid',
-    },
-    borderColor: {
-      default: null,
-      '@media (forced-colors: active)': 'CanvasText',
-    },
+    // Its forced-colors edge comes with the focus ring
+    // (surfaceEdgeStyles.edgeWithFocusRing).
   },
   // An open popover whose separate anchor resolves to nothing shows no
   // surface until it does: an unanchored layer would sit at the page origin.
@@ -234,7 +240,9 @@ export interface UsePopoverOptions {
    * on, the native popover uses `popover="auto"`, whose browser-level light
    * dismiss also closes on Escape, so Escape handling stays registered to
    * keep topmost-only dismissal intact. Set both to `false` for
-   * explicit-dismiss-only surfaces like onboarding coachmarks.
+   * explicit-dismiss-only surfaces like onboarding coachmarks. A popover
+   * with `tabBehavior: 'pageOrder'` is not an auto popover, so `false` turns
+   * its Escape off whatever `hasLightDismiss` says.
    *
    * @default true
    */
@@ -283,12 +291,37 @@ export interface UsePopoverOptions {
 
   /**
    * Whether the dialog is modal (`aria-modal`). Only applies when `role` is
-   * `'dialog'`. Set to `false` for non-modal dialogs that do not inert the rest
-   * of the page.
+   * `'dialog'`. Set to `false` for a dialog that leaves the rest of the page
+   * usable. Tab stays inside the popover either way: `tabBehavior` decides
+   * that. A popover with `tabBehavior: 'pageOrder'` is never modal.
    *
    * @default true
    */
   isModal?: boolean;
+
+  /**
+   * Where Tab and Shift+Tab go while the popover is open.
+   *
+   * - `'contain'`: they cycle inside the popover.
+   * - `'pageOrder'`: the popover holds nothing. Tab moves in the page's
+   *   order. Where the browser supports popover invokers, the popover takes
+   *   its place after its trigger, or after an anchor that can take focus
+   *   when there is no trigger. When another layer opened from the same
+   *   trigger or anchor closes (a menu, a hover card), the popover leaves
+   *   the Tab order until it opens again. Escape closes it only while focus
+   *   is inside
+   *   it, or on or inside its anchor or trigger, and it never carries
+   *   `aria-modal`.
+   *   Use it for a coachmark or a tour step, whose reader must reach the
+   *   control it describes.
+   *
+   * A Tab pressed outside the popover is never pulled into it. Set
+   * `tabBehavior` before the popover opens: a change while it is open is not
+   * supported.
+   *
+   * @default 'contain'
+   */
+  tabBehavior?: 'contain' | 'pageOrder';
 
   /**
    * Whether to apply the default popover surface (background, border-radius,
@@ -443,7 +476,7 @@ export interface InternalPopoverOptions extends UsePopoverOptions {
   /**
    * The owner decides what a touch outside that pans does to the popover.
    * Otherwise a light-dismiss popover keeps such a pan from dismissing it
-   * (useLayer's `watchesOutsidePans`).
+   * (useLayer's `watchesOutside`).
    */
   ownsOutsidePan?: boolean;
   /**
@@ -518,13 +551,25 @@ function usePopoverImplementation(
     closeButtonLabel: closeButtonLabelFromProps,
     dialogLabel,
     role = 'dialog',
-    isModal = true,
+    isModal: isModalOption,
+    tabBehavior = 'contain',
     getRestoreFallback,
     restoreFocusTo,
     getOpener,
     ownsOutsidePan = false,
     onOpenPendingChange,
   } = options;
+
+  // A popover that Tab passes through is never modal.
+  const passesTab = tabBehavior === 'pageOrder';
+  const isModal = !passesTab && (isModalOption ?? true);
+  useDevWarning(
+    'usePopover',
+    process.env.NODE_ENV === 'production'
+      ? ''
+      : "`isModal: true` is ignored with `tabBehavior: 'pageOrder'`.",
+    passesTab && isModalOption === true,
+  );
 
   const t = useComponentTranslator();
   const closeButtonLabel =
@@ -558,14 +603,40 @@ function usePopoverImplementation(
     focusOnShow?.();
   }, [onShow]);
 
-  // Core layer for popover positioning
   // Filled in once the content ref exists; runs when the surface hides because
   // its anchor is missing.
   const anchorMissingRef = useRef<(() => void) | null>(null);
-  // Focus returns as the popover starts to close, while it still holds focus:
-  // the browser restores focus only for an auto popover whose opener is still
+  // Read at press time: with light dismiss off, no press closes the popover.
+  const hasLightDismissRef = useCommittedRef(hasLightDismiss);
+  // Closes a `'pageOrder'` popover for a press outside it.
+  const watchPresses = useCallback(
+    (layerElement: HTMLElement, dismiss: () => void) =>
+      watchOutsidePresses(
+        layerElement,
+        triggerElementRef,
+        hasLightDismissRef,
+        dismiss,
+      ),
+    [hasLightDismissRef],
+  );
+  // A `'pageOrder'` popover takes Escape only while it holds focus: inside
+  // it, or on the anchor or trigger it belongs to. Read at press time.
+  const isFocusInScope = useCallback((surface: Element | null): boolean => {
+    // The focused element may be inside a shadow root, or the surface may
+    // be in one and its trigger outside.
+    const active = deepActiveElement(surface?.ownerDocument ?? document);
+    return (
+      active != null &&
+      [surface, boundAnchorRef.current, triggerElementRef.current].some(
+        scope => scope != null && containsAlongFlatTree(scope, active),
+      )
+    );
+  }, []);
+
+  // Focus returns as the popover starts to close, while it still holds focus.
+  // The browser restores focus only for an auto popover whose opener is still
   // there, and then with a focus ring whatever the last input was. The trap
-  // below supplies the return; it is read through a ref because the layer
+  // below supplies the return. It is read through a ref because the layer
   // exists first.
   const returnFocusRef = useRef<() => void>(() => {});
   const onCloseStartRef = useCommittedRef(onCloseStart);
@@ -573,23 +644,44 @@ function usePopoverImplementation(
     returnFocusRef.current();
     onCloseStartRef.current?.();
   }, [onCloseStartRef]);
+  // A `'pageOrder'` popover follows its trigger in the focus order. With no
+  // trigger it follows an anchor that takes focus. Otherwise it keeps its DOM
+  // place. A trigger that wraps its control passes the control: browsers
+  // place the popover before a control inside the invoker.
+  const getInvoker = useCallback((): HTMLElement | null => {
+    const trigger = triggerElementRef.current;
+    if (trigger != null) {
+      return focusableWithin(trigger) ?? trigger;
+    }
+    const anchor = boundAnchorRef.current;
+    return isHTMLElement(anchor) && anchor.tabIndex >= 0 ? anchor : null;
+  }, []);
+  const announcesOpenRef = useRef(false);
   const layer = useLayerInternal({
     mode: 'context',
-    lightDismiss: hasLightDismiss,
+    // A `'pageOrder'` popover takes Escape only within its scope, and the
+    // browser's auto light dismiss closes on any Escape. So it is a manual
+    // popover, and a watch closes it for a press outside.
+    lightDismiss: hasLightDismiss && !passesTab,
     onShow: handleLayerShow,
     onHide,
     onCloseStart: handleCloseStart,
-    watchesOutsidePans:
-      hasLightDismiss && !ownsOutsidePan ? watchOutsidePans : undefined,
+    watchesOutside: passesTab
+      ? watchPresses
+      : hasLightDismiss && !ownsOutsidePan
+        ? watchOutsidePans
+        : undefined,
     writesEntranceSide,
     onPlacedAfresh,
     onOpenPendingChange,
     waitsForAnchor: anchorRef != null,
+    getInvoker: passesTab ? getInvoker : undefined,
   });
 
-  // Focus trap for the popover content. Escape stays registered while light
-  // dismiss is on (native popover="auto" closes on Escape regardless), so a
-  // host Dialog keeps deferring to this trap instead of double-dismissing.
+  // Focus trap for the popover content. A `'contain'` popover keeps Escape
+  // registered while light dismiss is on, because native popover="auto"
+  // closes on Escape regardless. A host Dialog then defers to this trap and
+  // does not dismiss too.
   // The element focused when `show` ran: initial focus may move inside before
   // the trap activates, so the trap restores focus here instead.
   const openerRef = useRef<HTMLElement | null>(null);
@@ -603,13 +695,18 @@ function usePopoverImplementation(
     moveFocusOut,
   } = useFocusTrapInternal<HTMLDivElement>({
     isActive: layer.isOpen,
-    onEscape: hasEscapeDismiss || hasLightDismiss ? layer.hide : undefined,
+    onEscape:
+      hasEscapeDismiss || (hasLightDismiss && !passesTab)
+        ? layer.hide
+        : undefined,
     getRestoreTarget,
     getRestoreFallback,
     restoreFocusTo,
     getTrigger: () => triggerElementRef.current,
     getAnchor: () => boundAnchorRef.current ?? null,
     layerId: layer.id,
+    isContaining: !passesTab,
+    isEscapeInScope: passesTab ? isFocusInScope : undefined,
   });
   useCommittedRefInto(returnFocusRef, returnFocus);
 
@@ -634,6 +731,41 @@ function usePopoverImplementation(
     }
     focusFirst();
   }, [contentRef, focusFirst, role]);
+
+  // A dialog popover that opens from code and takes no focus announces
+  // its name, so a screen reader user learns it appeared. It reads focus
+  // after initial focus has had its frame.
+  const isOpenForAnnouncement = layer.isOpen;
+  // Both are read when the announcement is made. The announcer changes
+  // identity with the modal that holds this popover, and a caller may rename
+  // the popover. Neither restarts the wait.
+  const announceRef = useCommittedRef(useAnnounce());
+  const dialogLabelRef = useCommittedRef(dialogLabel);
+  const roleRef = useCommittedRef(role);
+  useEffect(() => {
+    if (!isOpenForAnnouncement || !announcesOpenRef.current) {
+      return;
+    }
+    announcesOpenRef.current = false;
+    const container = contentRef.current;
+    const view = container?.ownerDocument.defaultView ?? window;
+    // Initial focus for content that mounts on open lands in the next frame,
+    // so focus is read one frame after that.
+    let frame = view.requestAnimationFrame(() => {
+      frame = view.requestAnimationFrame(() => {
+        const active = deepActiveElement(container?.ownerDocument);
+        const name = dialogLabelRef.current;
+        if (
+          name != null &&
+          container != null &&
+          (active == null || !containsAlongFlatTree(container, active))
+        ) {
+          announceRef.current(name, 'polite');
+        }
+      });
+    });
+    return () => view.cancelAnimationFrame(frame);
+  }, [isOpenForAnnouncement, contentRef, dialogLabelRef, announceRef]);
 
   // Auto-focus first element when popover opens (unless skipped)
   useEffect(() => {
@@ -780,11 +912,25 @@ function usePopoverImplementation(
       // that renders on open (and the dialog-surface fallback) waits for the
       // effect's frame.
       focusOnShowRef.current = focusWithinEvent;
+      const trigger = triggerElementRef.current;
+      // An open is the person's while a press, key or click on the trigger
+      // is being handled, or while the pointer is on the trigger. Any other
+      // open is from code.
+      const inputTarget = currentInputTarget();
+      const isFromTrigger =
+        trigger != null &&
+        ((isElement(inputTarget) &&
+          containsAlongFlatTree(trigger, inputTarget)) ||
+          trigger.matches(':hover'));
+      announcesOpenRef.current =
+        roleRef.current === 'dialog' &&
+        dialogLabelRef.current != null &&
+        !isFromTrigger;
       // The first frame is anchored: the anchor is read as the popover opens.
       bindAnchor();
       layer.show();
     },
-    [layer, hasAutoFocus, contentRef, bindAnchor],
+    [layer, hasAutoFocus, contentRef, bindAnchor, roleRef, dialogLabelRef],
   );
 
   // Toggle function. Opening delegates to show so every route inherits the
@@ -839,7 +985,7 @@ function usePopoverImplementation(
             tabIndex={role === 'dialog' ? -1 : undefined}
             {...mergeProps(
               {...surfaceProps, className: surfaceClassName},
-              focusOutlineProps.focusVisible(
+              (hasSurface ? surfaceEdgeProps : focusOutlineProps.focusVisible)(
                 styles.contentWrapper,
                 hasSurface && styles.surface,
                 padding != null && paddingStyles[padding],
@@ -904,8 +1050,17 @@ function usePopoverImplementation(
   };
 }
 
-export function usePopover(options: UsePopoverOptions = {}): UsePopoverReturn {
-  return usePopoverImplementation(options);
+export function usePopover<
+  TabBehavior extends UsePopoverOptions['tabBehavior'] =
+    UsePopoverOptions['tabBehavior'],
+>(
+  options?: UsePopoverOptions & {
+    tabBehavior?: TabBehavior;
+    /** A popover that Tab passes through is never modal. */
+    isModal?: [TabBehavior] extends ['pageOrder'] ? false : boolean;
+  },
+): UsePopoverReturn {
+  return usePopoverImplementation(options ?? {});
 }
 
 /**

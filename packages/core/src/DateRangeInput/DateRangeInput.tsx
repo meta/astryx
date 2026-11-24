@@ -90,6 +90,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {useLocale} from '../i18n';
 import type {Locale} from '../i18n/types';
+import type {TranslatorFn} from '../i18n/useTranslator';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -277,6 +278,7 @@ function formatRangeDisplay(
   locale: Locale,
   calendar: CalendarSystem,
   today: PlainDate | null,
+  t: TranslatorFn,
 ): string {
   if (!range) {
     return '';
@@ -292,7 +294,10 @@ function formatRangeDisplay(
     yearOf(start) === yearOf(today);
 
   const fmt = sameYear ? DATE_FORMAT_SHORT : DATE_FORMAT_SHORT_WITH_YEAR;
-  return `${formatCalendarDate(calendar, start, fmt, locale)} – ${formatCalendarDate(calendar, end, fmt, locale)}`;
+  return t('@astryx.dateRangeInput.rangeValue', {
+    start: formatCalendarDate(calendar, start, fmt, locale),
+    end: formatCalendarDate(calendar, end, fmt, locale),
+  });
 }
 
 function isRangeEqual(a: DateRange | null, b: DateRange | null): boolean {
@@ -682,8 +687,8 @@ export function DateRangeInput({
 
   const today = useToday();
   const displayValue = useMemo(
-    () => formatRangeDisplay(optimisticValue, locale, calendar, today),
-    [optimisticValue, locale, calendar, today],
+    () => formatRangeDisplay(optimisticValue, locale, calendar, today, t),
+    [optimisticValue, locale, calendar, today, t],
   );
 
   const popover = usePopover({
@@ -760,9 +765,10 @@ export function DateRangeInput({
     [fireChange],
   );
 
-  const triggerAriaLabel = optimisticValue
-    ? `${label}: ${displayValue}`
-    : `${label}: ${placeholder}`;
+  const triggerAriaLabel = t('@astryx.dateRangeInput.triggerLabel', {
+    label,
+    value: optimisticValue ? displayValue : placeholder,
+  });
 
   return (
     <Field
@@ -931,9 +937,9 @@ export function DateRangeInput({
                       // Focusable while disabled (AR3, spec:AST-085 FR1).
                       aria-disabled={isPresetDisabled || undefined}
                       aria-describedby={
-                        showsDisabledMessage
-                          ? disabledMessageTooltip.describedBy
-                          : undefined
+                        (showsDisabledMessage &&
+                          disabledMessageTooltip.describedBy) ||
+                        undefined
                       }
                       onClick={() => {
                         if (!isPresetDisabled) {

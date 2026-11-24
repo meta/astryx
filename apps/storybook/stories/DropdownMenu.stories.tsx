@@ -968,6 +968,37 @@ export const Submenu: Story = {
   },
 };
 
+export const SubmenuRadioGroup: Story = {
+  render: function SubmenuRadioGroupStory({
+    presentation: _,
+    ...args
+  }: StoryArgs) {
+    const [sort, setSort] = useState('newest');
+    return (
+      <DropdownMenu button={{label: 'View'}} {...args}>
+        <DropdownMenuItem label="Refresh" onClick={() => {}} />
+        <DropdownMenuSubMenu label="Sort by">
+          <DropdownMenuRadioGroup
+            value={sort}
+            onChange={setSort}
+            label="Sort by">
+            <DropdownMenuRadioItem value="newest" label="Newest" />
+            <DropdownMenuRadioItem value="oldest" label="Oldest" />
+          </DropdownMenuRadioGroup>
+        </DropdownMenuSubMenu>
+      </DropdownMenu>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A DropdownMenuRadioGroup inside a DropdownMenuSubMenu. Picking a value closes the whole menu.',
+      },
+    },
+  },
+};
+
 export const NestedSubmenu: Story = {
   render: ({presentation: _, ...args}: StoryArgs) => (
     <DropdownMenu button={{label: 'Share'}} {...args}>

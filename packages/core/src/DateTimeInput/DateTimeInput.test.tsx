@@ -32,6 +32,7 @@ import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
@@ -157,6 +158,59 @@ describe('DateTimeInput', () => {
     rerender(renderDateTimeInput('es-ES'));
     expect(screen.getByRole('combobox')).toHaveValue('25 de enero de 2026');
   });
+
+  it.each([
+    ['en-US', 'ltr'],
+    ['ar-EG', 'rtl'],
+    ['he-IL', 'rtl'],
+  ])(
+    'reads its date and time text in the direction of %s, not the page direction',
+    (locale, direction) => {
+      render(
+        <div dir="rtl">
+          <InternationalizationProvider locale={locale}>
+            <DateTimeInput
+              label="Meeting"
+              value={'2026-01-25T09:00' as ISODateTimeString}
+              onChange={() => {}}
+            />
+          </InternationalizationProvider>
+        </div>,
+      );
+      expect(screen.getByRole('combobox')).toHaveAttribute('dir', direction);
+      expect(screen.getByLabelText('Meeting time')).toHaveAttribute(
+        'dir',
+        direction,
+      );
+    },
+  );
+
+  it.each([
+    ['en-GB', 'ltr'],
+    ['ar-EG', 'rtl'],
+  ])(
+    'reads the native date text in the direction of %s, not the page direction',
+    (locale, direction) => {
+      const {container} = render(
+        <div dir="rtl">
+          <InternationalizationProvider locale={locale}>
+            <DateTimeInput
+              label="Meeting"
+              presentation="native"
+              value={'2026-03-15T09:00' as ISODateTimeString}
+              onChange={() => {}}
+            />
+          </InternationalizationProvider>
+        </div>,
+      );
+      const dateInput =
+        container.querySelector<HTMLInputElement>('input[type="date"]')!;
+      expect(dateInput).toHaveAttribute('dir', direction);
+      const overlay = dateInput.nextElementSibling;
+      expect(overlay).toHaveAttribute('aria-hidden', 'true');
+      expect(overlay).toHaveAttribute('dir', direction);
+    },
+  );
 
   it('derives the time input label from the field label (forms-15)', () => {
     render(<DateTimeInput label="Meeting time" onChange={() => {}} />);
@@ -655,7 +709,7 @@ describe('DateTimeInput', () => {
       />,
     );
     const timeInput = screen.getByLabelText('When time');
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    const tooltip = getTooltip();
     expect(timeInput.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 
@@ -1603,17 +1657,18 @@ describe('DateTimeInput', () => {
       // The tooltip anchors on the outer row that wraps both inputs.
       const dateInput = screen.getByRole('combobox');
       const row = dateInput.parentElement?.parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('You need the Editor role');
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(row);
+      fireEvent.pointerMove(row);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(row);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(tooltip()).not.toHaveAttribute('popover-open');
       });
     });
 
@@ -1628,17 +1683,17 @@ describe('DateTimeInput', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       // The calendar button keeps its enabled tab stop (spec:AST-085 FR1).
       await user.tab();
       expect(getButton('Open calendar')).toHaveFocus();
       expect(
         getButton('Open calendar').getAttribute('aria-describedby'),
-      ).toContain(tooltip.id);
+      ).toContain(tooltip().id);
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
     });
 
@@ -1687,7 +1742,7 @@ describe('DateTimeInput', () => {
         />,
       );
       const dateInput = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(dateInput.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -3776,6 +3831,29 @@ describe('DateTimeInput date segment rejected entries', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(texts).toEqual(['Invalid date']);
     observer.disconnect();
+  });
+
+  it('clears rejected date text when the caller clears its value to undefined', () => {
+    const {container, rerender} = render(
+      <DateTimeInput
+        label="Starts"
+        value={'2026-01-25T10:00' as ISODateTimeString}
+        onChange={() => {}}
+      />,
+    );
+    const dateInput = screen.getByRole('combobox');
+    fireEvent.change(dateInput, {target: {value: 'tomorrowish'}});
+    fireEvent.blur(dateInput);
+    expect(dateInput).toHaveValue('tomorrowish');
+    expect(dateInput).toHaveAttribute('aria-invalid', 'true');
+
+    rerender(
+      <DateTimeInput label="Starts" value={undefined} onChange={() => {}} />,
+    );
+
+    expect(dateInput).toHaveValue('');
+    expect(dateInput).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBe('');
   });
 
   it('posts the committed date from a hidden input while Enter keeps unreadable text, and lets the next Enter submit', () => {

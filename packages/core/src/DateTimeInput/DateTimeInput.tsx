@@ -114,6 +114,8 @@ import {
   parseLocaleTime,
   resolveHourFormat,
 } from '../utils/timeFormat';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {isolatedText, localeTextStyles} from '../utils/textDirection';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
@@ -754,6 +756,7 @@ function PointerDateTimeField({
   };
   const t = useComponentTranslator();
   const locale = useLocale();
+  const textDirection = getLocaleDirection(locale);
   const usesNativePicker = nativeMode !== 'off';
   // `forced` (`presentation="native"`, FR2): no Astryx fallback. `adaptive`
   // (`adaptive-native` coarse) and `legacy` (deprecated `always`):
@@ -1827,9 +1830,9 @@ function PointerDateTimeField({
                 aria-disabled={isEffectivelyDisabled || undefined}
                 // A tab stop while disabled too, so it carries the reason (FR5).
                 aria-describedby={
-                  showsDisabledMessage
-                    ? disabledMessageTooltip.describedBy
-                    : undefined
+                  (showsDisabledMessage &&
+                    disabledMessageTooltip.describedBy) ||
+                  undefined
                 }
                 aria-label={
                   popover.isOpen
@@ -1890,8 +1893,10 @@ function PointerDateTimeField({
                 aria-controls={popover.isOpen ? popover.id : undefined}
                 aria-autocomplete="none"
                 autoComplete="off"
+                dir={controlProps.dir ?? textDirection}
                 {...stylex.props(
                   styles.input,
+                  localeTextStyles.pageAlign,
                   isEffectivelyDisabled && styles.inputDisabled,
                   isDateInvalid && styles.inputInvalid,
                 )}
@@ -2041,8 +2046,10 @@ function PointerDateTimeField({
                     : undefined
                 }
                 aria-busy={isBusy || undefined}
+                dir={textDirection}
                 {...stylex.props(
                   styles.input,
+                  localeTextStyles.pageAlign,
                   isEffectivelyDisabled && styles.inputDisabled,
                   typedTime.isRejected && styles.inputInvalid,
                 )}
@@ -2123,7 +2130,7 @@ function PointerDateTimeField({
                         isSelected && styles.timeOptionSelected,
                       ),
                     )}>
-                    {option.label}
+                    {isolatedText(option.label, undefined, textDirection)}
                   </div>
                 );
               })}
