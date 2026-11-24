@@ -75,7 +75,7 @@ import {
   normalizeOption,
   getSelectableOptions,
 } from '../Selector/utils';
-import {useMultiCombobox} from './hooks';
+import {useMultiComboboxInternal} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
@@ -1900,7 +1900,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onKeyDown: onComboboxKeyDown,
     onItemMouseEnter: onComboboxItemMouseEnter,
     setHighlightedIndex,
-  } = useMultiCombobox({
+  } = useMultiComboboxInternal({
     selectableItems: sortedItems,
     isDisabled: isDisabled || isEffectivelyReadOnly,
     isOpen: surface.isOpen,

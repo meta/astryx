@@ -25,13 +25,6 @@ interface UseMultiComboboxOptions {
   selectableItems: MultiSelectorOptionData[];
   isDisabled?: boolean;
   isOpen: boolean;
-  /**
-   * Whether the open list is in the document. False while an open waits for
-   * its surface to load: the open is held, so a second press or Enter repeats
-   * it instead of closing the list or toggling an option no one can see.
-   * Defaults to `isOpen`.
-   */
-  isListShown?: boolean;
   hasSearch?: boolean;
   onOpen: () => unknown;
   onClose: () => void;
@@ -59,6 +52,18 @@ interface UseMultiComboboxOptions {
   rowHasAction?: (index: number) => boolean;
   /** Activate the control in the highlighted row's action cell. */
   onActivateAction?: (index: number) => void;
+}
+
+// The options MultiSelector's own trigger passes: those of the public hook,
+// and whether the open list is in the document.
+interface UseMultiComboboxInternalOptions extends UseMultiComboboxOptions {
+  /**
+   * Whether the open list is in the document. False while an open waits for
+   * its surface to load: the open is held, so a second press or Enter repeats
+   * it instead of closing the list or toggling an option no one can see.
+   * Defaults to `isOpen`.
+   */
+  isListShown?: boolean;
 }
 
 /** Which cell of the highlighted row the highlight is on. */
@@ -89,7 +94,17 @@ interface UseMultiComboboxResult {
  *
  * The caller must ensure selectableItems is in the same order as the rendered DOM.
  */
-export function useMultiCombobox({
+export function useMultiCombobox(
+  options: UseMultiComboboxOptions,
+): UseMultiComboboxResult {
+  return useMultiComboboxInternal(options);
+}
+
+/**
+ * `useMultiCombobox` with MultiSelector's held open: an open whose list is not
+ * in the document yet. Internal; not exported from the package.
+ */
+export function useMultiComboboxInternal({
   selectableItems,
   isDisabled = false,
   isOpen,
@@ -104,7 +119,7 @@ export function useMultiCombobox({
   isGrid = false,
   rowHasAction,
   onActivateAction,
-}: UseMultiComboboxOptions): UseMultiComboboxResult {
+}: UseMultiComboboxInternalOptions): UseMultiComboboxResult {
   const [highlightedIndex, setHighlightedIndexState] = useState<number>(-1);
   const [highlightedCell, setHighlightedCell] =
     useState<MultiComboboxCell>('option');

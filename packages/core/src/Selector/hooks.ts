@@ -370,13 +370,6 @@ interface UseComboboxOptions<T extends ComboboxOption> {
   value?: string;
   isDisabled?: boolean;
   isOpen: boolean;
-  /**
-   * Whether the open list is in the document. False while an open waits for
-   * its surface to load: the open is held, so a second press or Enter repeats
-   * it instead of closing the list or picking an option no one can see.
-   * Defaults to `isOpen`.
-   */
-  isListShown?: boolean;
   hasSearch?: boolean;
   onOpen: () => unknown;
   onClose: () => void;
@@ -396,6 +389,20 @@ interface UseComboboxOptions<T extends ComboboxOption> {
    */
   onSearchSeed?: (char: string) => void;
   listboxId: string;
+}
+
+// The options Selector's own trigger passes: those of the public hook, and
+// whether the open list is in the document.
+interface UseComboboxInternalOptions<
+  T extends ComboboxOption,
+> extends UseComboboxOptions<T> {
+  /**
+   * Whether the open list is in the document. False while an open waits for
+   * its surface to load: the open is held, so a second press or Enter repeats
+   * it instead of closing the list or picking an option no one can see.
+   * Defaults to `isOpen`.
+   */
+  isListShown?: boolean;
 }
 
 /** Spread onto the caller's field. */
@@ -466,7 +473,19 @@ function hasModifier(e: React.KeyboardEvent): boolean {
  * rows and where the list renders. The caller announces each new result count
  * through useAnnounce (spec:AST-075 DEC-2), with the words the field shows.
  */
-export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
+export function useCombobox<T extends ComboboxOption = SelectorOptionData>(
+  options: UseComboboxOptions<T>,
+): UseComboboxResult<T> {
+  return useComboboxInternal(options);
+}
+
+/**
+ * `useCombobox` with Selector's held open: an open whose list is not in the
+ * document yet. Internal; not exported from the package.
+ */
+export function useComboboxInternal<
+  T extends ComboboxOption = SelectorOptionData,
+>({
   selectableItems,
   value,
   isDisabled = false,
@@ -479,7 +498,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
   onClear,
   onSearchSeed,
   listboxId,
-}: UseComboboxOptions<T>): UseComboboxResult<T> {
+}: UseComboboxInternalOptions<T>): UseComboboxResult<T> {
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
 
   const getItemId = useCallback(

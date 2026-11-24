@@ -75,7 +75,7 @@ import {
 import type {SelectorOptionType, SelectorOptionData} from './types';
 import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
 import {getSelectableOptionEntries} from './selectableOptionEntries';
-import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
+import {useComboboxInternal, useSelectedItemOverlayMargin} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
@@ -1647,7 +1647,7 @@ export function Selector<T extends SelectorOptionType>(
     onKeyDown: comboboxKeyDown,
     onItemSelect,
     onItemMouseEnter: comboboxItemMouseEnter,
-  } = useCombobox({
+  } = useComboboxInternal({
     selectableItems: filteredItems,
     // The optimistic value, not the raw prop: with a pending changeAction the
     // prop still holds the old selection, so the popup would open with the
