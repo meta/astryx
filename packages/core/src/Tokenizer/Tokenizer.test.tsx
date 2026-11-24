@@ -1243,6 +1243,141 @@ describe('Tokenizer', () => {
       expect(await screen.findByText('Create "Kiwis"')).toBeInTheDocument();
     });
 
+    it('creates nothing from the list of an earlier query, and creates the typed text once its own list shows', async () => {
+      const fruits = ['Apple', 'Apricot'].map(label => ({id: label, label}));
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{
+            search: (query: string) =>
+              fruits.filter(item =>
+                item.label.toLowerCase().includes(query.toLowerCase()),
+              ),
+            bootstrap: () => fruits,
+          }}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          hasEntriesOnFocus
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        input.focus();
+        fireEvent.click(input);
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      // The focus list still shows while "Zig" waits for its debounce.
+      fireEvent.change(input, {target: {value: 'Zig'}});
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith(
+        [{id: 'Zig', label: 'Zig'}],
+        expect.objectContaining({type: 'create'}),
+      );
+    });
+
+    it('creates with Enter below minQueryLength, where the rows come from the typed text', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          minQueryLength={3}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'QA'}});
+      });
+      // Text below the threshold is never searched, so Enter does not wait.
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith(
+        [expect.objectContaining({id: 'QA', label: 'QA'})],
+        expect.objectContaining({type: 'create'}),
+      );
+    });
+
+    it('creates nothing from rows for shorter text when the text grows back to the last search', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          minQueryLength={3}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Zig'}});
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      // Below the threshold, the rows come from "Zi".
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Zi'}});
+      });
+      // "Zig" again waits for its search; the "Zi" rows still show.
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Zig'}});
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith(
+        [expect.objectContaining({id: 'Zig', label: 'Zig'})],
+        expect.objectContaining({type: 'create'}),
+      );
+    });
+
+    it('creates nothing for erased text when the field is cleared and Enter is pressed at once', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          hasEntriesOnFocus
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        input.focus();
+        fireEvent.change(input, {target: {value: 'Zig'}});
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      // The "Zig" rows still show while the focus list waits.
+      await act(async () => {
+        fireEvent.change(input, {target: {value: ''}});
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
     it('still offers Create below minQueryLength, and does not search', async () => {
       // The threshold exists to avoid a fetch too broad to be worth making.
       // Creating costs no fetch, so a field that can create `QA` should not
@@ -1762,7 +1897,7 @@ describe('Tokenizer', () => {
       expect(bootstrap).toHaveBeenCalledTimes(1);
     });
 
-    it('closes after Enter on typed results while the cleared query waits for its debounce', async () => {
+    it('closes after a pick on typed results while the cleared query waits for its debounce', async () => {
       const user = userEvent.setup();
       function Debounced() {
         const [value, setValue] = useState<SearchableItem[]>([]);
@@ -1785,8 +1920,9 @@ describe('Tokenizer', () => {
         expect(option('Diana')).toBeInTheDocument();
       });
       // Clearing the text starts a focus-list reload that waits for the
-      // debounce. Enter acts before it runs.
-      await user.keyboard('{Backspace}{Enter}');
+      // debounce. A press on a row acts before it runs.
+      await user.keyboard('{Backspace}');
+      fireEvent.click(option('Diana') as HTMLElement);
       await act(async () => {
         await new Promise(r => setTimeout(r, 20));
       });
