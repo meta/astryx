@@ -973,11 +973,7 @@ export function TransferList<T extends string = string>({
         </div>
       )}
 
-      <div
-        {...mergeProps(
-          themeProps('transfer-list-collection'),
-          stylex.props(styles.panels),
-        )}>
+      <div {...stylex.props(styles.panels)}>
         <div
           ref={selectedPanelRef}
           role="group"
