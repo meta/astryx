@@ -369,34 +369,35 @@ const DEFAULT_AURORA: HeroAuroraPalette = {
 //
 // Keep in sync with the typography.{body,heading} families + display overrides
 // in each theme package (packages/themes/<name>/src/<name>Theme.ts).
-const REEL_FONT_FAMILIES: ReadonlyArray<string> = [
+const REEL_FONT_FAMILIES: Record<string, ReadonlyArray<string>> = {
   // Astryx (docsite brand)
-  'Figtree',
+  [ASTRYX]: ['Figtree'],
   // Matcha (DM Sans body + Playwrite US Trad heading)
-  'DM Sans',
-  'Playwrite US Trad',
+  '@astryxdesign/theme-matcha': ['DM Sans', 'Playwrite US Trad'],
   // Butter (Outfit body/heading + Sarina display)
-  'Outfit',
-  'Sarina',
+  '@astryxdesign/theme-butter': ['Outfit', 'Sarina'],
   // Gothic (Fustat body/heading + Manufacturing Consent display)
-  'Fustat',
-  'Manufacturing Consent',
+  '@astryxdesign/theme-gothic': ['Fustat', 'Manufacturing Consent'],
   // Y2K (Poppins body/heading + Crimson Text display)
-  'Poppins',
-  'Crimson Text',
-];
+  '@astryxdesign/theme-y2k': ['Poppins', 'Crimson Text'],
+};
 
 /**
- * `document.fonts.load()` specifiers for the reel's custom families. A short
+ * `document.fonts.load()` specifiers for a theme's custom families. A short
  * representative string is enough to pull the right woff2 — the API loads the
  * whole face that would render those glyphs. We warm a normal and a bold-ish
  * weight since the cards mix body and heading weights.
  */
-export const REEL_FONT_SPECIFIERS: ReadonlyArray<string> =
-  REEL_FONT_FAMILIES.flatMap(family => [
+function fontSpecifiers(themeName: string): string[] {
+  return (REEL_FONT_FAMILIES[themeName] ?? []).flatMap(family => [
     `400 1rem "${family}"`,
     `600 1rem "${family}"`,
   ]);
+}
+
+/** The specifiers for every theme of the reel, in slide order. */
+export const REEL_FONT_SPECIFIERS: ReadonlyArray<string> =
+  REEL_THEMES.flatMap(fontSpecifiers);
 
 // Ordered slides from REEL_THEMES; unresolved (uninstalled) themes are skipped.
 export const HERO_THEME_SLIDES: ReadonlyArray<HeroThemeSlide> = REEL_THEMES.map(
@@ -451,12 +452,23 @@ export function reelThumbSources(image: string): ReelImageSources {
 /**
  * The three photos of each slide, in slide order, with the sources that the
  * slide's cards give their <img>. A card loads a photo only when its slide
- * shows. The hero loads this list after the page loads, so that the browser
- * has each file before the reel advances to its slide.
+ * shows. On a wide screen the hero loads this list after the page loads, so
+ * that the browser has each file before the reel advances to its slide.
  */
 export const REEL_IMAGES: ReadonlyArray<ReelImageSources> =
-  HERO_THEME_SLIDES.flatMap(slide => [
-    reelPhotoSources(slide.content.product.image),
-    reelPhotoSources(slide.content.feature.image),
-    reelThumbSources(slide.content.mini.image),
-  ]);
+  HERO_THEME_SLIDES.flatMap(slide => slideAssets(slide).images);
+
+/** The fonts and the photos that one slide loads when it shows. */
+export function slideAssets(slide: HeroThemeSlide): {
+  fonts: ReadonlyArray<string>;
+  images: ReadonlyArray<ReelImageSources>;
+} {
+  return {
+    fonts: fontSpecifiers(slide.name),
+    images: [
+      reelPhotoSources(slide.content.product.image),
+      reelPhotoSources(slide.content.feature.image),
+      reelThumbSources(slide.content.mini.image),
+    ],
+  };
+}
