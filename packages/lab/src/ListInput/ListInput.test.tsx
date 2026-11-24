@@ -17,7 +17,7 @@
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {useMemo, useState} from 'react';
+import {createRef, useMemo, useState} from 'react';
 import userEvent from '@testing-library/user-event';
 import {createReorderable, type ReorderHandleOptions} from '@astryxdesign/core';
 import {
@@ -29,6 +29,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {useAnnounce, useContainerReveal} from '@astryxdesign/core/hooks';
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {TextInput} from '@astryxdesign/core/TextInput';
@@ -1559,5 +1560,120 @@ describe('ListInput', () => {
     expect(warn.mock.calls.flat().join(' ')).toContain(
       'ListInput: getItemKey returned duplicate key',
     );
+  });
+});
+
+describe('ListInput prop targets', () => {
+  it('forwards ref, id, data and ARIA attributes, and handlers to the group', () => {
+    const ref = createRef<HTMLDivElement>();
+    const onFocus = vi.fn();
+    renderListInput({
+      ref,
+      id: 'caller-id',
+      'data-testid': 'guests',
+      'aria-details': 'details-id',
+      onFocus,
+    });
+    const group = screen.getByRole('group', {name: 'Guests'});
+    expect(group).toHaveAttribute('id', 'caller-id');
+    expect(group).toHaveAttribute('data-testid', 'guests');
+    expect(group).toHaveAttribute('aria-details', 'details-id');
+    expect(ref.current).toBe(group);
+    fireEvent.focus(group);
+    expect(onFocus).toHaveBeenCalled();
+  });
+
+  it('keeps a caller aria-describedby and aria-labelledby beside its own', () => {
+    renderListInput({
+      description: 'Who comes to dinner',
+      'aria-describedby': 'caller-help',
+      'aria-labelledby': 'caller-label',
+    });
+    const group = screen.getByRole('group');
+    const describedBy = (group.getAttribute('aria-describedby') ?? '').split(
+      ' ',
+    );
+    expect(describedBy).toContain('caller-help');
+    expect(
+      describedBy.map(id => document.getElementById(id)?.textContent).join(),
+    ).toContain('Who comes to dinner');
+    const labelledBy = (group.getAttribute('aria-labelledby') ?? '').split(' ');
+    expect(labelledBy).toContain('caller-label');
+    expect(
+      labelledBy.map(id => document.getElementById(id)?.textContent).join(),
+    ).toContain('Guests');
+  });
+
+  it('styles the Field box with container* and the group with control*', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const {container} = renderListInput({
+      containerClassName: 'caller-container',
+      containerStyle: {marginTop: '7px'},
+      controlClassName: 'caller-control',
+      controlStyle: {marginBottom: '9px'},
+    });
+    const group = screen.getByRole('group');
+    const fieldBox = container.querySelector<HTMLElement>('.caller-container');
+    expect(fieldBox).not.toBeNull();
+    expect(fieldBox).not.toBe(group);
+    expect(fieldBox).toContainElement(group);
+    expect(fieldBox?.style.marginTop).toBe('7px');
+    expect(group).toHaveClass('caller-control', 'astryx-list-input');
+    expect(group.style.marginBottom).toBe('9px');
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('drops root styling and warns in development', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const untyped = {
+      className: 'caller-root',
+      style: {outlineColor: 'red'},
+    } as unknown as Partial<ListInputProps<Guest>>;
+    const {container} = renderListInput(untyped);
+    expect(container.querySelector('.caller-root')).toBeNull();
+    expect(screen.getByRole('group').style.outlineColor).toBe('');
+    expect(
+      warn.mock.calls.some(call => String(call[0]).startsWith('ListInput:')),
+    ).toBe(true);
+  });
+
+  it('ignores container* and warns in a horizontal-labels FormLayout', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const {container} = render(
+      <FormLayout direction="horizontal-labels">
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={guests}
+          onChange={() => {}}
+          getItemKey={guest => guest.id}
+          createItem={() => createdGuest}
+          columns={columns}
+          containerClassName="caller-container"
+        />
+      </FormLayout>,
+    );
+    expect(container.querySelector('.caller-container')).toBeNull();
+    expect(
+      warn.mock.calls.some(call =>
+        String(call[0]).includes('no Field box renders'),
+      ),
+    ).toBe(true);
+  });
+
+  it('types no root styling props', () => {
+    const props: ListInputProps<Guest> = {
+      label: 'Guests',
+      value: guests,
+      onChange: () => {},
+      getItemKey: guest => guest.id,
+      createItem: () => createdGuest,
+      columns,
+      containerClassName: 'caller-container',
+      controlClassName: 'caller-control',
+      // @ts-expect-error Field-composed inputs take no root className.
+      className: 'caller-root',
+    };
+    expect(props.controlClassName).toBe('caller-control');
   });
 });

@@ -5,8 +5,9 @@
 /**
  * @file ListInput.tsx
  * @input React, StyleX, Astryx field/list/button/icon/empty-state
- *   primitives, the container-reveal hook, compact size context, browser
- *   scroll geometry, and programmatic theme tokens. Also core List's reorder
+ *   primitives, the form layout and input group contexts, the container-reveal
+ *   hook, compact size context, browser scroll geometry, and programmatic
+ *   theme tokens. Also core List's reorder
  *   session and handle, run by the owner's createReorderable object through
  *   Core's internal entry `@astryxdesign/core/internal/reorder`
  * @output Exports ListInput and its controlled data, column, renderer, and change types
@@ -20,6 +21,7 @@
  */
 
 import {
+  use,
   useEffect,
   useId,
   useLayoutEffect,
@@ -29,18 +31,26 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import type {BaseProps} from '@astryxdesign/core';
 import {Button} from '@astryxdesign/core/Button';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
-import {Field, type InputStatus} from '@astryxdesign/core/Field';
+import {
+  Field,
+  type FieldContainerStyleProps,
+  type FieldInputBaseProps,
+  type InputStatus,
+} from '@astryxdesign/core/Field';
 import {FieldStatus} from '@astryxdesign/core/FieldStatus';
+import {FormLayoutContext} from '@astryxdesign/core/FormLayout';
 import {Icon} from '@astryxdesign/core/Icon';
 import {
   useAnnounce,
   useContainerReveal,
+  useDevWarning,
   useMediaQuery,
+  useMergedRefs,
 } from '@astryxdesign/core/hooks';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {useInputGroup} from '@astryxdesign/core/InputGroup';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {
   isReorderHandle,
@@ -115,10 +125,10 @@ export interface ListInputColumn<T> {
 }
 
 export interface ListInputProps<T> extends Omit<
-  BaseProps<HTMLDivElement>,
+  FieldInputBaseProps<HTMLDivElement>,
   'onChange'
 > {
-  /** Ref forwarded to the outer field element. */
+  /** Ref forwarded to the `role="group"` element. */
   ref?: React.Ref<HTMLDivElement>;
   /** Visible and accessible label for the list. */
   label: string;
@@ -479,6 +489,67 @@ function resolveColumnTrack(width?: ColumnWidth): string {
   return `minmax(${minWidth}px, ${proportion}fr)`;
 }
 
+const ROOT_STYLING_MESSAGE =
+  '`xstyle`, `className`, and `style` are not supported on ListInput and were ignored. ' +
+  'Style the field with `containerXstyle`/`containerClassName`/`containerStyle` and the list with ' +
+  '`controlXstyle`/`controlClassName`/`controlStyle`.';
+
+const CONTAINER_WITHOUT_FIELD_MESSAGE =
+  '`containerXstyle`/`containerClassName`/`containerStyle` have no effect here because no Field box renders ' +
+  '(inside InputGroup or a `horizontal-labels` FormLayout). Inside InputGroup, style the InputGroup.';
+
+/**
+ * Keeps root styling off the group, where an untyped caller can still pass
+ * it, and gives the `container*` styles to Field only where its box renders.
+ */
+function useFieldStyling<R extends object>(
+  restProps: R,
+  {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  }: FieldContainerStyleProps,
+): {rest: R; container: FieldContainerStyleProps} {
+  const inputGroup = useInputGroup();
+  const {direction} = use(FormLayoutContext);
+  const hasFieldBox = inputGroup == null && direction !== 'horizontal-labels';
+  const untyped = restProps as R & {
+    xstyle?: unknown;
+    className?: unknown;
+    style?: unknown;
+  };
+  const hasRootStyling =
+    untyped.xstyle != null ||
+    untyped.className != null ||
+    untyped.style != null;
+  let rest = restProps;
+  if (hasRootStyling) {
+    const {
+      xstyle: _xstyle,
+      className: _className,
+      style: _style,
+      ...remaining
+    } = untyped;
+    rest = remaining as R;
+  }
+  useDevWarning('ListInput', ROOT_STYLING_MESSAGE, hasRootStyling);
+  const hasContainerStyling =
+    containerXstyle != null ||
+    containerClassName != null ||
+    containerStyle != null;
+  useDevWarning(
+    'ListInput',
+    CONTAINER_WITHOUT_FIELD_MESSAGE,
+    hasContainerStyling && !hasFieldBox,
+  );
+  return {
+    rest,
+    container: hasFieldBox
+      ? {containerXstyle, containerClassName, containerStyle}
+      : {},
+  };
+}
+
 function hasKeys<T>(
   value: T[],
   getItemKey: (item: T) => Key,
@@ -712,17 +783,33 @@ export function ListInput<T>({
   isLabelHidden = false,
   isOptional = false,
   isRequired = false,
+  id,
+  containerXstyle,
+  containerClassName,
+  containerStyle,
+  controlXstyle,
+  controlClassName,
+  controlStyle,
+  'aria-labelledby': ariaLabelledBy,
+  'aria-describedby': ariaDescribedBy,
   ref,
-  ...rest
+  ...restProps
 }: ListInputProps<T>): ReactNode {
+  const {rest, container} = useFieldStyling(restProps, {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  });
   const generatedID = useId();
-  const groupID = `list-input-${generatedID}`;
-  const labelID = `${groupID}-label`;
-  const descriptionID = description ? `${groupID}-description` : undefined;
-  const statusID = status?.message ? `${groupID}-status` : undefined;
-  const reorderInstructionsID = `${groupID}-reorder-instructions`;
+  const baseID = `list-input-${generatedID}`;
+  const groupID = id ?? baseID;
+  const labelID = `${baseID}-label`;
+  const descriptionID = description ? `${baseID}-description` : undefined;
+  const statusID = status?.message ? `${baseID}-status` : undefined;
+  const reorderInstructionsID = `${baseID}-reorder-instructions`;
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const groupRef = useRef<HTMLDivElement>(null);
+  const mergedGroupRef = useMergedRefs(ref, groupRef);
   const listRef = useRef<HTMLOListElement>(null);
   const addActionRef = useRef<HTMLDivElement>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
@@ -1200,7 +1287,6 @@ export function ListInput<T>({
   return (
     <SizeProvider value="md">
       <Field
-        ref={ref}
         label={label}
         description={description}
         inputID={groupID}
@@ -1213,15 +1299,18 @@ export function ListInput<T>({
         isDisabled={isDisabled}
         status={status == null ? undefined : {...status, messageID: statusID}}
         statusVariant="detached"
-        {...rest}>
+        xstyle={container.containerXstyle}
+        className={container.containerClassName}
+        style={container.containerStyle}>
         <div
-          ref={groupRef}
+          {...rest}
+          ref={mergedGroupRef}
           id={groupID}
           role="group"
-          aria-labelledby={labelID}
-          aria-describedby={joinIDs(descriptionID, statusID)}
-          aria-disabled={isDisabled || undefined}
-          aria-busy={isLoading || undefined}
+          aria-labelledby={joinIDs(labelID, ariaLabelledBy)}
+          aria-describedby={joinIDs(ariaDescribedBy, descriptionID, statusID)}
+          aria-disabled={isDisabled || rest['aria-disabled']}
+          aria-busy={isLoading || rest['aria-busy']}
           {...mergeProps(
             themeProps('list-input', {
               state: isLoading
@@ -1236,7 +1325,10 @@ export function ListInput<T>({
               showStartHandle &&
                 !isHandleAlwaysVisible &&
                 styles.groupWithHangingHandles,
+              controlXstyle,
             ),
+            controlClassName,
+            controlStyle,
           )}>
           <ListReorderScope reorder={reorderScope}>
             <ol
@@ -1271,7 +1363,7 @@ export function ListInput<T>({
                     showReorderHandle && (canReorder?.(itemKey) ?? true);
                   const itemStatus = getItemStatus?.(item, index);
                   const itemStatusID = itemStatus?.message
-                    ? `${groupID}-item-${index}-status`
+                    ? `${baseID}-item-${index}-status`
                     : undefined;
                   return (
                     <li
