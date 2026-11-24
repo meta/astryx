@@ -3,6 +3,7 @@
 import {useState} from 'react';
 import {fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi, beforeEach} from 'vitest';
+import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
 import {Switch} from '../Switch/Switch';
 import {Text} from '../Text/Text';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
@@ -297,6 +298,34 @@ describe('MenuBottomSheetActionList', () => {
         ]);
         press(screen.getByLabelText('Pin'), 'touch');
         press(screen.getByLabelText('Pin'), 'mouse');
+        expect(onSelect).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      [
+        'Switch',
+        <Switch key="s" label="Pin" isLabelHidden value={false} isDisabled />,
+      ],
+      [
+        'CheckboxInput',
+        <CheckboxInput
+          key="c"
+          label="Pin"
+          isLabelHidden
+          value={false}
+          isDisabled
+        />,
+      ],
+    ] as const)(
+      'a press on a disabled %s in a row’s end content neither focuses it nor runs a row',
+      (_kind, control) => {
+        const {onSelect} = renderRows([
+          {label: 'Notes', onClick: () => {}, endContent: control},
+        ]);
+        press(screen.getByLabelText('Pin'), 'touch');
+        press(screen.getByLabelText('Pin'), 'mouse');
+        expect(screen.getByLabelText('Pin')).not.toHaveFocus();
         expect(onSelect).not.toHaveBeenCalled();
       },
     );
