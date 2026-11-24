@@ -1592,6 +1592,26 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
   const shownMenu = (name: string) =>
     screen.getAllByRole('menu', {name, ...h}).find(isShown)!;
 
+  it('exposes only the drilled-in view as a menu, and the root again after Back (AR3)', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    render(<PhoneMenu />);
+    const trigger = screen.getByRole('button', {name: /Actions/});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    await user.click(shownRow('Move to'));
+    const view = await waitFor(() => shownMenu('Move to'));
+    expect(view.parentElement?.closest('[role="menu"]')).toBeNull();
+    expect(
+      screen.queryAllByRole('menu', {name: 'Actions', ...h}).filter(isShown),
+    ).toEqual([]);
+
+    await user.click(shownRow('Back to Actions'));
+    await waitFor(() => expect(shownMenu('Actions')).toBeDefined());
+  });
+
   it('drills in from a menu that mounts open, as from one opened by its trigger (FR11)', async () => {
     stubCompactTouch(true);
     const user = userEvent.setup();
@@ -2763,6 +2783,13 @@ describe('DropdownMenuSubMenu header and footer', () => {
       await waitFor(() => expect(row).toHaveFocus());
       expect(isShown(rootMenu)).toBe(true);
       expect(isShown(rootField)).toBe(true);
+    });
+
+    it('the drilled-in view carries the dropdown-menu theme target while the root steps aside (FR20)', async () => {
+      const {rootMenu, dialog} = await openLabels({});
+      expect(isShown(rootMenu)).toBe(false);
+      expect(rootMenu.className).toContain('astryx-dropdown-menu');
+      expect(dialog.className).toContain('astryx-dropdown-menu');
     });
 
     it('a shown view follows its header or footer as it comes and goes: beside the root menu with one, inside it without', async () => {

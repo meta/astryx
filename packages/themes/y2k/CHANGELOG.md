@@ -1,4 +1,4 @@
-# @xds/theme-y2k
+# @astryxdesign/theme-y2k
 
 # 0.7.17
 
@@ -427,4 +427,4 @@ Thanks to everyone who contributed to this release:
 #### Changes
 
 - Theme polish — color-token and type-scale refinements for visual consistency with the other themes. (#2856)
-- Tracks `@xds/core@0.0.15` (bare-name migration + data-attribute selector surface).
+- Tracks `@astryxdesign/core@0.0.15` (bare-name migration + data-attribute selector surface).
