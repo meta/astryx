@@ -8,7 +8,8 @@
  *   ListContext's `reorder`), the translator, theme tokens and the theme's
  *   `list-reorder-handle` icon slot
  * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle`,
- *   `UNREAD_HANDLE_NAME` and `reorderHandleGrowth`
+ *   `reorderListStyle`, `INSERTION_LINE_THICKNESS`, `UNREAD_HANDLE_NAME` and
+ *   `reorderHandleGrowth`
  * @position Part of the reorder machinery that createReorderable carries.
  *   ListItem renders it, from the List's context, at the end of each row
  *   that can move
