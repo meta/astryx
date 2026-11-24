@@ -175,6 +175,20 @@ interface PendingFocus {
   target: 'first-field' | 'remove' | 'add';
 }
 
+/** A change that ListInput asked its owner for, until a value applies it. */
+interface PendingChange {
+  /** The record keys when ListInput asked for the change. */
+  keysBefore: string[];
+  /** The record keys after the change. */
+  keysAfter: string[];
+  /** The announcement for the change. */
+  announcement: string;
+  /** The element that had focus when ListInput asked for the change. */
+  focusedBefore: Element | null;
+  /** Where focus goes after the change. Null when the Add anchor moved it. */
+  focus: PendingFocus | null;
+}
+
 interface PendingAddScrollAnchor {
   addTop: number;
   expectedKeys: string[];
@@ -462,6 +476,17 @@ function resolveColumnTrack(width?: ColumnWidth): string {
   return `minmax(${minWidth}px, ${proportion}fr)`;
 }
 
+function hasKeys<T>(
+  value: T[],
+  getItemKey: (item: T) => Key,
+  keys: string[],
+): boolean {
+  return (
+    value.length === keys.length &&
+    value.every((item, index) => String(getItemKey(item)) === keys[index])
+  );
+}
+
 function joinIDs(...ids: Array<string | undefined>): string | undefined {
   const resolved = ids.filter(Boolean);
   return resolved.length > 0 ? resolved.join(' ') : undefined;
@@ -700,7 +725,7 @@ export function ListInput<T>({
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const addPointerAnchorTopRef = useRef<number | null>(null);
   const addAnchorFrameRef = useRef<number | null>(null);
-  const pendingFocusRef = useRef<PendingFocus | null>(null);
+  const pendingChangeRef = useRef<PendingChange | null>(null);
   const pendingAddScrollAnchorRef = useRef<PendingAddScrollAnchor | null>(null);
   const pendingMutationMotionRef = useRef<PendingMutationMotion<T> | null>(
     null,
@@ -818,16 +843,17 @@ export function ListInput<T>({
     if (addAction == null) {
       return;
     }
-    const pendingFocus = pendingFocusRef.current;
+    const pendingChange = pendingChangeRef.current;
+    const pendingFocus = pendingChange?.focus;
     const addedRow = rowRefs.current.get(pendingAnchor.itemKey);
     const focusTarget =
       pendingFocus?.target === 'first-field' &&
       pendingFocus.itemKey === pendingAnchor.itemKey
         ? firstFieldIn(addedRow)
         : null;
-    if (focusTarget != null) {
+    if (focusTarget != null && pendingChange != null) {
       focusTarget.focus({preventScroll: true});
-      pendingFocusRef.current = null;
+      pendingChange.focus = null;
     }
 
     // Resolve after insertion: the new record may make a nearer overflow
@@ -941,9 +967,31 @@ export function ListInput<T>({
     }
   }, [value]);
 
+  // Syncs focus and the live region with the owner's value. A change that
+  // ListInput asked for takes effect only when a value applies it.
   useLayoutEffect(() => {
-    const pendingFocus = pendingFocusRef.current;
-    if (pendingFocus == null) {
+    const pendingChange = pendingChangeRef.current;
+    if (pendingChange == null) {
+      return;
+    }
+    if (!hasKeys(value, getItemKey, pendingChange.keysAfter)) {
+      // Other records mean that the owner made a different change.
+      if (!hasKeys(value, getItemKey, pendingChange.keysBefore)) {
+        pendingChangeRef.current = null;
+      }
+      return;
+    }
+    pendingChangeRef.current = null;
+    announce(pendingChange.announcement);
+    const pendingFocus = pendingChange.focus;
+    const focused = document.activeElement;
+    // A change that applies later never takes focus from where the user moved it.
+    if (
+      pendingFocus == null ||
+      (focused !== pendingChange.focusedBefore &&
+        focused !== document.body &&
+        focused != null)
+    ) {
       return;
     }
     let target: HTMLElement | null = null;
@@ -957,11 +1005,8 @@ export function ListInput<T>({
             null)
           : firstFieldIn(row);
     }
-    if (target != null) {
-      target.focus();
-      pendingFocusRef.current = null;
-    }
-  }, [value]);
+    target?.focus();
+  }, [announce, getItemKey, value]);
 
   const mutationsDisabled = isDisabled || isLoading;
   const hasReachedMax = maxItems != null && value.length >= maxItems;
@@ -1050,9 +1095,15 @@ export function ListInput<T>({
     const item = createItem();
     const nextValue = [...value, item];
     const itemKey = String(getItemKey(item));
-    pendingFocusRef.current = {
-      itemKey,
-      target: 'first-field',
+    pendingChangeRef.current = {
+      keysBefore: value.map(candidate => String(getItemKey(candidate))),
+      keysAfter: nextValue.map(candidate => String(getItemKey(candidate))),
+      announcement: t('@astryx.listInput.announceAdded', {
+        itemName,
+        position: value.length + 1,
+      }),
+      focusedBefore: document.activeElement,
+      focus: {itemKey, target: 'first-field'},
     };
     if (event.detail > 0) {
       prepareAddScrollAnchor(
@@ -1066,12 +1117,6 @@ export function ListInput<T>({
     addPointerAnchorTopRef.current = null;
     prepareMutationMotion(nextValue);
     onChange(nextValue, {type: 'add', item, index: value.length});
-    announce(
-      t('@astryx.listInput.announceAdded', {
-        itemName,
-        position: value.length + 1,
-      }),
-    );
   };
 
   const handleUpdate = (
@@ -1108,15 +1153,21 @@ export function ListInput<T>({
     const removedItem = value[index];
     const nextValue = value.filter((_, itemIndex) => itemIndex !== index);
     const nextFocusItem = nextValue[Math.min(index, nextValue.length - 1)];
-    pendingFocusRef.current =
-      nextFocusItem == null
-        ? {target: 'add'}
-        : {itemKey: String(getItemKey(nextFocusItem)), target: 'remove'};
+    pendingChangeRef.current = {
+      keysBefore: value.map(candidate => String(getItemKey(candidate))),
+      keysAfter: nextValue.map(candidate => String(getItemKey(candidate))),
+      announcement: t('@astryx.listInput.announceRemoved', {
+        itemName,
+        position: index + 1,
+      }),
+      focusedBefore: document.activeElement,
+      focus:
+        nextFocusItem == null
+          ? {target: 'add'}
+          : {itemKey: String(getItemKey(nextFocusItem)), target: 'remove'},
+    };
     prepareMutationMotion(nextValue);
     onChange(nextValue, {type: 'remove', item: removedItem, index});
-    announce(
-      t('@astryx.listInput.announceRemoved', {itemName, position: index + 1}),
-    );
   };
 
   const rowLayoutStyle = showEndHandle
