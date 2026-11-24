@@ -1286,6 +1286,30 @@ describe('Tokenizer', () => {
       );
     });
 
+    it('creates with Enter below minQueryLength, where the rows come from the typed text', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          minQueryLength={3}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'QA'}});
+      });
+      // Text below the threshold is never searched, so Enter does not wait.
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith(
+        [expect.objectContaining({id: 'QA', label: 'QA'})],
+        expect.objectContaining({type: 'create'}),
+      );
+    });
+
     it('still offers Create below minQueryLength, and does not search', async () => {
       // The threshold exists to avoid a fetch too broad to be worth making.
       // Creating costs no fetch, so a field that can create `QA` should not
