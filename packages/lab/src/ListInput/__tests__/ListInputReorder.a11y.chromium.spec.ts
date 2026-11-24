@@ -192,6 +192,79 @@ test.describe('with a mouse', () => {
   });
 });
 
+test.describe('a mouse drop that moves the first record', () => {
+  test.use({
+    hasTouch: false,
+    isMobile: false,
+    viewport: {width: 1280, height: 800},
+    deviceScaleFactor: 1,
+  });
+
+  test("starts each moved record's glide where its fields were shown, though only the first record carries the column labels", async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`,
+    );
+    const handle = page.locator(HANDLE).first();
+    await expect(handle).toBeVisible();
+    // Each record's first field top, keyed by the record.
+    const fieldTops = async () =>
+      page.evaluate(
+        async () =>
+          new Promise<Record<string, number>>(resolve =>
+            requestAnimationFrame(() =>
+              resolve(
+                Object.fromEntries(
+                  Array.from(
+                    document.querySelectorAll('[data-list-input-row]'),
+                  ).map(record => [
+                    record.getAttribute('data-list-input-row') ?? '',
+                    record
+                      .querySelector('input, [role="combobox"], button')
+                      ?.getBoundingClientRect().top ?? NaN,
+                  ]),
+                ),
+              ),
+            ),
+          ),
+      );
+    const order = async () =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll('[data-list-input-row]')).map(
+          row => row.getAttribute('data-list-input-row') ?? '',
+        ),
+      );
+    const before = await order();
+    expect(before.length).toBeGreaterThanOrEqual(3);
+    const records = page.locator('[data-list-input-row]');
+    const third = await records.nth(2).boundingBox();
+    const box = await handle.boundingBox();
+    if (box == null || third == null) {
+      throw new Error('no handle or third record');
+    }
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y + 12, {steps: 3});
+    await page.mouse.move(x, third.y + third.height * 0.75, {steps: 12});
+    await sleep(300);
+    // The other records stay still during the drag: these are their shown
+    // places just before the drop.
+    const shown = await fieldTops();
+    await page.mouse.up();
+    const landed = await fieldTops();
+    const after = await order();
+    expect(after[0]).toBe(before[1]);
+    // The record that became first gained the column labels, and its fields
+    // still start the glide where they were shown.
+    for (const key of before.slice(1, 3)) {
+      expect(Math.abs(landed[key] - shown[key])).toBeLessThan(2);
+    }
+  });
+});
+
 test.describe('the record columns', () => {
   for (const viewport of [
     {width: 390, height: 844},

@@ -6,7 +6,7 @@
  * @file Item.tsx
  * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer,
  *   the shared press overlays and the compositor press layer, and a row's
- *   trailing control (ItemTrailingContext)
+ *   control a row adds at one edge of the slots (ItemTrailingContext)
  * @output Exports Item component, ItemProps type; publishes the shared inline inset.
  *   Only numbered composing rows keep their start/label/end slots in one flex
  *   group, through Item's private exact-marker scope; other marked rows keep
@@ -417,6 +417,9 @@ const styles = stylex.create({
     // derived var registry, keeping padding and compensation in sync.
     '--_item-inset-inline': spacingVars['--spacing-2'],
     paddingInline: 'var(--_item-inset-inline)',
+    // Room after a list marker for a control the row's neighbours put there.
+    // Every row resets it, so a nested row never takes its parent's room.
+    '--_item-marker-room': '0px',
     position: 'relative',
     boxSizing: 'border-box',
     textAlign: 'start',
@@ -432,6 +435,7 @@ const styles = stylex.create({
     alignItems: 'inherit',
     alignSelf: 'stretch',
     gap: 'inherit',
+    paddingInlineStart: 'var(--_item-marker-room)',
   },
   markerContentFirstLine: {
     // A tall start/end slot moves the first text baseline down. The marker
@@ -926,12 +930,15 @@ export function Item({
     onClick?.(e);
   };
 
-  // A control a row adds after the slots, unwrapped (ItemTrailingContext):
-  // a List row's reorder handle when the row has no end content.
-  const trailing = use(ItemTrailingContext);
+  // A control a row adds before or after the slots, unwrapped
+  // (ItemTrailingContext): a List row's reorder handle.
+  const edgeControl = use(ItemTrailingContext);
+  const leading = edgeControl?.edge === 'start' ? edgeControl.control : null;
+  const trailing = edgeControl?.edge === 'end' ? edgeControl.control : null;
 
   const content = (
     <>
+      {leading}
       {isRenderable(startContent) && (
         <span
           {...stylex.props(
