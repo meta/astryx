@@ -121,9 +121,8 @@ test.describe('with a mouse', () => {
       if (row.handle != null) {
         expect(row.handle.opacity, detail).toBe(1);
         expect(row.handle.left, detail).toBeGreaterThanOrEqual(row.rowLeft);
-        expect(row.handle.right, detail).toBeLessThanOrEqual(
-          row.labelLeft + 0.5,
-        );
+        // The row's 8 px gap between the grip and the label.
+        expect(row.labelLeft - row.handle.right, detail).toBeCloseTo(8, 0);
       }
     }
     // Trash has no handle, and its label lines up with the others.
@@ -160,12 +159,12 @@ test.describe('with a mouse', () => {
       }
       if (placement === 'start') {
         expect(box.left, JSON.stringify(hovered)).toBeLessThan(hovered.rowLeft);
-        // The grip ends 4 px before the label, so its 24 px target stops at
-        // the row's content.
+        // The grip ends the row's 8 px gap before the label, as a handle that
+        // always shows does, so its focus ring keeps 4 px from the label.
         expect(
           hovered.labelLeft - box.right,
           JSON.stringify(hovered),
-        ).toBeCloseTo(4, 0);
+        ).toBeCloseTo(8, 0);
       } else {
         expect(box.right, JSON.stringify(hovered)).toBeGreaterThan(
           hovered.rowRight,

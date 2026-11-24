@@ -166,10 +166,10 @@ const TARGET_REACH = reorderHandle.targetReach;
 const INSET = `var(--_item-inset-inline, ${spacingVars['--spacing-2']})`;
 const GUARD = `max(0px, calc(${TARGET_REACH} - ${INSET}))`;
 const TOUCH_GUARD = `max(0px, calc(${reorderHandle.touchReach} - ${INSET}))`;
-// A hanging handle sits its grip and its target's reach outside its row's
-// content, and its target reaches past that. The row's own inset holds part
-// of that room.
-const HANG_ROOM = `calc(${GRIP} + 2 * ${TARGET_REACH} - ${spacingVars['--spacing-2']})`;
+// A hanging handle sits its grip and the row's gap outside its row's content,
+// and its target reaches past that. The row's own inset, the same gap, holds
+// part of that room. SYNC: core List's hanging gutter.
+const HANG_ROOM = `calc(${GRIP} + ${TARGET_REACH})`;
 // A handle in its row at the start takes its grip and the row's gap.
 const START_ROOM = `calc(${GUARD} + ${GRIP} + ${spacingVars['--spacing-2']})`;
 const TOUCH_START_ROOM = `calc(${TOUCH_GUARD} + ${GRIP} + ${spacingVars['--spacing-2']})`;

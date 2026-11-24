@@ -115,14 +115,10 @@ const EDGE_GUARD = `max(0px, calc(${TARGET_REACH} - ${INSET}))`;
 const TOUCH_EDGE_GUARD = `max(0px, calc(${TOUCH_REACH} - ${INSET}))`;
 /**
  * How far a hanging handle sits outside its row's content: its grip, then
- * its target's reach, so the target stops at the content.
+ * the row's gap. So its focus ring keeps the same space from the content as
+ * a handle that always shows.
  */
-const HANG = `calc(${GRIP} + ${TARGET_REACH})`;
-/**
- * The hanging handle's inner margin: it gives back the row's gap, less the
- * target's reach, which ends at the row's content.
- */
-const HANG_GIVE_BACK = `calc(${TARGET_REACH} - ${spacingVars['--spacing-2']})`;
+const HANG = `calc(${GRIP} + ${spacingVars['--spacing-2']})`;
 const COARSE = '@media (pointer: coarse)';
 
 /**
@@ -238,17 +234,16 @@ const styles = stylex.create({
   },
   // Where it shows only on hover or focus (a fine primary pointer), it hangs
   // outside the row's content. It takes no width, so the content keeps its
-  // place. The inner margin gives back the row's gap. Under a coarse pointer
-  // it always shows, so it takes its place in the row.
+  // place, and the row's gap stays between the handle and the content. Under
+  // a coarse pointer it always shows, so it takes its place in the row.
   hangAtStart: {
     marginInlineStart: {
       default: `calc(-1 * ${HANG})`,
       [COARSE]: TOUCH_EDGE_GUARD,
     },
-    marginInlineEnd: {default: HANG_GIVE_BACK, [COARSE]: 0},
   },
   hangAtEnd: {
-    marginInlineStart: {default: HANG_GIVE_BACK, [COARSE]: 'auto'},
+    marginInlineStart: {default: 0, [COARSE]: 'auto'},
     marginInlineEnd: {
       default: `calc(-1 * ${HANG})`,
       [COARSE]: TOUCH_EDGE_GUARD,
@@ -339,7 +334,8 @@ export const reorderListStyle = [listStyles.list, reorderLineStyles.list];
 const LIST_REACH = TARGET_REACH;
 const LIST_TOUCH_REACH = TOUCH_REACH;
 // The room a hanging handle needs beside a row's text: the hang, then its
-// target's reach past it, which holds its focus ring.
+// target's reach past it, which holds its focus ring. SYNC: Lab ListInput's
+// and TransferList's hanging room.
 const GUTTER = `calc(${HANG} + ${TARGET_REACH})`;
 // A padded row's own inset holds part of that room. SYNC: Item/Item.tsx.
 const PADDED_ROOM = `calc(${GUTTER} - ${spacingVars['--spacing-2']})`;

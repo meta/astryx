@@ -201,11 +201,11 @@ const GRIP = reorderHandle.grip;
 const TARGET_REACH = reorderHandle.targetReach;
 const HANDLE_ROOM = `calc(${GRIP} + ${TARGET_REACH})`;
 const TOUCH_HANDLE_ROOM = `calc(${GRIP} + ${reorderHandle.touchReach})`;
-// A handle that hangs before a record sits its grip and its target's reach
-// outside it, so the target stops at the record's first field. The target
-// reaches past that. The group takes the room, as much of it as its
-// container's padding holds.
-const HANG_ROOM = `calc(${GRIP} + 2 * ${TARGET_REACH})`;
+// A handle that hangs before a record sits its grip and core List's row gap
+// outside it, so its focus ring keeps the space a shown handle keeps. Its
+// target reaches past that. The group takes the room, as much of it as its
+// container's padding holds. SYNC: core List's hanging gutter.
+const HANG_ROOM = `calc(${GRIP} + ${spacingVars['--spacing-2']} + ${TARGET_REACH})`;
 const HANG_REACH = `min(${HANG_ROOM}, var(--container-padding-inline-start, 0px))`;
 // Past a handle's track at the record's start, and the cell's gap.
 const PAST_HANDLE = `calc(${HANDLE_ROOM} + ${spacingVars['--spacing-1']})`;
