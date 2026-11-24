@@ -8,12 +8,7 @@
  *   ListContext's `reorder`), the translator, theme tokens and the theme's
  *   `list-reorder-handle` icon slot
  * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle`,
- *   `UNREAD_HANDLE_NAME` and `reorderHandleGrowth`. The handle ends a reorderable List row. A finger
- *   held still on it drags it, and so does a pen where the primary pointer is
- *   coarse. A mouse, or a pen where it is fine, drags it at once. It is also a
- *   toggle (`aria-pressed`): a click, Space or Enter turns its row's reorder
- *   mode on and off. The row name serves a row without one, and the style a
- *   row that has one
+ *   `UNREAD_HANDLE_NAME` and `reorderHandleGrowth`
  * @position Part of the reorder machinery that createReorderable carries.
  *   ListItem renders it, from the List's context, at the end of each row
  *   that can move
@@ -176,12 +171,12 @@ const styles = stylex.create({
     },
     // Where the primary pointer is coarse, the page keeps its scrolling and
     // its pinch-zoom until the hold claims the drag. A flick on the handle
-    // scrolls, as on iOS (iOS 26.2, measured: UIKit's reorder control claims
-    // the drag after the scroll view's 150 ms content-touch delay; a flick
-    // scrolls instead). That is `manipulation`, what a long press leaves the
-    // browser. The hold's selection lock stops text selection while the
-    // finger is down, so a mouse keeps the page's selection. Where the
-    // pointer is fine, a finger gets the browser's defaults.
+    // scrolls, as on iOS. That is `manipulation`, what a long press leaves the
+    // browser. On iOS 26.2 (measured), UIKit's reorder control claims the
+    // drag only after a finger holds still for the scroll view's 150 ms
+    // content-touch delay. The hold's selection lock stops text selection
+    // while the finger is down, so a mouse keeps the page's selection. Where
+    // the pointer is fine, a finger gets the browser's defaults.
     touchAction: {
       default: null,
       '@media (pointer: coarse)': 'manipulation',
@@ -274,7 +269,10 @@ function labelTextOf(handle: HTMLElement | null, labelID: string | null) {
 
 /**
  * The reorder handle of a List row. Renders nothing outside a reorderable
- * List.
+ * List. A finger held still on it drags it, and so does a pen where the
+ * primary pointer is coarse. A mouse, or a pen where it is fine, drags it at
+ * once. It is also a toggle (`aria-pressed`): a click, Space or Enter turns
+ * its row's reorder mode on and off.
  */
 export function ListReorderHandle({
   label,
