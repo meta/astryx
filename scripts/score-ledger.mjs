@@ -931,11 +931,42 @@ Only record what you actually measured.`;
 // recording has to be ONE command.
 // ---------------------------------------------------------------------------
 
+function defaultWikiCacheDir() {
+  const cacheBase =
+    process.env.XDG_CACHE_HOME ||
+    process.env.LOCALAPPDATA ||
+    (os.homedir() ? path.join(os.homedir(), '.cache') : null);
+  if (cacheBase) {
+    return path.join(cacheBase, 'astryx', 'score-ledger-wiki');
+  }
+  const uid =
+    typeof process.getuid === 'function' ? String(process.getuid()) : 'user';
+  return path.join(os.tmpdir(), `astryx-score-ledger-wiki-${uid}`);
+}
+
 /** The reused shallow clone. One per user, not one per run. */
-export const WIKI_CACHE_DIR = path.join(
-  os.tmpdir(),
-  'astryx-score-ledger-wiki',
-);
+export const WIKI_CACHE_DIR = defaultWikiCacheDir();
+
+function assertSafeOwnedDir(dir) {
+  let st;
+  try {
+    st = fs.lstatSync(dir);
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return false;
+    throw e;
+  }
+  if (st.isSymbolicLink() || !st.isDirectory()) {
+    throw new Error(
+      `refusing to use unsafe wiki cache path (symlink or non-directory): ${dir}`,
+    );
+  }
+  if (typeof process.getuid === 'function' && st.uid !== process.getuid()) {
+    throw new Error(
+      `refusing to use wiki cache directory owned by uid ${st.uid}: ${dir}`,
+    );
+  }
+  return true;
+}
 
 function git(cwd, ...argv) {
   return execFileSync('git', argv, {
@@ -963,13 +994,19 @@ function tryGit(cwd, ...argv) {
  * — the cache is an optimisation, never a state carrier.
  */
 export function ensureWikiClone(dir = WIKI_CACHE_DIR, remote = WIKI_REMOTE) {
-  if (fs.existsSync(path.join(dir, '.git'))) {
+  const exists = assertSafeOwnedDir(dir);
+  const gitDir = path.join(dir, '.git');
+  if (exists && assertSafeOwnedDir(gitDir)) {
     git(dir, 'remote', 'set-url', 'origin', remote);
     git(dir, 'fetch', '--depth', '1', 'origin', WIKI_BRANCH);
   } else {
-    fs.rmSync(dir, {recursive: true, force: true});
+    if (exists) {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+    fs.mkdirSync(dir, {recursive: true, mode: 0o700});
+    assertSafeOwnedDir(dir);
     git(
-      os.tmpdir(),
+      path.dirname(dir),
       'clone',
       '--depth',
       '1',
@@ -1200,7 +1237,11 @@ export function isEvidenceItem(item) {
 export function isBlocksShape(blocks) {
   if (!blocks || typeof blocks !== 'object' || Array.isArray(blocks))
     return false;
-  return typeof blocks.count === 'number' && Array.isArray(blocks.open);
+  return (
+    Number.isInteger(blocks.count) &&
+    blocks.count >= 0 &&
+    Array.isArray(blocks.open)
+  );
 }
 
 /**
@@ -1252,8 +1293,15 @@ export function applyScorecard(existing, scorecard, {component, pkg}) {
         'simply has no row. Remove the entry instead.',
     );
   }
-  if (typeof next.score !== 'number') {
-    throw new Error(`${component}: an audited entry needs a numeric score`);
+  if (
+    typeof next.score !== 'number' ||
+    !Number.isFinite(next.score) ||
+    next.score < 0 ||
+    next.score > 100
+  ) {
+    throw new Error(
+      `${component}: an audited entry needs a numeric score between 0 and 100`,
+    );
   }
   const expected = gradeFor(next.score, openBlockCount(next));
   // `grade` is derived from `score`, so it must never be inherited across a
@@ -1987,6 +2035,12 @@ async function cmdFileIssues(args) {
   }
 
   const repo = flagValue(args.repo) || DEFAULT_REPO;
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
+    console.error(
+      `score-ledger --file-issues: invalid --repo "${repo}" (expected owner/name).`,
+    );
+    return 1;
+  }
   const {ledger, error} = await loadLedger(ledgerPath);
   if (!ledger) {
     console.error(`score-ledger: ${error}`);
@@ -2028,7 +2082,13 @@ async function cmdFileIssues(args) {
 
   const filed = [];
   for (const block of blockList(entry)) {
-    if (block.issue) {
+    if (block.issue !== undefined && block.issue !== null) {
+      if (!Number.isInteger(block.issue) || block.issue <= 0) {
+        console.error(
+          `score-ledger --file-issues: invalid issue number on ${block.id}: ${String(block.issue)}`,
+        );
+        return 1;
+      }
       // Idempotent: never re-file. Reopen if the issue was closed while the
       // BLOCK is still on the row.
       if (args['dry-run']) {
