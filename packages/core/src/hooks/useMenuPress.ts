@@ -6,7 +6,7 @@
  * @file useMenuPress.ts
  * @input The menu root, its trigger, the enabled-row selector, and callbacks
  *   for opening, highlighting, activating and dismissing
- * @output useMenuPress, useMenuPressInternal for DropdownMenu, the marker
+ * @output useMenuPress, useMenuPressInternal for DropdownMenu and its sheet, the marker
  *   attributes, the activation mark and elementAtMenuPoint (internal: the
  *   point lookup a caller's hitTest builds on)
  * @position Core hook for DropdownMenu, ContextMenu, DropdownMenuSubMenu,
@@ -253,13 +253,6 @@ export interface UseMenuPressOptions {
    */
   hitTest?: (x: number, y: number) => Element | null;
   /**
-   * Whether a press that starts on `target` belongs to a control there. The
-   * model leaves such a press alone: it tracks nothing, acts on nothing and
-   * swallows no click, so the control handles its own press. A bottom sheet
-   * passes one for the controls in a row's content.
-   */
-  ownsPress?: (target: Element) => boolean;
-  /**
    * How long a finger rests on the trigger before the menu opens under it.
    * Unset, a finger on every device waits as on UIMenu: not at all in a fixed
    * bar, and 150 ms in a scroll view. The opening finger then picks after
@@ -289,6 +282,13 @@ interface MenuPressConfig extends UseMenuPressOptions {
    * the content-touch delay.
    */
   isInScrollView?: (control: Element) => boolean;
+  /**
+   * Whether a press that starts on `target` belongs to a control there. The
+   * model leaves such a press alone: it tracks nothing, acts on nothing and
+   * swallows no click, so the control handles its own press. A bottom sheet
+   * passes one for the controls in a row's content.
+   */
+  ownsPress?: (target: Element) => boolean;
 }
 
 export interface UseMenuPressReturn {
@@ -450,13 +450,20 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
  * null when the model took no press on the trigger in this gesture: the
  * keyboard, or a press it ignores.
  */
-export function useMenuPressInternal(input: UseMenuPressOptions): {
+export function useMenuPressInternal(
+  input: UseMenuPressOptions,
+  {ownsPress}: Pick<MenuPressConfig, 'ownsPress'> = {},
+): {
   press: UseMenuPressReturn;
   triggerClickPointerType: () => MenuPressPointerType | null;
 } {
-  // The touch model is the hook's own: an untyped caller's `touchModel` does
-  // not reach the model.
-  const {touchModel: _touchModel, ...publicOptions} = input as MenuPressConfig;
+  // The touch model and `ownsPress` are the hook's own: an untyped caller's
+  // `touchModel` or `ownsPress` does not reach the model.
+  const {
+    touchModel: _touchModel,
+    ownsPress: _ownsPress,
+    ...publicOptions
+  } = input as MenuPressConfig;
   // An unset delay follows UIMenu for a finger on every device, with its
   // scroll-view wait. A set one keeps the released wait.
   const options: MenuPressConfig = {
@@ -464,6 +471,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
     touchModel:
       publicOptions.longPressDelayMs === undefined ? 'uikit' : 'pointer',
     isInScrollView: isInsideScrollView,
+    ownsPress,
   };
   const optionsRef = useCommittedRef(options);
   // The highlight, and the hover focus of the rows in this menu, follow the
