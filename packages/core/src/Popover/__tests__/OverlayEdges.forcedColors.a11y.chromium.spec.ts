@@ -245,6 +245,38 @@ for (const forcedColors of ['active', 'none'] as const) {
   });
 }
 
+test('a keyboard-focused sub-menu flyout keeps the focus ring in forced colors', async ({
+  page,
+}) => {
+  await open(page, 'core-dropdownmenu--submenu', 'active');
+  const opener = trigger(page);
+  await opener.focus();
+  await page.keyboard.press('Enter');
+  const row = page.getByRole('menuitem', {name: 'Move to'});
+  await row.waitFor({state: 'visible'});
+  await row.focus();
+  await page.keyboard.press('ArrowRight');
+  const flyout = page
+    .getByRole('menuitem', {name: 'Folder A'})
+    .locator('xpath=ancestor::*[contains(@class,"astryx-dropdown-menu")][1]');
+  await flyout.waitFor({state: 'visible'});
+  // An empty or loading flyout takes focus itself.
+  await flyout.evaluate(el => (el as HTMLElement).focus());
+  const ring = await flyout.evaluate(el => {
+    const computed = getComputedStyle(el);
+    return {
+      focusVisible: el.matches(':focus-visible'),
+      width: parseFloat(computed.outlineWidth),
+      style: computed.outlineStyle,
+      offset: parseFloat(computed.outlineOffset),
+    };
+  });
+  expect(ring.focusVisible).toBe(true);
+  expect(ring.style).not.toBe('none');
+  expect(ring.width).toBeGreaterThanOrEqual(2);
+  expect(ring.offset).toBeGreaterThanOrEqual(0);
+});
+
 test('a fullscreen Dialog has no edge to draw and fits the viewport', async ({
   page,
 }) => {

@@ -54,10 +54,8 @@ import {
 } from '../hooks/focusableSelector';
 import {rtlStyles} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
-import {
-  focusOutlineProps,
-  surfaceFocusOutlineProps,
-} from '../utils/focusOutline.stylex';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {surfaceEdgeStyles} from './surfaceEdge.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {isFocusDetached} from '../utils/isFocusDetached';
 import {themeProps} from '../utils/themeProps';
@@ -111,6 +109,14 @@ function focusFirstContentControl(container: HTMLElement): boolean {
   return false;
 }
 
+/** The surface's focus ring with its forced-colors edge, then `styles`. */
+function surfaceEdgeProps(...styles: unknown[]) {
+  return stylex.props(
+    surfaceEdgeStyles.edgeWithFocusRing,
+    ...(styles as never[]),
+  );
+}
+
 const styles = stylex.create({
   // Default popover surface — background, radius, shadow.
   // Applied automatically unless hasSurface is false.
@@ -121,7 +127,7 @@ const styles = stylex.create({
     borderRadius: 'var(--_popover-radius)',
     boxShadow: shadowVars['--shadow-low'],
     // Its forced-colors edge comes with the focus ring
-    // (surfaceFocusOutlineProps).
+    // (surfaceEdgeStyles.edgeWithFocusRing).
   },
   // An open popover whose separate anchor resolves to nothing shows no
   // surface until it does: an unanchored layer would sit at the page origin.
@@ -979,9 +985,7 @@ function usePopoverImplementation(
             tabIndex={role === 'dialog' ? -1 : undefined}
             {...mergeProps(
               {...surfaceProps, className: surfaceClassName},
-              (hasSurface
-                ? surfaceFocusOutlineProps
-                : focusOutlineProps.focusVisible)(
+              (hasSurface ? surfaceEdgeProps : focusOutlineProps.focusVisible)(
                 styles.contentWrapper,
                 hasSurface && styles.surface,
                 padding != null && paddingStyles[padding],
