@@ -17,27 +17,27 @@ const PEOPLE = {
   ada: {
     id: 'ada',
     name: 'Ada Lovelace',
-    avatarSrc: 'https://i.pravatar.cc/80?img=47',
+    src: 'https://i.pravatar.cc/80?img=47',
   },
   lin: {
     id: 'lin',
     name: 'Lin Chen',
-    avatarSrc: 'https://i.pravatar.cc/80?img=32',
+    src: 'https://i.pravatar.cc/80?img=32',
   },
   mira: {
     id: 'mira',
     name: 'Mira Patel',
-    avatarSrc: 'https://i.pravatar.cc/80?img=5',
+    src: 'https://i.pravatar.cc/80?img=5',
   },
   noah: {
     id: 'noah',
     name: 'Noah Williams',
-    avatarSrc: 'https://i.pravatar.cc/80?img=12',
+    src: 'https://i.pravatar.cc/80?img=12',
   },
   sam: {
     id: 'sam',
     name: 'Sam Rivera',
-    avatarSrc: 'https://i.pravatar.cc/80?img=15',
+    src: 'https://i.pravatar.cc/80?img=15',
   },
 };
 
@@ -252,16 +252,6 @@ export const StateMatrix: Story = {
       </HStack>
       <HStack gap={4} xstyle={styles.row}>
         <Text type="supporting" xstyle={styles.stateLabel}>
-          Other pin dimmed
-        </Text>
-        <CommentPin
-          label="Open another annotation from Mira"
-          participants={[PEOPLE.mira]}
-          isDimmed
-        />
-      </HStack>
-      <HStack gap={4} xstyle={styles.row}>
-        <Text type="supporting" xstyle={styles.stateLabel}>
           Grouped
         </Text>
         <CommentPin
@@ -326,18 +316,6 @@ export const StateMatrix: Story = {
       </HStack>
       <HStack gap={4} xstyle={styles.row}>
         <Text type="supporting" xstyle={styles.stateLabel}>
-          Resolved, selected
-        </Text>
-        {/* An unselected resolved pin renders nothing. */}
-        <CommentPin
-          label="Current resolved annotation from Mira"
-          participants={[PEOPLE.mira]}
-          isResolved
-          isSelected
-        />
-      </HStack>
-      <HStack gap={4} xstyle={styles.row}>
-        <Text type="supporting" xstyle={styles.stateLabel}>
           Disabled / pending
         </Text>
         <CommentPin
@@ -356,9 +334,8 @@ export const OverContentAndInMargin: Story = {
     const [selected, setSelected] = useState<'content' | 'margin' | null>(
       'content',
     );
-    // aria-pressed toggle semantics: activating the selected pin clears it.
-    const toggle = (id: 'content' | 'margin') =>
-      setSelected(current => (current === id ? null : id));
+    const select = (id: 'content' | 'margin') => (isSelected: boolean) =>
+      setSelected(isSelected ? id : null);
     return (
       <div {...stylex.props(styles.canvas)}>
         <img
@@ -371,8 +348,7 @@ export const OverContentAndInMargin: Story = {
           participants={[PEOPLE.ada, PEOPLE.lin]}
           threadCount={4}
           isSelected={selected === 'content'}
-          isDimmed={selected != null && selected !== 'content'}
-          onClick={() => toggle('content')}
+          onSelectedChange={select('content')}
           xstyle={styles.overMarker}
         />
         <div {...stylex.props(styles.margin)}>
@@ -380,8 +356,7 @@ export const OverContentAndInMargin: Story = {
             label="Open margin annotation from Mira"
             participants={[PEOPLE.mira]}
             isSelected={selected === 'margin'}
-            isDimmed={selected != null && selected !== 'margin'}
-            onClick={() => toggle('margin')}
+            onSelectedChange={select('margin')}
             xstyle={styles.marginMarker}
           />
         </div>

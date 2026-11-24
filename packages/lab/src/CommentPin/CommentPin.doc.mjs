@@ -13,7 +13,7 @@ const anatomy = [
     name: 'Marker surface',
     required: true,
     description:
-      'The compact speech-bubble button surface, with a fixed 2px logical bottom-start corner, 28, 32, or 36px tall by size and padded equally on every side. It owns selected, resolved, disabled, hover, press, focus-visible, and grouped presentation, but no coordinates.',
+      'The compact speech-bubble button surface, with a fixed 2px logical bottom-start corner, 28, 32, or 36px tall by size and padded equally on every side. It owns selected, disabled, hover, press, focus-visible, and grouped presentation, but no coordinates.',
   },
   {
     name: 'Representative avatars',
@@ -60,20 +60,20 @@ export const docs = {
     'margin comment',
   ],
   description:
-    'Avatar-first button for opening one anchored annotation thread or a caller-defined group. A single marker shows its lead participant; a grouped marker shows up to three participant circles (two plus an ellipsis beyond three) and the total thread count. Whenever any represented thread is unread, an accent status dot appears after the count. Three sizes follow the element-size scale. The host owns anchors, coordinates, grouping, collision handling, and the comments surface.',
+    'Avatar-first button for opening one anchored annotation thread or a caller-defined group. A single marker shows its lead participant; a grouped marker shows up to three participant circles (two plus an ellipsis beyond three) and the total thread count. Whenever any represented thread is unread, an accent status dot appears after the count. Three sizes follow the element-size scale. Activation flips the selection, which the host can control. The host owns anchors, coordinates, grouping, collision handling, which pins render, and the comments surface.',
   props: [
     {
       name: 'label',
       type: 'string',
       description:
-        'Required accessible action name and hover/focus tooltip. Include grouped, unread, or resolved context when it changes the action meaning, for example “Open 4 grouped annotations from Ada and Lin, 2 unread”.',
+        'Required accessible action name and hover/focus tooltip. Include grouped or unread context when it changes the action meaning, for example “Open 4 grouped annotations from Ada and Lin, 2 unread”.',
       required: true,
     },
     {
       name: 'participants',
-      type: 'readonly [CommentPinParticipant, ...CommentPinParticipant[]]',
+      type: 'readonly [CommentUser, ...CommentUser[]]',
       description:
-        'Non-empty ordered participants, lead first. A single pin renders the first. A grouped pin renders distinct IDs as an AvatarGroup of at most three circles: every participant when three or fewer are distinct, otherwise the first two plus an ellipsis overflow circle. Pass every distinct participant so the overflow appears exactly when more than three people participate. Each record has id, name, and optional avatarSrc.',
+        'Non-empty ordered participants, lead first. A single pin renders the first. A grouped pin renders distinct IDs as an AvatarGroup of at most three circles: every participant when three or fewer are distinct, otherwise the first two plus an ellipsis overflow circle. Pass every distinct participant so the overflow appears exactly when more than three people participate. These are the same CommentUser records Comments takes; the pin reads id, name, and the optional src image.',
       required: true,
     },
     {
@@ -101,22 +101,20 @@ export const docs = {
       name: 'isSelected',
       type: 'boolean',
       description:
-        'Whether the pin is the active annotation target. Draws a solid 2px accent outline outside the pin, keeping its elevation, plus aria-pressed; the shared offset focus outline remains farther outside for keyboard focus. Follow aria-pressed toggle semantics: activating the selected pin again should clear the host selection.',
+        'Controlled selection: whether the pin is the active annotation target. Draws a solid 2px accent outline outside the pin, keeping its elevation, plus aria-pressed; the shared offset focus outline remains farther outside for keyboard focus. Pass it with onSelectedChange to keep one pin selected among its siblings; leave it out and the pin keeps its own selection.',
+    },
+    {
+      name: 'defaultIsSelected',
+      type: 'boolean',
+      description:
+        'Whether the pin starts selected when isSelected is left out.',
       default: 'false',
     },
     {
-      name: 'isDimmed',
-      type: 'boolean',
+      name: 'onSelectedChange',
+      type: '(isSelected: boolean) => void',
       description:
-        'Whether another pin is selected. Lowers this pin’s opacity without disabling it, so it remains available to switch selection. Leave it false on every pin when nothing is selected. Selected presentation wins if both are true.',
-      default: 'false',
-    },
-    {
-      name: 'isResolved',
-      type: 'boolean',
-      description:
-        'Whether every represented thread is resolved. A resolved pin renders nothing unless it is selected: resolved discussion leaves the content, while a thread the reader opened (or resolved from its popover) keeps its anchor, with the selected treatment, until the host clears the selection.',
-      default: 'false',
+        'Called with the requested selection when a click, Enter, or Space flips it, so activating the selected pin asks to clear it. A pin without isSelected flips itself too. A disabled pin does not call it.',
     },
     {
       name: 'isDisabled',
@@ -129,7 +127,7 @@ export const docs = {
       name: 'onClick',
       type: 'MouseEventHandler<HTMLButtonElement>',
       description:
-        'Product-owned activation handler. Open or select the represented thread/group here; CommentPin owns no comments or popover state.',
+        'Product-owned activation handler, called before onSelectedChange. Open the represented thread or group here; CommentPin owns no comments or popover state.',
     },
     {
       name: 'xstyle',
@@ -142,22 +140,14 @@ export const docs = {
     targets: [
       {
         className: 'astryx-comment-pin',
-        visualProps: [
-          'size',
-          'grouped',
-          'unread',
-          'selected',
-          'dimmed',
-          'resolved',
-          'disabled',
-        ],
+        visualProps: ['size', 'grouped', 'unread', 'selected', 'disabled'],
       },
     ],
   },
   usage: {
     anatomy,
     description:
-      'Use CommentPin as the interactive anchor for comments attached to images, documents, canvases, table regions, or content margins. Pass the distinct participants (lead first), the total number of threads the host grouped at that anchor, and how many of them are unread. The component intentionally has no coordinates, anchor IDs, thread IDs, clustering algorithm, popover, or Comments dependency: those stay with the product so the same marker can sit over transformed media or in normal document layout. Participant Avatars and the overflow circle suppress their own tooltips and interaction; the pin is the only button and its label is the complete action name.',
+      'Use CommentPin as the interactive anchor for comments attached to images, documents, canvases, table regions, or content margins. Pass the distinct participants (lead first), the total number of threads the host grouped at that anchor, and how many of them are unread. The component intentionally has no coordinates, anchor IDs, thread IDs, clustering algorithm, resolved state, or popover: those stay with the product so the same marker can sit over transformed media or in normal document layout. Render a pin only for discussion that should show; to hide resolved threads, stop rendering their pins. Participant Avatars and the overflow circle suppress their own tooltips and interaction; the pin is the only button and its label is the complete action name.',
     accessibility: [
       {
         name: 'Native button activation',
@@ -171,7 +161,14 @@ export const docs = {
         category: 'Semantics',
         criterion: '4.1.2 Name, Role, Value',
         description:
-          'The required label is the button name and tooltip. aria-pressed communicates controlled selection; participant Avatars, the overflow circle, the visible thread total, and the unread dot remain decorative, so repeat grouped and unread context in label.',
+          'The required label is the button name and tooltip. aria-pressed communicates the selection; participant Avatars, the overflow circle, the visible thread total, and the unread dot remain decorative, so repeat grouped and unread context in label.',
+      },
+      {
+        name: 'Focus when a pin goes away',
+        category: 'Keyboard',
+        criterion: '2.4.3 Focus Order',
+        description:
+          'A pin never removes itself. Before your host stops rendering a pin that has focus, for example after its thread is resolved, move focus to where the reader continues: the thread’s entry in your comments list when one shows, otherwise the next pin in reading order, or the annotated content when no pin is left.',
       },
       {
         name: 'Selection and focus',
@@ -205,12 +202,12 @@ export const docs = {
       {
         guidance: true,
         description:
-          'When one pin is selected, pass isDimmed to the other pins instead of disabling them. They stay available to switch selection while the active pin holds visual focus. When nothing is selected, no pin dims.',
+          'To keep one pin selected among its siblings, control isSelected and update it from onSelectedChange: activating the selected pin again asks to clear the selection.',
       },
       {
         guidance: true,
         description:
-          'Treat selection as an aria-pressed toggle: when the selected pin is activated again, clear the host selection.',
+          'Hide resolved discussion by not rendering its pins. If the pin you remove has focus, move focus first: to the thread’s entry in your comments list, the next pin, or the annotated content.',
       },
       {
         guidance: true,
@@ -244,7 +241,7 @@ export const docs = {
       label: 'Single thread',
       code: `<CommentPin
   label="Open annotation from Ada"
-  participants={[{id: 'ada', name: 'Ada Lovelace', avatarSrc: '/ada.jpg'}]}
+  participants={[{id: 'ada', name: 'Ada Lovelace', src: '/ada.jpg'}]}
   onClick={() => openThread('thread-1')}
 />`,
     },
@@ -253,12 +250,14 @@ export const docs = {
       code: `<CommentPin
   label="Open 4 grouped annotations from Ada and Lin"
   participants={[
-    {id: 'ada', name: 'Ada Lovelace', avatarSrc: '/ada.jpg'},
-    {id: 'lin', name: 'Lin Chen', avatarSrc: '/lin.jpg'},
+    {id: 'ada', name: 'Ada Lovelace', src: '/ada.jpg'},
+    {id: 'lin', name: 'Lin Chen', src: '/lin.jpg'},
   ]}
   threadCount={4}
   isSelected={selectedCluster === 'cluster-1'}
-  onClick={() => setSelectedCluster('cluster-1')}
+  onSelectedChange={isSelected =>
+    setSelectedCluster(isSelected ? 'cluster-1' : null)
+  }
 />`,
     },
     {
@@ -270,7 +269,10 @@ export const docs = {
   participants={[ada, lin, mira, noah, sam]}
   threadCount={6}
   unreadCount={2}
-  onClick={() => setSelectedCluster('cluster-2')}
+  isSelected={selectedCluster === 'cluster-2'}
+  onSelectedChange={isSelected =>
+    setSelectedCluster(isSelected ? 'cluster-2' : null)
+  }
 />`,
     },
     {
@@ -280,6 +282,22 @@ export const docs = {
   <CommentPin size="md" label="Open annotation from Ada" participants={[ada]} />
   <CommentPin size="lg" label="Open annotation from Ada" participants={[ada]} />
 </HStack>`,
+    },
+    {
+      label: 'Resolved threads leave the content',
+      code: `{threads
+  .filter(thread => !thread.isResolved)
+  .map(thread => (
+    <CommentPin
+      key={thread.id}
+      label={\`Open annotation from \${thread.author.name}\`}
+      participants={[thread.author]}
+      isSelected={selectedId === thread.id}
+      onSelectedChange={isSelected =>
+        setSelectedId(isSelected ? thread.id : null)
+      }
+    />
+  ))}`,
     },
     {
       label: 'Host-owned placement',
@@ -308,24 +326,23 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsZh = {
   description:
-    '用于打开单个锚定批注线程或调用方定义线程组的头像优先按钮。单线程显示主要参与者头像；分组标记最多显示三个圆形（超过三人时显示两个头像和省略号圆形），并显示线程总数；有未读线程时在末尾（总数或单个头像之后）显示强调色状态点。三种尺寸遵循元素尺寸刻度。',
+    '用于打开单个锚定批注线程或调用方定义线程组的头像优先按钮。单线程显示主要参与者头像；分组标记最多显示三个圆形（超过三人时显示两个头像和省略号圆形），并显示线程总数；有未读线程时在末尾（总数或单个头像之后）显示强调色状态点。三种尺寸遵循元素尺寸刻度。激活会切换选中状态，宿主可以受控管理。',
   propDescriptions: {
-    label:
-      '必填的无障碍操作名称及悬停/聚焦提示；包含分组、未读或已解决上下文。',
+    label: '必填的无障碍操作名称及悬停/聚焦提示；包含分组或未读上下文。',
     participants:
-      '有序参与者列表（主要参与者在前）；单线程显示第一个；分组最多显示三个圆形，超过三位不同参与者时显示前两个头像和省略号溢出圆形。',
+      '有序参与者列表（主要参与者在前），与 Comments 相同的 CommentUser 记录（读取 id、name 和 src）；单线程显示第一个；分组最多显示三个圆形，超过三位不同参与者时显示前两个头像和省略号溢出圆形。',
     size: '标记高度：sm 28px、md 32px、lg 36px，参与者头像分别为 22px、24px、28px；四边内边距相等。',
     threadCount: '所代表的线程总数；大于 1 时使用分组样式并显示准确数量。',
     unreadCount:
       '有未读活动的线程数；大于 0 时在总数之后（单线程时在头像之后）显示强调色状态点，不显示该数字。',
     isSelected:
-      '标记是否为当前批注目标；再次激活已选中的标记时，宿主应清除选择（aria-pressed 切换语义）。',
-    isDimmed:
-      '其他标记被选中时降低此标记的视觉突出度，但不禁用操作；未选中任何标记时不应降低。',
-    isResolved: '所代表的线程是否都已解决；已解决的标记除非被选中否则不渲染。',
+      '受控选中状态：标记是否为当前批注目标；省略时标记自行管理选中状态。',
+    defaultIsSelected: '省略 isSelected 时标记是否初始选中。',
+    onSelectedChange:
+      '点击、Enter 或 Space 切换选中状态时以请求的值调用；再次激活已选中的标记会请求清除选择。禁用的标记不会调用。',
     isDisabled:
       '通过 aria-disabled 禁用激活：保留 Tab 焦点，拦截所有激活路径。',
-    onClick: '由产品拥有的激活处理函数。',
+    onClick: '由产品拥有的激活处理函数，在 onSelectedChange 之前调用。',
     xstyle: '根按钮的 StyleX 布局样式；由宿主决定内容上方或边距中的位置。',
   },
 };
@@ -336,7 +353,7 @@ export const docsDense = {
     'avatar-first annotation anchor; 1 lead Avatar for one thread; groups show max 3 circles (2 Avatars + ellipsis beyond 3) + exact total; accent StatusDot after the total (or the avatar on a single pin) when unreadCount > 0; sm/md/lg = 28/32/36px; host owns placement/grouping',
   usage: {
     description:
-      'Interactive anchor for comments over content or in margins. Pass every distinct participant, the total thread count, and the unread thread count; keep coordinates, clustering, collisions, thread state, and opened UI in the host. Absolute coordinates map to the logical bottom-start corner, while another pin is selected its siblings use isDimmed and remain interactive, and activating the selected pin again clears the host selection.',
+      'Interactive anchor for comments over content or in margins. Pass every distinct participant, the total thread count, and the unread thread count; keep coordinates, clustering, collisions, thread state, which pins render, and opened UI in the host. Absolute coordinates map to the logical bottom-start corner. Activation flips the selection: uncontrolled by default, or controlled with isSelected + onSelectedChange. Hide resolved threads by not rendering their pins, moving focus first if the removed pin has it.',
     bestPractices: [
       {
         guidance: true,
@@ -359,20 +376,20 @@ export const docsDense = {
     label:
       'required action name + hover/focus tooltip; include grouped/unread context',
     participants:
-      'non-empty ordered tuple of {id,name,avatarSrc?}; single renders 1; groups render ≤3 circles (2 + ellipsis overflow beyond 3 distinct)',
+      'non-empty ordered tuple of CommentUser {id,name,src?}; single renders 1; groups render ≤3 circles (2 + ellipsis overflow beyond 3 distinct)',
     size: "'sm' | 'md' | 'lg' = 28/32/36px height, 22/24/28px avatars, equal padding; default 'sm'",
     threadCount:
       'positive integer total; >1 selects grouped presentation; default 1',
     unreadCount:
       'unread represented threads; >0 shows an accent dot after the total (or the avatar on a single pin); capped at threadCount; default 0',
     isSelected:
-      'controlled active pin; solid 2px accent outline outside the pin + aria-pressed; host clears it when the selected pin is activated again',
-    isDimmed:
-      'controlled de-emphasis for non-selected siblings only while another pin is selected; remains interactive',
-    isResolved: 'resolved pins render nothing unless selected',
+      'controlled selection; solid 2px accent outline outside the pin + aria-pressed; omit for uncontrolled',
+    defaultIsSelected: 'uncontrolled initial selection; default false',
+    onSelectedChange:
+      '(isSelected) => void on click/Enter/Space; activating the selected pin requests false; not on disabled pins',
     isDisabled:
       'disabled marker: aria-disabled, keeps its tab stop, blocks every activation path',
-    onClick: 'host activation handler',
+    onClick: 'host activation handler; runs before onSelectedChange',
     xstyle: 'root layout/positioning styles; marker owns no coordinates',
   },
 };

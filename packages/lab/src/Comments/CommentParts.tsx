@@ -615,7 +615,7 @@ export function AuthorName({
 
 function CommentAvatar({user}: {user: CommentUser}) {
   const t = useTranslator();
-  const logo = user.avatarUrl?.trim();
+  const logo = user.src?.trim();
   if (user.kind === 'agent' && logo != null && logo !== '') {
     return (
       <Thumbnail

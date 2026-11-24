@@ -106,7 +106,7 @@ const AGENT: CommentUser = {
   id: 'release-bot',
   name: 'Release Assistant',
   kind: 'agent',
-  avatarUrl: '/agent-logo.png',
+  src: '/agent-logo.png',
 };
 
 const COMMENTS: readonly CommentThreadData[] = [

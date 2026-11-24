@@ -47,11 +47,7 @@ export {
 } from './EmojiPicker';
 
 // CommentPin — avatar-first anchor for one or grouped annotation threads
-export {
-  CommentPin,
-  type CommentPinParticipant,
-  type CommentPinProps,
-} from './CommentPin';
+export {CommentPin, type CommentPinProps} from './CommentPin';
 
 // Comments family — a panel, standalone thread, and controlled composer
 export {
