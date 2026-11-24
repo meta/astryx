@@ -97,32 +97,39 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
-describe('Table loading observation uses actual window admission', () => {
+describe('Table loading observation uses the Table block viewport', () => {
+  it('uses the browser viewport for a Table without a rows capability', () => {
+    const load = vi.fn(async () => {});
+    render(<Fixture fallback="plain" load={load} />);
+    expect(Observer.instances.at(-1)?.options.root).toBeNull();
+    expect(load).not.toHaveBeenCalled();
+  });
+  // A Table given a rows capability keeps its parent-sized block viewport
+  // when its rows fall back, so loading keeps observing inside it.
   it.each([
-    'plain',
+    'none',
     'renderer',
     'wrap',
     'empty',
     'duplicate',
     'identity',
     'offset',
-  ])('uses the browser viewport for %s full-render fallback', fallback => {
-    const load = vi.fn(async () => {});
-    render(<Fixture fallback={fallback} load={load} />);
-    expect(Observer.instances.at(-1)?.options.root).toBeNull();
-    expect(load).not.toHaveBeenCalled();
-  });
-  it('uses the bounded Table block viewport only for admitted windowing', () => {
-    const view = render(<Fixture />);
-    expect(Observer.instances.at(-1)?.options.root).toBe(
-      view.container.querySelector('.astryx-table-scroll-wrapper'),
-    );
-  });
-  it('disconnects the old bounded root and ignores its late entries after fallback', () => {
+  ])(
+    'uses the Table block viewport for %s, windowed or fallen back',
+    fallback => {
+      const load = vi.fn(async () => {});
+      const view = render(<Fixture fallback={fallback} load={load} />);
+      expect(Observer.instances.at(-1)?.options.root).toBe(
+        view.container.querySelector('.astryx-table-scroll-wrapper'),
+      );
+      expect(load).not.toHaveBeenCalled();
+    },
+  );
+  it('disconnects the old bounded root and ignores its late entries when the rows capability goes', () => {
     const load = vi.fn(async () => {});
     const view = render(<Fixture load={load} />);
     const old = Observer.instances.at(-1)!;
-    view.rerender(<Fixture fallback="renderer" load={load} />);
+    view.rerender(<Fixture fallback="plain" load={load} />);
     expect(old.disconnect).toHaveBeenCalled();
     expect(Observer.instances.at(-1)?.options.root).toBeNull();
     act(() => old.enter());

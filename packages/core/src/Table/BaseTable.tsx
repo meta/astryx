@@ -1330,13 +1330,17 @@ function BaseTableInner<T extends Record<string, unknown>>({
       parentAppearance == null ? null : {...parentAppearance, textOverflow},
     [parentAppearance, textOverflow],
   );
+  // A data-mode Table given a rows capability keeps its parent-sized scroll
+  // area when its rows fall back, so a fallback costs rendering time, not
+  // layout. A caller-provided scroll wrapper keeps its own sizing.
+  const isBlockViewport =
+    mode === 'data' &&
+    config != null &&
+    ScrollWrapper != null &&
+    isTableScrollWrapperOwned(ScrollWrapper);
   const runtimeValue = useMemo(
-    () => ({
-      ...runtime,
-      isBlockViewport: windowPlan.isWindowed,
-      isLoadingAdmitted,
-    }),
-    [runtime, windowPlan.isWindowed, isLoadingAdmitted],
+    () => ({...runtime, isBlockViewport, isLoadingAdmitted}),
+    [runtime, isBlockViewport, isLoadingAdmitted],
   );
   return (
     <TableRuntimeContext value={runtimeValue}>

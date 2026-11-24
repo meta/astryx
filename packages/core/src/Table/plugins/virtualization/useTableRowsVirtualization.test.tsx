@@ -12,6 +12,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import * as TableApi from '@astryxdesign/core/Table';
 import {Table} from '../../Table';
 import type {TableColumn} from '../../types';
+import {useTableColumnsVirtualization} from './useTableColumnsVirtualization';
 import {
   getTableVirtualizationConfig,
   useTableRowsVirtualization,
@@ -179,6 +180,77 @@ describe('actual Table virtualization', () => {
     restore = measure(101 * 48);
     expect(await mountedRows()).toBe(data.length);
     restore();
+  });
+  it('keeps the parent-sized scroll area when windowing falls back', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    function Wrapped() {
+      const virtualization = useTableRowsVirtualization({
+        rowHeight: 48,
+        initialViewportHeight: 240,
+      });
+      // Wrapped text is not fixed-height, so every row renders.
+      return (
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          virtualization={virtualization}
+          textOverflow="wrap"
+        />
+      );
+    }
+    const {container} = render(<Wrapped />);
+    const bodyRows = Array.from(
+      container.querySelectorAll('tbody > tr'),
+    ).filter(row => row.getAttribute('aria-hidden') !== 'true');
+    expect(bodyRows).toHaveLength(data.length);
+    const viewport = screen.getByRole('table').closest('[role="group"]');
+    expect(getComputedStyle(viewport as Element).height).toContain('100%');
+    cleanup();
+    // A Table never asked to window keeps its content height.
+    render(<Table data={data} columns={columns} idKey="id" />);
+    const plain = screen.getByRole('table').closest('[role="group"]');
+    expect(getComputedStyle(plain as Element).height).not.toContain('100%');
+    cleanup();
+    warn.mockRestore();
+  });
+  it('keeps a content-sized scroll area for a columns capability alone and in children mode', () => {
+    function ColumnsOnly() {
+      const virtualization = useTableColumnsVirtualization({
+        initialViewportWidth: 400,
+      });
+      return (
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          virtualization={virtualization}
+        />
+      );
+    }
+    function Children() {
+      const virtualization = useTableRowsVirtualization({
+        rowHeight: 48,
+        initialViewportHeight: 240,
+      });
+      return (
+        <Table virtualization={virtualization}>
+          <tbody>
+            <tr>
+              <td>Only row</td>
+            </tr>
+          </tbody>
+        </Table>
+      );
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const Case of [ColumnsOnly, Children]) {
+      render(<Case />);
+      const region = screen.getByRole('table').closest('[role="group"]');
+      expect(getComputedStyle(region as Element).height).not.toContain('100%');
+      cleanup();
+    }
+    warn.mockRestore();
   });
   it('falls back for an initialViewportHeight that is not a positive finite size', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
