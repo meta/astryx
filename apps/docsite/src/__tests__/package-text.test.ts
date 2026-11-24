@@ -7,7 +7,7 @@
  * @output Proof that the package registry holds no README or changelog text,
  *   and that the server modules that show the text read each package's own
  * @position Build-time docsite data verification. The build's
- *   check-package-text-bundle.mjs proves that no browser script holds the text.
+ *   check-server-text-bundle.mjs proves that no browser script holds the text.
  * Run: pnpm -F @astryxdesign/docsite test
  */
 

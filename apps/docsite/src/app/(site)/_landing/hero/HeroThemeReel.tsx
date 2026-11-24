@@ -47,9 +47,12 @@ import {
   HERO_THEME_SLIDES,
   REEL_FONT_SPECIFIERS,
   REEL_IMAGES,
+  slideAssets,
+  type ReelImageSources,
   type HeroThemeSlide,
 } from './heroThemeContent';
 import {AstryxLogo} from '../../../../components/logos';
+import {prefersReducedData} from '../../../../lib/prefersReducedData';
 import {HeroFloatingCards} from './HeroFloatingCards';
 
 // How long each theme stays on screen before auto-advancing (ms).
@@ -65,6 +68,11 @@ interface HeroReelState {
   /** Whether entrance/cycle animation should run (false under reduced-motion). */
   animate: boolean;
   setPaused: (paused: boolean) => void;
+  /**
+   * Starts the downloads of the slides before and after the current one,
+   * where the reel has not loaded them: on a narrow screen.
+   */
+  warmNeighbors: () => void;
   /**
    * The docsite's color mode for theme rendering. 'system' on the first paint
    * (before the OS preference resolves) so slides keep `color-scheme: light
@@ -255,6 +263,35 @@ const styles = stylex.create({
   },
 });
 
+/**
+ * Starts the downloads of fonts and photos, so that they are in the browser's
+ * cache before a slide shows them.
+ */
+function warmAssets(
+  fonts: ReadonlyArray<string>,
+  images: ReadonlyArray<ReelImageSources>,
+) {
+  // The CSS Font Loading API loads the woff2 file that the @font-face rule of
+  // a family names. Those file URLs change, so this code does not name them.
+  // A family that the stylesheet does not have fails to load. Its slide then
+  // shows the fallback font.
+  if (typeof document !== 'undefined' && document.fonts?.load) {
+    for (const spec of fonts) {
+      document.fonts.load(spec).catch(() => {});
+    }
+  }
+  // An Image downloads and decodes a photo before its slide shows it. With
+  // the `sizes` and the `srcset` of the card's <img>, the browser selects the
+  // same file here.
+  for (const {src, srcSet, sizes} of images) {
+    const img = new Image();
+    img.decoding = 'async';
+    img.sizes = sizes;
+    img.srcset = srcSet;
+    img.src = src;
+  }
+}
+
 // Dynamic per-theme values via stylex.create functions (no inline styles).
 const dynamic = stylex.create({
   wordmarkColor: (color: string) => ({color}),
@@ -281,15 +318,48 @@ export function HeroReelProvider({children}: {children: ReactNode}) {
   const isNarrow = useMediaQuery('(max-width: 1023px)');
   const {themeMode: userMode} = useThemeMode();
 
+  // The slides that a narrow screen has started to load. The first slide
+  // loads with the page.
+  const startedSlides = useRef(new Set([0]));
+  // A swipe moves one slide, so the two slides next to `center` load before
+  // the visitor can reach them. A dot can move further: that slide loads
+  // when it shows.
+  const warmNeighborsOf = useCallback(
+    (center: number) => {
+      // A wide screen loads every slide after load. For a visitor who saves
+      // data, a slide loads only when it shows.
+      if (slides.length === 0 || !isNarrow || prefersReducedData()) {
+        return;
+      }
+      const started = startedSlides.current;
+      started.add(center);
+      for (const step of [1, -1]) {
+        const neighbor = (center + step + slides.length) % slides.length;
+        if (!started.has(neighbor)) {
+          started.add(neighbor);
+          const {fonts, images} = slideAssets(slides[neighbor]);
+          warmAssets(fonts, images);
+        }
+      }
+    },
+    [slides, isNarrow],
+  );
+  const warmNeighbors = useCallback(
+    () => warmNeighborsOf(index),
+    [warmNeighborsOf, index],
+  );
+
   const goTo = useCallback(
     (next: number) => {
       const count = slides.length;
       if (count === 0) {
         return;
       }
-      setIndex(((next % count) + count) % count);
+      const target = ((next % count) + count) % count;
+      warmNeighborsOf(target);
+      setIndex(target);
     },
-    [slides.length],
+    [slides.length, warmNeighborsOf],
   );
 
   useEffect(() => {
@@ -314,7 +384,7 @@ export function HeroReelProvider({children}: {children: ReactNode}) {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
-  // Warm the reel's per-theme assets once, after first paint, so first-time
+  // Warm the reel's per-theme assets after first paint, so first-time
   // visitors don't see fonts flash (FOUT) and product photos pop in as the reel
   // auto-advances. The @font-face rules ship in the docsite's Google Fonts
   // <link>, but a family's woff2 is only fetched when a glyph using it first
@@ -322,8 +392,12 @@ export function HeroReelProvider({children}: {children: ReactNode}) {
   // renders; both happen mid-swap on a cold cache. Kicking the fetches off here
   // (off the critical path, scoped to just the reel's ~9 fonts and photos) gets
   // them into cache before the first 4.5s advance without touching initial LCP.
+  // A screen narrower than 1024 px does not advance the reel, and most of its
+  // visitors never see another slide. There, warmNeighborsOf loads slides
+  // when the visitor uses the reel.
+  // Effect: syncs the browser's cache with a reel that advances by itself.
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === 'undefined' || isNarrow) {
       return;
     }
     // Defer to idle time so warming never competes with first paint / LCP.
@@ -333,34 +407,27 @@ export function HeroReelProvider({children}: {children: ReactNode}) {
     const cancel =
       window.cancelIdleCallback?.bind(window) ?? window.clearTimeout;
 
-    const handle = schedule(() => {
-      // Fonts: ask the CSS Font Loading API to load each reel family. This pulls
-      // the woff2 the @font-face rule points at without us hardcoding gstatic's
-      // hashed URLs (which rotate). Failures (e.g. a family not in the sheet)
-      // are non-fatal — the slide just paints its fallback as it does today.
-      if (typeof document !== 'undefined' && document.fonts?.load) {
-        for (const spec of REEL_FONT_SPECIFIERS) {
-          document.fonts.load(spec).catch(() => {});
-        }
-      }
-      // Images: prime the browser cache with the reel's product photos so they
-      // are decoded by the time their slide swaps in. With the `sizes` and the
-      // `srcset` of the card's <img>, the browser selects the same file here.
-      for (const {src, srcSet, sizes} of REEL_IMAGES) {
-        const img = new Image();
-        img.decoding = 'async';
-        img.sizes = sizes;
-        img.srcset = srcSet;
-        img.src = src;
-      }
-    });
+    const handle = schedule(() =>
+      warmAssets(REEL_FONT_SPECIFIERS, REEL_IMAGES),
+    );
 
+    // In the first render after hydration `isNarrow` is the server's answer,
+    // a wide screen. This cleanup cancels the idle callback of that render
+    // when the browser's answer replaces it.
     return () => cancel(handle as never);
-  }, []);
+  }, [isNarrow]);
 
   const value = useMemo<HeroReelState>(
-    () => ({slides, index, goTo, animate: !reduceMotion, setPaused, userMode}),
-    [slides, index, goTo, reduceMotion, userMode],
+    () => ({
+      slides,
+      index,
+      goTo,
+      animate: !reduceMotion,
+      setPaused,
+      warmNeighbors,
+      userMode,
+    }),
+    [slides, index, goTo, reduceMotion, warmNeighbors, userMode],
   );
 
   return <HeroReelContext value={value}>{children}</HeroReelContext>;
@@ -368,6 +435,10 @@ export function HeroReelProvider({children}: {children: ReactNode}) {
 
 // A horizontal touch travel shorter than this is a tap or a scroll, not a swipe.
 const SWIPE_THRESHOLD_PX = 45;
+
+// A touch that scrolls the page also starts on the reel. Sideways travel of
+// this length shows that the visitor moves the reel, early in the swipe.
+const SWIPE_START_PX = 10;
 
 /**
  * The reel's interaction surface: hover or focus inside pauses auto-advance,
@@ -385,6 +456,7 @@ export function HeroReelSwipeArea({
 }) {
   const reel = useHeroReel();
   const setPaused = reel?.setPaused;
+  const warmNeighbors = reel?.warmNeighbors;
 
   const touchStart = useRef<{x: number; y: number} | null>(null);
   const onTouchStart = useCallback(
@@ -398,6 +470,21 @@ export function HeroReelSwipeArea({
       setPaused?.(true);
     },
     [setPaused],
+  );
+  const onTouchMove = useCallback(
+    (e: ReactTouchEvent) => {
+      const start = touchStart.current;
+      const t = e.touches[0];
+      if (!start || !t) {
+        return;
+      }
+      const dx = Math.abs(t.clientX - start.x);
+      const dy = Math.abs(t.clientY - start.y);
+      if (dx >= SWIPE_START_PX && dx > dy) {
+        warmNeighbors?.();
+      }
+    },
+    [warmNeighbors],
   );
   const onTouchEnd = useCallback(
     (e: ReactTouchEvent) => {
@@ -430,6 +517,7 @@ export function HeroReelSwipeArea({
       onFocusCapture={() => setPaused?.(true)}
       onBlurCapture={() => setPaused?.(false)}
       onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}>
       {children}
     </div>
@@ -558,7 +646,7 @@ export function HeroReelDots() {
   if (!reel || reel.slides.length <= 1) {
     return null;
   }
-  const {slides, index, goTo} = reel;
+  const {slides, index, goTo, warmNeighbors} = reel;
   const active = slides[index];
 
   return (
@@ -566,7 +654,15 @@ export function HeroReelDots() {
       {/* Real Pagination (dots variant). It's 1-indexed, so page = index+1.
           The prev/next chevrons it ships with are hidden on the home page via
           a [data-home-page] CSS rule in globals.css, leaving just the dots. */}
-      <div {...stylex.props(styles.dots)}>
+      <div
+        {...stylex.props(styles.dots)}
+        onFocusCapture={event => {
+          // Keyboard focus only. A press also focuses a dot, and goTo loads
+          // the slides for a press.
+          if (event.target.matches(':focus-visible')) {
+            warmNeighbors();
+          }
+        }}>
         <Pagination
           variant="dots"
           label="Preview Astryx themes"
