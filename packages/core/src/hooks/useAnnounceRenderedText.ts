@@ -199,18 +199,20 @@ export function useAnnounceRenderedText(
     const isFirstRun = isFirstRunRef.current;
     isFirstRunRef.current = false;
     const element = ref.current;
-    if (
-      !isShown ||
-      element?.closest(HIDDEN) ||
-      element?.checkVisibility?.() === false
-    ) {
+    if (!isShown || element?.closest(HIDDEN)) {
       spokenRef.current = null;
       return;
     }
     if (!element) {
       return;
     }
+    // A live container speaks its own content. The ancestor walk is cheap, so
+    // it comes before the visibility read, which forces style and layout.
     if (skipFirstRender && element.parentElement?.closest(LIVE_CONTAINER)) {
+      return;
+    }
+    if (element.checkVisibility?.() === false) {
+      spokenRef.current = null;
       return;
     }
     let text = skipFirstRender
