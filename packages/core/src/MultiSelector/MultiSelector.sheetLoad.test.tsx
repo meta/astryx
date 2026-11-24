@@ -6,14 +6,15 @@
  *   bottom-sheet frame held until the test releases it, counting each request
  *   for it
  * @output Tests that a caller's renderTrigger control starts the sheet's load
- *   on a pointer down and on a mouse entering it, and that an idle sheet
- *   trigger names no listbox until the sheet has rendered one
+ *   on a pointer down and on a mouse entering it, each on its own, and that a
+ *   sheet trigger names the listbox only while the sheet is open
  * @position Tests; MultiSelector's touch presentation, alongside
  *   MultiSelector.test.tsx
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
+import type * as SheetModule from '../Selector/SelectorBottomSheet';
 
 const frameModule = vi.hoisted(() => {
   let release: () => void = () => {};
@@ -33,6 +34,16 @@ const frameModule = vi.hoisted(() => {
   };
 });
 
+// Counts each load the trigger's intents start, whether or not the frame has
+// loaded already.
+vi.mock('../Selector/SelectorBottomSheet', async importOriginal => {
+  const actual = await importOriginal<typeof SheetModule>();
+  return {
+    ...actual,
+    loadSelectorBottomSheet: vi.fn(actual.loadSelectorBottomSheet),
+  };
+});
+
 vi.mock('../Selector/SelectorBottomSheetFrame', async importOriginal => {
   frameModule.requests += 1;
   await frameModule.released;
@@ -41,6 +52,7 @@ vi.mock('../Selector/SelectorBottomSheetFrame', async importOriginal => {
   return module;
 });
 
+import {loadSelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {MultiSelector} from './MultiSelector';
 
 await vi.importActual('../Selector/SelectorBottomSheetFrame');
@@ -74,46 +86,55 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function idle() {
-  await act(async () => {
-    await new Promise(resolve => setTimeout(resolve, 50));
-  });
+function renderWithTrigger() {
+  render(
+    <MultiSelector
+      label="Labels"
+      options={['Bug', 'Feature']}
+      value={[]}
+      onChange={() => {}}
+      presentation="bottom-sheet"
+      renderTrigger={props => (
+        <button type="button" {...props}>
+          Pick labels
+        </button>
+      )}
+    />,
+  );
+  return screen.getByRole('button', {name: 'Pick labels'});
 }
 
 describe('MultiSelector bottom-sheet load', () => {
-  it("starts the load from a caller's control on a mouse entering it and on a pointer down, and names no missing listbox", async () => {
-    render(
-      <MultiSelector
-        label="Labels"
-        options={['Bug', 'Feature']}
-        value={[]}
-        onChange={() => {}}
-        presentation="bottom-sheet"
-        renderTrigger={props => (
-          <button type="button" {...props}>
-            Pick labels
-          </button>
-        )}
-      />,
-    );
-    const opener = screen.getByRole('button', {name: 'Pick labels'});
-    // Idle: the sheet's listbox is not in the document, so nothing names it.
-    expect(opener).not.toHaveAttribute('aria-controls');
+  beforeEach(() => {
+    vi.mocked(loadSelectorBottomSheet).mockClear();
+  });
 
-    fireEvent.pointerEnter(opener, {pointerType: 'touch'});
-    await idle();
-    expect(frameModule.requests).toBe(0);
-    fireEvent.pointerEnter(opener, {pointerType: 'mouse'});
-    await vi.waitFor(() => expect(frameModule.requests).toBe(1));
+  it("starts the load on a pointer down on a caller's control", () => {
+    const opener = renderWithTrigger();
     fireEvent.pointerDown(opener, {pointerType: 'touch'});
-    await idle();
-    expect(frameModule.requests).toBe(1);
+    expect(loadSelectorBottomSheet).toHaveBeenCalledTimes(1);
+  });
 
-    fireEvent.click(opener);
+  it("starts the load when a mouse enters a caller's control, not when a finger does", () => {
+    const opener = renderWithTrigger();
+    fireEvent.pointerEnter(opener, {pointerType: 'touch'});
+    expect(loadSelectorBottomSheet).not.toHaveBeenCalled();
+    fireEvent.pointerEnter(opener, {pointerType: 'mouse'});
+    expect(loadSelectorBottomSheet).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the listbox only while the sheet is open', async () => {
+    const opener = renderWithTrigger();
+    expect(opener).not.toHaveAttribute('aria-controls');
+    fireEvent.pointerEnter(opener, {pointerType: 'mouse'});
     await act(async () => {
       frameModule.release();
       await frameModule.ready;
     });
+    // Loaded but closed: the closed-state ARIA has not changed.
+    expect(opener).not.toHaveAttribute('aria-controls');
+
+    fireEvent.click(opener);
     await vi.waitFor(() =>
       expect(opener.getAttribute('aria-controls')).not.toBeNull(),
     );

@@ -2631,11 +2631,13 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ),
   };
 
-  // A sheet's listbox is in the document only once its frame has loaded and
-  // rendered it, so the trigger names it only from then.
+  // A sheet's listbox is in the document only while the sheet is open and its
+  // frame has rendered it. The trigger names it only then, so a load that
+  // another selector starts leaves this closed trigger's ARIA as it was.
   const isListboxReferable =
     !isEffectivelyReadOnly &&
-    (surface.activePresentation !== 'bottom-sheet' || isListboxMounted);
+    (surface.activePresentation !== 'bottom-sheet' ||
+      (surface.isOpen && isListboxMounted));
 
   if (renderTrigger != null) {
     // A caller's control gets no pointer props from the selector, so its
@@ -2645,19 +2647,14 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       if (element == null || !canOpenSurface) {
         return;
       }
-      const onPointerDown = () => surface.preloadSheet();
-      const onPointerEnter = (event: PointerEvent) => {
-        if (event.pointerType !== 'touch') {
-          surface.preloadSheet();
-        }
-      };
-      element.addEventListener('pointerdown', onPointerDown, {capture: true});
-      element.addEventListener('pointerenter', onPointerEnter);
+      const {preloadSheet, preloadSheetOnPointerEnter} = surface;
+      element.addEventListener('pointerdown', preloadSheet, {capture: true});
+      element.addEventListener('pointerenter', preloadSheetOnPointerEnter);
       return () => {
-        element.removeEventListener('pointerdown', onPointerDown, {
+        element.removeEventListener('pointerdown', preloadSheet, {
           capture: true,
         });
-        element.removeEventListener('pointerenter', onPointerEnter);
+        element.removeEventListener('pointerenter', preloadSheetOnPointerEnter);
       };
     };
     // Anchor-only mode: the caller renders the opener and spreads these props

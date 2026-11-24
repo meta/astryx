@@ -14,7 +14,6 @@ import {
   useRef,
   useState,
   type FocusEvent,
-  type PointerEvent,
   type RefObject,
 } from 'react';
 import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
@@ -76,7 +75,7 @@ interface SelectorPresentationController {
   /** Starts loading the bottom sheet when the sheet presents the list. */
   preloadSheet: () => void;
   /** The same, for a mouse or pen entering the trigger. */
-  preloadSheetOnPointerEnter: (event: PointerEvent) => void;
+  preloadSheetOnPointerEnter: (event: {readonly pointerType: string}) => void;
   show: () => boolean;
 }
 
@@ -291,7 +290,7 @@ export function useSelectorPresentation({
   }, [resolvedPresentation]);
   // A touch reports its own pointer down, which starts the load.
   const preloadSheetOnPointerEnter = useCallback(
-    (event: PointerEvent) => {
+    (event: {readonly pointerType: string}) => {
       if (event.pointerType !== 'touch') {
         preloadSheet();
       }
