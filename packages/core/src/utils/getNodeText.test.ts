@@ -73,6 +73,11 @@ describe('getNodeText', () => {
         'now',
       ]),
     ).toBe('Saved now');
+    expect(
+      getNodeText(
+        createElement('span', null, 'a', createElement('div', null, 'B'), 'c'),
+      ),
+    ).toBe('a B c');
     // An inline element that holds only inline text still joins it.
     expect(
       getNodeText([
