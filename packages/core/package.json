@@ -324,6 +324,11 @@
       "types": "./dist/Dialog/index.d.ts",
       "default": "./dist/Dialog/index.js"
     },
+    "./DiffViewer": {
+      "source": "./src/DiffViewer/index.ts",
+      "types": "./dist/DiffViewer/index.d.ts",
+      "default": "./dist/DiffViewer/index.js"
+    },
     "./Divider": {
       "source": "./src/Divider/index.ts",
       "types": "./dist/Divider/index.d.ts",

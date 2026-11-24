@@ -5,12 +5,12 @@
  * @input Two versions of a text (old and new) plus optional paths
  * @output Exports createDiffFile(options) → DiffViewerFile and
  *   CreateDiffFileOptions
- * @position Lab utility; computes a line diff (Myers) when the caller has two
+ * @position Core utility; computes a line diff (Myers) when the caller has two
  *   texts rather than a patch
  *
  * SYNC: When modified, update:
- * - /packages/lab/src/DiffViewer/createDiffFile.test.ts
- * - /packages/lab/src/DiffViewer/DiffViewer.doc.mjs (utilities section)
+ * - /packages/core/src/DiffViewer/createDiffFile.test.ts
+ * - /packages/core/src/DiffViewer/DiffViewer.doc.mjs (utilities section)
  */
 
 import type {

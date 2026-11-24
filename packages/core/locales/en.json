@@ -741,91 +741,91 @@
   },
   "@astryx.diffViewer.label": {
     "defaultMessage": "Diff",
-    "description": "Accessible name of a lab DiffViewer's scrollable code area when the file has no path to name it."
+    "description": "Accessible name of a DiffViewer's scrollable code area when the file has no path to name it."
   },
   "@astryx.diffViewer.renamedPath": {
     "defaultMessage": "{oldPath} → {newPath}",
-    "description": "File path shown in a lab DiffViewer header when the file was renamed. `{oldPath}` and `{newPath}` are file paths and must stay untranslated; keep the arrow pointing from the old path to the new one."
+    "description": "File path shown in a DiffViewer header when the file was renamed. `{oldPath}` and `{newPath}` are file paths and must stay untranslated; keep the arrow pointing from the old path to the new one."
   },
   "@astryx.diffViewer.statusAdded": {
     "defaultMessage": "Added",
-    "description": "Badge in a lab DiffViewer file header marking a file that the change creates."
+    "description": "Badge in a DiffViewer file header marking a file that the change creates."
   },
   "@astryx.diffViewer.statusDeleted": {
     "defaultMessage": "Deleted",
-    "description": "Badge in a lab DiffViewer file header marking a file that the change removes."
+    "description": "Badge in a DiffViewer file header marking a file that the change removes."
   },
   "@astryx.diffViewer.statusRenamed": {
     "defaultMessage": "Renamed",
-    "description": "Badge in a lab DiffViewer file header marking a file that the change moves to a new path."
+    "description": "Badge in a DiffViewer file header marking a file that the change moves to a new path."
   },
   "@astryx.diffViewer.addedCount": {
     "defaultMessage": "+{count, number}",
-    "description": "Compact count of added lines shown in a lab DiffViewer file header, e.g. \"+12\". Hidden from screen readers, which hear `@astryx.diffViewer.stats` instead."
+    "description": "Compact count of added lines shown in a DiffViewer file header, e.g. \"+12\". Hidden from screen readers, which hear `@astryx.diffViewer.stats` instead."
   },
   "@astryx.diffViewer.removedCount": {
     "defaultMessage": "−{count, number}",
-    "description": "Compact count of removed lines shown in a lab DiffViewer file header, e.g. \"−3\" (a minus sign). Hidden from screen readers, which hear `@astryx.diffViewer.stats` instead."
+    "description": "Compact count of removed lines shown in a DiffViewer file header, e.g. \"−3\" (a minus sign). Hidden from screen readers, which hear `@astryx.diffViewer.stats` instead."
   },
   "@astryx.diffViewer.stats": {
     "defaultMessage": "{added, plural, one {# line added} other {# lines added}}, {removed, plural, one {# line removed} other {# lines removed}}",
-    "description": "Screen-reader text for the line counts in a lab DiffViewer file header, e.g. \"12 lines added, 3 lines removed\"."
+    "description": "Screen-reader text for the line counts in a DiffViewer file header, e.g. \"12 lines added, 3 lines removed\"."
   },
   "@astryx.diffViewer.added": {
     "defaultMessage": "Added",
-    "description": "Screen-reader text marking one line of a lab DiffViewer as added by the change; sighted readers see a + sign and a tinted row."
+    "description": "Screen-reader text marking one line of a DiffViewer as added by the change; sighted readers see a + sign and a tinted row."
   },
   "@astryx.diffViewer.removed": {
     "defaultMessage": "Removed",
-    "description": "Screen-reader text marking one line of a lab DiffViewer as removed by the change; sighted readers see a - sign and a tinted row."
+    "description": "Screen-reader text marking one line of a DiffViewer as removed by the change; sighted readers see a - sign and a tinted row."
   },
   "@astryx.diffViewer.lineNumberButton": {
     "defaultMessage": "{side, select, old {Original line {line, number}} other {Changed line {line, number}}}",
-    "description": "Accessible label of a clickable line number in a lab DiffViewer (callers use it, for example, to start a comment on that line). `side` is `old` for the file before the change and `new` for the file after it; `line` is the line number in that version."
+    "description": "Accessible label of a clickable line number in a DiffViewer (callers use it, for example, to start a comment on that line). `side` is `old` for the file before the change and `new` for the file after it; `line` is the line number in that version."
   },
   "@astryx.diffViewer.columnOldLine": {
     "defaultMessage": "Original line number",
-    "description": "Screen-reader-only header of a lab DiffViewer column holding line numbers in the file before the change. Pairs with `@astryx.diffViewer.lineNumberButton` (\"Original line …\")."
+    "description": "Screen-reader-only header of a DiffViewer column holding line numbers in the file before the change. Pairs with `@astryx.diffViewer.lineNumberButton` (\"Original line …\")."
   },
   "@astryx.diffViewer.columnNewLine": {
     "defaultMessage": "Changed line number",
-    "description": "Screen-reader-only header of a lab DiffViewer column holding line numbers in the file after the change. Pairs with `@astryx.diffViewer.lineNumberButton` (\"Changed line …\")."
+    "description": "Screen-reader-only header of a DiffViewer column holding line numbers in the file after the change. Pairs with `@astryx.diffViewer.lineNumberButton` (\"Changed line …\")."
   },
   "@astryx.diffViewer.columnChange": {
     "defaultMessage": "Change",
-    "description": "Screen-reader-only header of a lab DiffViewer column that marks each line as added or removed (noun: the kind of change)."
+    "description": "Screen-reader-only header of a DiffViewer column that marks each line as added or removed (noun: the kind of change)."
   },
   "@astryx.diffViewer.columnCode": {
     "defaultMessage": "Code",
-    "description": "Screen-reader-only header of the source-code column in a lab DiffViewer's single-column (unified) view."
+    "description": "Screen-reader-only header of the source-code column in a DiffViewer's single-column (unified) view."
   },
   "@astryx.diffViewer.columnOldCode": {
     "defaultMessage": "Original code",
-    "description": "Screen-reader-only header of the source-code column for the file before the change, in a lab DiffViewer's side-by-side (split) view."
+    "description": "Screen-reader-only header of the source-code column for the file before the change, in a DiffViewer's side-by-side (split) view."
   },
   "@astryx.diffViewer.columnNewCode": {
     "defaultMessage": "Changed code",
-    "description": "Screen-reader-only header of the source-code column for the file after the change, in a lab DiffViewer's side-by-side (split) view."
+    "description": "Screen-reader-only header of the source-code column for the file after the change, in a DiffViewer's side-by-side (split) view."
   },
   "@astryx.diffViewer.binary": {
     "defaultMessage": "Binary file not shown",
-    "description": "Message in place of line changes in a lab DiffViewer when the file is binary and has no text diff."
+    "description": "Message in place of line changes in a DiffViewer when the file is binary and has no text diff."
   },
   "@astryx.diffViewer.noChanges": {
     "defaultMessage": "No content changes",
-    "description": "Message in a lab DiffViewer when a file changed only its path or mode, so there are no line changes to show."
+    "description": "Message in a DiffViewer when a file changed only its path or mode, so there are no line changes to show."
   },
   "@astryx.diffViewer.largeChange": {
     "defaultMessage": "Large change: {count, plural, one {# line} other {# lines}}",
-    "description": "Label of a folded block in a lab DiffViewer. The change was too large to compare line by line, so the block shows its old lines as removed and its new lines as added, folded until the reader opens it. `{count}` is the number of removed plus added lines in the block; some can be the same on both sides, because the block was not compared. Keep it short: it shares one row with the Show full diff button."
+    "description": "Label of a folded block in a DiffViewer. The change was too large to compare line by line, so the block shows its old lines as removed and its new lines as added, folded until the reader opens it. `{count}` is the number of removed plus added lines in the block; some can be the same on both sides, because the block was not compared. Keep it short: it shares one row with the Show full diff button."
   },
   "@astryx.diffViewer.showFullDiff": {
     "defaultMessage": "Show full diff",
-    "description": "Button beside `@astryx.diffViewer.largeChange` in a lab DiffViewer that shows the folded lines of a large change. Pairs with `@astryx.diffViewer.hideFullDiff`."
+    "description": "Button beside `@astryx.diffViewer.largeChange` in a DiffViewer that shows the folded lines of a large change. Pairs with `@astryx.diffViewer.hideFullDiff`."
   },
   "@astryx.diffViewer.hideFullDiff": {
     "defaultMessage": "Hide full diff",
-    "description": "Button beside `@astryx.diffViewer.largeChange` in a lab DiffViewer that folds the lines of a large change again after `@astryx.diffViewer.showFullDiff` showed them."
+    "description": "Button beside `@astryx.diffViewer.largeChange` in a DiffViewer that folds the lines of a large change again after `@astryx.diffViewer.showFullDiff` showed them."
   },
   "@astryx.markdownHeadingLinks.copied": {
     "defaultMessage": "Link copied",

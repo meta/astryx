@@ -220,6 +220,16 @@ const FIXTURES: Readonly<Record<string, (probe: Probe) => ReactElement>> = {
       <Core.ContextMenuRadioItem value="a" label="A" {...probe} />
     </Core.ContextMenuRadioGroup>
   ),
+  DiffViewer: probe => (
+    <Core.DiffViewer
+      file={Core.createDiffFile({
+        oldValue: 'a\n',
+        newValue: 'b\n',
+        path: 'a.ts',
+      })}
+      {...probe}
+    />
+  ),
   DropdownMenuRadioItem: probe => (
     <Core.DropdownMenuRadioGroup label="Pick" value="a" onChange={noop}>
       <Core.DropdownMenuRadioItem value="a" label="A" {...probe} />

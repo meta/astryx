@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {createDiffFile} from '../../../../../../../packages/lab/src/DiffViewer/createDiffFile';
+import {createDiffFile} from '../../../../../../../packages/core/src/DiffViewer/createDiffFile';
 import {
   countLines,
   createMultiFileWorkload,

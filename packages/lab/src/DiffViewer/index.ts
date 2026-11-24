@@ -3,30 +3,30 @@
 'use client';
 
 /**
- * @file index.ts
- * @input Imports from DiffViewer.tsx, parseUnifiedDiff.ts, createDiffFile.ts, diffTypes.ts
- * @output Exports DiffViewer, its diff model types, and the patch/text utilities
- * @position Component entry point; re-exported by /packages/lab/src/index.ts
- *
- * SYNC: When modified, update /packages/lab/src/DiffViewer/DiffViewer.doc.mjs
+ * @file DiffViewer re-export
+ * @input `@astryxdesign/core/DiffViewer`
+ * @output Re-exports DiffViewer, parseUnifiedDiff, createDiffFile, and their
+ *   types from Core
+ * @position Lab entry for DiffViewer, which lives in Core; consumed by
+ *   packages/lab/src/index.ts
  */
 
-export {DiffViewer} from './DiffViewer';
+export {
+  DiffViewer,
+  createDiffFile,
+  parseUnifiedDiff,
+} from '@astryxdesign/core/DiffViewer';
 export type {
+  CreateDiffFileOptions,
   DiffViewerChangeIndicator,
-  DiffViewerInlineHighlight,
-  DiffViewerProps,
-  DiffViewerViewMode,
-} from './DiffViewer';
-export {parseUnifiedDiff} from './parseUnifiedDiff';
-export {createDiffFile} from './createDiffFile';
-export type {CreateDiffFileOptions} from './createDiffFile';
-export type {
   DiffViewerFile,
   DiffViewerFileStatus,
   DiffViewerHunk,
+  DiffViewerInlineHighlight,
   DiffViewerLine,
   DiffViewerLineKind,
   DiffViewerLineRef,
+  DiffViewerProps,
   DiffViewerSide,
-} from './diffTypes';
+  DiffViewerViewMode,
+} from '@astryxdesign/core/DiffViewer';

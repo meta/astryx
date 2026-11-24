@@ -405,7 +405,7 @@ export const samples = {
         onSubmit: noop,
       }),
     ),
-  lab__DiffViewer: ({C, React, mod, Pkg}) => {
+  core__DiffViewer: ({C, React, mod, Pkg}) => {
     const parse = mod.parseUnifiedDiff ?? Pkg.parseUnifiedDiff;
     const patch = [
       'diff --git a/a.ts b/a.ts',

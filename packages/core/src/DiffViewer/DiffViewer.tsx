@@ -4,11 +4,11 @@
  * @file DiffViewer.tsx
  * @input Uses React, StyleX, theme tokens, the shared CodeBlock tokenizer and
  *   syntax-theme slots (incl. the diff row slots), useScrollableArea,
- *   useCollapsible, Token, Icon, Button, VisuallyHidden, and the i18n
+ *   useCollapsible, Token, Icon, Button, VisuallyHidden, and the component
  *   translator
  * @output Exports DiffViewer component, DiffViewerProps, DiffViewerViewMode,
  *   DiffViewerChangeIndicator, DiffViewerInlineHighlight
- * @position Lab implementation; read-only, syntax-highlighted file diff for
+ * @position Core implementation; read-only, syntax-highlighted file diff for
  *   code review surfaces
  *
  * Renders one DiffViewerFile: a file header (path, status, +/- counts, a
@@ -30,11 +30,13 @@
  * files should be windowed or collapsed by the caller.
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/lab/src/DiffViewer/DiffViewer.doc.mjs (props table, notes)
- * - /packages/lab/src/DiffViewer/DiffViewer.test.tsx (behavior tests)
- * - /packages/lab/src/DiffViewer/index.ts (exports if types change)
- * - /packages/lab/src/DiffViewer/inlineDiff.ts (inline highlight ranges)
+ * - /packages/core/src/DiffViewer/DiffViewer.doc.mjs (props table, notes)
+ * - /docs/specs/components/DiffViewer/DiffViewer.spec.md (contract)
+ * - /packages/core/src/DiffViewer/DiffViewer.test.tsx (behavior tests)
+ * - /packages/core/src/DiffViewer/index.ts (exports if types change)
+ * - /packages/core/src/DiffViewer/inlineDiff.ts (inline highlight ranges)
  * - /apps/storybook/stories/DiffViewer.stories.tsx (examples and visual coverage)
+ * - /packages/cli/assets/templates/blocks/components/DiffViewer/ (showcase and example blocks)
  */
 
 'use client';
@@ -54,29 +56,31 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 
-import type {BaseProps} from '@astryxdesign/core';
+import type {BaseProps} from '../BaseProps';
+import {Button} from '../Button/Button';
+import type {CodeLanguage} from '../CodeBlock/grammar';
+import {ensureHighlightStyles} from '../CodeBlock/highlightStyles';
 import {
-  ensureHighlightStyles,
   tokenize,
-  type CodeLanguage,
   type SyntaxToken,
   type TokenLine,
-} from '@astryxdesign/core/CodeBlock';
+} from '../CodeBlock/tokenizer';
 import {
   useCollapsible,
   type CollapsibleConfig,
-} from '@astryxdesign/core/Collapsible';
+} from '../Collapsible/useCollapsible';
 import {
   useScrollableArea,
   type ScrollableElementProps,
-} from '@astryxdesign/core/hooks';
-import {Button} from '@astryxdesign/core/Button';
-import {useTranslator} from '@astryxdesign/core/i18n';
-import {Icon} from '@astryxdesign/core/Icon';
+} from '../hooks/useScrollableArea';
 import {
-  SyntaxTheme,
-  type SyntaxThemeDefinition,
-} from '@astryxdesign/core/theme/syntax';
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DiffViewer/DiffViewer.generated';
+import {Icon} from '../Icon/Icon';
+import {SyntaxTheme} from '../theme/syntax/SyntaxTheme';
+import type {SyntaxThemeDefinition} from '../theme/syntax/defineSyntaxTheme';
 import {
   borderVars,
   colorVars,
@@ -87,16 +91,14 @@ import {
   spacingVars,
   typeScaleVars,
   typographyVars,
-} from '@astryxdesign/core/theme/tokens.stylex';
-import {
-  focusOutlineProps,
-  isRenderable,
-  mergeProps,
-  rtlStyles,
-  themeProps,
-} from '@astryxdesign/core/utils';
-import {Token, type TokenColor} from '@astryxdesign/core/Token';
-import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
+} from '../theme/tokens.stylex';
+import {Token, type TokenColor} from '../Token/Token';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {rtlStyles} from '../utils/rtlStyles';
+import {themeProps} from '../utils/themeProps';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 
 import type {
   DiffViewerFile,
@@ -106,6 +108,8 @@ import type {
   DiffViewerSide,
 } from './diffTypes';
 import {diffInlineRanges, type InlineRange} from './inlineDiff';
+
+registerEnglishFallback(english);
 
 /** How hunks are laid out: one column, or old and new side by side. */
 export type DiffViewerViewMode = 'unified' | 'split';
@@ -209,7 +213,7 @@ export interface DiffViewerProps extends BaseProps<HTMLDivElement> {
    * Content at the end of the file header, e.g. a "Viewed" checkbox or a menu
    * of file actions.
    */
-  headerEnd?: ReactNode;
+  endContent?: ReactNode;
   /**
    * Render content in a full-width row under a line, e.g. review comments.
    * Return `null` (or `false`) for lines with nothing to show. Called once per line with
@@ -285,7 +289,7 @@ const EXTENSION_LANGUAGES: Record<string, string> = {
 
 /**
  * The language a file's name or extension infers: a listed value first (a
- * later entry wins), then a built-in, else plain text (CodeBlock FR13).
+ * later entry wins), then a built-in, else plain text.
  */
 function inferLanguage(
   path: string | null,
@@ -322,7 +326,7 @@ interface LineCell {
   ref: DiffViewerLineRef;
   tokens: TokenLine;
   /** Changed character ranges to highlight inside the line. */
-  emphasis: readonly InlineRange[];
+  emphasis: ReadonlyArray<InlineRange>;
 }
 
 /** The control that folds a replaced block's changed lines. */
@@ -458,7 +462,7 @@ function findAnnotatedHunks(
  * renders from.
  */
 function tokenizeRun(
-  lines: readonly DiffViewerLine[],
+  lines: ReadonlyArray<DiffViewerLine>,
   language: string | CodeLanguage,
 ): TokenLine[] {
   if (language === 'plaintext') {
@@ -497,7 +501,7 @@ function buildCells(
 ): HunkCells[] {
   return file.hunks.map((hunk, hunkIndex) => {
     const cells: LineCell[] = [];
-    const addRun = (lines: readonly DiffViewerLine[]) => {
+    const addRun = (lines: ReadonlyArray<DiffViewerLine>) => {
       const tokens = tokenizeRun(lines, language);
       lines.forEach((line, i) => {
         const ref = lineRef(line, hunkIndex);
@@ -623,9 +627,9 @@ interface Piece {
 function buildPieces(
   text: string,
   tokens: SyntaxToken[],
-  emphasis: readonly InlineRange[],
+  emphasis: ReadonlyArray<InlineRange>,
 ): Piece[] {
-  const segments: Array<{start: number; end: number; type: string | null}> = [];
+  const segments: {start: number; end: number; type: string | null}[] = [];
   let cursor = 0;
   for (const token of tokens) {
     const start = Math.max(token.start, cursor);
@@ -688,7 +692,7 @@ function renderPiece(text: string, piece: Piece): ReactNode {
 function buildSpans(
   text: string,
   tokens: SyntaxToken[],
-  emphasis: readonly InlineRange[],
+  emphasis: ReadonlyArray<InlineRange>,
   changeXstyle: stylex.StyleXStyles,
 ): ReactNode {
   if (text === '') {
@@ -714,10 +718,7 @@ function buildSpans(
       i++;
     }
     parts.push(
-      <span
-        key={`c${first}`}
-        data-diff-change=""
-        {...stylex.props(changeXstyle)}>
+      <span key={`c${first}`} {...stylex.props(changeXstyle)}>
         {run}
       </span>,
     );
@@ -832,7 +833,7 @@ const styles = stylex.create({
   statRemoved: {
     color: colorVars['--color-text-red'],
   },
-  headerEnd: {
+  endContent: {
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
@@ -852,6 +853,7 @@ const styles = stylex.create({
     paddingInline: spacingVars['--spacing-4'],
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   table: {
     borderCollapse: 'collapse',
@@ -996,7 +998,7 @@ const styles = stylex.create({
     whiteSpace: 'pre-wrap',
     wordBreak: 'normal',
     overflowWrap: 'anywhere',
-    // Text inside keeps `anywhere` too (Text FR3).
+    // Text inside reads this value, so its long words wrap the same way.
     '--_astryx-text-overflow-wrap': 'anywhere',
   },
   // Row tints are a background-image layer so a pinned (sticky) cell can lay
@@ -1155,7 +1157,7 @@ const annotationStyles = stylex.create({
   content: {
     direction: {default: null, ':is([dir="rtl"] *)': 'rtl'},
     overflowWrap: 'anywhere',
-    // Text inside keeps `anywhere` too (Text FR3).
+    // Text inside reads this value, so its long words wrap the same way.
     '--_astryx-text-overflow-wrap': 'anywhere',
     contain: 'inline-size',
   },
@@ -1238,7 +1240,6 @@ function DiffViewerPane({
   });
   return (
     <div
-      data-diff-pane={side}
       {...withoutInlineOverscroll(
         getViewportProps<HTMLDivElement>({
           ...stylex.props(
@@ -1309,7 +1310,7 @@ export function DiffViewer({
   inlineHighlight = 'word',
   hasChangeBackground = true,
   collapsible = true,
-  headerEnd,
+  endContent,
   renderLineAnnotation,
   onLineNumberClick,
   maxHeight,
@@ -1319,7 +1320,7 @@ export function DiffViewer({
   style,
   ...props
 }: DiffViewerProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const bodyId = useId();
 
   useInsertionEffect(() => {
@@ -1520,7 +1521,6 @@ export function DiffViewer({
         {actionRef != null && onLineNumberClick != null ? (
           <button
             type="button"
-            data-diff-line-button=""
             aria-label={t('@astryx.diffViewer.lineNumberButton', {
               side,
               line: number,
@@ -1563,7 +1563,6 @@ export function DiffViewer({
         {isChange && changeIndicator === 'bars' && (
           <span
             aria-hidden="true"
-            data-diff-bar=""
             {...stylex.props(
               styles.bar,
               kind === 'added' ? styles.barAdded : styles.barRemoved,
@@ -1731,7 +1730,7 @@ export function DiffViewer({
                   {renderMarker('td', row.cell, 'm', markerPin)}
                   {renderCode('td', row.cell, 'c')}
                 </tr>
-                {note != null && (
+                {isRenderable(note) && (
                   <tr>
                     <td colSpan={columns} {...stylex.props(styles.annotation)}>
                       <div {...stylex.props(annotationStyles.content)}>
@@ -1754,43 +1753,47 @@ export function DiffViewer({
   // pane's scrollLeft fires a scroll event there too; the expected value it
   // lands on marks that event as our own echo, so it is not mirrored back
   // (which would fight momentum scrolling on the side the reader drives).
-  const paneRefs = useRef<Record<DiffViewerSide, HTMLDivElement | null>>({
-    old: null,
-    new: null,
-  });
+  const paneElementsRef = useRef<Record<DiffViewerSide, HTMLDivElement | null>>(
+    {
+      old: null,
+      new: null,
+    },
+  );
   // Stable per side: a new callback ref every render would re-attach the
   // pane's scroll measurement each time.
   const paneRefCallbacks = useMemo(
     () => ({
       old: (node: HTMLDivElement | null) => {
-        paneRefs.current.old = node;
+        paneElementsRef.current.old = node;
       },
       new: (node: HTMLDivElement | null) => {
-        paneRefs.current.new = node;
+        paneElementsRef.current.new = node;
       },
     }),
     [],
   );
-  const scrollEcho = useRef<{side: DiffViewerSide; left: number} | null>(null);
+  const scrollEchoRef = useRef<{side: DiffViewerSide; left: number} | null>(
+    null,
+  );
   const syncPaneScroll = (
     side: DiffViewerSide,
     event: UIEvent<HTMLDivElement>,
   ) => {
     const left = event.currentTarget.scrollLeft;
-    const echo = scrollEcho.current;
+    const echo = scrollEchoRef.current;
     if (echo != null && echo.side === side) {
-      scrollEcho.current = null;
+      scrollEchoRef.current = null;
       if (Math.abs(echo.left - left) < 1) {
         return;
       }
     }
     const otherSide = side === 'old' ? 'new' : 'old';
-    const other = paneRefs.current[otherSide];
+    const other = paneElementsRef.current[otherSide];
     if (other == null || Math.abs(other.scrollLeft - left) < 1) {
       return;
     }
     other.scrollLeft = left;
-    scrollEcho.current = {side: otherSide, left: other.scrollLeft};
+    scrollEchoRef.current = {side: otherSide, left: other.scrollLeft};
   };
 
   const renderSplit = () => {
@@ -1942,7 +1945,7 @@ export function DiffViewer({
               <div
                 role="cell"
                 {...stylex.props(styles.annotation, styles.paneSpan)}>
-                {note != null && (
+                {isRenderable(note) && (
                   <div {...stylex.props(annotationStyles.content)}>{note}</div>
                 )}
               </div>
@@ -1952,11 +1955,7 @@ export function DiffViewer({
       }
       if (hasSizer) {
         rows.push(
-          <div
-            key="sizer"
-            data-diff-sizer=""
-            aria-hidden="true"
-            {...stylex.props(styles.paneRow)}>
+          <div key="sizer" aria-hidden="true" {...stylex.props(styles.paneRow)}>
             <div {...stylex.props(styles.code, styles.ltr, styles.sizer)}>
               {sizerText}
             </div>
@@ -1984,9 +1983,7 @@ export function DiffViewer({
     };
 
     return (
-      <div
-        data-diff-split=""
-        {...stylex.props(styles.split, dynamicStyles.splitRows(rowCount))}>
+      <div {...stylex.props(styles.split, dynamicStyles.splitRows(rowCount))}>
         {renderSide('old')}
         {renderSide('new')}
       </div>
@@ -2012,7 +2009,7 @@ export function DiffViewer({
     body = (
       <>
         {isLargeFile && (
-          <div data-diff-fold="" {...stylex.props(styles.fold)}>
+          <div {...stylex.props(styles.fold)}>
             {renderFoldControl(
               unfoldedChangedLines,
               !isFileFolded,
@@ -2061,7 +2058,7 @@ export function DiffViewer({
   );
 
   const header =
-    displayPath != null || headerEnd != null ? (
+    displayPath != null || isRenderable(endContent) ? (
       <div
         {...mergeProps(
           themeProps('diff-viewer-header'),
@@ -2113,8 +2110,8 @@ export function DiffViewer({
             </VisuallyHidden>
           </span>
         )}
-        {headerEnd != null && (
-          <div {...stylex.props(styles.headerEnd)}>{headerEnd}</div>
+        {isRenderable(endContent) && (
+          <div {...stylex.props(styles.endContent)}>{endContent}</div>
         )}
       </div>
     ) : null;

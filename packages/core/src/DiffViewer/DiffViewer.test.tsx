@@ -5,14 +5,14 @@ import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {createRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {rtlStyles} from '@astryxdesign/core/utils';
+import {rtlStyles} from '../utils/rtlStyles';
 import {DiffViewer} from './DiffViewer';
 import {parseUnifiedDiff} from './parseUnifiedDiff';
 import type {DiffViewerFile, DiffViewerLineRef} from './diffTypes';
 import {createDiffFile} from './createDiffFile';
-import {dockerfile} from '@astryxdesign/core/CodeBlock/languages/dockerfile';
-import {graphql} from '@astryxdesign/core/CodeBlock/languages/graphql';
-import {createCodeLanguage} from '@astryxdesign/core/CodeBlock';
+import {dockerfile} from '../CodeBlock/languages/dockerfile';
+import {graphql} from '../CodeBlock/languages/graphql';
+import {createCodeLanguage} from '../CodeBlock/grammar';
 
 const PATCH = `diff --git a/src/greet.ts b/src/greet.ts
 --- a/src/greet.ts
@@ -32,13 +32,48 @@ function codeRows(container: HTMLElement) {
   return Array.from(container.querySelectorAll('tbody tr'));
 }
 
+const PANE_NAMES = {old: 'Original code', new: 'Changed code'} as const;
+
+/** A split-view pane: the scroller named for its side. */
+function pane(container: HTMLElement, side: 'old' | 'new') {
+  return within(container).getByRole('group', {name: PANE_NAMES[side]});
+}
+
 /** A split-view pane's rows, after its column-header row. */
 function paneRows(container: HTMLElement, side: 'old' | 'new') {
   return Array.from(
-    container.querySelectorAll(
-      `[data-diff-pane="${side}"] [role="row"]:not([data-diff-sizer])`,
-    ),
+    pane(container, side).querySelectorAll('[role="row"]'),
   ).slice(1);
+}
+
+/**
+ * The inline highlights inside changed code cells: a cell's direct span
+ * children that are not syntax tokens.
+ */
+function highlights(container: HTMLElement, kind?: 'added' | 'removed') {
+  const cells = container.querySelectorAll(
+    kind == null ? '[data-diff]' : `[data-diff="${kind}"]`,
+  );
+  return Array.from(cells).flatMap(cell =>
+    Array.from(cell.children).filter(
+      child =>
+        child.tagName === 'SPAN' && !child.className.includes('astryx-token-'),
+    ),
+  );
+}
+
+/** The line-number buttons, found by the names they report. */
+function lineButtons() {
+  return screen.queryAllByRole('button', {
+    name: /^(Original|Changed) line \d+$/,
+  });
+}
+
+/** The empty, hidden marker spans: bars, and forced-colors-only bars. */
+function emptyMarkers(container: HTMLElement) {
+  return Array.from(
+    container.querySelectorAll('span[aria-hidden="true"]:empty'),
+  );
 }
 
 function patchOf(removed: string, added: string) {
@@ -52,9 +87,7 @@ function patchOf(removed: string, added: string) {
 }
 
 function changedText(container: HTMLElement, kind: 'added' | 'removed') {
-  return Array.from(
-    container.querySelectorAll(`[data-diff="${kind}"] [data-diff-change]`),
-  ).map(span => span.textContent);
+  return highlights(container, kind).map(span => span.textContent);
 }
 
 describe('DiffViewer', () => {
@@ -381,9 +414,7 @@ describe('DiffViewer', () => {
           onLineNumberClick={onLineNumberClick}
         />,
       );
-      const buttons = screen
-        .getAllByRole('button')
-        .filter(b => b.hasAttribute('data-diff-line-button'));
+      const buttons = lineButtons();
       // One per line: 4 context (new side), 1 removed (old), 2 added (new).
       expect(buttons).toHaveLength(6);
       for (const button of buttons) {
@@ -421,9 +452,7 @@ describe('DiffViewer', () => {
   it('keeps every line-number button in the Tab order with no arrow-key movement', async () => {
     const user = userEvent.setup();
     render(<DiffViewer file={FILE} onLineNumberClick={() => {}} />);
-    const buttons = screen
-      .getAllByRole('button')
-      .filter(b => b.hasAttribute('data-diff-line-button'));
+    const buttons = lineButtons();
     expect(buttons.length).toBeGreaterThan(2);
     expect(buttons.every(b => b.tabIndex === 0)).toBe(true);
 
@@ -436,12 +465,8 @@ describe('DiffViewer', () => {
 
   it('scrolls the split panes sideways in lockstep when unwrapped', () => {
     const {container} = render(<DiffViewer file={FILE} viewMode="split" />);
-    const oldPane = container.querySelector<HTMLElement>(
-      '[data-diff-pane="old"]',
-    )!;
-    const newPane = container.querySelector<HTMLElement>(
-      '[data-diff-pane="new"]',
-    )!;
+    const oldPane = pane(container, 'old');
+    const newPane = pane(container, 'new');
     oldPane.scrollLeft = 120;
     fireEvent.scroll(oldPane);
     expect(newPane.scrollLeft).toBe(120);
@@ -472,15 +497,21 @@ describe('DiffViewer', () => {
       <DiffViewer file={FILE} viewMode="split" />,
     );
     const widest = 'export function greet(name: string) {';
-    for (const side of ['old', 'new']) {
-      const sizer = container.querySelector(
-        `[data-diff-pane="${side}"] [data-diff-sizer]`,
+    // The sizer is the hidden child of a pane's table that is not a row.
+    const sizers = (side: 'old' | 'new') =>
+      Array.from(
+        pane(container, side).querySelectorAll(
+          '[role="table"] > div[aria-hidden="true"]:not([role])',
+        ),
       );
-      expect(sizer?.textContent).toBe(widest);
+    for (const side of ['old', 'new'] as const) {
+      expect(sizers(side).map(sizer => sizer.textContent)).toEqual([widest]);
     }
     // Wrapped panes never scroll sideways: no sizer row.
     rerender(<DiffViewer file={FILE} viewMode="split" isWrapped />);
-    expect(container.querySelector('[data-diff-sizer]')).toBeNull();
+    for (const side of ['old', 'new'] as const) {
+      expect(sizers(side)).toHaveLength(0);
+    }
   });
 
   it('turns off sideways overscroll only while code overflows sideways', () => {
@@ -496,11 +527,12 @@ describe('DiffViewer', () => {
     vi.spyOn(window, 'getComputedStyle').mockImplementation(element => {
       const computed = nativeGetComputedStyle(element);
       return new Proxy(computed, {
-        get(target, property) {
+        get(target, property): string | number | object | null | undefined {
           if (property === 'overflowX' || property === 'overflowY') {
             return 'auto';
           }
-          return Reflect.get(target, property, target);
+          return Reflect.get(target, property, target) as
+            string | number | object | null | undefined;
         },
       });
     });
@@ -547,11 +579,10 @@ describe('DiffViewer', () => {
       }
       measure(blockViewport, 180);
       expect(blockViewport.style.overscrollBehaviorX).not.toBe('none');
-      for (const pane of container.querySelectorAll<HTMLElement>(
-        '[data-diff-pane]',
-      )) {
-        measure(pane, 180);
-        expect(pane.style.overscrollBehaviorX).toBe('none');
+      for (const side of ['old', 'new'] as const) {
+        const scroller = pane(container, side);
+        measure(scroller, 180);
+        expect(scroller.style.overscrollBehaviorX).toBe('none');
       }
     } finally {
       vi.restoreAllMocks();
@@ -596,15 +627,16 @@ describe('DiffViewer', () => {
   it('skips the inline highlight for unrelated lines and when turned off', () => {
     const [unrelated] = parseUnifiedDiff(patchOf('foo()', 'return 42;'));
     const {container, unmount} = render(<DiffViewer file={unrelated} />);
-    expect(container.querySelector('[data-diff-change]')).toBeNull();
+    expect(highlights(container)).toHaveLength(0);
     unmount();
 
     const [file] = parseUnifiedDiff(patchOf('let a = 1;', 'let a = 2;'));
     const view = render(<DiffViewer file={file} inlineHighlight="none" />);
-    expect(view.container.querySelector('[data-diff-change]')).toBeNull();
+    expect(highlights(view.container)).toHaveLength(0);
   });
 
   it('marks changed lines with bars or no indicator, still named for assistive technology', () => {
+    let barClasses: string[] = [];
     for (const changeIndicator of ['bars', 'none'] as const) {
       const {container, unmount} = render(
         <DiffViewer file={FILE} changeIndicator={changeIndicator} />,
@@ -613,9 +645,15 @@ describe('DiffViewer', () => {
         container.querySelectorAll('span[aria-hidden="true"]'),
       ).filter(span => span.textContent === '+' || span.textContent === '-');
       expect(glyphs).toHaveLength(0);
-      expect(container.querySelectorAll('[data-diff-bar]')).toHaveLength(
-        changeIndicator === 'bars' ? 3 : 0,
-      );
+      const markers = emptyMarkers(container).map(span => span.className);
+      if (changeIndicator === 'bars') {
+        // One bar per changed line.
+        expect(markers).toHaveLength(3);
+        barClasses = markers;
+      } else {
+        // No bar on screen: only the forced-colors-only marks remain.
+        expect(markers.some(name => barClasses.includes(name))).toBe(false);
+      }
       expect(screen.getAllByText('Added')).toHaveLength(2);
       expect(screen.getAllByText('Removed')).toHaveLength(1);
       unmount();
@@ -623,10 +661,8 @@ describe('DiffViewer', () => {
   });
 
   it('gives a tint-only change a bar that shows only in forced colors', () => {
-    const forcedOnly = (container: HTMLElement) =>
-      Array.from(
-        container.querySelectorAll('span[aria-hidden="true"]:empty'),
-      ).filter(span => !span.hasAttribute('data-diff-bar'));
+    // With no bars on screen, every empty hidden marker is forced-colors-only.
+    const forcedOnly = emptyMarkers;
     const {container, rerender} = render(
       <DiffViewer file={FILE} changeIndicator="none" />,
     );
@@ -908,11 +944,11 @@ describe('DiffViewer', () => {
     expect(screen.getByText('Binary file not shown')).toBeInTheDocument();
   });
 
-  it('renders the headerEnd slot', () => {
+  it('renders the endContent slot', () => {
     render(
       <DiffViewer
         file={FILE}
-        headerEnd={<button type="button">Viewed</button>}
+        endContent={<button type="button">Viewed</button>}
       />,
     );
     const header = screen
@@ -922,6 +958,23 @@ describe('DiffViewer', () => {
     expect(
       within(header as HTMLElement).getByRole('button', {name: 'Viewed'}),
     ).toBeInTheDocument();
+  });
+
+  it('renders no header for a file with no path and nothing in endContent', () => {
+    const file = createDiffFile({oldValue: 'a\n', newValue: 'b\n'});
+    const {container, rerender} = render(
+      <DiffViewer file={file} endContent={false} />,
+    );
+    expect(container.querySelector('.astryx-diff-viewer-header')).toBeNull();
+    rerender(
+      <DiffViewer
+        file={file}
+        endContent={<button type="button">Viewed</button>}
+      />,
+    );
+    expect(
+      container.querySelector('.astryx-diff-viewer-header'),
+    ).not.toBeNull();
   });
 
   it('forwards ref, className, and DOM props to the root', () => {

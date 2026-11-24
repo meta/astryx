@@ -2132,6 +2132,42 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(358.8 73% 25%)',
       },
     },
+    'diff-viewer': {
+      base: {
+        backgroundColor: 'hsl(193.6 93% 53%)',
+        color: 'hsl(168.1 71% 12%)',
+        borderColor: 'hsl(213.9 90% 25%)',
+        outlineColor: 'hsl(24.7 92% 25%)',
+      },
+      'viewMode:unified': {
+        backgroundColor: 'hsl(297.8 83% 58%)',
+        color: 'hsl(327.3 88% 12%)',
+        borderColor: 'hsl(250.1 84% 25%)',
+        outlineColor: 'hsl(191.4 92% 25%)',
+      },
+      'viewMode:split': {
+        backgroundColor: 'hsl(241.8 81% 56%)',
+        color: 'hsl(355.2 88% 12%)',
+        borderColor: 'hsl(289.4 85% 25%)',
+        outlineColor: 'hsl(156.7 88% 25%)',
+      },
+    },
+    'diff-viewer-header': {
+      base: {
+        backgroundColor: 'hsl(194.1 85% 59%)',
+        color: 'hsl(342.0 78% 12%)',
+        borderColor: 'hsl(165.9 81% 25%)',
+        outlineColor: 'hsl(296.6 93% 25%)',
+      },
+    },
+    'diff-viewer-path': {
+      base: {
+        backgroundColor: 'hsl(304.6 92% 45%)',
+        color: 'hsl(62.7 83% 12%)',
+        borderColor: 'hsl(359.9 70% 25%)',
+        outlineColor: 'hsl(165.7 75% 25%)',
+      },
+    },
     divider: {
       base: {
         backgroundColor: 'hsl(26.4 77% 53%)',

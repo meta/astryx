@@ -44,7 +44,7 @@ import {
   DiffViewer,
   type DiffViewerFile,
   type DiffViewerViewMode,
-} from '@astryxdesign/lab';
+} from '@astryxdesign/core/DiffViewer';
 import {
   createMultiFileWorkload,
   createSingleFileWorkload,
@@ -396,12 +396,10 @@ export default function DiffViewerPerfPage() {
         // Looks for a rendered diff now and then once per frame, so a file
         // that renders late is caught at the frame it appears.
         const watchFirstFile = () => {
-          // Unified view renders a <table>; split view, a role="table" grid;
-          // a file folded for its size, only its fold row.
+          // A DiffViewer renders its root and its rows (a table, a
+          // role="table" grid, or a fold row) in one commit.
           if (
-            surfaceRef.current?.querySelector(
-              'table, [role="table"], [data-diff-fold]',
-            ) != null
+            surfaceRef.current?.querySelector('.astryx-diff-viewer') != null
           ) {
             afterNextPaint(renderStart, ms => {
               firstFileMs = ms;
