@@ -104,7 +104,8 @@ export const docs = {
     {
       name: 'describedBy',
       type: 'string',
-      description: 'ID to compose into aria-describedby on the trigger.',
+      description:
+        "ID to compose into aria-describedby on the trigger. It names the tooltip's text description: a hidden copy (the hidden attribute) after the trigger until the tooltip first shows, then the tooltip's content. It is not the tooltip element's id.",
     },
     {
       name: 'renderTooltip',
@@ -142,7 +143,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'For a toggle-style trigger, have your own button call show() and hide() on each press. Give it aria-describedby and aria-controls set to describedBy, and aria-expanded (true while show() holds the tooltip, false after hide() or onHide), and keep its own accessible name. For an info icon, use InfoTip instead.',
+          'For a toggle-style trigger, have your own button call show() and hide() on each press. Give it aria-describedby set to describedBy and aria-expanded (true while show() holds the tooltip, false after hide() or onHide), and keep its own accessible name. For an info icon, use InfoTip instead.',
       },
       {
         guidance: false,
@@ -184,7 +185,8 @@ export const docsDense = {
     positionRef: 'position anchor ref.',
     interactionRef: 'hover/focus interaction ref.',
     anchorId: 'CSS anchor name.',
-    describedBy: 'ID for aria-describedby.',
+    describedBy:
+      "ID for aria-describedby: the tooltip's text description (a hidden copy until the first show, then its content), not the tooltip element.",
     renderTooltip: 'renders anchor-positioned tooltip content.',
     show: 'opens + holds until hide()/Escape/outside press/focus leave; announces once; onShow. Controlled: onShow only. No-op when disabled.',
     hide: 'closes; onHide. Controlled: onHide only.',
@@ -206,7 +208,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Toggle-style trigger: own button calls show()/hide() per press, sets aria-describedby + aria-controls={describedBy}, aria-expanded (true while held), keeps its own name. Info icon: use InfoTip.',
+          'Toggle-style trigger: own button calls show()/hide() per press, sets aria-describedby={describedBy}, aria-expanded (true while held), keeps its own name. Info icon: use InfoTip.',
       },
       {
         guidance: false,

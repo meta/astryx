@@ -478,6 +478,15 @@ describe('Text keeps its children mounted when maxLines changes', () => {
 // A page of truncated text mounted one closed tooltip layer per element at
 // load. The tooltip now mounts on the first hover, tap or focus, and that
 // interaction opens it as it would once mounted.
+/**
+ * The marker a mounted tooltip leaves beside its text. A truncated Text's
+ * tooltip adds no description, and its layer mounts at its first show, so
+ * before a show the marker is the only sign that the tooltip mounted.
+ */
+function tooltipMarkerIn(container: HTMLElement): Element | null {
+  return container.querySelector('template');
+}
+
 describe('the truncation tooltip mounts on the first interaction', () => {
   const LABEL = 'A label far wider than the space it has been given';
 
@@ -886,7 +895,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
   it('opens no tooltip when the pointer leaves before the hover delay ends', async () => {
     const {showPopover, restore} = withOverflowAndPopover();
     try {
-      render(
+      const {container} = render(
         <Text type="body" maxLines={1}>
           {LABEL}
         </Text>,
@@ -899,7 +908,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       fireEvent.mouseLeave(text);
       await waitFor(
         () => {
-          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+          expect(tooltipMarkerIn(container)).not.toBeNull();
         },
         {timeout: 3000},
       );
@@ -959,7 +968,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
     const {restore} = withOverflowAndPopover();
     try {
       const user = userEvent.setup();
-      render(
+      const {container} = render(
         <Text type="body" maxLines={1}>
           <a href="#details">{LABEL}</a>
         </Text>,
@@ -976,7 +985,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       expect(link).toHaveFocus();
       await waitFor(
         () => {
-          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+          expect(tooltipMarkerIn(container)).not.toBeNull();
         },
         {timeout: 3000},
       );
@@ -1090,7 +1099,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
     const {showPopover, restore} = withOverflowAndPopover();
     try {
       const user = userEvent.setup();
-      render(
+      const {container} = render(
         <Text type="body" maxLines={1}>
           {LABEL} <input aria-label="Note" />
         </Text>,
@@ -1105,7 +1114,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       expect(field).toHaveFocus();
       await waitFor(
         () => {
-          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+          expect(tooltipMarkerIn(container)).not.toBeNull();
         },
         {timeout: 3000},
       );
@@ -1276,7 +1285,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
   it('opens nothing after a mouse press made while the tooltip loads', async () => {
     const {showPopover, restore} = withOverflowAndPopover();
     try {
-      render(
+      const {container} = render(
         <Text type="body" maxLines={1}>
           {LABEL}
         </Text>,
@@ -1287,7 +1296,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       fireEvent.pointerDown(text, {pointerType: 'mouse'});
       await waitFor(
         () => {
-          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+          expect(tooltipMarkerIn(container)).not.toBeNull();
         },
         {timeout: 3000},
       );
@@ -1336,7 +1345,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       // A fresh module graph, so the Tooltip module has not loaded yet.
       vi.resetModules();
       const {Text: FirstText} = await import('./Text');
-      render(
+      const {container} = render(
         <FirstText type="body" maxLines={1}>
           {LABEL}
         </FirstText>,
@@ -1346,10 +1355,10 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       fireEvent.pointerMove(text, {pointerType: 'mouse'});
       fireEvent.pointerDown(text, {pointerType: 'mouse'});
       fireEvent.pointerMove(text, {pointerType: 'mouse'});
-      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+      expect(tooltipMarkerIn(container)).toBeNull();
       await waitFor(
         () => {
-          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+          expect(tooltipMarkerIn(container)).not.toBeNull();
         },
         {timeout: 3000},
       );

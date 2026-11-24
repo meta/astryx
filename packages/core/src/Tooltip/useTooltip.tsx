@@ -14,6 +14,8 @@
  */
 
 import {
+  Fragment,
+  isValidElement,
   use,
   useCallback,
   useEffect,
@@ -21,11 +23,20 @@ import {
   useState,
   type ReactNode,
   type RefCallback,
+  useSyncExternalStore,
 } from 'react';
+import {createPortal} from 'react-dom';
 import {useCommittedRef} from '../hooks/useCommittedRef';
+import {getNodeText} from '../utils/getNodeText';
 import {holdMouseMoves, isMouseMove} from '../utils/inputStream';
+import {createStore, type SharedStore} from '../utils/sharedRealm';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {TooltipPresentInterestContext} from './tooltipPresentInterest';
+import {
+  DESCRIPTION_SUFFIX,
+  TooltipDescribesContext,
+  TooltipDescriptionIdContext,
+  TooltipPresentInterestContext,
+} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
 import {getInteractionModality} from '../utils/interactionModality';
 import {NON_TEXT_INPUT_TYPES} from '../keyboard/keyboardHeight';
@@ -55,6 +66,7 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {tooltipDescriptionProps} from '../privateAttributes/tooltipDescription.stylex';
 
 /**
  * Whether `element` is a text field in any state: a text-like `<input>`, a
@@ -232,13 +244,21 @@ export interface TooltipReturn {
 
   /**
    * ID for aria-describedby on the trigger element.
-   * Caller should compose with other IDs using mergeIds utility.
+   * Caller should compose with other IDs using mergeIds utility. It names the
+   * tooltip's text description: until the tooltip first shows, a hidden copy
+   * of the tooltip text that `renderTooltip` renders after the trigger, in
+   * server and client markup alike; after that, the tooltip's content. It is
+   * not the tooltip element's id.
    */
   describedBy: string;
 
   /**
    * Render function for tooltip content.
    * Returns anchor-positioned popover element.
+   *
+   * Until the tooltip first shows, the content also renders as the trigger's
+   * hidden description, so a component inside it runs its effects before
+   * then. The tooltip renders it again inside the layer when it first shows.
    *
    * `positioning` is excluded: the tooltip always derives its position from
    * placement/alignment, so accepting the custom opt-out here would be a
@@ -259,8 +279,8 @@ export interface TooltipReturn {
    * `isEnabled` is false.
    *
    * Use `show()` and `hide()` to build a toggle-style trigger: your own button
-   * calls them, sets `aria-describedby` and `aria-controls` to `describedBy`
-   * and `aria-expanded` (true while shown), and keeps its own accessible name.
+   * calls them, sets `aria-describedby` to `describedBy` and `aria-expanded`
+   * (true while shown), and keeps its own accessible name.
    */
   show: () => void;
 
@@ -269,6 +289,75 @@ export interface TooltipReturn {
    * `isOpen`, it calls `onHide` and does not change `isOpen`.
    */
   hide: () => void;
+}
+
+/**
+ * The trigger's description until the layer first mounts: a hidden copy of
+ * the tooltip text (the `hidden` attribute). `aria-describedby` reads a hidden
+ * node it names directly, and browse mode skips it. It is a sibling after the
+ * trigger, never inside it, and the commit that mounts the layer removes it.
+ * Group rules that find the last member (ButtonGroup's trailing radius) skip
+ * it. A Core component that renders the
+ * tooltip under `TooltipDescribesContext` `false` gets none.
+ */
+function TooltipDescription({
+  id,
+  children,
+}: {
+  id: string;
+  children: ReactNode;
+}): ReactNode {
+  const describes = use(TooltipDescribesContext);
+  // The host span reaches render through a store, so no DOM node is in
+  // state.
+  const [hostStore] = useState(createHostStore);
+  const host = useSyncExternalStore(
+    hostStore.subscribe,
+    hostStore.get,
+    readNoHost,
+  );
+  if (!describes) {
+    return null;
+  }
+  if (!hasComponent(children)) {
+    return (
+      <span id={id} hidden {...tooltipDescriptionProps}>
+        {getNodeText(children)}
+      </span>
+    );
+  }
+  // Content that holds a component renders as it is, so its text reaches the
+  // description. Its markup can hold a block, which must not sit in an
+  // enclosing paragraph. So the copy starts empty, server markup included,
+  // and the client renders the content into it through a portal.
+  return (
+    <span ref={hostStore.set} id={id} hidden {...tooltipDescriptionProps}>
+      {host != null ? createPortal(children, host) : null}
+    </span>
+  );
+}
+
+const readNoHost = (): HTMLElement | null => null;
+
+/** A store for the element a description renders its content into. */
+const createHostStore = (): SharedStore<HTMLElement | null> =>
+  createStore<HTMLElement | null>(null);
+
+/**
+ * Whether tooltip content holds a component element, whose text only its own
+ * rendering knows.
+ */
+function hasComponent(node: ReactNode): boolean {
+  if (Array.isArray(node)) {
+    return node.some(hasComponent);
+  }
+  if (!isValidElement(node)) {
+    return false;
+  }
+  if (typeof node.type !== 'string' && node.type !== Fragment) {
+    return true;
+  }
+  return hasComponent((node.props as {children?: ReactNode}).children);
 }
 
 /**
@@ -289,7 +378,7 @@ export interface TooltipReturn {
  * @example
  * ```
  * const tooltip = useTooltip({ placement: 'above' });
- * <Button ref={tooltip.ref} aria-describedby={tooltip.describedBy}>
+ * <Button ref={tooltip.ref} aria-describedby={tooltip.describedBy || undefined}>
  *   Hover me
  * </Button>
  * {tooltip.renderTooltip('Helpful tooltip text')}
@@ -314,11 +403,15 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // over the trigger: content taller than the room above and below opens
   // beside it, or on the roomier side sized to that room, and scrolls what does not
   // fit inside the surface, which stays hoverable (spec:AST-059 FR4).
+  // The layer mounts at its first show and then stays. A page of closed
+  // tooltips mounts no layers.
   const layer = useLayerInternal({
     mode: 'context',
     onShow,
     onHide,
     keepsAnchorClear: true,
+    lazyMount: true,
+    keepsMountAfterShow: true,
     getInvoker: noInvoker,
   });
   const {
@@ -330,6 +423,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     id: layerId,
     render: renderLayer,
   } = layer;
+  // The trigger's description is a hidden copy of the tooltip text until the
+  // layer first mounts: it is in server and client markup before the first
+  // show. Once the layer is mounted, its content is the description, and the
+  // copy is gone.
+  const describes = use(TooltipDescribesContext);
+  const givenDescriptionId = use(TooltipDescriptionIdContext);
+  const descriptionId = givenDescriptionId ?? `${layerId}${DESCRIPTION_SUFFIX}`;
 
   const popoverXstyle = styles.container;
 
@@ -1077,20 +1177,47 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         onMouseLeave: scheduleHide,
       };
 
-      return renderLayer(
-        // FR11: React bubbles a press on the surface to the trigger's
-        // ancestors, portaled or not. A registered surface counts as
-        // something else in the shared interactive-ancestor walk, so a
-        // clickable container around the trigger leaves the press alone while
-        // document listeners still see it.
-        // The hold's announcement reads this element's text.
-        <div ref={contentRefs} {...stylex.props(styles.content)}>
-          {children}
-        </div>,
-        renderProps,
+      return (
+        <>
+          {renderLayer(
+            // FR11: React bubbles a press on the surface to the trigger's
+            // ancestors, portaled or not. A registered surface counts as
+            // something else in the shared interactive-ancestor walk, so a
+            // clickable container around the trigger leaves the press alone
+            // while document listeners still see it.
+            // The hold's announcement reads this element's text.
+            <div
+              ref={contentRefs}
+              // Once the layer is mounted, its content is the trigger's
+              // description, so the text renders once.
+              id={describes ? descriptionId : undefined}
+              // Without a description, the trigger already reads this text
+              // (its own label, or a reason it names). A pinned tooltip stays
+              // readable: its text is announced and the pinning button
+              // controls it.
+              aria-hidden={describes || isHoldShown ? undefined : true}
+              {...stylex.props(styles.content)}>
+              {children}
+            </div>,
+            {
+              ...renderProps,
+              // Before the layer first mounts, a hidden copy of the text
+              // describes the trigger. The commit that mounts the layer
+              // removes it.
+              whileUnmounted: describes ? (
+                <TooltipDescription id={descriptionId}>
+                  {children}
+                </TooltipDescription>
+              ) : null,
+            },
+          )}
+        </>
       );
     },
     [
+      describes,
+      descriptionId,
+      isHoldShown,
       renderLayer,
       placement,
       alignment,
@@ -1138,7 +1265,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     positionRef: layerRef,
     interactionRef,
     anchorId: layerAnchorId,
-    describedBy: layerId,
+    describedBy: describes ? descriptionId : '',
     renderTooltip,
     show,
     hide,

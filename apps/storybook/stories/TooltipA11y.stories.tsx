@@ -32,3 +32,4 @@ export const WrappedButton = storyFor('wrapped-button');
 export const TextTrigger = storyFor('text-trigger');
 export const AnchorRefWithHint = storyFor('anchor-ref-with-hint');
 export const UseTooltipHook = storyFor('use-tooltip-hook');
+export const BeforeFirstShow = storyFor('before-first-show');

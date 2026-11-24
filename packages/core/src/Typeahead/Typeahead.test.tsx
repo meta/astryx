@@ -56,6 +56,7 @@ import {
 import type {SearchSource, SearchableItem} from './types';
 import {InternationalizationProvider} from '../i18n';
 import {InputGroup} from '../InputGroup';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
@@ -2720,18 +2721,18 @@ describe('Typeahead disabledMessage', () => {
     const container = document.querySelector(
       '.astryx-typeahead',
     ) as HTMLElement;
-    const tooltip = screen.getByRole('tooltip', h);
-    expect(tooltip).toHaveTextContent('You need the Editor role');
+    const tooltip = () => getTooltip();
+    expect(tooltip()).toHaveTextContent('You need the Editor role');
 
     fireEvent.mouseEnter(container);
     fireEvent.pointerMove(container);
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(tooltip()).toHaveAttribute('popover-open');
     });
 
     fireEvent.mouseLeave(container);
     await waitFor(() => {
-      expect(tooltip).not.toHaveAttribute('popover-open');
+      expect(tooltip()).not.toHaveAttribute('popover-open');
     });
   });
 
@@ -2748,11 +2749,11 @@ describe('Typeahead disabledMessage', () => {
       />,
     );
 
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = () => getTooltip();
     await user.tab();
     expect(screen.getByRole('combobox')).toHaveFocus();
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(tooltip()).toHaveAttribute('popover-open');
     });
   });
 
@@ -2811,7 +2812,7 @@ describe('Typeahead disabledMessage', () => {
       />,
     );
     const input = screen.getByRole('combobox');
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 

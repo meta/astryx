@@ -30,6 +30,7 @@ import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -79,7 +80,7 @@ describe('InputClearButton', () => {
     const button = screen.getByRole('button', {
       name: 'Clear Assigned engineering partner',
     });
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent(/^Clear$/);
     expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
 
@@ -98,9 +99,7 @@ describe('InputClearButton', () => {
       </InternationalizationProvider>,
     );
     expect(screen.getByRole('button', {name: 'Suche leeren'})).toBeTruthy();
-    expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
-      /^Leeren$/,
-    );
+    expect(getTooltip()).toHaveTextContent(/^Leeren$/);
   });
 
   it('renders a real button with the given accessible label', () => {
