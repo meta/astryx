@@ -1243,6 +1243,49 @@ describe('Tokenizer', () => {
       expect(await screen.findByText('Create "Kiwis"')).toBeInTheDocument();
     });
 
+    it('creates nothing from the list of an earlier query, and creates the typed text once its own list shows', async () => {
+      const fruits = ['Apple', 'Apricot'].map(label => ({id: label, label}));
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{
+            search: (query: string) =>
+              fruits.filter(item =>
+                item.label.toLowerCase().includes(query.toLowerCase()),
+              ),
+            bootstrap: () => fruits,
+          }}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          hasEntriesOnFocus
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        input.focus();
+        fireEvent.click(input);
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      // The focus list still shows while "Zig" waits for its debounce.
+      fireEvent.change(input, {target: {value: 'Zig'}});
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith(
+        [{id: 'Zig', label: 'Zig'}],
+        expect.objectContaining({type: 'create'}),
+      );
+    });
+
     it('still offers Create below minQueryLength, and does not search', async () => {
       // The threshold exists to avoid a fetch too broad to be worth making.
       // Creating costs no fetch, so a field that can create `QA` should not

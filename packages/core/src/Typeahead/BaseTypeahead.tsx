@@ -800,6 +800,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // cached empty answer belongs to the old query, not the text now typed.
   const [lastSearchedQuery, setLastSearchedQuery] = useState('');
   const isSearchPending = isLoading || query !== lastSearchedQuery;
+  // Text below the threshold is never searched; its rows come from the text.
+  const isTypedTextUnsearched =
+    query.length > 0 &&
+    query !== lastSearchedQuery &&
+    !isBelowMinQueryLength(query, minQueryLength);
 
   // An empty query reports nothing: an empty focus bootstrap is not a failed
   // search. A newer query stays silent through debounce and pending work;
@@ -2062,6 +2067,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           break;
         case 'Enter':
           e.preventDefault();
+          // Until the typed text's own search starts, the list still answers
+          // an earlier query, so Enter picks nothing from it.
+          if (isTypedTextUnsearched) {
+            break;
+          }
           if (highlightedIndex >= 0 && highlightedIndex < results.length) {
             handleSelect(displayedResults[highlightedIndex]);
           }
@@ -2105,6 +2115,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       highlightedIndex,
       handleSelect,
       hasEntriesOnFocus,
+      isTypedTextUnsearched,
       query,
       minQueryLength,
       performBootstrap,
