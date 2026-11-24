@@ -109,15 +109,18 @@ describe('Selector bottom-sheet load', () => {
     fireEvent.pointerDown(trigger, {pointerType: 'touch'});
     await vi.waitFor(() => expect(frameModule.requests).toBe(1));
 
-    // The tap ends and opens the list while the frame still loads. Focus
-    // and the open add no second load.
+    // The tap ends and opens the list while the frame still loads.
     trigger.focus();
     fireEvent.pointerUp(trigger, {pointerType: 'touch'});
     fireEvent.click(trigger);
     // The open is held until the frame renders the listbox: the trigger
-    // reports no expanded list and names nothing yet.
+    // reports no expanded list, names nothing yet, and its chevron stays
+    // closed.
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).not.toHaveAttribute('aria-controls');
+    const chevron = () =>
+      document.querySelector('.astryx-selector-indicator-icon');
+    expect(chevron()).toHaveAttribute('data-state', 'collapsed');
     expect(frameModule.requests).toBe(1);
     expect(screen.queryByRole('dialog', {hidden: true})).toBeNull();
 
@@ -135,5 +138,6 @@ describe('Selector bottom-sheet load', () => {
     expect(listbox.contains(document.activeElement)).toBe(true);
     expect(trigger).toHaveAttribute('aria-controls', listbox.id);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(chevron()).toHaveAttribute('data-state', 'expanded');
   });
 });

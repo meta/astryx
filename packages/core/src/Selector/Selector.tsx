@@ -2501,7 +2501,7 @@ export function Selector<T extends SelectorOptionType>(
             xstyle={[
               styles.triggerIcon,
               styles.triggerIconRotation,
-              surface.isOpen && styles.triggerIconOpen,
+              isExpanded && styles.triggerIconOpen,
             ]}
             // Stable theme target on the chevron glyph itself, so a theme can
             // restyle just this icon (color, size, hover) — and its
@@ -2509,7 +2509,7 @@ export function Selector<T extends SelectorOptionType>(
             // @layer astryx-theme win over the icon's own base color/size,
             // which a button-level target could not reach.
             {...themeProps('selector-indicator-icon', {
-              state: surface.isOpen ? 'expanded' : 'collapsed',
+              state: isExpanded ? 'expanded' : 'collapsed',
             })}
           />
         ) : null}

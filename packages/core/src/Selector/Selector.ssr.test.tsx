@@ -5,8 +5,8 @@
  * @input Selector server markup and React hydration
  * @output Proves a bottom-sheet Selector hydrates without a recoverable
  *   error or a console error while its on-demand sheet has not loaded
- * @position SSR acceptance test for Selector; it waits for the on-demand
- *   sheet module each hydration starts, so none loads after teardown
+ * @position SSR acceptance test for Selector; it imports the sheet frame
+ *   after each hydration, so no import lands after teardown
  */
 
 import {act} from 'react';

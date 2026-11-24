@@ -2629,9 +2629,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const isExpanded = !isEffectivelyReadOnly && surface.isListShown;
 
   if (renderTrigger != null) {
-    // A caller's control gets no pointer props from the selector, so its
-    // intent listeners (a pointer down, or a mouse or pen entering it) are
-    // attached here and start the sheet's load.
+    // A caller's control gets no pointer props. These listeners start the
+    // sheet's load on a pointer down, or when a mouse or pen enters the control.
     const loadSheetOnIntent = (element: HTMLElement | null) => {
       if (element == null || !canOpenSurface) {
         return;
@@ -2901,7 +2900,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             xstyle={[
               styles.triggerIcon,
               styles.triggerIconRotation,
-              surface.isOpen && styles.triggerIconOpen,
+              isExpanded && styles.triggerIconOpen,
             ]}
             // Stable theme target on the chevron glyph itself, so a theme can
             // restyle just this icon (color, size, hover) — and its
@@ -2909,7 +2908,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             // @layer astryx-theme win over the icon's own base color/size,
             // which a button-level target could not reach.
             {...themeProps('multi-selector-indicator-icon', {
-              state: surface.isOpen ? 'expanded' : 'collapsed',
+              state: isExpanded ? 'expanded' : 'collapsed',
             })}
           />
         ) : null}
