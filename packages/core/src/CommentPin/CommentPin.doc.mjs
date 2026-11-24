@@ -3,8 +3,9 @@
 /**
  * @file CommentPin.doc.mjs
  * @input CommentPin API, anatomy, ownership boundaries, and examples
- * @output Consumer documentation for the Lab comment pin
- * @position CLI and docsite metadata; the runnable showcase lives in packages/lab/blocks
+ * @output Consumer documentation for the comment pin
+ * @position CLI and docsite metadata; the runnable showcase lives in
+ *   packages/cli/assets/templates/blocks/components/CommentPin
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
@@ -45,6 +46,8 @@ const anatomy = [
 export const docs = {
   name: 'CommentPin',
   displayName: 'Comment Pin',
+  // Keeps the registry route CommentPin had as a Lab component.
+  registry: {aliases: ['lab/comment-pin']},
   group: 'Comments',
   category: 'Chat',
   keywords: [

@@ -6,7 +6,7 @@
  * @input A host-positioned CommentPin and its lead commenter
  * @output A document passage with one comment pin in its margin; activating
  *   the pin toggles its own selection and aria-pressed state
- * @position Copyable Lab CommentPin placement example
+ * @position Copyable CommentPin placement example
  */
 
 import * as stylex from '@stylexjs/stylex';
@@ -14,7 +14,7 @@ import {Card} from '@astryxdesign/core/Card';
 import {Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Stack';
 import {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
-import {CommentPin} from '@astryxdesign/lab';
+import {CommentPin} from '@astryxdesign/core/CommentPin';
 
 const styles = stylex.create({
   document: {

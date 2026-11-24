@@ -2,7 +2,8 @@
 
 /**
  * @file types.ts
- * @input Uses React types, ChatComposerTrigger, and Markdown plugin types
+ * @input Uses React types, ChatComposerTrigger, Markdown plugin types, and
+ *   Core's CommentUser
  * @output Exports the data, callback, and prop types shared by Comments,
  *   CommentThread, and CommentComposer, and DEFAULT_COMMENT_REACTIONS
  * @position Type contract for the lab Comments family
@@ -18,6 +19,7 @@ import type {
   ChatComposerTrigger,
   ChatMessageStatus,
 } from '@astryxdesign/core/Chat';
+import type {CommentUser} from '@astryxdesign/core/CommentPin';
 import type {MarkdownInlinePlugin} from '@astryxdesign/core/Markdown';
 import type {MarkdownPluginEntry} from '@astryxdesign/core/Markdown/plugins';
 
@@ -39,29 +41,7 @@ export type CommentStatus = Extract<
   'sending' | 'sent' | 'error'
 >;
 
-/**
- * A person or agent who writes comments, reacts, or acts on the item. A
- * CommentPin's participants take the same records.
- */
-export interface CommentUser {
-  /** Stable host-owned id, used for equality ("is this my comment?"). */
-  id: string;
-  /** Full display name. Never a viewer-relative label such as "You". */
-  name: string;
-  /**
-   * An agent shows its logo (`src`), or square-cornered initials without
-   * one, and an Agent badge beside its name.
-   * @default 'person'
-   */
-  kind?: 'person' | 'agent';
-  /** Where the author's name links, such as their profile. */
-  href?: string;
-  /**
-   * Profile picture, or an agent's square logo, as Avatar's `src`. Initials
-   * without one.
-   */
-  src?: string;
-}
+export type {CommentUser};
 
 /** A selectable reaction. */
 export interface CommentReactionOption {

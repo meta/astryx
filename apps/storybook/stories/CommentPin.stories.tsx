@@ -3,7 +3,7 @@
 import type {Meta, StoryObj} from '@storybook/react';
 import {useEffect, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {CommentPin} from '@astryxdesign/lab';
+import {CommentPin} from '@astryxdesign/core/CommentPin';
 import {Text} from '@astryxdesign/core/Text';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
 import {
@@ -169,7 +169,7 @@ function FocusedSelectedPin() {
 }
 
 const meta: Meta<typeof CommentPin> = {
-  title: 'Lab/CommentPin',
+  title: 'Core/CommentPin',
   component: CommentPin,
   tags: ['autodocs'],
   parameters: {layout: 'centered'},
