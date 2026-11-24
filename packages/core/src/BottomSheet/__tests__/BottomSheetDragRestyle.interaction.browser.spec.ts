@@ -51,6 +51,78 @@ interface OpenSheet {
   handle: {x: number; y: number};
 }
 
+interface ScrimRule {
+  readonly selector: string;
+  readonly value: string;
+  readonly origin: string;
+  readonly layers: ReadonlyArray<string>;
+  readonly stylesheet: string | null;
+}
+
+/**
+ * Every rule that sets the scrim's opacity on the sheet and on its first
+ * content element, with its origin, layers and stylesheet, as the DevTools
+ * protocol matches them. It names the rule that wins over the sheet's reset
+ * when the reset does not apply.
+ */
+async function scrimRules(
+  page: Page,
+): Promise<Record<string, ReadonlyArray<ScrimRule>>> {
+  const cdp = await page.context().newCDPSession(page);
+  const stylesheets = new Map<string, string>();
+  cdp.on('CSS.styleSheetAdded', ({header}) => {
+    stylesheets.set(header.styleSheetId, header.sourceURL || header.origin);
+  });
+  await cdp.send('DOM.enable');
+  await cdp.send('CSS.enable');
+  const {root} = await cdp.send('DOM.getDocument', {depth: -1});
+  const rulesFor = async (selector: string): Promise<ScrimRule[]> => {
+    const {nodeId} = await cdp.send('DOM.querySelector', {
+      nodeId: root.nodeId,
+      selector,
+    });
+    if (nodeId === 0) {
+      return [];
+    }
+    const matched = await cdp.send('CSS.getMatchedStylesForNode', {nodeId});
+    const rules: ScrimRule[] = [];
+    for (const {rule} of matched.matchedCSSRules ?? []) {
+      for (const property of rule.style.cssProperties) {
+        if (property.name === '--_sheet-scrim-opacity') {
+          rules.push({
+            selector: rule.selectorList.text,
+            value: property.value,
+            origin: rule.origin,
+            layers: (rule.layers ?? []).map(layer => layer.text),
+            stylesheet:
+              rule.styleSheetId == null
+                ? null
+                : (stylesheets.get(rule.styleSheetId) ?? rule.styleSheetId),
+          });
+        }
+      }
+    }
+    for (const property of matched.inlineStyle?.cssProperties ?? []) {
+      if (property.name === '--_sheet-scrim-opacity') {
+        rules.push({
+          selector: 'style attribute',
+          value: property.value,
+          origin: 'inline',
+          layers: [],
+          stylesheet: null,
+        });
+      }
+    }
+    return rules;
+  };
+  const rules = {
+    sheet: await rulesFor('dialog[open] .astryx-bottom-sheet'),
+    content: await rulesFor('dialog[open] .astryx-bottom-sheet > *'),
+  };
+  await cdp.detach().catch(() => {});
+  return rules;
+}
+
 async function openSheet(page: Page): Promise<OpenSheet> {
   await openStory(page, storybook(), 'core-bottomsheet--tall-sheet');
   const driver = await touchDriver(page);
@@ -130,12 +202,15 @@ test("a move of a drag restyles the dialog and the panel, not the sheet's conten
   const oversized = sources.filter(
     source => source.elements > RESTYLED_PER_MOVE,
   );
+  const rules = oversized.length > 0 ? await scrimRules(page) : null;
   const explained = JSON.stringify(
     {
       restyled,
       sheetElements: contentElements,
       scrimOpacity,
-      oversized: oversized.map(source => ({
+      scrimRules: rules,
+      // The first three; restyle-sources.json keeps them all.
+      oversized: oversized.slice(0, 3).map(source => ({
         elements: source.elements,
         after: source.invalidations,
       })),
@@ -149,7 +224,7 @@ test("a move of a drag restyles the dialog and the panel, not the sheet's conten
       {
         'rendering-events.json': JSON.stringify({steady, events: trace.events}),
         'restyle-sources.json': JSON.stringify(
-          {steady, scrimOpacity, sources},
+          {steady, scrimOpacity, rules, sources},
           null,
           1,
         ),
