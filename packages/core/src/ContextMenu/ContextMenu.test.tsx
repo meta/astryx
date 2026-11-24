@@ -432,6 +432,46 @@ describe('ContextMenu', () => {
     expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
   });
 
+  it('exposes only the drilled-in view as a menu on compact touch (FR7)', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    const user = userEvent.setup();
+    render(
+      <ContextMenu
+        presentation="popover"
+        label="Actions"
+        items={[
+          {label: 'Rename'},
+          {label: 'Move to', items: [{label: 'Folder A'}]},
+        ]}>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    fireEvent.contextMenu(screen.getByText('Right-click me'));
+    const isShown = (el: HTMLElement) => el.closest('[hidden]') == null;
+    const moveTo = screen
+      .getAllByRole('menuitem', {name: /Move to/, hidden: true})
+      .find(isShown)!;
+    await user.click(moveTo);
+    const view = await waitFor(() =>
+      screen
+        .getAllByRole('menu', {name: 'Move to', hidden: true})
+        .find(isShown)!,
+    );
+    expect(view.parentElement?.closest('[role="menu"]')).toBeNull();
+  });
+
   it('closes on Escape even when opened without auto-focus', () => {
     render(
       <ContextMenu items={[{label: 'Item 1'}]}>

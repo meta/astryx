@@ -29,6 +29,7 @@ import {
   type TooltipFocusTrigger,
   type TooltipTouchTrigger,
 } from './useTooltip';
+import {TooltipDescribesContext} from './tooltipPresentInterest';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {colorVars} from '../theme/tokens.stylex';
 
@@ -67,7 +68,10 @@ export interface TooltipProps {
 
   /**
    * Content to display in the tooltip.
-   * Typically short, non-interactive text.
+   * Typically short, non-interactive text. Until the tooltip first shows, it
+   * also renders as the trigger's hidden description, so a component inside
+   * it runs its effects before then. The tooltip renders it again inside the
+   * layer when it first shows.
    */
   content: ReactNode;
 
@@ -173,12 +177,21 @@ function isTextOnly(children: ReactNode): boolean {
   return typeof children === 'string' || typeof children === 'number';
 }
 
-/**
- * Utility to merge ARIA ID strings
- */
+/** Merges ARIA ID lists, each id once. */
 function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
-  const filtered = ids.filter(Boolean);
-  return filtered.length > 0 ? filtered.join(' ') : undefined;
+  const tokens = new Set(
+    ids.flatMap(id => (id == null ? [] : id.split(/\s+/).filter(Boolean))),
+  );
+  return tokens.size > 0 ? [...tokens].join(' ') : undefined;
+}
+
+/** Sets `aria-describedby`, or removes it when no id is left. */
+function setDescribedBy(element: Element, ids: string | undefined): void {
+  if (ids == null) {
+    element.removeAttribute('aria-describedby');
+  } else {
+    element.setAttribute('aria-describedby', ids);
+  }
 }
 
 /**
@@ -253,10 +266,7 @@ export function Tooltip({
 
       // Set aria-describedby, merging with existing
       const existingDescribedBy = el.getAttribute('aria-describedby');
-      el.setAttribute(
-        'aria-describedby',
-        mergeIds(existingDescribedBy, tooltip.describedBy) ?? '',
-      );
+      setDescribedBy(el, mergeIds(existingDescribedBy, tooltip.describedBy));
 
       return () => {
         tooltip.ref(null);
@@ -319,9 +329,9 @@ export function Tooltip({
 
     // Set aria-describedby, merging with existing
     const existingDescribedBy = firstChild.getAttribute('aria-describedby');
-    firstChild.setAttribute(
-      'aria-describedby',
-      mergeIds(existingDescribedBy, tooltip.describedBy) ?? '',
+    setDescribedBy(
+      firstChild,
+      mergeIds(existingDescribedBy, tooltip.describedBy),
     );
 
     return () => {
@@ -346,7 +356,7 @@ export function Tooltip({
         <span
           ref={tooltip.ref}
           tabIndex={0}
-          aria-describedby={tooltip.describedBy}
+          aria-describedby={tooltip.describedBy || undefined}
           // The span is a tab stop Astryx adds: it draws the shared ring,
           // which a theme restyles through the focus-outline tokens.
           {...focusOutlineProps.focusVisible(
@@ -381,19 +391,30 @@ Tooltip.displayName = 'Tooltip';
  * as they open a Tooltip. Internal: the truncation tooltip module loads it
  * with this module; the Tooltip entry does not export it.
  */
-export function UndescribedTooltip({
-  anchorRef,
-  content,
-  placement = 'above',
-  isOpen,
-  onHide,
-}: {
+export function UndescribedTooltip(props: UndescribedTooltipProps): ReactNode {
+  // No hidden copy: the anchor's own text is the tooltip's content.
+  return (
+    <TooltipDescribesContext value={false}>
+      <UndescribedTooltipLayer {...props} />
+    </TooltipDescribesContext>
+  );
+}
+
+interface UndescribedTooltipProps {
   anchorRef: RefObject<HTMLElement | null>;
   content: ReactNode;
   placement?: LayerPlacement;
   isOpen?: boolean;
   onHide?: () => void;
-}): ReactNode {
+}
+
+function UndescribedTooltipLayer({
+  anchorRef,
+  content,
+  placement = 'above',
+  isOpen,
+  onHide,
+}: UndescribedTooltipProps): ReactNode {
   const tooltip = useTooltip({placement, isOpen, onHide});
   const attach = tooltip.ref;
   // Syncs the trigger listeners with the anchor's current element on every

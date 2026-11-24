@@ -48,6 +48,7 @@ import {groupStyles} from '../InputGroup/groupStyles';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {colorVars, focusVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 /**
  * Enters a search query as one change. Typing it key by key can land several
@@ -2553,17 +2554,20 @@ describe('MultiSelector', () => {
       const container = screen
         .getByTestId('fruit-multi-selector')
         .closest('.astryx-multi-selector') as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent('Select a table first');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        );
       });
     });
 
@@ -2580,11 +2584,10 @@ describe('MultiSelector', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
     });
 
@@ -2643,7 +2646,7 @@ describe('MultiSelector', () => {
         />,
       );
       const trigger = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -3197,7 +3200,7 @@ describe('MultiSelector statusVariant forwarding', () => {
     const statusButton = screen.getByRole('button', {
       name: /warning details/i,
     });
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent('Some rows are hidden');
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
     expect(
@@ -3205,7 +3208,7 @@ describe('MultiSelector statusVariant forwarding', () => {
     ).toContain(tooltip.id);
   });
 
-  it('keeps the written order of the status tooltip message under right-to-left', () => {
+  it('keeps the written order of the status tooltip message under right-to-left', async () => {
     render(
       <div dir="rtl">
         <MultiSelector
@@ -3219,7 +3222,11 @@ describe('MultiSelector statusVariant forwarding', () => {
         />
       </div>,
     );
-    const tooltip = screen.getByRole('tooltip', h);
+    // The tooltip mounts on the first hover; its text keeps the written order.
+    await userEvent.hover(
+      screen.getByRole('button', {name: /warning details/i}),
+    );
+    const tooltip = await screen.findByRole('tooltip', h);
     expect(within(tooltip).getByText('-42 items')).toHaveAttribute(
       'dir',
       'ltr',

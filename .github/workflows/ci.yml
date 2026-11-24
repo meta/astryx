@@ -861,7 +861,7 @@ jobs:
             exit 0
           fi
           echo 'deferred=true' >> "$GITHUB_OUTPUT"
-          echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when review passes and before merge. It starts on its own once the review app or an engineering owner approves this exact head and the spec gate passes; re-run all jobs of this run to run everything now."
+          echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when review passes and before merge. It starts on its own once the review app or an engineering owner approves this exact head and the spec gate passes, while this run is at most six hours old. After that, mark the pull request draft, then ready, for a fresh run on the current main (a fork head needs its ci:run label first); a push or a main merge also works."
           echo "Heavy CI deferred: runs when review passes and before merge." >> "$GITHUB_STEP_SUMMARY"
 
   docsite-build:
@@ -5494,11 +5494,17 @@ jobs:
   # paints after Vite emits the final bundle. The `test-build` name makes that
   # package ownership explicit; the historical `test` join above projects its
   # result. Until runtime:build has a specialized route, broad CI dispatches it.
+  # It runs in two parts, each inside ten minutes: the Build package's
+  # contracts, and the vibe-tests fixtures that need the same Playwright setup.
   test-build:
     needs: [admission, heavy-ci]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [contracts, fixtures]
     permissions:
       # The heavy-suite caps read the author's pull requests and runs.
       actions: read
@@ -5583,20 +5589,19 @@ jobs:
       # production CSS-layer cascade, and cross-package StyleX markers in a
       # real browser. `pnpm test:build` owns the list.
       - name: Run Build package contracts
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && matrix.part == 'contracts'
         run: pnpm test:build
 
-      # The vibe-tests fixtures share this Playwright-equipped runner: the
-      # canonical setup compositions and the guest fixture contrast need a
-      # production browser render.
+      # The fixtures part: the vibe-tests canonical setup compositions and the
+      # guest fixture contrast need a production browser render.
       - name: Verify canonical setup compositions
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && matrix.part == 'fixtures'
         env:
           ASTRYX_CANONICAL_SETUP_BROWSER: '1'
         run: pnpm vitest run internal/vibe-tests/setup-test/setup-canonical.test.ts --project node --maxWorkers=1
 
       - name: Verify guest fixture contrast
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && matrix.part == 'fixtures'
         run: pnpm -F @astryxdesign/vibe-tests fixtures:contrast
 
   # The full visual plan first loads every Core story to learn which theming
@@ -7531,7 +7536,8 @@ jobs:
   # the components that use it. These otherwise run only in their own
   # component-audit pull request and in the release check. The plan job reads
   # the changed files and the import graph at the merge commit and splits the
-  # audits into at most three legs of about ten minutes each by recorded time.
+  # audits into at most three legs of about ten minutes each by recorded time,
+  # or four on a first run when a fourth runs every owed audit.
   # It waits for the Storybook build, which the legs need anyway.
   a11y-dependent-audits-plan:
     needs: [room, admission, heavy-ci, build-storybook]
@@ -7601,15 +7607,18 @@ jobs:
           echo "::error::The scope step could not list the changed files, so the dependent audits to run are unknown. Re-run the job."
           exit 1
 
-      # A first run fits what it can into three legs of about ten minutes and
-      # names the rest as not yet run; a later run at the same head (a re-run
-      # of all jobs) runs every owed audit.
+      # A first run fits what it can into three legs of about ten minutes, or
+      # four when a fourth runs every owed audit, and names the rest as not
+      # yet run, with the audits-at-head dispatch that runs them at this head;
+      # a later run at the same head (a re-run of all jobs) runs every owed
+      # audit.
       - name: Plan the dependent audits
         id: plan
         if: steps.scope.outputs.applies == 'true'
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           TRUNCATED: ${{ steps.scope.outputs.truncated }}
         run: |
@@ -7647,10 +7656,11 @@ jobs:
     # An empty count (the plan skipped) compares as 0.
     runs-on: ${{ needs.a11y-dependent-audits-plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: 15
-    # A first run plans at most three legs; a later run at the same head may
-    # plan up to six to run every owed audit. The matrix starts only the
-    # planned legs; a plan that owes no audit starts none (the condition above),
-    # and a plan that did not succeed starts exactly one, which fails.
+    # A first run plans at most three legs, or four when that runs every owed
+    # audit; a later run at the same head may plan up to six to run them all.
+    # The matrix starts only the planned legs; a plan that owes no audit
+    # starts none (the condition above), and a plan that did not succeed
+    # starts exactly one, which fails.
     strategy:
       fail-fast: false
       matrix:

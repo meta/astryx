@@ -63,4 +63,24 @@ describe('runClaudeCode', () => {
     expect(result.spawnError).toMatch(/ENOENT/);
     expect(result.result).toBeNull();
   });
+
+  it('gives the agent its own TMPDIR when the runner passes one', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vibe-agent-'));
+    const bin = path.join(dir, 'fake-claude');
+    const seen = path.join(dir, 'seen.txt');
+    fs.writeFileSync(bin, `#!/bin/sh\nprintf '%s' "$TMPDIR" > ${JSON.stringify(seen)}\n`, {mode: 0o755});
+    const tempDir = path.join(dir, 'run', 'tmp');
+    await runClaudeCode({
+      workspace: dir,
+      prompt: 'p',
+      model: 'm',
+      maxBudgetUsd: 1,
+      timeoutMs: 5000,
+      transcriptPath: path.join(dir, 'transcript.jsonl'),
+      tempDir,
+      bin,
+    });
+    expect(fs.readFileSync(seen, 'utf8')).toBe(tempDir);
+    expect(fs.statSync(tempDir).isDirectory()).toBe(true);
+  });
 });

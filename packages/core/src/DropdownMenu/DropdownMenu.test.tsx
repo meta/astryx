@@ -1041,6 +1041,26 @@ describe('DropdownMenu', () => {
     );
   });
 
+  it('notifies onOpenChange once when closing an open menu by clicking the trigger', async () => {
+    const user = userEvent.setup();
+    const handleOpenChange = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        items={[{label: 'Edit'}, {label: 'Delete'}]}
+        onOpenChange={handleOpenChange}
+      />,
+    );
+
+    const trigger = screen.getByRole('button', {name: /Actions/});
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(handleOpenChange.mock.calls).toEqual([[true]]);
+
+    await user.click(trigger);
+    expect(handleOpenChange.mock.calls).toEqual([[true], [false]]);
+  });
+
   it('restores focus to the trigger after keyboard dismissal', async () => {
     const raf = vi
       .spyOn(window, 'requestAnimationFrame')

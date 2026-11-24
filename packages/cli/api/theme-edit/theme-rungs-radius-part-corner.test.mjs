@@ -35,6 +35,7 @@ import {
 import {modeValue, refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+import {UNASSIGNABLE_PID} from '../../test-utils/unassignable-pid.mjs';
 // The assertions are about settings, builds, notes and lines, not rendered
 // pages: a render costs seconds, so the pages are written by the stand-in.
 vi.mock('./_preview.mjs', async importOriginal =>
@@ -321,7 +322,10 @@ describe('rungs radius part corner', () => {
   }, 240_000);
 
   it('a render folder left by a stopped command is removed', async () => {
-    const left = path.join(cwd, 'themes/.astryx-render-999999-abcdef');
+    const left = path.join(
+      cwd,
+      `themes/.astryx-render-${UNASSIGNABLE_PID}-abcdef`,
+    );
     fs.mkdirSync(left, {recursive: true});
     fs.writeFileSync(path.join(left, 'preview-t.mjs'), '');
     // A leftover is one more than ten minutes old.

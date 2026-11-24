@@ -28,6 +28,7 @@ import {
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {UndescribedTooltip as UndescribedTooltipType} from '../Tooltip/Tooltip';
+import {holdMouseMoves, isMouseMove} from '../utils/inputStream';
 import {useTapRecognizer} from '../Layer/gestureCounter';
 import {isElement} from '../utils/nodeType';
 import {
@@ -63,7 +64,7 @@ export interface TruncationTooltipInterest {
   readonly tooltip: UndescribedTooltipComponent | null;
   /** The interaction that mounted the tooltip, until the tooltip reads it. */
   readonly interestRef: RefObject<TooltipPresentInterestState>;
-  readonly onPointerEnter: (event: PointerEvent<HTMLElement>) => void;
+  readonly onPointerMove: (event: PointerEvent<HTMLElement>) => void;
   readonly onPointerLeave: (event: PointerEvent<HTMLElement>) => void;
   readonly onPointerDown: (event: PointerEvent<HTMLElement>) => void;
   readonly onFocus: (event: FocusEvent<HTMLElement>) => void;
@@ -84,6 +85,9 @@ export function useTruncationTooltipInterest(
   // text is truncated, so the interaction that measures it can mount the
   // tooltip.
   measure?: () => boolean,
+  // The element, so the window it is in hears mouse moves while it can show
+  // a tooltip.
+  elementRef?: RefObject<HTMLElement | null>,
 ): TruncationTooltipInterest {
   const [isWanted, setIsWanted] = useState(false);
   const [tooltip, setTooltip] = useState<UndescribedTooltipComponent | null>(
@@ -149,15 +153,44 @@ export function useTruncationTooltipInterest(
       state.interest = null;
     }
   }, []);
-  const onPointerEnter = useCallback(
+  // Set by a mouse press until the pointer leaves: the press ends the hover,
+  // so a later move does not start it again.
+  const isHoverEndedRef = useRef(false);
+  // Set by the first move of a hover until the pointer leaves, so a hover
+  // measures the text once, not on every move.
+  const isHoverStartedRef = useRef(false);
+  // The text holds its window's mouse moves while it can show a tooltip.
+  // isMouseMove then tells a still mouse's repeated move from a real move.
+  useEffect(() => {
+    if (!isEnabled && measure == null) {
+      return;
+    }
+    return holdMouseMoves(elementRef?.current?.ownerDocument.defaultView);
+  }, [isEnabled, measure, elementRef]);
+  // A hover starts at the first mouse or pen move over the element. A
+  // `pointerenter` also comes when the element appears or moves under a still
+  // pointer. After a scroll, WebKit also sends a move at the still point
+  // (isMouseMove).
+  const onPointerMove = useCallback(
     (event: PointerEvent<HTMLElement>) => {
-      if (event.pointerType !== 'touch') {
-        want('hover');
+      if (
+        event.pointerType === 'touch' ||
+        isHoverEndedRef.current ||
+        isHoverStartedRef.current ||
+        !isMouseMove(event.nativeEvent)
+      ) {
+        return;
       }
+      isHoverStartedRef.current = true;
+      want('hover');
     },
     [want],
   );
-  const onPointerLeave = useCallback(() => forget('hover'), [forget]);
+  const onPointerLeave = useCallback(() => {
+    isHoverEndedRef.current = false;
+    isHoverStartedRef.current = false;
+    forget('hover');
+  }, [forget]);
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       if (!measureInterest() || interestRef.current.isRead) {
@@ -172,6 +205,7 @@ export function useTruncationTooltipInterest(
       // A mouse press cancels a hover show, as a mounted tooltip does. A pen
       // press waits for its tap.
       if (!isTouch) {
+        isHoverEndedRef.current = true;
         forget('hover');
       }
     },
@@ -197,7 +231,7 @@ export function useTruncationTooltipInterest(
     isWanted,
     tooltip,
     interestRef,
-    onPointerEnter,
+    onPointerMove,
     onPointerLeave,
     onPointerDown,
     onFocus,

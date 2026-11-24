@@ -55,6 +55,7 @@ import {
 import {rtlStyles} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {surfaceEdgeStyles} from './surfaceEdge.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {isFocusDetached} from '../utils/isFocusDetached';
 import {themeProps} from '../utils/themeProps';
@@ -108,6 +109,14 @@ function focusFirstContentControl(container: HTMLElement): boolean {
   return false;
 }
 
+/** The surface's focus ring with its forced-colors edge, then `styles`. */
+function surfaceEdgeProps(...styles: unknown[]) {
+  return stylex.props(
+    surfaceEdgeStyles.edgeWithFocusRing,
+    ...(styles as never[]),
+  );
+}
+
 const styles = stylex.create({
   // Default popover surface — background, radius, shadow.
   // Applied automatically unless hasSurface is false.
@@ -117,19 +126,8 @@ const styles = stylex.create({
     '--_popover-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_popover-radius)',
     boxShadow: shadowVars['--shadow-low'],
-    // Forced colors removes box-shadow, which is this surface's only edge.
-    borderWidth: {
-      default: null,
-      '@media (forced-colors: active)': '1px',
-    },
-    borderStyle: {
-      default: null,
-      '@media (forced-colors: active)': 'solid',
-    },
-    borderColor: {
-      default: null,
-      '@media (forced-colors: active)': 'CanvasText',
-    },
+    // Its forced-colors edge comes with the focus ring
+    // (surfaceEdgeStyles.edgeWithFocusRing).
   },
   // An open popover whose separate anchor resolves to nothing shows no
   // surface until it does: an unanchored layer would sit at the page origin.
@@ -987,7 +985,7 @@ function usePopoverImplementation(
             tabIndex={role === 'dialog' ? -1 : undefined}
             {...mergeProps(
               {...surfaceProps, className: surfaceClassName},
-              focusOutlineProps.focusVisible(
+              (hasSurface ? surfaceEdgeProps : focusOutlineProps.focusVisible)(
                 styles.contentWrapper,
                 hasSurface && styles.surface,
                 padding != null && paddingStyles[padding],

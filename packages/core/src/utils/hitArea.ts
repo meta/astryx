@@ -32,6 +32,7 @@
 // layout px. A layer that opens from a smaller scale then keeps the insets of
 // the size it settles at.
 
+import {stableClassName} from '../naming';
 import {subscribeInput} from './inputStream';
 import {isElement} from './nodeType';
 import {sharedState} from './sharedRealm';
@@ -295,6 +296,10 @@ export const INTERACTIVE_SELECTOR = [
   '[role="slider"]',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
+
+const FIELD_FRAME_SELECTOR = ['text-input', 'number-input', 'selector']
+  .map(name => `.${stableClassName(name)}`)
+  .join(',');
 
 const TOUCH_QUERY = '(pointer: coarse)';
 
@@ -713,10 +718,17 @@ function ungroup(element: Element): void {
 
 /** The page's interactive elements and their rects: one read. */
 function readCandidates(doc: Document): Candidate[] {
-  return interactiveElements(doc).map(element => ({
-    element,
-    rect: plainRect(element),
-  }));
+  const targets = interactiveElements(doc);
+  const elements = new Set(targets);
+  // Keep inner targets: their shared frame cannot separate their hit areas.
+  // Resolve frames on each read so cached targets follow their current frame.
+  for (const element of targets) {
+    const frame = element.closest(FIELD_FRAME_SELECTOR);
+    if (frame != null) {
+      elements.add(watchedOwner(frame) ?? frame);
+    }
+  }
+  return [...elements].map(element => ({element, rect: plainRect(element)}));
 }
 
 /**

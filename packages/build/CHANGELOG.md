@@ -406,11 +406,11 @@ Thanks to everyone who contributed to this release:
 
 #### Breaking Changes
 
-- Rename `@xds/build` exports off the xds name
+- Rename `@astryxdesign/build` exports off the xds name
   The Vite integration's public exports are renamed: `xdsStylex` -> `astryxStylex`,
   and the option types `XDSVitePluginOptions` / `XDSVitePluginLegacyOptions` ->
   `AstryxVitePluginOptions` / `AstryxVitePluginLegacyOptions`. Update imports from
-  `@xds/build/vite` accordingly. Internal plugin names and the babel wrapper are
+  `@astryxdesign/build/vite` accordingly. Internal plugin names and the babel wrapper are
   also rebranded. Part of removing `xds` naming from the public API.
 - Rename Next.js helper `withXDS` to `withAstryx`
   The Next.js configuration wrapper is renamed `withXDS` -> `withAstryx`
@@ -473,8 +473,8 @@ Thanks to everyone who contributed to this release:
 
   ```
 
-- Rename the npm package scope from `@xds/*` to `@astryxdesign/*`
-  All published packages move to the new `@astryxdesign` scope (e.g. `@xds/core` → `@astryxdesign/core`), along with the workspace lockfile, build/runtime scope-directory scans, and docsite slug derivation. Consumers must update their imports and dependency names. The internal ESLint plugin namespace (`@xds/*` rules) is intentionally untouched and tracked separately. Existing `@xds/*` codemods continue to target the old scope so projects still on `@xds/*` can migrate.
+- Move every package to the npm package scope `@astryxdesign/*`
+  All published packages move to the new `@astryxdesign` scope, along with the workspace lockfile, build/runtime scope-directory scans, and docsite slug derivation. Consumers must update their imports and dependency names. The ESLint plugin namespace is unchanged. The existing upgrade codemods still migrate projects from the earlier scope.
 
 #### Contributors
 
@@ -489,7 +489,7 @@ Thanks to everyone who contributed to this release:
 
 #### Fixes
 
-- **Unprefix migration alignment** — Build output and Vite plugin updated for the XDS-prefix migration (bare names canonical, `XDS*` compat aliases) so generated CSS stays in sync with `@xds/core` (#2941).
+- **Unprefix migration alignment** — Build output and Vite plugin updated for the XDS-prefix migration (bare names canonical, `XDS*` compat aliases) so generated CSS stays in sync with `@astryxdesign/core` (#2941).
 
 #### Contributors
 
@@ -504,7 +504,7 @@ Thanks to everyone who contributed to this release:
 
 # 0.0.14
 
-_First public release_ — `@xds/build` is now published to the npm registry.
+_First release_ — the build package is now published.
 
 #### New Features
 
