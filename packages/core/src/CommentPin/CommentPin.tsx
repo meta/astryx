@@ -8,32 +8,34 @@
  *   total and unread represented thread counts (unread shows as a dot), a
  *   size on the element-size scale, controlled or uncontrolled selection,
  *   disabled state, and button DOM props
- * @output Exports the avatar-first CommentPin button and its props type
- * @position Lab collaboration primitive for annotation anchors over content or
- *   in content margins; callers own grouping, coordinates, and opened content
+ * @output Exports the avatar-first CommentPin button, its props type, and
+ *   the CommentUser person record its participants share with Comments
+ * @position Core collaboration primitive for annotation anchors over content
+ *   or in content margins; callers own grouping, coordinates, and opened
+ *   content
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/lab/src/CommentPin/CommentPin.doc.mjs
+ * - /packages/core/src/CommentPin/CommentPin.doc.mjs
  * - /docs/specs/components/CommentPin/CommentPin.spec.md
- * - /packages/lab/src/CommentPin/CommentPin.test.tsx
+ * - /packages/core/src/CommentPin/CommentPin.test.tsx
+ * - /packages/core/src/CommentPin/index.ts
  * - /packages/lab/src/CommentPin/index.ts
  * - /apps/storybook/stories/CommentPin.stories.tsx
- * - /packages/lab/blocks/CommentPinShowcase.tsx
+ * - /packages/cli/assets/templates/blocks/components/CommentPin/CommentPinShowcase.tsx
  */
 
 import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import type {BaseProps} from '@astryxdesign/core';
-import {Avatar, type AvatarSize} from '@astryxdesign/core/Avatar';
-import {AvatarGroup, AvatarGroupOverflow} from '@astryxdesign/core/AvatarGroup';
-import {
-  useDevWarning,
-  useMergedRefs,
-  usePressFeedback,
-} from '@astryxdesign/core/hooks';
-import {Icon, type IconSize} from '@astryxdesign/core/Icon';
-import type {ElementSize} from '@astryxdesign/core/SizeContext';
-import {StatusDot} from '@astryxdesign/core/StatusDot';
+import {Avatar, type AvatarSize} from '../Avatar/Avatar';
+import {AvatarGroup} from '../AvatarGroup/AvatarGroup';
+import {AvatarGroupOverflow} from '../AvatarGroup/AvatarGroupOverflow';
+import type {BaseProps} from '../BaseProps';
+import {useDevWarning} from '../hooks/useDevWarning';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {usePressFeedback} from '../hooks/usePressFeedback';
+import {Icon, type IconSize} from '../Icon/Icon';
+import type {ElementSize} from '../SizeContext/SizeContext';
+import {StatusDot} from '../StatusDot/StatusDot';
 import {
   borderVars,
   colorVars,
@@ -43,15 +45,37 @@ import {
   spacingVars,
   typeScaleVars,
   typographyVars,
-} from '@astryxdesign/core/theme/tokens.stylex';
-import {useTooltip} from '@astryxdesign/core/Tooltip';
-import {
-  focusOutlineProps,
-  interactionOverlayStyles,
-  mergeProps,
-  themeProps,
-} from '@astryxdesign/core/utils';
-import type {CommentUser} from '../Comments/types';
+} from '../theme/tokens.stylex';
+import {useTooltip} from '../Tooltip/useTooltip';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
+
+/**
+ * A person or agent who writes comments, reacts, or acts on the item. A
+ * CommentPin's participants and the Comments family take the same records.
+ */
+export interface CommentUser {
+  /** Stable host-owned id, used for equality ("is this my comment?"). */
+  id: string;
+  /** Full display name. Never a viewer-relative label such as "You". */
+  name: string;
+  /**
+   * An agent shows its logo (`src`), or square-cornered initials without
+   * one, and an Agent badge beside its name in a comment. A CommentPin draws
+   * every participant the same way.
+   * @default 'person'
+   */
+  kind?: 'person' | 'agent';
+  /** Where the author's name links in a comment, such as their profile. */
+  href?: string;
+  /**
+   * Profile picture, or an agent's square logo, as Avatar's `src`. Initials
+   * without one.
+   */
+  src?: string;
+}
 
 export interface CommentPinProps extends Omit<
   BaseProps<HTMLButtonElement>,
@@ -194,7 +218,7 @@ const styles = stylex.create({
   // GrayText is the platform's disabled affordance there. Defaults repeat the
   // base values, since StyleX merges per property. Only unselected pins take
   // it — the selected treatment keeps its forced-colors Highlight, so a
-  // selected disabled pin stays prominent (ORD4).
+  // selected disabled pin stays prominent.
   disabledUnselected: {
     borderColor: {
       default: 'transparent',
@@ -302,7 +326,7 @@ const OVERFLOW_ICON_SIZE: Record<ElementSize, IconSize> = {
 };
 
 function takeDistinctParticipants(
-  participants: readonly CommentUser[],
+  participants: ReadonlyArray<CommentUser>,
   limit: number,
 ): CommentUser[] {
   const result: CommentUser[] = [];
@@ -448,7 +472,7 @@ export function CommentPin({
   });
   const mergedRef = useMergedRefs(ref, hasTooltip ? tooltip.ref : undefined);
 
-  const avatarParticipants: readonly CommentUser[] =
+  const avatarParticipants: ReadonlyArray<CommentUser> =
     visibleParticipants.length > 0
       ? visibleParticipants
       : [{id: '__anonymous__', name: ''}];
@@ -462,17 +486,17 @@ export function CommentPin({
       aria-label={label}
       aria-pressed={isSelected}
       // A disabled pin keeps its tab stop and is announced as disabled through
-      // aria-disabled instead of the native attribute (spec:AST-085 FR1). The
-      // activation guards below keep it inert (FR2); focus is kept when the
-      // pin becomes disabled while focused (FR4), and the shared focus outline
-      // still paints, dimmed with the rest of the pin (FR6).
+      // aria-disabled instead of the native attribute. The activation guards
+      // below keep it inert. Focus stays when the pin becomes disabled while
+      // focused, and the shared focus outline still paints, dimmed with the
+      // rest of the pin.
       aria-disabled={isDisabled ? 'true' : undefined}
       onClick={e => {
         if (isDisabled) {
           // A natively disabled element dispatched no click at all, so an
           // aria-disabled pin must not reach the caller's handler, and the
           // click must not leak to a clickable ancestor (annotation surface)
-          // the native attribute never let it reach either (FR2).
+          // the native attribute never let it reach either.
           e.preventDefault();
           e.stopPropagation();
           return;
@@ -485,7 +509,7 @@ export function CommentPin({
         onSelectedChange?.(nextIsSelected);
       }}
       // The keyboard paths to activation are Enter and Space; other keys still
-      // reach caller handlers, as on an enabled pin (FR2).
+      // reach caller handlers, as on an enabled pin.
       onKeyDown={e => {
         if (isDisabled && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();

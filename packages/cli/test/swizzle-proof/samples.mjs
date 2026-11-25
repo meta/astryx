@@ -216,6 +216,12 @@ export const samples = {
       },
     });
   },
+  core__CommentPin: ({C, React}) =>
+    React.createElement(C, {
+      label: 'Open annotation from Ada',
+      participants: [{id: 'ada', name: 'Ada Lovelace'}],
+      onClick: noop,
+    }),
   core__Heading: ({C, React}) =>
     React.createElement(C, {level: 2}, 'Section title'),
   core__Kbd: ({C, React}) => React.createElement(C, {keys: 'mod+k'}),
@@ -384,12 +390,6 @@ export const samples = {
     }),
   lab__CommentComposer: ({C, React}) =>
     React.createElement(C, {value: '', onChange: noop, onSubmit: noop}),
-  lab__CommentPin: ({C, React}) =>
-    React.createElement(C, {
-      label: 'Open annotation from Ada',
-      participants: [{id: 'ada', name: 'Ada Lovelace'}],
-      onClick: noop,
-    }),
   lab__CommentThread: ({C, React}) =>
     React.createElement(
       'div',

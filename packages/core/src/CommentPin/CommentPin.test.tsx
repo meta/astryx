@@ -5,7 +5,7 @@ import {describe, expect, it, vi} from 'vitest';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {CommentPin} from './CommentPin';
 
 const ADA = {id: 'ada', name: 'Ada Lovelace'};

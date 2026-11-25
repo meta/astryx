@@ -9,12 +9,12 @@
  * @output A grouped pin with a three-circle participant cap and an unread
  *   dot, a single pin, and an unread margin pin; selecting a pin clears the
  *   others, and activating the selected pin clears the selection
- * @position CommentPin docsite showcase and copyable Lab block
+ * @position CommentPin docsite showcase and copyable CLI block
  */
 
 import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {CommentPin} from '@astryxdesign/lab';
+import {CommentPin} from '@astryxdesign/core/CommentPin';
 import {Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Stack';
 import {

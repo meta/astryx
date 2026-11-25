@@ -294,6 +294,11 @@
       "types": "./dist/CommandPalette/index.d.ts",
       "default": "./dist/CommandPalette/index.js"
     },
+    "./CommentPin": {
+      "source": "./src/CommentPin/index.ts",
+      "types": "./dist/CommentPin/index.d.ts",
+      "default": "./dist/CommentPin/index.js"
+    },
     "./ComplexSelector": {
       "source": "./src/ComplexSelector/index.ts",
       "types": "./dist/ComplexSelector/index.d.ts",
