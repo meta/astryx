@@ -558,5 +558,69 @@ describe('PowerSearch date zone', () => {
         .find(text => /Mar \d+, 2024/.test(text));
       expect(rangeText).toBe('Mar 9, 2024 – Mar 10, 2024');
     });
+
+    it("names a relative range by its new days after the zone's midnight", async () => {
+      process.env.TZ = 'UTC';
+      const onChange = vi.fn();
+      const filters: PowerSearchFilter[] = [
+        {
+          field: 'win',
+          operator: 'in',
+          value: {
+            type: 'date_range',
+            value: {
+              start: {type: 'RELATIVE', backValue: 7, unit: 'day'},
+              end: {type: 'NOW'},
+            },
+          },
+        },
+      ];
+      const element = () => (
+        <PowerSearch
+          config={config}
+          filters={filters}
+          onChange={onChange}
+          label="Search"
+        />
+      );
+      // Only the render reads the moved clock; the announcer's own clock
+      // stays real.
+      const renderAt = (iso: string, draw: () => void) => {
+        const now = vi.spyOn(Date, 'now').mockReturnValue(Date.parse(iso));
+        try {
+          draw();
+        } finally {
+          now.mockRestore();
+        }
+      };
+      let rerender: (ui: React.ReactElement) => void = () => {};
+      renderAt('2024-03-10T23:30:00Z', () => {
+        rerender = render(element()).rerender;
+      });
+      expect(tokenText('Win').replace(/\s/g, ' ')).toBe(
+        'Win: inMar 3 – 10, 2024',
+      );
+      // Past UTC midnight, a render with the same filters reads the new days
+      // on the token and in the label its removal announces.
+      renderAt('2024-03-11T00:30:00Z', () => {
+        rerender(element());
+      });
+      expect(tokenText('Win').replace(/\s/g, ' ')).toBe(
+        'Win: inMar 4 – 11, 2024',
+      );
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: /^Remove /}));
+      });
+      await waitFor(
+        () => {
+          const announced = Array.from(document.querySelectorAll('[aria-live]'))
+            .map(region => region.textContent ?? '')
+            .join(' ')
+            .replace(/\s+/g, ' ');
+          expect(announced).toContain('Removed Win: in Mar 4 – 11, 2024');
+        },
+        {timeout: 4000},
+      );
+    });
   });
 });
