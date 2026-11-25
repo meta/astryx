@@ -77,6 +77,9 @@ import {getInputARIA, isImeKeyEvent} from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {useLocale} from '../i18n/useLocale';
+import {localeTextStyles} from '../utils/textDirection';
 import {type DateInputEntryError, useTypedDateField} from './useTypedDate';
 import type {TimestampFormat} from '../Timestamp';
 import {
@@ -759,6 +762,8 @@ function PointerDateField({
     hasPlaceholder: placeholderFromProps != null,
     entryErrorBehavior: resolvedEntryErrorBehavior,
   });
+  // A date the locale formats reads in the locale's direction.
+  const textDirection = getLocaleDirection(useLocale());
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -1049,8 +1054,10 @@ function PointerDateField({
         aria-controls={popover.isOpen ? popover.id : undefined}
         aria-autocomplete="none"
         autoComplete="off"
+        dir={controlProps.dir ?? textDirection}
         {...stylex.props(
           styles.input,
+          localeTextStyles.pageAlign,
           isEffectivelyDisabled && styles.inputDisabled,
           isInvalid && styles.inputInvalid,
         )}
