@@ -233,7 +233,9 @@ describe('PowerSearch — SSR of a relative date range', () => {
     now.mockReturnValue(Date.parse('2024-03-10T23:30:00Z'));
     const html = renderToString(tree);
     expect(html).toContain('date range');
-    expect(html).not.toContain('Mar 3');
+    // No day anywhere in the markup: not the token's text, and not the
+    // accessible names its buttons carry.
+    expect(html).not.toMatch(/Mar \d/);
 
     const container = document.createElement('div');
     container.innerHTML = html;
