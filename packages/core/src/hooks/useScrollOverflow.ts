@@ -38,8 +38,9 @@ export interface ScrollOverflowState {
 }
 
 /**
- * The edges, plus whether the first measurement set them. Those edges replace
- * none that a frame showed, so a caller applies them without a transition.
+ * The edges, plus whether the first measurement set them. The first
+ * measurement sets the edges before any frame shows them, so a caller applies
+ * them without a transition.
  */
 interface ShownScrollOverflowState extends ScrollOverflowState {
   isFirstMeasurement: boolean;
