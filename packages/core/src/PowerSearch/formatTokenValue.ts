@@ -146,9 +146,9 @@ function formatListText(
  * use the same words and the same zone handling. `maxLength` is the token's
  * width budget; pass `Number.MAX_SAFE_INTEGER` for the untruncated text.
  * A `date_absolute` value is written in `calendar`, the calendar that the
- * provider resolves.
- * The list, date-range and nested summaries and a relative date resolve
- * through the catalog; several labels join as a list in the locale.
+ * provider resolves, and a `date_range` as its two days in the same zone.
+ * The list and nested summaries and a relative date resolve through the
+ * catalog; several labels join as a list in the locale.
  */
 export function formatTokenValueText(
   operatorValue: OperatorValue,
