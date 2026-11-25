@@ -318,27 +318,6 @@ function boundsOf(movable: ReadonlyArray<boolean>): boolean[] {
  */
 const MOVING_OPACITY = '0.6';
 
-/** A re-grab or the rest step ends the mark that the drop started. */
-const travelEnds = new WeakMap<HTMLElement, () => void>();
-
-/**
- * Marks a dropped row as travelling for the length of its glide: it rides
- * above the rows it passes, on its preview's backdrop.
- */
-function travel(row: HTMLElement, backdrop: string | null): void {
-  setTravellingBackdrop(row, backdrop);
-  travelEnds.set(row, markTravelling(row));
-}
-
-function endTravel(row: HTMLElement): void {
-  const end = travelEnds.get(row);
-  if (end != null) {
-    travelEnds.delete(row);
-    end();
-    setTravellingBackdrop(row, null);
-  }
-}
-
 /**
  * An element the drag draws over the list: no row to the list's order or
  * its layout updates (`markLeaving`), inert and hidden from assistive
@@ -809,6 +788,8 @@ export class ListReorderController implements ListReorderSession {
   private claimFocusUntil = 0;
   private session: DragSession | null = null;
   private pending: PendingDrop | null = null;
+  /** A re-grab or the rest step ends the mark that the drop started. */
+  private readonly travelEnds = new WeakMap<HTMLElement, () => void>();
   private fallback: ReturnType<typeof setTimeout> | null = null;
   /** The row whose handle keeps focus across a reorder mode move's commit. */
   private focusRow: HTMLElement | null = null;
@@ -1487,7 +1468,7 @@ export class ListReorderController implements ListReorderSession {
     const scroller = scrollerOf(list);
     // A row grabbed again mid-glide still travels. Its preview rides above
     // the rows now, so the mark ends.
-    endTravel(row);
+    this.endTravel(row);
     // Every row gets an identity offset for the session. Otherwise a row's
     // first offset changes how it paints in the middle of the drag, with a
     // layout and a paint. With one in place, neither a move nor a slide lays
@@ -1958,6 +1939,24 @@ export class ListReorderController implements ListReorderSession {
     );
   }
 
+  /**
+   * Marks a dropped row as travelling for the length of its glide: it rides
+   * above the rows it passes, on its preview's backdrop.
+   */
+  private travel(row: HTMLElement, backdrop: string | null): void {
+    setTravellingBackdrop(row, backdrop);
+    this.travelEnds.set(row, markTravelling(row));
+  }
+
+  private endTravel(row: HTMLElement): void {
+    const end = this.travelEnds.get(row);
+    if (end != null) {
+      this.travelEnds.delete(row);
+      end();
+      setTravellingBackdrop(row, null);
+    }
+  }
+
   /** Clears the dragged row's stacking once its motion has come to rest. */
   private restWhenDone(element: HTMLElement, restore: RowRestore): void {
     const settle = () => {
@@ -1970,7 +1969,7 @@ export class ListReorderController implements ListReorderSession {
         void running.handle.finished.then(settle);
         return;
       }
-      endTravel(element);
+      this.endTravel(element);
       element.style.zIndex = restore.zIndex;
       element.style.backgroundColor = restore.backgroundColor;
       // Identity offsets go; a row still moving keeps its own.
@@ -2150,7 +2149,7 @@ export class ListReorderController implements ListReorderSession {
         // the preview's backdrop. A row with its own background keeps it.
         // Under Reduce Motion the drop does not travel, so nothing rides.
         if (!reducesMotion(list)) {
-          travel(element, pending.background ?? 'transparent');
+          this.travel(element, pending.background ?? 'transparent');
         }
         touchMotion.glide(element, shift, spring, at, pending.velocity);
       } else if (spring != null) {
