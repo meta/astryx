@@ -15,8 +15,16 @@ import {spawn} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-/** A trash folder's name: the run folder's name and the time it moved. */
-const TRASH_NAME = /^astryx-cli-tarball-.+\.trash-(\d+)$/u;
+/** A short name leaves room for Chromium's nested Unix socket path. */
+export const TEST_TMP_PREFIX = 'ax-t-';
+
+/**
+ * A trash folder's name: the run folder's name (the packed CLI's folder, the
+ * run's temp folder that holds it, or the run's home folder) and the time it
+ * moved.
+ */
+const TRASH_NAME =
+  /^(?:astryx-(?:cli-tarball|test-tmp|test-user)-|ax-t-).+\.trash-(\d+)$/u;
 
 /**
  * Remove `target` in a detached child that outlives this process.

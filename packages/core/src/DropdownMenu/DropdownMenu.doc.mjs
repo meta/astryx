@@ -29,7 +29,7 @@ const anatomy = [
     name: 'Icon-rendered item icon',
     required: false,
     description:
-      'Optional semantic or component icon rendered through Icon at the start of an action row.',
+      'Optional built-in meaning or icon component rendered through Icon at the start of an action row.',
   },
   {
     name: 'Caller-rendered item start content',
@@ -211,7 +211,7 @@ export const docs = {
       name: 'isMenuOpen',
       type: 'boolean',
       description:
-        'Controlled open state for the menu. Mounting with true renders the menu open without moving focus into it; focus moves to the first item only when the menu opens after mount.',
+        'Controlled open state for the menu. Mounting with true renders an anchored popover open without moving focus into it; focus moves to the first item only when the popover opens after mount. A menu presented as a bottom sheet is modal and manages its own initial focus, so focus moves inside it whenever it opens, on mount included.',
     },
     {
       name: 'onOpenChange',

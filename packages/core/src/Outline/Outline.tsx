@@ -25,6 +25,7 @@
 
 import {useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {cutText} from '../utils/textDirection';
 import {
   colorVars,
   durationVars,
@@ -489,7 +490,7 @@ export function Outline({
                     isActive && styles.activeAnchor,
                   ),
                 )}>
-                <span {...stylex.props(styles.label)}>{item.label}</span>
+                {cutText(item.label, styles.label)}
               </LinkComponent>
             </li>
           );

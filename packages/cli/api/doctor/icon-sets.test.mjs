@@ -97,7 +97,7 @@ describe('icon-sets check', () => {
     });
     expect(check).toMatchObject({status: 'pass'});
     expect(check?.message).toContain(
-      'Each icon draws its "solid" look where its set has one.',
+      'Each icon draws its "solid" variant where its set has one.',
     );
   });
 
@@ -146,7 +146,7 @@ describe('icon-sets check', () => {
     expect(check).toMatchObject({
       status: 'fail',
       message:
-        'experimental.iconVariant names "solid", but the main set glyphs declares no variants: it draws one look.',
+        'experimental.iconVariant names "solid", but the main set glyphs declares no variants, so it has none to pick.',
       fix: 'Remove experimental.iconVariant: run `astryx experimental icon use glyphs`.',
     });
   });

@@ -3,7 +3,8 @@
 /**
  * @file Timestamp.test.tsx
  * @input Uses Timestamp, Testing Library, and mocked browser APIs
- * @output Regression coverage for formatting and the focusable details trigger
+ * @output Regression coverage for formatting and the focusable details trigger,
+ *   and counts of the date formatters a render and an opened card build
  * @position Colocated Timestamp behavior and accessibility tests
  */
 
@@ -1326,6 +1327,7 @@ describe('Timestamp', () => {
       const button = card.querySelector('button')!;
       const restName = button.getAttribute('aria-label');
       fireEvent.mouseEnter(button);
+      fireEvent.pointerMove(button);
       fireEvent.click(button);
       await waitFor(() =>
         expect(button).toHaveAccessibleName(
@@ -1359,6 +1361,7 @@ describe('Timestamp', () => {
       // The visible tooltip content defaults to the short imperative 'Copy'
       // (the full "Copy <value>" string stays the button's aria-label).
       fireEvent.mouseEnter(button);
+      fireEvent.pointerMove(button);
       await waitFor(() =>
         expect(
           screen.getByText('Copy', {
@@ -1376,6 +1379,14 @@ describe('Timestamp', () => {
           }),
         ).toBeInTheDocument(),
       );
+    });
+
+    it("names the copy button 'Copy <value>' once: its 'Copy' tooltip adds no description", async () => {
+      render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
+      const card = await openTimestampHoverCard();
+      const button = card.querySelector('button')!;
+      expect(button.getAttribute('aria-label')).toMatch(/^Copy /);
+      expect(button).toHaveAccessibleDescription('');
     });
 
     describe('copy icon slot', () => {
@@ -1625,9 +1636,15 @@ describe('Timestamp', () => {
         />,
       );
       const card = await openTimestampHoverCard();
-      const [rowValue] = Array.from(card.querySelectorAll('dd')).map(
-        el => el.textContent ?? '',
-      );
+      // The row's visible text: the copy button's tooltip description, a
+      // hidden sibling, is not part of the value.
+      const [rowValue] = Array.from(card.querySelectorAll('dd')).map(el => {
+        const visible = el.cloneNode(true) as HTMLElement;
+        visible
+          .querySelectorAll('span[hidden][id$="-description"]')
+          .forEach(piece => piece.remove());
+        return visible.textContent ?? '';
+      });
       const copyButton = card.querySelectorAll('button')[0];
 
       fireEvent.click(copyButton);
@@ -2623,6 +2640,260 @@ describe('Timestamp calendar systems', () => {
       warn.mockRestore();
       act(() => root?.unmount());
       host.remove();
+    }
+  });
+});
+
+describe('Timestamp formatter builds', () => {
+  const RealDateTimeFormat = Intl.DateTimeFormat;
+  /** The options of each formatter built since the last reset. */
+  let builds: Intl.DateTimeFormatOptions[] = [];
+  const FULL: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    calendar: 'gregory',
+  };
+  const HOUR_SECONDS = 3600;
+  const originalTZ = process.env.TZ;
+
+  beforeAll(async () => {
+    // The hover card loads lazily. Load its chunk before any count.
+    await import('./TimestampHoverCard');
+  });
+
+  beforeEach(() => {
+    builds = [];
+    Intl.DateTimeFormat = new Proxy(RealDateTimeFormat, {
+      construct(target, args: unknown[], newTarget) {
+        builds.push((args[1] as Intl.DateTimeFormatOptions | undefined) ?? {});
+        return Reflect.construct(target, args, newTarget) as object;
+      },
+    });
+  });
+
+  afterEach(() => {
+    Intl.DateTimeFormat = RealDateTimeFormat;
+    if (originalTZ === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = originalTZ;
+    }
+  });
+
+  /** Ends the task, so the next render runs in a task of its own. */
+  async function nextTask(): Promise<void> {
+    await new Promise(resolve => {
+      setTimeout(resolve, 0);
+    });
+  }
+
+  /** A palette's twelve rows, each an hour before `now`. */
+  function Rows({now}: {now: number}) {
+    return (
+      <ul>
+        {Array.from({length: 12}, (_, index) => (
+          <li key={index}>
+            <Timestamp
+              value={now - (index + 1) * HOUR_SECONDS}
+              format="relative"
+            />
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  /** What a formatter built for the call writes, as each one did before. */
+  function fresh(
+    date: Date,
+    locale: string,
+    options: Intl.DateTimeFormatOptions,
+  ): string {
+    return new RealDateTimeFormat(locale, options).format(date);
+  }
+
+  /** Hovers the first time on the page and waits for its card. */
+  async function openFirstCard(): Promise<HTMLElement> {
+    const time = document.querySelector('time');
+    if (time == null) {
+      throw new Error('Expected Timestamp to render a <time> element');
+    }
+    await userEvent.hover(time);
+    return waitFor(() => screen.getByRole('dialog', {hidden: true}));
+  }
+
+  /** The long zone name a formatter built for the call writes. */
+  function freshZoneName(
+    date: Date,
+    locale: string,
+    timeZone?: string,
+  ): string {
+    return (
+      new RealDateTimeFormat(locale, {timeZoneName: 'long', timeZone})
+        .formatToParts(date)
+        .find(part => part.type === 'timeZoneName')?.value ?? ''
+    );
+  }
+
+  it('builds only the accessible names for a list of relative timestamps whose cards are closed', async () => {
+    // The first render builds the formatters that are kept, such as the
+    // calendar's.
+    render(<Rows now={Date.now() / 1000} />).unmount();
+    await nextTask();
+    builds = [];
+    render(<Rows now={Date.now() / 1000} />);
+    // Each row's accessible name carries its full date in the viewer's zone.
+    // The host can change that zone at any time, so each row builds that
+    // formatter.
+    expect(builds).toEqual(
+      Array.from({length: 12}, () => ({...FULL, timeZoneName: 'long'})),
+    );
+  });
+
+  it('formats a hover card line only when the card shows, with the same text', async () => {
+    const value = new Date('2026-03-25T10:00:00Z');
+    process.env.TZ = 'UTC';
+    render(<Timestamp value={value.getTime() / 1000} format="relative" />);
+    expect(builds.filter(options => options.timeZoneName === 'short')).toEqual(
+      [],
+    );
+    const card = await openFirstCard();
+    expect(card.textContent).toContain(
+      fresh(value, 'en-US', {...FULL, timeZoneName: 'short'}),
+    );
+    expect(card.textContent).toContain(freshZoneName(value, 'en-US'));
+  });
+
+  it('builds no formatter on a later render of a timestamp in the time format pinned to a zone', async () => {
+    const view = (value: number) => (
+      <Timestamp
+        value={value}
+        format="time"
+        timezoneID="Asia/Tokyo"
+        hasTooltip={false}
+      />
+    );
+    const {rerender} = render(view(1665792474));
+    await nextTask();
+    builds = [];
+    rerender(view(1665792534));
+    expect(builds).toEqual([]);
+  });
+
+  it('writes a zone the host changes between two renders into the second', () => {
+    const value = new Date('2026-03-25T10:00:00Z');
+    const view = (key: string) => (
+      <Timestamp key={key} value={value.getTime() / 1000} format="relative" />
+    );
+    process.env.TZ = 'UTC';
+    const {rerender} = render(view('utc'));
+    expect(
+      document.querySelector('time')?.getAttribute('aria-label'),
+    ).toContain('Coordinated Universal Time');
+    process.env.TZ = 'Asia/Tokyo';
+    rerender(view('tokyo'));
+    expect(
+      document.querySelector('time')?.getAttribute('aria-label'),
+    ).toContain('Japan Standard Time');
+  });
+
+  it('warns about an unknown zone in an entry as the timestamp renders, before its card shows', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(
+        <Timestamp
+          value={1665792474}
+          format="relative"
+          tooltipEntries={[{timezoneID: 'Never/Shown'}]}
+        />,
+      );
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Never/Shown'));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  describe('writes the text of a formatter built for the call', () => {
+    const cases: ReadonlyArray<{zone: string; at: string}> = [
+      {zone: 'UTC', at: '2026-03-25T10:00:00Z'},
+      {zone: 'Asia/Kolkata', at: '2026-03-25T10:00:00Z'},
+      // The last second of Pacific standard time, and the first of daylight
+      // time.
+      {zone: 'America/Los_Angeles', at: '2026-03-08T09:59:59Z'},
+      {zone: 'America/Los_Angeles', at: '2026-03-08T10:00:00Z'},
+      // Lord Howe Island moves its clocks by half an hour: the last second of
+      // daylight time, and the first of standard time.
+      {zone: 'Australia/Lord_Howe', at: '2026-04-04T14:59:59Z'},
+      {zone: 'Australia/Lord_Howe', at: '2026-04-04T15:00:00Z'},
+    ];
+    const locales = ['en-US', 'de-DE', 'ja-JP', 'ar-EG'];
+
+    for (const {zone, at} of cases) {
+      for (const locale of locales) {
+        it(`${locale}, ${zone}, ${at}`, async () => {
+          process.env.TZ = zone;
+          const date = new Date(at);
+          const value = date.getTime() / 1000;
+          const time: Intl.DateTimeFormatOptions = {
+            hour: 'numeric',
+            minute: '2-digit',
+          };
+          const view = render(
+            <InternationalizationProvider locale={locale}>
+              <Timestamp value={value} format="relative" />
+              <Timestamp value={value} format="time" hasTooltip={false} />
+              <Timestamp
+                value={value}
+                format="time"
+                timezoneID={zone}
+                hasTooltip={false}
+              />
+            </InternationalizationProvider>,
+          );
+          const [relative, local, pinned] = document.querySelectorAll('time');
+          expect(relative.getAttribute('aria-label')).toContain(
+            fresh(date, locale, {...FULL, timeZoneName: 'long'}),
+          );
+          expect(local.textContent).toBe(fresh(date, locale, time));
+          // A formatter pinned to a zone is kept. Each zone's second case
+          // reads the first case's formatter across its daylight-saving
+          // change.
+          expect(pinned.textContent).toBe(
+            fresh(date, locale, {...time, timeZone: zone}),
+          );
+          const card = await openFirstCard();
+          expect(card.textContent).toContain(
+            fresh(date, locale, {...FULL, timeZoneName: 'short'}),
+          );
+          expect(card.textContent).toContain(freshZoneName(date, locale));
+          view.unmount();
+
+          render(
+            <InternationalizationProvider locale={locale}>
+              <Timestamp
+                value={value}
+                format="relative"
+                tooltipEntries={[{timezoneID: zone}]}
+              />
+            </InternationalizationProvider>,
+          );
+          const pinnedCard = await openFirstCard();
+          expect(pinnedCard.textContent).toContain(
+            fresh(date, locale, {
+              ...FULL,
+              timeZoneName: 'short',
+              timeZone: zone,
+            }),
+          );
+          expect(pinnedCard.textContent).toContain(
+            freshZoneName(date, locale, zone),
+          );
+        });
+      }
     }
   });
 });

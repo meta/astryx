@@ -31,6 +31,7 @@ import {Icon} from '../Icon';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {InternationalizationProvider} from '../i18n';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 describe('DateRangeInput', () => {
   it('renders with label', () => {
@@ -240,6 +241,45 @@ describe('DateRangeInput', () => {
       expect(trigger).toHaveTextContent(/Mar.*1.*Mar.*7/);
     });
     expect(trigger).toHaveAccessibleName(/Range:.*Mar.*1.*Mar.*7/);
+  });
+
+  it('names the trigger through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="ja"
+        overrides={{
+          ja: {'@astryx.dateRangeInput.triggerLabel': '{value}（{label}）'},
+        }}>
+        <DateRangeInput
+          label="期間"
+          placeholder="日付を選択"
+          value={null}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByRole('button', {name: '日付を選択（期間）'}),
+    ).toBeInTheDocument();
+  });
+
+  it('writes the selected range through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="de"
+        overrides={{
+          de: {'@astryx.dateRangeInput.rangeValue': '{start} bis {end}'},
+        }}>
+        <DateRangeInput
+          label="Zeitraum"
+          value={{start: '2026-01-05', end: '2026-01-09'}}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByRole('button', {name: /^Zeitraum: .+ bis .+$/}),
+    ).toHaveTextContent(/ bis /);
   });
 
   it('renders status icon for error status', () => {
@@ -678,17 +718,18 @@ describe('DateRangeInput', () => {
 
       const trigger = getButton(/Range:/);
       const container = trigger.parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('You need the Editor role');
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(tooltip()).not.toHaveAttribute('popover-open');
       });
     });
 
@@ -696,11 +737,11 @@ describe('DateRangeInput', () => {
       const user = userEvent.setup();
       renderDisabled({disabledMessage: 'You need the Editor role'});
 
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(getButton(/Range:/)).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
     });
 
@@ -731,7 +772,7 @@ describe('DateRangeInput', () => {
     it('links the reason tooltip from the trigger via aria-describedby', () => {
       renderDisabled({disabledMessage: 'You need the Editor role'});
       const trigger = getButton(/Range:/);
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

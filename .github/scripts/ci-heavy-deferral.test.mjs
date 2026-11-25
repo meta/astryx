@@ -208,6 +208,8 @@ describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => 
     vi.useFakeTimers();
     const job = ci.jobs['heavy-ci'];
     expect(job.permissions.statuses).toBe('read');
+    // The review reads when the head was pushed from its check suites.
+    expect(job.permissions.checks).toBe('read');
     const gate = job.steps.find(item => item.id === 'gate');
     expect(gate.env.HEAD_SHA).toBe('${{ github.event.pull_request.head.sha }}');
     expect(job.steps.find(item => item.id === 'decide').env.REVIEW_PASSES).toBe(
@@ -724,6 +726,22 @@ describe('the PR report on a deferred push', () => {
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
+  });
+
+  it('tells the author when the review-pass run starts on its own, and what to do once the run is more than six hours old', () => {
+    const decide = ci.jobs['heavy-ci'].steps.find(step => step.id === 'decide');
+    const notice = /::notice title=Heavy CI deferred::([^"]*)"/.exec(
+      decide.run,
+    )[1];
+    expect(notice).toContain(
+      'It starts on its own once the review app or an engineering owner approves this exact head and the spec gate passes, while this run is at most six hours old.',
+    );
+    // An older run merges the head with an older main: re-running it would
+    // test a different tree, so the notice names the fresh-run paths instead.
+    expect(notice).toContain(
+      'After that, mark the pull request draft, then ready, for a fresh run on the current main (a fork head needs its ci:run label first); a push or a main merge also works.',
+    );
+    expect(notice).not.toMatch(/re-run all jobs/i);
   });
 
   it('says the heavy CI was deferred', () => {

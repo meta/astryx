@@ -16,7 +16,7 @@ import * as adapter from '../_adapter.mjs';
  * inside it), a family (its members), a setting (a dial's rungs, a token's
  * type and readers, a CSS property), an aspect (colors, text, corners...: the
  * whole-theme tokens and dial), a plain-words question (exact commands), a
- * PNG picture (its main colors, or the color at points), or with `list` a
+ * PNG picture (its main colors and the look's traits measured from it, or the color at points), or with `list` a
  * list of dials, tokens, parts, families or CSS properties.
  * @experimental
  * @param {string} subject a part, family, setting, aspect, question, or PNG file; with `list`, a filter

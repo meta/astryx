@@ -11,7 +11,11 @@
 
 import {describe, expect, it} from 'vitest';
 
-import {PICTURE_WINDOW, desktopMatches} from './picture-window.mjs';
+import {
+  PICTURE_WINDOW,
+  desktopMatches,
+  windowCommands,
+} from './picture-window.mjs';
 
 const {width, height} = PICTURE_WINDOW;
 
@@ -187,5 +191,34 @@ describe('desktopMatches', () => {
         '(min-width: 1024px) and (max-width: 2000px) or (pointer: coarse)',
       ),
     ).toBe(false);
+  });
+});
+
+describe('windowCommands', () => {
+  it("sizes a page to the editor's window, with no touch", () => {
+    expect(windowCommands()).toEqual([
+      [
+        'Emulation.setDeviceMetricsOverride',
+        {
+          width: PICTURE_WINDOW.width,
+          height: PICTURE_WINDOW.height,
+          deviceScaleFactor: 1,
+          mobile: false,
+        },
+      ],
+    ]);
+  });
+
+  it("gives a phone's window touch, as Playwright's phone has", () => {
+    expect(windowCommands({width: 375, height: 812, mobile: true})).toEqual([
+      [
+        'Emulation.setDeviceMetricsOverride',
+        {width: 375, height: 812, deviceScaleFactor: 1, mobile: true},
+      ],
+      [
+        'Emulation.setTouchEmulationEnabled',
+        {enabled: true, maxTouchPoints: 5},
+      ],
+    ]);
   });
 });

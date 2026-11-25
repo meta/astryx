@@ -2202,7 +2202,9 @@ test.describe('frame evidence', () => {
     await expect(
       blockMainThread(page, 100, {during: dialog, timeout: 600}),
     ).rejects.toThrow(/no animation started/);
-    await expect(waitForAnimation(dialog, {timeout: 600})).rejects.toThrow();
+    await expect(waitForAnimation(dialog, {timeout: 600})).rejects.toThrow(
+      /no animation started.* The element is an open dialog\. /,
+    );
     // Its own animation answers both.
     await dialog.evaluate(el =>
       el.animate([{opacity: 1}, {opacity: 0.5}], {duration: 2000}),
@@ -2940,6 +2942,44 @@ test.describe('frame evidence', () => {
     expect(numbers.frames).toBeLessThan(3);
     expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
     expect((outcome as Error).message).toMatch(/^waitForRest: the page drew /);
+  });
+
+  test('waitForRest waits until no input hold covers the element, and one still in place at the deadline rejects by name', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="layer" style="width:40px;height:40px"><div id="box"></div><div data-astryx-layer-root><div id="nested"></div></div></div>',
+    );
+    // The shield that an input hold lays over its layer (Core's
+    // Layer/inputHold.ts), over the layer that holds the box. It goes
+    // `removeAfter` ms from now, or stays.
+    const addShield = (removeAfter: number | null) =>
+      page.evaluate(ms => {
+        const shield = document.createElement('div');
+        shield.setAttribute('aria-hidden', 'true');
+        Object.assign(shield.style, {
+          position: 'absolute',
+          inset: '0',
+          touchAction: 'pinch-zoom',
+        });
+        (document.getElementById('layer') as HTMLElement).append(shield);
+        if (ms != null) {
+          setTimeout(() => shield.remove(), ms);
+        }
+        return performance.now() + (ms ?? 0);
+      }, removeAfter);
+    const box = page.locator('#box');
+    const goneAt = await addShield(300);
+    await waitForRest(box, {timeout: 2000});
+    expect(await page.evaluate(() => performance.now())).toBeGreaterThanOrEqual(
+      goneAt,
+    );
+    await addShield(null);
+    // A layer inside the held one stays live: its element rests at once.
+    await waitForRest(page.locator('#nested'), {timeout: 1000});
+    await expect(waitForRest(box, {timeout: 300})).rejects.toThrow(
+      /waitForRest: the element rests, but an input hold still covers it at the deadline/,
+    );
   });
 
   test('waitForRest whose frame past the deadline shows motion after a starved gap fails by name, with the last move', async ({
@@ -8027,10 +8067,21 @@ async function freezeFixture(page: Page) {
   await page.goto('http://freeze.test/');
 }
 
+/**
+ * The box's run. It lasts long enough that a freeze a busy runner makes
+ * late still leaves it playing at the reads after the thaw. It moves at
+ * the 0.2 px per ms that the position checks expect.
+ */
+const RUN = {ms: 10_000, px: 2_000};
+
 /** The box's run as the page reads it, and the page's clocks. */
 const readScene = (page: Page) =>
   page.locator('#box').evaluate(el => {
-    const animation = el.getAnimations()[0];
+    // The run `startRun` keeps: a run that ended leaves `getAnimations()`,
+    // but its own state still reads `finished`.
+    const animation =
+      (window as unknown as {__freezeRun?: Animation}).__freezeRun ??
+      el.getAnimations()[0];
     return {
       x: new DOMMatrix(getComputedStyle(el).transform).m41,
       now: performance.now(),
@@ -8041,14 +8092,36 @@ const readScene = (page: Page) =>
     };
   });
 
-/** Starts a 2 s linear run of the box over 400 px. */
+type Scene = Awaited<ReturnType<typeof readScene>>;
+
+/** Starts the box's linear run and keeps it for the reads. */
 const startRun = (page: Page) =>
-  page.locator('#box').evaluate(el => {
-    el.animate(
-      [{transform: 'translateX(0px)'}, {transform: 'translateX(400px)'}],
-      {duration: 2_000, easing: 'linear'},
+  page.locator('#box').evaluate((el, {ms, px}) => {
+    (window as unknown as {__freezeRun?: Animation}).__freezeRun = el.animate(
+      [{transform: 'translateX(0px)'}, {transform: `translateX(${px}px)`}],
+      {duration: ms, easing: 'linear'},
     );
-  });
+  }, RUN);
+
+/**
+ * Fails by name when the run no longer plays at `scene`. A freeze that
+ * landed too late measures nothing, and a read of it must not count as
+ * time 0.
+ */
+function expectPlaying(
+  scene: Scene,
+  frozen: Scene,
+): asserts scene is Scene & {current: number; state: 'running'} {
+  if (scene.state !== 'running' || scene.current == null) {
+    const landed =
+      frozen.current == null
+        ? 'after the run ended'
+        : `at ${Math.round(frozen.current)} ms of the ${RUN.ms} ms run`;
+    throw new Error(
+      `inconclusive: the freeze landed ${landed}, and the run was ${scene.state ?? 'gone'} at this read`,
+    );
+  }
+}
 
 test.describe('page freeze', () => {
   test('a frozen scene stands still and reads no time passing; thawed, it plays on from where it stood, and the frozen span counts for neither its clock nor its animation', async ({
@@ -8061,24 +8134,28 @@ test.describe('page freeze', () => {
     await waitForAnimation(page.locator('#box'), {minProgressMs: 100});
     await freezePage(page);
     const frozen = await readScene(page);
+    expectPlaying(frozen, frozen);
     const frozenAt = Date.now();
     await page.waitForTimeout(300);
     const still = await readScene(page);
     expect(still).toEqual(frozen);
     expect(still.state).toBe('running');
     // Read in the thaw's own task: the run resumes exactly where it stood.
-    const atThaw = await page.locator('#box').evaluate(el => {
-      (
-        window as unknown as {__harnessFreeze: {thaw(): void}}
-      ).__harnessFreeze.thaw();
-      return Number(el.getAnimations()[0].currentTime);
+    const atThaw = await page.evaluate(() => {
+      const w = window as unknown as {
+        __harnessFreeze: {thaw(): void};
+        __freezeRun: Animation;
+      };
+      w.__harnessFreeze.thaw();
+      return Number(w.__freezeRun.currentTime);
     });
-    expect(atThaw).toBeCloseTo(frozen.current ?? NaN, 3);
+    expect(atThaw).toBeCloseTo(frozen.current, 3);
     await thawPage(page);
     await page.waitForTimeout(200);
     const thawed = await readScene(page);
     const elapsed = Date.now() - frozenAt;
-    const moved = (thawed.current ?? 0) - (frozen.current ?? 0);
+    expectPlaying(thawed, frozen);
+    const moved = thawed.current - frozen.current;
     expect(moved).toBeGreaterThan(100);
     expect(thawed.x).toBeGreaterThan(frozen.x);
     // The 300 ms frozen span counts for neither the run nor the page's clock.
@@ -8358,11 +8435,13 @@ test.describe('page freeze', () => {
       }, 10);
     });
     const before = await readScene(page);
+    expectPlaying(before, before);
     await advanceFrozenPage(page, 120);
     const after = await readScene(page);
+    expectPlaying(after, before);
     expect(after.now - before.now).toBeCloseTo(120, 6);
     expect(after.timeline - before.timeline).toBeCloseTo(120, 6);
-    expect((after.current ?? 0) - (before.current ?? 0)).toBeCloseTo(120, 6);
+    expect(after.current - before.current).toBeCloseTo(120, 6);
     expect(after.x - before.x).toBeCloseTo(24, 1);
     expect(
       await page.evaluate(
@@ -8397,6 +8476,7 @@ test.describe('page freeze', () => {
     await startRun(page);
     await reached;
     const frozen = await readScene(page);
+    expectPlaying(frozen, frozen);
     expect(frozen.x).toBeGreaterThanOrEqual(100);
     expect(frozen.x).toBeLessThan(400);
     await page.waitForTimeout(200);

@@ -21,6 +21,16 @@ function isSwizzledSource(filePath: string, memo: Map<string, boolean>) {
   return markerReader.isSwizzledSource(filePath, memo);
 }
 
+// The CommonJS relation keying every stylesheet build shares, loaded on first
+// use from beside babel.js like the marker reader.
+let relationKeyer: typeof import('./keyed-relations.js') | undefined;
+function keyRelations(rules: unknown[]): unknown[] {
+  relationKeyer ??= createRequire(import.meta.url)(
+    path.resolve(__dirname, 'keyed-relations.js'),
+  ) as typeof import('./keyed-relations.js');
+  return relationKeyer.keyRelations(rules);
+}
+
 const LIBRARY_PATTERN = 'node_modules/@astryxdesign/';
 
 /**
@@ -410,7 +420,7 @@ function renderSplitLayers(
   );
   const render = (rules: unknown[], layer: string) =>
     rules.length
-      ? `@layer ${layer} {\n${stylexBabelPlugin.processStylexRules([...constantRules, ...rules] as never, {useLayers: true})}\n}`
+      ? `@layer ${layer} {\n${stylexBabelPlugin.processStylexRules([...constantRules, ...keyRelations(rules)] as never, {useLayers: true})}\n}`
       : '';
 
   return [

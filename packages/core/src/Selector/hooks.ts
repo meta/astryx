@@ -391,6 +391,20 @@ interface UseComboboxOptions<T extends ComboboxOption> {
   listboxId: string;
 }
 
+// The options Selector's own trigger passes: those of the public hook, and
+// whether the open list is in the document.
+interface UseComboboxInternalOptions<
+  T extends ComboboxOption,
+> extends UseComboboxOptions<T> {
+  /**
+   * Whether the open list is in the document. False while an open waits for
+   * its surface to load: the open is held, so a second press or Enter repeats
+   * it instead of closing the list or picking an option no one can see.
+   * Defaults to `isOpen`.
+   */
+  isListShown?: boolean;
+}
+
 /** Spread onto the caller's field. */
 interface ComboboxFieldProps {
   role: 'combobox';
@@ -460,10 +474,23 @@ function hasModifier(e: React.KeyboardEvent): boolean {
  * through useAnnounce (spec:AST-075 DEC-2), with the words the field shows.
  */
 export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
+  ...options
+}: UseComboboxOptions<T>): UseComboboxResult<T> {
+  return useComboboxInternal(options);
+}
+
+/**
+ * `useCombobox` with Selector's held open: an open whose list is not in the
+ * document yet. Internal; not exported from the package.
+ */
+export function useComboboxInternal<
+  T extends ComboboxOption = SelectorOptionData,
+>({
   selectableItems,
   value,
   isDisabled = false,
   isOpen,
+  isListShown = isOpen,
   hasSearch = false,
   onOpen,
   onClose,
@@ -471,7 +498,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
   onClear,
   onSearchSeed,
   listboxId,
-}: UseComboboxOptions<T>): UseComboboxResult<T> {
+}: UseComboboxInternalOptions<T>): UseComboboxResult<T> {
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
 
   const getItemId = useCallback(
@@ -521,6 +548,10 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     if (isDisabled) {
       return;
     }
+    if (isOpen && !isListShown) {
+      // The held open stays: a second press repeats it.
+      return;
+    }
     if (isOpen) {
       closeAndReset();
     } else {
@@ -529,7 +560,15 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
         setHighlightedIndex(findOpeningIndex(false));
       }
     }
-  }, [isDisabled, isOpen, onOpen, closeAndReset, findOpeningIndex, hasSearch]);
+  }, [
+    isDisabled,
+    isOpen,
+    isListShown,
+    onOpen,
+    closeAndReset,
+    findOpeningIndex,
+    hasSearch,
+  ]);
 
   // The scroll effect lives here, the highlight owner, so every consumer
   // (Selector, CommandPalette) shares one hover/keyboard split (#6077).
@@ -596,6 +635,10 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
         // falls through
         case 'Enter':
           e.preventDefault();
+          if (isOpen && !isListShown) {
+            // The held open stays, and nothing unseen is picked.
+            break;
+          }
           if (isOpen && highlightedIndex >= 0) {
             const item = selectableItems[highlightedIndex];
             if (item && !item.disabled) {
@@ -686,6 +729,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     [
       isDisabled,
       isOpen,
+      isListShown,
       onOpen,
       closeAndReset,
       selectableItems,

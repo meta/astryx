@@ -12,7 +12,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {afterEach, describe, it, expect} from 'vitest';
-import {checkRepository, validateChangeset} from './check-changesets.mjs';
+import {
+  checkRepository,
+  validateChangeset,
+  validateChangelogTitle,
+} from './check-changesets.mjs';
 
 const ctx = {
   pre1: true,
@@ -279,5 +283,89 @@ describe('checkRepository — main pull requests enforce the declared tier', () 
     fs.mkdirSync(path.join(root, '.release'));
     fs.writeFileSync(path.join(root, '.release/target.json'), 'not json');
     expect(checkRepository(root).problems).toEqual([]);
+  });
+});
+
+describe('validateChangelogTitle — a CHANGELOG names its own package', () => {
+  it('accepts a first line that is the package name as the title', () => {
+    expect(
+      validateChangelogTitle(
+        'packages/core/CHANGELOG.md',
+        '@astryxdesign/core',
+        '# @astryxdesign/core\n\n## 0.7.17\n',
+      ),
+    ).toEqual([]);
+  });
+
+  it('rejects a title that names another package', () => {
+    expect(
+      validateChangelogTitle(
+        'packages/core/CHANGELOG.md',
+        '@astryxdesign/core',
+        '# @example/core\n\n## 0.7.17\n',
+      ),
+    ).toEqual([
+      'packages/core/CHANGELOG.md: the first line must be "# @astryxdesign/core"; found "# @example/core".',
+    ]);
+  });
+
+  it('rejects a CHANGELOG with no title line', () => {
+    expect(
+      validateChangelogTitle(
+        'packages/core/CHANGELOG.md',
+        '@astryxdesign/core',
+        '## 0.7.17\n',
+      ),
+    ).toEqual([
+      'packages/core/CHANGELOG.md: the first line must be "# @astryxdesign/core"; found "## 0.7.17".',
+    ]);
+  });
+});
+
+describe('checkRepository — CHANGELOG titles', () => {
+  const roots = [];
+  afterEach(() => {
+    for (const root of roots.splice(0))
+      fs.rmSync(root, {recursive: true, force: true});
+  });
+
+  function checkout(changelogs) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-cl-title-'));
+    roots.push(root);
+    const put = (file, text) => {
+      fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+      fs.writeFileSync(path.join(root, file), text);
+    };
+    put('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
+    put(
+      'packages/core/package.json',
+      JSON.stringify({name: '@astryxdesign/core', version: '0.7.17'}),
+    );
+    put(
+      'packages/lab/package.json',
+      JSON.stringify({
+        name: '@astryxdesign/lab',
+        version: '0.7.17',
+        private: true,
+      }),
+    );
+    put('.changeset/config.json', JSON.stringify({fixed: [], ignore: []}));
+    for (const [file, text] of Object.entries(changelogs)) put(file, text);
+    return root;
+  }
+
+  it('reports every package whose CHANGELOG names another package, private ones included', () => {
+    const root = checkout({
+      'packages/core/CHANGELOG.md': '# @example/core\n',
+      'packages/lab/CHANGELOG.md': '# @example/lab\n',
+    });
+    expect(checkRepository(root).problems).toEqual([
+      'packages/core/CHANGELOG.md: the first line must be "# @astryxdesign/core"; found "# @example/core".',
+      'packages/lab/CHANGELOG.md: the first line must be "# @astryxdesign/lab"; found "# @example/lab".',
+    ]);
+  });
+
+  it('passes a package with no CHANGELOG yet', () => {
+    expect(checkRepository(checkout({})).problems).toEqual([]);
   });
 });

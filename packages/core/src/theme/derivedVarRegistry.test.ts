@@ -333,11 +333,20 @@ const DIR_TO_REGISTRY_KEY: Record<string, string | string[]> = {
  * by the record that requires it.
  */
 const PRIVATE_SYSTEM_VARS = new Set([
+  // InputClearButton's 24 px fine-pointer target (WCAG 2.2 SC 2.5.8): the
+  // button holds the media condition and the hole's direction, which its
+  // `::after` reads. They are not a theme surface.
+  '--_input-clear-target',
+  '--_input-clear-target-hole',
   // Text and Heading FR3: a container that wraps with `overflow-wrap:
   // anywhere` passes it to the Text inside it; Text reads it with a
   // `break-word` fallback. scripts/text-overflow-wrap-anywhere.test.mjs
   // keeps every such container setting it.
   '--_astryx-text-overflow-wrap',
+  // Button FR19: an open popover sets it on the control that holds its
+  // separate anchor, and the control reads it as the factor a press scales
+  // it by. Popover/PopoverAnchor.test.tsx keeps every such control reading it.
+  '--_astryx-press-scale',
   // List FR5 and the container-padding record's corner geometry: a bleeding
   // List passes its first and last rows the container corner they take.
   '--_list-corner-start-start',
@@ -402,8 +411,9 @@ const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   // documents and reads both slots.
   DropdownMenu: ['--_item-label-color', '--_item-description-color'],
   // List's edge="flush" zeroes the inline inset of the Item each ListItem
-  // renders; Item owns, documents and reads it.
-  List: ['--_item-inset-inline'],
+  // renders, and a reorderable row that stays put sets the room after its
+  // marker; Item owns, documents and reads both.
+  List: ['--_item-inset-inline', '--_item-marker-room'],
   // A layer content root stops an outer Stepper's connector gap; Stepper owns,
   // documents and reads it.
   Layer: ['--step-connector-gap'],
@@ -440,6 +450,16 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // The ::after layer adds it to its offset, so the band starts past the
   // border. It is the layer's geometry, not a property a theme author sets. A
   // theme changes the divider through `--border-width`, which this follows.
+  // A reorderable list's values for its rows' handle room: whether the
+  // handles take a place, their targets' reach, and a bleeding list's start
+  // padding. They are reorder layout, not properties a theme author sets.
+  '--_reorder-shown',
+  '--_reorder-reach',
+  '--_reorder-bleed-start',
+  // The room a row keeps after its list marker for its neighbours' reorder
+  // handles: a reorderable List row that stays put sets it, and Item pads the
+  // content after the marker by it.
+  '--_item-marker-room',
   '--_hit-border-bottom',
   // The interaction overlay's colour on the ::after layer of the cards:
   // written by the component's own hover and mouse `:active` arms, never a
@@ -516,6 +536,10 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // control — a theme reaches them by setting the vars directly.
   '--_item-label-color',
   '--_item-description-color',
+  // Set by an open row expansion on its row, read by that row's cells: 0, so
+  // the panel below carries the divider. A theme's `borderBottomWidth` on
+  // the row must not write it, or an open row would draw a divider again.
+  '--_table-open-row-divider-width',
 ]);
 
 // ---------------------------------------------------------------------------
