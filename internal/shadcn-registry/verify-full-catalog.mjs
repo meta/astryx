@@ -37,6 +37,8 @@ import {
 } from '../../packages/cli/authoring/shadcn/receipt.mjs';
 import {DEMO_CONTENT_MODULE} from '../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {expandWorkspaceDirs} from '../../scripts/lib/workspace-globs.mjs';
+import {readImportSpecifiers} from '../../apps/docsite/scripts/generate-shadcn-registry.mjs';
+import {packageNameFromSpecifier} from '../../apps/docsite/scripts/published-exports.mjs';
 import {registryNameForPath} from '../../apps/docsite/src/lib/shadcnRegistry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -140,41 +142,21 @@ function packageName(spec) {
   return version === -1 ? spec : spec.slice(0, version);
 }
 
-function importedPackageName(specifier) {
-  if (
-    specifier.startsWith('.') ||
-    specifier.startsWith('/') ||
-    specifier.startsWith('@/') ||
-    specifier.startsWith('~/') ||
-    specifier.startsWith('node:') ||
-    specifier.includes(':')
-  ) {
-    return null;
-  }
-  if (specifier.startsWith('@')) {
-    const parts = specifier.split('/');
-    return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : specifier;
-  }
-  return specifier.split('/')[0];
-}
-
-function extractExternalImports(source) {
-  const withoutComments = source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+function extractExternalImports(source, fileName) {
   const packages = new Set();
-  const staticImportPattern =
-    /^\s*(?:import|export)\s+(?:type\s+)?(?:[^;'"`]*?\bfrom\s+)?['"]([^'"]+)['"]/gm;
-  for (const match of withoutComments.matchAll(staticImportPattern)) {
-    const pkg = importedPackageName(match[1]);
-    if (pkg != null && !CONSUMER_BASELINE_PACKAGES.has(pkg)) {
-      packages.add(pkg);
+  for (const specifier of readImportSpecifiers(source, fileName)) {
+    if (
+      specifier.startsWith('.') ||
+      specifier.startsWith('/') ||
+      specifier.startsWith('@/') ||
+      specifier.startsWith('~/') ||
+      specifier.startsWith('node:') ||
+      specifier.includes(':')
+    ) {
+      continue;
     }
-  }
-  const dynamicImportPattern = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-  for (const match of withoutComments.matchAll(dynamicImportPattern)) {
-    const pkg = importedPackageName(match[1]);
-    if (pkg != null && !CONSUMER_BASELINE_PACKAGES.has(pkg)) {
+    const pkg = packageNameFromSpecifier(specifier);
+    if (!CONSUMER_BASELINE_PACKAGES.has(pkg)) {
       packages.add(pkg);
     }
   }
@@ -577,22 +559,33 @@ function writeConsumer(project, items, packageDirs, {tsx}) {
       `${item.name} temporary item`,
     );
     fs.writeFileSync(itemPath, JSON.stringify(installItem));
-    itemPaths.push(itemPath);
+    itemPaths.push(path.relative(project, itemPath));
   }
 
   // Every dependency is pinned by generated registry data. The consumer is
   // ephemeral, and only local Astryx packages may run install hooks.
-  const builtDependencies = [
-    ...new Set([
-      ...(packageDirs ? packageDirs.keys() : []),
-      ...[...dependencyNames].filter(name => name.startsWith('@astryxdesign/')),
-    ]),
-  ].sort();
+  // pnpm 11 matches file: dependencies by <name>@file:<path relative to consumer>.
+  const allowBuilds = {};
+  if (packageDirs) {
+    for (const [name, directory] of [...packageDirs.entries()].sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    )) {
+      if (!name.startsWith('@astryxdesign/')) continue;
+      const relDir = path.relative(project, directory).split(path.sep).join('/');
+      allowBuilds[`${name}@file:${relDir}`] = true;
+    }
+  } else {
+    for (const name of [...dependencyNames].sort()) {
+      if (name.startsWith('@astryxdesign/')) {
+        allowBuilds[name] = true;
+      }
+    }
+  }
   const workspaceLines = ['packages: []'];
-  if (builtDependencies.length > 0) {
-    workspaceLines.push('onlyBuiltDependencies:');
-    for (const name of builtDependencies) {
-      workspaceLines.push(`  - ${JSON.stringify(name)}`);
+  if (Object.keys(allowBuilds).length > 0) {
+    workspaceLines.push('allowBuilds:');
+    for (const [selector, allowed] of Object.entries(allowBuilds)) {
+      workspaceLines.push(`  ${JSON.stringify(selector)}: ${allowed}`);
     }
   }
   fs.writeFileSync(
@@ -611,12 +604,9 @@ function runShadcn(project, itemPaths) {
   // transforms: keep them inside the consumer, which main() removes.
   const scratch = path.join(project, '.tmp');
   fs.mkdirSync(scratch, {recursive: true});
-  const relativeItemPaths = itemPaths.map(itemPath =>
-    path.relative(project, itemPath),
-  );
   const result = spawnSync(
     SHADCN_BIN,
-    ['add', ...relativeItemPaths, '--yes', '--overwrite', '--silent'],
+    ['add', ...itemPaths, '--yes', '--overwrite', '--silent'],
     {
       cwd: project,
       encoding: 'utf8',
@@ -676,7 +666,7 @@ function verifyInstall(project, items, dependencyNames, {tsx}) {
         !/\.d\.[cm]?ts$/.test(expected.target)
       ) {
         sources.push(installed);
-        for (const importedPkg of extractExternalImports(actual)) {
+        for (const importedPkg of extractExternalImports(actual, expected.target)) {
           if (!declared.has(importedPkg)) {
             fail(
               `${item.name} imports ${importedPkg} in ${expected.target} without declaring it in dependencies`,

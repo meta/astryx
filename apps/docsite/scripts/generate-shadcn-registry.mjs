@@ -67,7 +67,7 @@ class UnpublishedAstryxDependencyError extends Error {
   }
 }
 
-function readImportSpecifiers(source, fileName) {
+export function readImportSpecifiers(source, fileName) {
   const sourceFile = ts.createSourceFile(
     fileName,
     source,
