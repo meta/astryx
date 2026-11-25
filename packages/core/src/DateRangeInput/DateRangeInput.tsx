@@ -4,8 +4,8 @@
 
 /**
  * @file DateRangeInput.tsx
- * @input Uses React, Field, Calendar (range mode), the resolved calendar,
- *   VisuallyHidden, usePopover
+ * @input Uses React, Field, Calendar (range mode, loaded on the trigger's
+ *   intent), the resolved calendar, VisuallyHidden, usePopover
  * @output Exports DateRangeInput component, DateRangeInputProps
  * @position Core implementation; consumed by index.ts, tested by DateRangeInput.test.tsx
  *
@@ -62,15 +62,20 @@ import {
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {
-  Calendar,
-  type ISODateString,
-  type DateRange,
-  type DayOfWeek,
-  type DayOfWeekName,
+import type {
+  ISODateString,
+  DateRange,
+  DayOfWeek,
+  DayOfWeekName,
 } from '../Calendar';
 import {useCalendarConstraints} from '../Calendar/hooks';
 import {usePopover} from '../Popover';
+import {useCommittedRef} from '../hooks/useCommittedRef';
+import {
+  DateRangeCalendar,
+  isDateRangeCalendarLoaded,
+  loadDateRangeCalendar,
+} from './DateRangeCalendar';
 import {useTooltip} from '../Tooltip';
 import {mergeProps} from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
@@ -723,15 +728,45 @@ export function DateRangeInput({
     ],
   );
 
+  // An open asked for before Calendar loads opens once it loads, and a
+  // failed load drops it. The popover never shows without Calendar.
+  const isOpenHeldRef = useRef(false);
+  const showPopoverRef = useCommittedRef(popover.show);
   const handleToggle = useCallback(() => {
-    if (!isEffectivelyDisabled) {
-      if (popover.isOpen) {
-        popover.hide();
-      } else {
-        popover.show();
-      }
+    if (isEffectivelyDisabled) {
+      return;
     }
-  }, [isEffectivelyDisabled, popover]);
+    if (popover.isOpen) {
+      popover.hide();
+    } else if (isDateRangeCalendarLoaded()) {
+      popover.show();
+    } else if (isOpenHeldRef.current) {
+      isOpenHeldRef.current = false;
+    } else {
+      isOpenHeldRef.current = true;
+      void loadDateRangeCalendar().then(isLoaded => {
+        if (isOpenHeldRef.current) {
+          isOpenHeldRef.current = false;
+          if (isLoaded) {
+            showPopoverRef.current();
+          }
+        }
+      });
+    }
+  }, [isEffectivelyDisabled, popover, showPopoverRef]);
+  // The trigger's intent (a mouse or pen entry, a focus or a press) starts
+  // loading Calendar, so an open that follows finds it loaded.
+  const preloadCalendar = useCallback(() => {
+    void loadDateRangeCalendar();
+  }, []);
+  const preloadCalendarOnPointerEnter = useCallback(
+    (event: React.PointerEvent) => {
+      if (event.pointerType !== 'touch') {
+        preloadCalendar();
+      }
+    },
+    [preloadCalendar],
+  );
 
   const handleRangeSelect = useCallback(
     (range: DateRange) => {
@@ -801,6 +836,9 @@ export function DateRangeInput({
           // compose, so attaching unconditionally is safe.
           disabledMessageTooltip.ref(el);
         }}
+        onPointerEnter={preloadCalendarOnPointerEnter}
+        onPointerDown={preloadCalendar}
+        onFocus={preloadCalendar}
         {...mergeProps(
           themeProps('date-range-input', {
             size,
@@ -967,7 +1005,7 @@ export function DateRangeInput({
             {/* The layer renders its children open or closed, so mount the
               calendar only while it is open. */}
             {popover.isOpen && (
-              <Calendar
+              <DateRangeCalendar
                 calendar={calendar}
                 mode="range"
                 value={optimisticValue}

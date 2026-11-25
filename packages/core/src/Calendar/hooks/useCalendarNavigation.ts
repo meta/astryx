@@ -30,7 +30,7 @@ import {
   calendarYearMonthOf,
   formatCalendarMonthLabel,
 } from '../../utils/calendarSystem';
-import {useLocale} from '../../i18n';
+import {useLocale} from '../../i18n/useLocale';
 import {resolveShownCalendar} from '../../i18n/useCalendarSystem';
 
 /**
