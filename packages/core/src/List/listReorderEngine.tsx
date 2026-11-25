@@ -106,6 +106,7 @@ import {
   releaseMotion,
 } from '../utils/rowMotion';
 import {edgeAutoscroll, type EdgeAutoscroll} from '../utils/edgeAutoscroll';
+import {msSinceInput} from '../utils/inputAge';
 import {subscribeInput} from '../utils/inputStream';
 import {nearestScroller} from '../utils/scrollingAncestor';
 import {useTouchPresentation} from '../utils/touchPresentation';
@@ -697,7 +698,7 @@ export interface ReorderGestureEvent {
    * dropped row's glide starts at.
    */
   readonly velocity?: number;
-  /** At a release, its event's time on the `performance.now()` clock. */
+  /** At a release, its time on the motion clock. */
   readonly time?: number;
 }
 
@@ -1314,7 +1315,8 @@ export class ListReorderController implements ListReorderSession {
             state: 'ended',
             y: up.clientY,
             velocity: velocity.velocity(up.timeStamp).y,
-            time: up.timeStamp,
+            // The release on the motion clock, from the pointer's own stamp.
+            time: motionNow() - msSinceInput(up.timeStamp, up),
           });
         }
       };
@@ -1384,7 +1386,10 @@ export class ListReorderController implements ListReorderSession {
               state === 'ended' && touch != null
                 ? velocity.velocity(touch.time).y
                 : undefined,
-            time: state === 'ended' ? touch?.time : undefined,
+            // A tracked touch keeps the time of its last move, which can be
+            // long before the lift. The recognizer ends in the lift's own
+            // task, so now is the lift.
+            time: state === 'ended' ? motionNow() : undefined,
           });
         }
       },

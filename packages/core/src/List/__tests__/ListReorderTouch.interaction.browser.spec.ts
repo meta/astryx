@@ -53,6 +53,7 @@ import {
   writeEvidence,
   type TouchEventStep,
 } from '@astryxdesign/interaction-harness';
+import {END_HOLD_MS} from '../../motion/animator';
 import {solveSpring, toSpring} from '../../motion/spring';
 import {reorder} from '../../motion/uikit/reorder';
 import {springs} from '../../motion/uikit/springs';
@@ -545,9 +546,11 @@ test.describe('under a finger', () => {
     page,
   }) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
-    // Each row animation's scheduled end on the document timeline, read every
-    // frame while it lives, and the lift's time on the same clock.
-    await page.evaluate(() => {
+    // Each row animation's curve end on the document timeline, read every
+    // frame while it lives, and when the page handles the lift, on the same
+    // clock. An animation holds its end state for END_HOLD_MS after its
+    // curve, so the curve ends that much before the animation does.
+    await page.evaluate(hold => {
       const record = window as unknown as {
         liftedAt: number;
         ends: Map<Animation, number>;
@@ -556,8 +559,8 @@ test.describe('under a finger', () => {
       record.ends = new Map();
       window.addEventListener(
         'touchend',
-        event => {
-          record.liftedAt = event.timeStamp;
+        () => {
+          record.liftedAt = performance.now();
         },
         {capture: true},
       );
@@ -576,13 +579,13 @@ test.describe('under a finger', () => {
           }
           const end = animation.effect?.getComputedTiming().endTime;
           if (typeof end === 'number') {
-            record.ends.set(animation, start + end);
+            record.ends.set(animation, start + end - hold);
           }
         }
         requestAnimationFrame(sample);
       };
       requestAnimationFrame(sample);
-    });
+    }, END_HOLD_MS);
     const {at, rowHeight} = await handleOf(page, 'Inbox');
     const driver = await touchDriver(page);
     await driver.play(
@@ -606,8 +609,8 @@ test.describe('under a finger', () => {
     const detail = JSON.stringify({liftedAt, lastEnd});
     expect(Number.isFinite(liftedAt), detail).toBe(true);
     expect(Number.isFinite(lastEnd), detail).toBe(true);
-    // The dip's halves are timed to the millisecond; half a millisecond
-    // covers the timeline's rounding.
+    // The page handles the lift a little after its own listeners do, so the
+    // bound is exact; half a millisecond covers the timeline's rounding.
     expect(lastEnd - liftedAt, detail).toBeLessThanOrEqual(200.5);
   });
 });

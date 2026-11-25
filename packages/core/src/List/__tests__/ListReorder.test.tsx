@@ -1907,7 +1907,8 @@ describe('List reorderable', () => {
     (_, coarse) => {
       stubPrimaryPointer(coarse);
       document.body.setAttribute('data-astryx-reduced-motion', '');
-      // The commit runs 40 ms after the release.
+      // The pointer stamped its release at 1000 ms, and the page handles it,
+      // and commits the move, 40 ms later.
       let clock = 1000;
       const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
       const glide = vi.spyOn(touchMotion, 'glide');
@@ -1923,7 +1924,8 @@ describe('List reorderable', () => {
           clientY: 322 + 70,
           bubbles: true,
         });
-        const releasedAt = up.timeStamp;
+        const releasedAt = 1000;
+        Object.defineProperty(up, 'timeStamp', {value: releasedAt});
         clock = releasedAt + 40;
         act(() => {
           handle.dispatchEvent(up);
