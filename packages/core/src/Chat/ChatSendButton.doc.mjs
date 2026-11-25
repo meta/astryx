@@ -32,7 +32,7 @@ export const docs = {
     {
       name: 'sendIcon',
       type: 'ReactNode',
-      description: 'Custom icon for the send state. Non-null content overrides chat-send-button-send; otherwise uses the slot, then arrowUp.',
+      description: 'Custom icon for the send state. Pass null to hide the glyph. Only undefined uses the chat-send-button-send slot, then arrowUp.',
       slotElements: [
         {
           __element: 'Icon',
@@ -124,7 +124,7 @@ export const docsZh = {
     isDisabled: '发送按钮是否禁用。默认使用上下文的 !canSend。',
     onSend: '用户点击发送时调用。默认使用上下文的 onSubmit。',
     onStop: '流式响应期间用户点击停止时调用。默认使用上下文的 onStop。',
-    sendIcon: '发送状态的自定义图标。非 null 值优先于 chat-send-button-send；否则使用插槽，无映射时使用 arrowUp。',
+    sendIcon: '发送状态的自定义图标。传入 null 可隐藏图标。仅当值为 undefined 时才使用 chat-send-button-send 插槽，无映射时使用 arrowUp。',
     stopIcon: '停止状态的自定义图标。默认使用图标注册表的 stop。',
     size: '按钮大小。',
     xstyle: '额外的 StyleX 样式。',
@@ -141,7 +141,7 @@ export const docsDense = {
     isDisabled: 'disabled; defaults to !canSend from context',
     onSend: 'send click handler; defaults to context onSubmit',
     onStop: 'stop click handler; defaults to context onStop',
-    sendIcon: 'custom send icon > chat-send-button-send > arrowUp; null/undefined falls through',
+    sendIcon: 'custom send icon > chat-send-button-send > arrowUp; null hides glyph; only undefined falls through',
     stopIcon: 'custom stop icon; default stop from registry',
     size: 'btn size',
     xstyle: 'additional StyleX styles',

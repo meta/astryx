@@ -213,7 +213,7 @@ describe('ChatSendButton', () => {
       expect(screen.getByTestId('my-send')).toBeInTheDocument();
     });
 
-    it('uses the theme send slot when sendIcon is null', () => {
+    it('uses the theme send slot when sendIcon is omitted', () => {
       render(
         <Theme
           theme={defineTheme({
@@ -221,12 +221,27 @@ describe('ChatSendButton', () => {
             icons: {clock: <TestIcon data-testid="mapped-send" />},
             componentIcons: {'chat-send-button-send': 'clock'},
           })}>
-          <ChatSendButton sendIcon={null} />
+          <ChatSendButton />
         </Theme>,
       );
       expect(screen.getByRole('button', {name: 'Send'})).toContainElement(
         screen.getByTestId('mapped-send'),
       );
+    });
+
+    it('hides only the mapped send glyph when sendIcon is null', () => {
+      render(
+        <Theme
+          theme={defineTheme({
+            name: 'send-slot-caller-null',
+            componentIcons: {'chat-send-button-send': 'clock'},
+          })}>
+          <ChatSendButton sendIcon={null} isDisabled={false} />
+        </Theme>,
+      );
+      const button = screen.getByRole('button', {name: 'Send'});
+      expect(button).toBeEnabled();
+      expect(button.querySelector('svg')).toBeNull();
     });
 
     it('hides only the glyph when the theme maps the send slot to null', () => {

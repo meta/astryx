@@ -52,7 +52,7 @@ export interface ChatSendButtonProps extends BaseProps<HTMLButtonElement> {
   onSend?: () => void;
   /** Called when the user clicks the stop button. */
   onStop?: () => void;
-  /** Icon for the send state. A non-null value overrides the theme's send slot. */
+  /** Icon for the send state. Use null to hide the glyph or undefined to use the theme's send slot. */
   sendIcon?: ReactNode;
   /** Icon for the stop state. Resolves from icon registry by default. */
   stopIcon?: ReactNode;
@@ -132,7 +132,7 @@ export function ChatSendButton(props: ChatSendButtonProps): ReactNode {
             state={undefined}
             fallback="arrowUp"
             color="inherit"
-            content={sendIcon ?? undefined}
+            content={sendIcon}
           />
         )
       }
