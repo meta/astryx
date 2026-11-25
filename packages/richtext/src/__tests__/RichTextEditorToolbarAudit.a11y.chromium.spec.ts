@@ -26,7 +26,9 @@ import {
 } from '@astryxdesign/a11y-spec/storybook';
 import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 
-const EVIDENCE = path.resolve('test-results/richtext-toolbar-audit-evidence');
+const EVIDENCE = path.resolve(
+  'test-results/rich-text-editor-toolbar-audit-evidence',
+);
 const TOOLBAR_STORY = 'richtext-richtexteditor--with-toolbar';
 const LINK_STORY = 'richtext-richtexteditor--with-links';
 const NO_ROOM_STORY = 'richtext-richtexteditor--with-links-no-room-above';

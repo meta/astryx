@@ -31,10 +31,9 @@
  * Behavior mirrors the Lexical playground toolbar (selection sync + format
  * commands); the UI is built from Astryx primitives so it matches the theme.
  *
- * ICONS: Each control resolves its glyph under a stable `richtext:*` key (see
- * {@link RICHTEXT_ICON_KEYS}): the active theme's icons, else the
- * `registerIcons()` registry, else the bundled inline SVGs below — the library
- * seam `getExtendedIcon` documents. A theme restyles any glyph by naming its key:
+ * ICONS: Each control resolves its glyph by a `richtext:*` key (see
+ * {@link RICHTEXT_ICON_KEYS}). The theme's icons win, then `registerIcons()`,
+ * then the bundled SVGs below. A theme restyles any glyph by naming its key:
  *   defineTheme({icons: {'richtext:bold': <MyBoldIcon />}});
  * Undo and redo point backward and forward in time, so they mirror under RTL
  * whichever glyph draws them.
