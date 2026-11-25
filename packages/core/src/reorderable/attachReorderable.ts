@@ -435,6 +435,12 @@ export function attachReorderable(
       hintRoot = createRoot(hintHost);
       hintRoot.render(createElement(ListReorderModeHint, {controller}));
     }
+    // The host sits outside the container's direction region, so it takes
+    // the container's direction each time the mode starts: the hint's
+    // buttons then mirror as List's hint does.
+    if (hintHost != null) {
+      hintHost.dir = container.matches(':dir(rtl)') ? 'rtl' : 'ltr';
+    }
   };
 
   const unsubscribeMode = controller.subscribeMode(() => {

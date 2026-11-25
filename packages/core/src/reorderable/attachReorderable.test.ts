@@ -280,6 +280,30 @@ describe('createReorderable attach (spec:AST-103 FR4b)', () => {
     expect(milk).toHaveAttribute('aria-pressed', 'false');
   });
 
+  it.each([
+    {scope: 'ltr', region: 'rtl'},
+    {scope: 'rtl', region: 'ltr'},
+  ] as const)(
+    "gives the hint the container's direction ($region) inside a $scope theme scope",
+    async ({scope, region}) => {
+      const {container, handle} = track(renderPlainList(['Milk', 'Eggs']));
+      const themeScope = document.createElement('div');
+      themeScope.dataset.astryxTheme = 'neutral';
+      themeScope.dir = scope;
+      const directionRegion = document.createElement('div');
+      directionRegion.dir = region;
+      document.body.append(themeScope);
+      themeScope.append(directionRegion);
+      directionRegion.append(container);
+      act(() => handle('Milk').click());
+      const done = await waitFor(() =>
+        screen.getByRole('button', {name: 'Done', hidden: true}),
+      );
+      expect(directionRegion).not.toContainElement(done);
+      expect(done.closest('[dir]')).toHaveAttribute('dir', region);
+    },
+  );
+
   it("starts reorder mode from the app's own UI with start(key)", () => {
     const {handle, reorderable} = track(renderPlainList(['Milk', 'Eggs']));
     act(() => reorderable.start('eggs'));
