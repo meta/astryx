@@ -16,8 +16,8 @@ import {createReorderable} from '@astryxdesign/core';
 import {Card} from '@astryxdesign/core/Card';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {createSwipe} from '@astryxdesign/core/Swipe';
-import {TransferList} from '@astryxdesign/lab';
-import type {TransferListOption} from '@astryxdesign/lab';
+import {TransferList} from '@astryxdesign/core/TransferList';
+import type {TransferListOption} from '@astryxdesign/core/TransferList';
 import type {ListReorderCaseId} from './caseIds';
 
 const MAILBOXES = [

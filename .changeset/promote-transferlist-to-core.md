@@ -1,0 +1,7 @@
+---
+'@astryxdesign/core': patch
+---
+
+[feat] Promote `TransferList` and `TransferListSelector` to Core, imported from `@astryxdesign/core/TransferList` or the package root, together with `TransferListOption`, `TransferListProps`, `TransferListSelectorProps`, `TransferListSelectorCommitBehavior`, and `transferListVars`. TransferListSelector is a selector field for choosing and ordering a set of options, such as the columns a table shows. Its popover holds two panels, the selected values in their order and the options that remain, with Add or Remove on each row, optional Add all and Clear, an optional search across both panels, and, with `reorderable={createReorderable(…)}`, a reorder handle on each selected row. Each edit commits at once by default; `commitBehavior="staged"` keeps a draft that Apply commits and Cancel discards. While a `changeAction` is pending, the list's actions stay focusable but make no change and announce none. TransferList is the same content for a custom ComplexSelector. As every component that composes Field does, TransferListSelector takes no root `xstyle`, `className`, or `style`: `containerXstyle`, `containerClassName`, and `containerStyle` style the Field box, `controlXstyle`, `controlClassName`, and `controlStyle` style the control box, and `ref`, `id`, `data-*`, and `aria-*` reach the trigger. A search that matches nothing is announced with the text of `emptySearchText` as the panels show it, not with a count.
+
+@ernestt

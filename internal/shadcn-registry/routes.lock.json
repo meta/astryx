@@ -788,16 +788,6 @@
       "aliases": []
     },
     {
-      "name": "component-lab-transfer-list",
-      "path": "components/lab/transfer-list",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-transfer-list-selector",
-      "path": "components/lab/transfer-list-selector",
-      "aliases": []
-    },
-    {
       "name": "component-lab-video-player",
       "path": "components/lab/video-player",
       "aliases": []
@@ -1271,6 +1261,20 @@
       "name": "component-top-nav-menu",
       "path": "components/top-nav-menu",
       "aliases": []
+    },
+    {
+      "name": "component-transfer-list",
+      "path": "components/transfer-list",
+      "aliases": [
+        "components/lab/transfer-list"
+      ]
+    },
+    {
+      "name": "component-transfer-list-selector",
+      "path": "components/transfer-list-selector",
+      "aliases": [
+        "components/lab/transfer-list-selector"
+      ]
     },
     {
       "name": "component-tree-list",

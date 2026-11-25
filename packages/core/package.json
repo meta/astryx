@@ -694,6 +694,11 @@
       "types": "./dist/TopNav/index.d.ts",
       "default": "./dist/TopNav/index.js"
     },
+    "./TransferList": {
+      "source": "./src/TransferList/index.ts",
+      "types": "./dist/TransferList/index.d.ts",
+      "default": "./dist/TransferList/index.js"
+    },
     "./TreeList": {
       "source": "./src/TreeList/index.ts",
       "types": "./dist/TreeList/index.d.ts",

@@ -5,35 +5,43 @@
 /**
  * @file TransferListSelector.tsx
  * @input Controlled option data, uncontrolled ComplexSelector state, action
- *   controls and the core i18n catalog. Also TransferList with the owner's
+ *   controls and the component translator. Also TransferList with the owner's
  *   reorderable object, adapted through Core's internal reorder entry and
  *   aimed at the draft when staged, and told while a change is pending
  * @output Exports the immediate-or-staged TransferListSelector composition with draft cleanup after dismissal
- * @position Lab collection input shell; consumed by the TransferList entry point, docs, and tests
+ * @position Core collection input shell; consumed by the TransferList entry point, docs, and tests
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/lab/src/TransferList/TransferListSelector.test.tsx
- * - /packages/lab/src/TransferList/TransferList.doc.mjs
- * - /packages/lab/src/TransferList/index.ts
+ * - /packages/core/src/TransferList/TransferListSelector.test.tsx
+ * - /packages/core/src/TransferList/TransferListSelector.doc.mjs
+ * - /packages/core/src/TransferList/index.ts
+ * - /docs/specs/components/TransferList/TransferListSelector.spec.md
  */
 
 import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Button} from '@astryxdesign/core/Button';
+import {Button} from '../Button/Button';
 import {
   ComplexSelector,
   type ComplexSelectorProps,
-} from '@astryxdesign/core/ComplexSelector';
-import {useTranslator} from '@astryxdesign/core/i18n';
-import {HStack} from '@astryxdesign/core/Stack';
-import {borderVars, colorVars} from '@astryxdesign/core/theme/tokens.stylex';
-import type {Reorderable} from '@astryxdesign/core';
+} from '../ComplexSelector/ComplexSelector';
+import {HStack} from '../HStack/HStack';
 import {
-  adaptReorderable,
-  reorderableOptions,
-} from '@astryxdesign/core/internal/reorder';
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TransferList/TransferListSelector.generated';
+import {adaptReorderable, reorderableOptions} from '../internal/reorder';
+import type {Reorderable} from '../reorderable/createReorderable';
+import {
+  useFieldInputStyling,
+  type FieldInputBaseProps,
+} from '../Field/fieldParts';
+import {borderVars, colorVars} from '../theme/tokens.stylex';
 import {TransferList, type TransferListProps} from './TransferList';
 import {TransferListBusyContext} from './transferListBusy';
+
+registerEnglishFallback(english);
 
 const DEFAULT_SELECTOR_WIDTH = 'min(41rem, calc(100vw - 32px))';
 
@@ -102,10 +110,7 @@ type TransferListSelectorShellProp =
   | 'size'
   | 'width'
   | 'placement'
-  | 'controlXstyle'
-  | 'controlClassName'
-  | 'controlStyle'
-  | 'data-testid';
+  | 'ref';
 
 type TransferListContentProp =
   | 'options'
@@ -123,17 +128,18 @@ type TransferListContentProp =
 
 export type TransferListSelectorCommitBehavior = 'immediate' | 'staged';
 
-export type TransferListSelectorProps<T extends string = string> = Pick<
-  ComplexSelectorProps<readonly T[]>,
-  TransferListSelectorShellProp
+export type TransferListSelectorProps<T extends string = string> = Omit<
+  FieldInputBaseProps,
+  'children' | 'onChange'
 > &
+  Pick<ComplexSelectorProps<ReadonlyArray<T>>, TransferListSelectorShellProp> &
   Pick<TransferListProps<T>, TransferListContentProp> & {
     /** Ordered values applied outside the selector. */
-    value: readonly T[];
+    value: ReadonlyArray<T>;
     /** Called whenever a value is committed. */
-    onChange: (value: readonly T[]) => void;
+    onChange: (value: ReadonlyArray<T>) => void;
     /** Optional async action after a changed value is applied. */
-    changeAction?: (value: readonly T[]) => void | Promise<void>;
+    changeAction?: (value: ReadonlyArray<T>) => void | Promise<void>;
     /**
      * Controls when changes are committed. Immediate commits each list edit and
      * staged waits for Apply. @default 'immediate'
@@ -155,15 +161,19 @@ export type TransferListSelectorProps<T extends string = string> = Pick<
   };
 
 /** `value` with `key` moved to index `to`. */
-function moveValue<T>(value: readonly T[], key: T, to: number): readonly T[] {
+function moveValue<T>(
+  value: ReadonlyArray<T>,
+  key: T,
+  to: number,
+): ReadonlyArray<T> {
   const next = value.filter(item => item !== key);
   next.splice(to, 0, key);
   return next;
 }
 
 function areOrderedValuesEqual<T>(
-  first: readonly T[],
-  second: readonly T[],
+  first: ReadonlyArray<T>,
+  second: ReadonlyArray<T>,
 ): boolean {
   return (
     first.length === second.length &&
@@ -233,14 +243,22 @@ export function TransferListSelector<T extends string = string>({
   selectedEmptyText,
   availableEmptyText,
   emptySearchText,
+  containerXstyle,
+  containerClassName,
+  containerStyle,
   ...selectorProps
 }: TransferListSelectorProps<T>): ReactNode {
-  const t = useTranslator();
+  const t = useComponentTranslator();
+  const {rest: shellProps, container} = useFieldInputStyling(
+    'TransferListSelector',
+    selectorProps,
+    {containerXstyle, containerClassName, containerStyle},
+  );
   const applyLabel =
     applyLabelFromProps ?? t('@astryx.transferListSelector.apply');
   const cancelLabel =
     cancelLabelFromProps ?? t('@astryx.transferListSelector.cancel');
-  const [draftValue, setDraftValue] = useState<readonly T[]>(value);
+  const [draftValue, setDraftValue] = useState<ReadonlyArray<T>>(value);
 
   const resetDraft = useCallback(() => {
     setDraftValue([...value]);
@@ -267,7 +285,10 @@ export function TransferListSelector<T extends string = string>({
 
   return (
     <ComplexSelector
-      {...selectorProps}
+      {...shellProps}
+      containerXstyle={container.xstyle}
+      containerClassName={container.className}
+      containerStyle={container.style}
       label={label}
       description={description}
       value={value}

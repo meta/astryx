@@ -77,6 +77,7 @@ const {Spinner} = await import('../Spinner');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
 const {InfoTip} = await import('../InfoTip/InfoTip');
 const {ToastSurface} = await import('../Toast/Toast');
+const {TransferList} = await import('../TransferList/TransferList');
 // Tokenizer and PowerSearch load their sheets on demand. This file loads
 // both sheet modules before any test runs, so the sheet cases' waits and
 // time limits cover the open, not the module's load.
@@ -152,6 +153,20 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
     rerender(<Spinner aria-hidden />);
     expect(calls.at(-1)?.isShown).toBe(false);
     expect(announce).not.toHaveBeenCalled();
+  },
+  'TransferList/TransferList.tsx': async () => {
+    render(
+      <TransferList
+        label="Columns"
+        options={[{value: 'name', label: 'Name'}]}
+        value={[]}
+        onChange={() => {}}
+        hasSearch
+        emptySearchText={<span>No column matches</span>}
+      />,
+    );
+    fireEvent.change(screen.getByRole('searchbox'), {target: {value: 'zzz'}});
+    await expectDelegated('No column matches');
   },
   'EmptyState/EmptyState.tsx': async () => {
     render(<EmptyState title="Nothing here" description="Add an item" />);

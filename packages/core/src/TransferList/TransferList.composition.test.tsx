@@ -4,7 +4,7 @@
  * @file TransferList.composition.test.tsx
  * @input Uses ComplexSelector, TransferList, React state, and Testing Library
  * @output Integration coverage for staged transfer-list selector behavior
- * @position Lab composition test; validates the two public component contracts together
+ * @position Core composition test; validates the two public component contracts together
  *
  * SYNC: When the ComplexSelector + TransferList staged contract changes, update this test.
  */
@@ -19,8 +19,8 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {ComplexSelector} from '@astryxdesign/core/ComplexSelector';
-import {createReorderable} from '@astryxdesign/core';
+import {ComplexSelector} from '../ComplexSelector/ComplexSelector';
+import {createReorderable} from '../reorderable/createReorderable';
 import {TransferList, type TransferListOption} from './TransferList';
 
 type Column = 'name' | 'owner' | 'status' | 'updated';
@@ -34,7 +34,7 @@ const OPTIONS: ReadonlyArray<TransferListOption<Column>> = [
 
 const PRESETS = {
   compact: ['owner', 'name'],
-} as const satisfies Record<string, readonly Column[]>;
+} as const satisfies Record<string, ReadonlyArray<Column>>;
 
 const hidden = {hidden: true} as const;
 
@@ -44,8 +44,8 @@ function ResetDraftOnOpen({
   onReset,
 }: {
   isOpen: boolean;
-  appliedValue: readonly Column[];
-  onReset: (value: readonly Column[]) => void;
+  appliedValue: ReadonlyArray<Column>;
+  onReset: (value: ReadonlyArray<Column>) => void;
 }) {
   const wasOpenRef = useRef(false);
 
@@ -59,16 +59,19 @@ function ResetDraftOnOpen({
   return null;
 }
 
+const STAGED_INITIAL_VALUE: ReadonlyArray<Column> = ['name', 'status'];
+
 function StagedColumnSelector({
-  initialValue = ['name', 'status'],
+  initialValue = STAGED_INITIAL_VALUE,
   onCommit,
 }: {
-  initialValue?: readonly Column[];
-  onCommit: (value: readonly Column[]) => void;
+  initialValue?: ReadonlyArray<Column>;
+  onCommit: (value: ReadonlyArray<Column>) => void;
 }) {
   const [appliedValue, setAppliedValue] =
-    useState<readonly Column[]>(initialValue);
-  const [draftValue, setDraftValue] = useState<readonly Column[]>(initialValue);
+    useState<ReadonlyArray<Column>>(initialValue);
+  const [draftValue, setDraftValue] =
+    useState<ReadonlyArray<Column>>(initialValue);
   // The composition owns the draft, so its reorderable moves the draft.
   const reorderable = useMemo(
     () =>

@@ -6,7 +6,7 @@
  * @output Behavioral coverage for immediate transfers, filtering, and
  *   reordering through core List's reorder handles, with keys here. The touch
  *   and mouse drags in a real browser are in the a11y Chromium specs
- * @position Lab tests; validates TransferList.tsx
+ * @position Core tests; validates TransferList.tsx
  *
  * SYNC: When TransferList.tsx behavior changes, update these tests.
  */
@@ -25,7 +25,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
-import {createReorderable} from '@astryxdesign/core';
+import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {createReorderable} from '../reorderable/createReorderable';
 import {
   TransferList,
   type TransferListOption,
@@ -72,10 +73,10 @@ const TRANSFER_LOCKED_OPTIONS: ReadonlyArray<TransferListOption<string>> = [
 
 /** Moves `key` to index `to` of `value`: how an owner applies a move. */
 function moveValue(
-  value: readonly string[],
+  value: ReadonlyArray<string>,
   key: string,
   to: number,
-): readonly string[] {
+): ReadonlyArray<string> {
   const next = value.filter(item => item !== key);
   next.splice(to, 0, key);
   return next;
@@ -85,27 +86,29 @@ type ControlledTransferListProps = Omit<
   TransferListProps<string>,
   'label' | 'options' | 'value' | 'onChange'
 > & {
-  initialValue?: readonly string[];
-  onValueChange?: (value: readonly string[]) => void;
+  initialValue?: ReadonlyArray<string>;
+  onValueChange?: (value: ReadonlyArray<string>) => void;
   options?: ReadonlyArray<TransferListOption<string>>;
   /**
    * Values that keep their place: the helper's reorderable object rejects
    * them in `isReorderable`. Its `onReorder` applies each move to its value.
    */
-  fixed?: readonly string[];
+  fixed?: ReadonlyArray<string>;
   /** Pass no reorderable object, so the selected options keep their order. */
   isUnordered?: boolean;
 };
 
+const NO_VALUES: ReadonlyArray<string> = [];
+
 function ControlledTransferList({
-  initialValue = [],
+  initialValue = NO_VALUES,
   onValueChange,
   options = OPTIONS,
   fixed,
   isUnordered = false,
   ...props
 }: ControlledTransferListProps) {
-  const [value, setValue] = useState<readonly string[]>(initialValue);
+  const [value, setValue] = useState<ReadonlyArray<string>>(initialValue);
   const reorderable = useMemo(
     () =>
       isUnordered
@@ -140,7 +143,7 @@ function ControlledTransferList({
   );
 }
 
-const FIXED_OWNER: readonly string[] = ['owner'];
+const FIXED_OWNER: ReadonlyArray<string> = ['owner'];
 
 const testStyles = stylex.create({
   root: (opacity: number) => ({opacity}),
@@ -148,7 +151,12 @@ const testStyles = stylex.create({
 
 afterEach(() => {
   vi.restoreAllMocks();
+  __resetLiveRegionsForTest();
 });
+
+function politeRegion(): HTMLElement | null {
+  return document.querySelector('[data-astryx-live-region="polite"]');
+}
 
 describe('TransferList', () => {
   it('disables every control while keeping them focusable, without option-specific messages', () => {
@@ -242,14 +250,8 @@ describe('TransferList', () => {
       expect(panels[0]?.parentElement).toBe(panels[1]?.parentElement);
 
       expect(screen.queryByText('2 items')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', {name: 'Clear'})).toHaveAttribute(
-        'data-transfer-list-header-action',
-        'true',
-      );
-      expect(screen.getByRole('button', {name: 'Add all'})).toHaveAttribute(
-        'data-transfer-list-header-action',
-        'true',
-      );
+      expect(screen.getByRole('button', {name: 'Clear'})).toBeInTheDocument();
+      expect(screen.getByRole('button', {name: 'Add all'})).toBeInTheDocument();
       const addButton = screen.getByRole('button', {name: 'Add Owner'});
       const removeButton = screen.getByRole('button', {name: 'Remove Name'});
       // Glyphs render through the shared Icon primitive rather than a raw
@@ -462,7 +464,7 @@ describe('TransferList', () => {
         value,
         isPending,
       }: {
-        value: readonly string[];
+        value: ReadonlyArray<string>;
         isPending: boolean;
       }) {
         return (
@@ -552,6 +554,35 @@ describe('TransferList', () => {
         screen.getAllByRole('button', {name: 'Add a column'}),
       ).toHaveLength(2);
       expect(screen.getAllByText(/No matching columns\./)).toHaveLength(2);
+    });
+
+    it('announces the count of a search that matches, and the shown message of one that matches nothing', async () => {
+      const user = userEvent.setup();
+      render(
+        <ControlledTransferList
+          initialValue={['name']}
+          hasSearch
+          emptySearchText={
+            <>
+              No matching columns. <button type="button">Add a column</button>
+            </>
+          }
+        />,
+      );
+      const search = screen.getByRole('searchbox');
+
+      await user.type(search, 'own');
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('1 item found.');
+      });
+
+      await user.type(search, 'zzz');
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent(
+          'No matching columns. Add a column',
+        );
+      });
+      expect(politeRegion()).not.toHaveTextContent('0 items found.');
     });
 
     it('disables search by default, and shows a reorder handle with reorderable', () => {
@@ -882,7 +913,7 @@ describe('TransferList', () => {
       );
       // The rows the list shows: every value with an option, in value order.
       const shown = () =>
-        (onValueChange.mock.lastCall?.[0] as readonly string[]).filter(
+        (onValueChange.mock.lastCall?.[0] as ReadonlyArray<string>).filter(
           value => value !== 'retired',
         );
       screen.getByRole('button', {name: 'Reorder Owner'}).focus();
@@ -1115,7 +1146,10 @@ describe("the owner's reorderable object", () => {
   it("its start(key) turns on reorder mode for that row in TransferList's list (spec:AST-103 FR4a)", () => {
     let start: ((key: string) => void) | undefined;
     function Owned() {
-      const [value, setValue] = useState<readonly string[]>(['name', 'status']);
+      const [value, setValue] = useState<ReadonlyArray<string>>([
+        'name',
+        'status',
+      ]);
       const reorderable = useMemo(
         () =>
           createReorderable<string>({
@@ -1174,7 +1208,7 @@ describe("the owner's reorderable object", () => {
     );
     const rowOf = (value: string) =>
       container.querySelector<HTMLElement>(
-        `[data-transfer-list-row="${value}"]`,
+        `[data-astryx-transfer-row="${value}"]`,
       );
     expect(rowOf('name')).toHaveAttribute('data-reorder', 'fixed');
     expect(rowOf('name')).toHaveAttribute('data-state', 'enabled');

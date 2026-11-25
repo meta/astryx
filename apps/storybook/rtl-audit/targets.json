@@ -1123,7 +1123,7 @@
   },
   {
     "component": "TransferList",
-    "storyId": "lab-transferlist--default",
+    "storyId": "core-transferlist--default",
     "dims": ["D2"],
     "selectors": {
       "prev": ".astryx-transfer-list-panel >> nth=0",
@@ -1132,7 +1132,7 @@
   },
   {
     "component": "TransferListSelector",
-    "storyId": "lab-transferlistselector--default",
+    "storyId": "core-transferlistselector--default",
     "dims": ["D2"],
     "selectors": {
       "prev": ".astryx-complex-selector button span:text-is(\"3 visible fields\")",

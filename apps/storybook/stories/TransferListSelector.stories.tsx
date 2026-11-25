@@ -4,7 +4,7 @@
  * @file TransferListSelector.stories.tsx
  * @input TransferListSelector option data and commit behavior
  * @output Storybook examples for the popover-backed immediate and staged selectors
- * @position Lab Storybook documentation and visual validation
+ * @position Core Storybook documentation and visual validation
  *
  * Covers the selector wrapper only. The TransferList primitive it hosts has its
  * own story file: a Storybook title maps to exactly one component, and the
@@ -17,11 +17,14 @@
 import {useMemo, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {createReorderable} from '@astryxdesign/core';
-import {TransferListSelector} from '@astryxdesign/lab';
-import type {TransferListOption, TransferListProps} from '@astryxdesign/lab';
+import {TransferListSelector} from '@astryxdesign/core/TransferList';
+import type {
+  TransferListOption,
+  TransferListProps,
+} from '@astryxdesign/core/TransferList';
 
 const meta: Meta<typeof TransferListSelector> = {
-  title: 'Lab/TransferListSelector',
+  title: 'Core/TransferListSelector',
   component: TransferListSelector,
   tags: ['autodocs'],
   parameters: {

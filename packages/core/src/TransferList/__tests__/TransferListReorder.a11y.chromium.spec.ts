@@ -2,7 +2,7 @@
 
 /**
  * @file TransferListReorder.a11y.chromium.spec.ts
- * @input The checked-in Lab/TransferList › Default story, a built Storybook and
+ * @input The checked-in Core/TransferList › Default story, a built Storybook and
  *   real Chromium touch input (CDP) on a phone viewport. The A11y/TransferList
  *   › Disabled fixture, with a mouse and keys
  * @output Browser evidence that a selected row dragged past the end of its
@@ -60,7 +60,7 @@ async function touch(
   });
 }
 
-const GRIP = '[data-transfer-list-row] button[data-astryx-list-reorder]';
+const GRIP = '[data-astryx-transfer-row] button[data-astryx-list-reorder]';
 // Core List's handle claims a still finger after 150 ms.
 const HOLD_MS = 250;
 
@@ -68,7 +68,7 @@ test('a row dragged past the end of its list stays inside it, clear of the next 
   page,
 }) => {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-transferlist--default&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-transferlist--default&viewMode=story`,
   );
   const grip = page.locator(GRIP).first();
   await expect(grip).toBeVisible();
@@ -78,8 +78,8 @@ test('a row dragged past the end of its list stays inside it, clear of the next 
         Array.from(document.querySelectorAll(selector)).map(
           element =>
             element
-              .closest('[data-transfer-list-row]')
-              ?.getAttribute('data-transfer-list-row') ?? '',
+              .closest('[data-astryx-transfer-row]')
+              ?.getAttribute('data-astryx-transfer-row') ?? '',
         ),
       GRIP,
     );
@@ -137,7 +137,7 @@ test('the panels clip nothing in the phone layout, and clip at a desktop width',
   page,
 }) => {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-transferlist--default&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-transferlist--default&viewMode=story`,
   );
   await expect(page.locator(GRIP).first()).toBeVisible();
   const overflows = async () =>
@@ -161,7 +161,7 @@ async function selectedRows(
   revealBehavior: 'always' | 'adaptive',
 ) {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-transferlist--locked&viewMode=story&args=placement:${placement};revealBehavior:${revealBehavior}`,
+    `${storybook.origin}/iframe.html?id=core-transferlist--locked&viewMode=story&args=placement:${placement};revealBehavior:${revealBehavior}`,
   );
   await page.locator(GRIP).first().waitFor({state: 'attached'});
   await page.mouse.move(1, 1);
@@ -178,7 +178,7 @@ async function selectedRows(
       return Number.NaN;
     };
     const rows = Array.from(
-      document.querySelectorAll('[data-transfer-list-row]'),
+      document.querySelectorAll('[data-astryx-transfer-row]'),
     )
       .map(row => row.closest('li') as HTMLElement)
       .filter(row =>
@@ -283,7 +283,7 @@ test.describe('with a mouse', () => {
     page,
   }) => {
     await page.goto(
-      `${storybook.origin}/iframe.html?id=lab-transferlist--default&viewMode=story`,
+      `${storybook.origin}/iframe.html?id=core-transferlist--default&viewMode=story`,
     );
     // This context's primary pointer is fine: the case is a mouse's.
     expect(
@@ -297,8 +297,8 @@ test.describe('with a mouse', () => {
           Array.from(document.querySelectorAll(selector)).map(
             element =>
               element
-                .closest('[data-transfer-list-row]')
-                ?.getAttribute('data-transfer-list-row') ?? '',
+                .closest('[data-astryx-transfer-row]')
+                ?.getAttribute('data-astryx-transfer-row') ?? '',
           ),
         GRIP,
       );
@@ -347,7 +347,7 @@ test.describe('a disabled list', () => {
         `${storybook.origin}/iframe.html?id=a11y-transferlist--disabled&viewMode=story&args=handlePlacement:${placement}`,
       );
       await page.getByRole('switch', {name: 'Disable the list'}).click();
-      const row = page.locator('[data-transfer-list-row="owner"]');
+      const row = page.locator('[data-astryx-transfer-row="owner"]');
       const handle = 'button[data-astryx-list-reorder]';
       await expect(row.locator(handle)).toHaveAttribute(
         'aria-disabled',
@@ -363,18 +363,18 @@ test.describe('a disabled list', () => {
             let opacity = 1;
             for (
               let node: Element | null = element;
-              node != null && !node.matches('[data-transfer-list-row]');
+              node != null && !node.matches('[data-astryx-transfer-row]');
               node = node.parentElement
             ) {
               opacity *= Number(getComputedStyle(node).opacity);
             }
             return Math.round(opacity * 100) / 100;
           });
-      await expect.poll(() => seen('text=Owner')).toBe(0.5);
+      await expect.poll(async () => seen('text=Owner')).toBe(0.5);
       await expect
-        .poll(() => seen('[data-transfer-list-action="selected"]'))
+        .poll(async () => seen('[data-astryx-transfer-action="selected"]'))
         .toBe(0.5);
-      await expect.poll(() => seen(handle)).toBe(0.5);
+      await expect.poll(async () => seen(handle)).toBe(0.5);
     });
   }
 
@@ -392,8 +392,8 @@ test.describe('a disabled list', () => {
           Array.from(document.querySelectorAll(selector)).map(
             element =>
               element
-                .closest('[data-transfer-list-row]')
-                ?.getAttribute('data-transfer-list-row') ?? '',
+                .closest('[data-astryx-transfer-row]')
+                ?.getAttribute('data-astryx-transfer-row') ?? '',
           ),
         GRIP,
       );
