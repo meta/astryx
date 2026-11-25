@@ -70,8 +70,11 @@ beforeEach(() => {
 describe('DateRangeInput open held while Calendar loads', () => {
   it('keeps the held open on a second press and opens once when Calendar loads', async () => {
     render(<DateRangeInput value={null} onChange={noop} label="Stay" />);
-    fireEvent.click(trigger());
-    fireEvent.click(trigger());
+    for (let press = 0; press < 2; press++) {
+      fireEvent.pointerDown(trigger());
+      fireEvent.pointerUp(trigger());
+      fireEvent.click(trigger());
+    }
     expect(trigger()).toHaveAttribute('aria-expanded', 'false');
     await finishLoad();
     expect(trigger()).toHaveAttribute('aria-expanded', 'true');
@@ -86,7 +89,9 @@ describe('DateRangeInput open held while Calendar loads', () => {
       </>,
     );
     fireEvent.click(trigger());
-    fireEvent.pointerDown(screen.getByRole('button', {name: 'Elsewhere'}));
+    const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+    fireEvent.pointerDown(elsewhere);
+    fireEvent.pointerUp(elsewhere);
     await finishLoad();
     expect(trigger()).toHaveAttribute('aria-expanded', 'false');
   });
@@ -137,12 +142,18 @@ describe('DateRangeInput open held while Calendar loads', () => {
     expect(trigger()).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('opens nothing and throws nothing after an unmount before Calendar loads', async () => {
+  it('stops watching for an outside press at unmount, and opens nothing after it', async () => {
     const {unmount} = render(
       <DateRangeInput value={null} onChange={noop} label="Stay" />,
     );
+    const removeListener = vi.spyOn(document, 'removeEventListener');
     fireEvent.click(trigger());
     unmount();
+    // The hold's press watch leaves at unmount, not at the next press.
+    expect(
+      removeListener.mock.calls.some(([type]) => type === 'pointerdown'),
+    ).toBe(true);
+    removeListener.mockRestore();
     await finishLoad();
     expect(document.querySelector('[aria-haspopup="dialog"]')).toBeNull();
   });

@@ -70,6 +70,8 @@ import type {
 } from '../Calendar';
 import {useCalendarConstraints} from '../Calendar/hooks';
 import {usePopover} from '../Popover';
+import {useOutsidePress} from '../Layer/outsidePress';
+import {isShadowRoot} from '../utils/nodeType';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {
   DateRangeCalendar,
@@ -732,32 +734,32 @@ export function DateRangeInput({
   // failed load drops it. The popover never shows without Calendar.
   // While the open is held, the trigger still reads as closed, so another
   // press is another open intent and keeps the hold. A press outside the
-  // field, focus leaving it, or Escape drops the hold.
+  // field, focus moving to another element, or Escape drops the hold, as
+  // Selector's held sheet open does. No popover then appears later, over what
+  // the person turned to.
   const isOpenHeldRef = useRef(false);
-  const stopHoldWatchRef = useRef<(() => void) | null>(null);
+  const heldPressWatch = useOutsidePress();
   const fieldRef = useRef<HTMLDivElement | null>(null);
   const showPopoverRef = useCommittedRef(popover.show);
   const isDisabledRef = useCommittedRef(isEffectivelyDisabled);
   const dropHeldOpen = useCallback(() => {
     isOpenHeldRef.current = false;
-    stopHoldWatchRef.current?.();
-    stopHoldWatchRef.current = null;
-  }, []);
+    heldPressWatch.stop();
+  }, [heldPressWatch]);
   const holdOpenUntilLoaded = useCallback(() => {
     if (isOpenHeldRef.current) {
       return;
     }
     isOpenHeldRef.current = true;
-    const doc = fieldRef.current?.ownerDocument ?? document;
-    const handleOutsidePress = (event: PointerEvent) => {
-      const field = fieldRef.current;
-      if (!(event.target instanceof Node && field?.contains(event.target))) {
-        dropHeldOpen();
-      }
-    };
-    doc.addEventListener('pointerdown', handleOutsidePress, true);
-    stopHoldWatchRef.current = () =>
-      doc.removeEventListener('pointerdown', handleOutsidePress, true);
+    const field = fieldRef.current;
+    if (field != null) {
+      const root = field.getRootNode();
+      heldPressWatch.start(field, path => path.includes(field), dropHeldOpen, {
+        root: isShadowRoot(root) ? root : null,
+        // The drop closes no layer, so a backdrop press still closes its host.
+        isDismissal: false,
+      });
+    }
     void loadDateRangeCalendar().then(isLoaded => {
       if (!isOpenHeldRef.current) {
         return;
@@ -772,7 +774,7 @@ export function DateRangeInput({
         showPopoverRef.current();
       }
     });
-  }, [dropHeldOpen, isDisabledRef, showPopoverRef]);
+  }, [dropHeldOpen, heldPressWatch, isDisabledRef, showPopoverRef]);
   const handleToggle = useCallback(() => {
     if (isEffectivelyDisabled) {
       return;
@@ -790,7 +792,8 @@ export function DateRangeInput({
       const next = event.relatedTarget;
       if (
         isOpenHeldRef.current &&
-        !(next instanceof Node && event.currentTarget.contains(next))
+        next instanceof Node &&
+        !event.currentTarget.contains(next)
       ) {
         dropHeldOpen();
       }
