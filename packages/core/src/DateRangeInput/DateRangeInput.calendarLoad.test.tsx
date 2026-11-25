@@ -10,7 +10,14 @@
  * @position Testing for DateRangeCalendar.tsx
  */
 
-import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import {describe, expect, it, vi} from 'vitest';
 
 const calendarImport = vi.hoisted(() => ({calls: 0}));
@@ -41,7 +48,7 @@ async function settle() {
 }
 
 describe('DateRangeInput Calendar loading', () => {
-  it('loads the Calendar on the first open, not with the field, and opens the popover only with it', async () => {
+  it('loads the Calendar on the first open, not with the field, opens the popover only with it, and opens at once after', async () => {
     render(<DateRangeInput value={null} onChange={noop} label="Stay" />);
     await settle();
     expect(calendarImport.calls).toBe(0);
@@ -65,22 +72,18 @@ describe('DateRangeInput Calendar loading', () => {
       // The popover layer is outside jsdom's accessibility tree.
       screen.getByRole('button', {name: 'Previous month', hidden: true}),
     ).toBeInTheDocument();
-  }, 20000);
+    cleanup();
 
-  it("starts the load on the trigger's intent, so a later open is at once", async () => {
-    const {unmount} = render(
-      <DateRangeInput value={null} onChange={noop} label="Stay" />,
-    );
-    // The first case loaded the module; this case reads it from the loader.
+    // With Calendar loaded, another field opens at once and loads nothing
+    // more. One case, so a shuffled run keeps the order.
+    render(<DateRangeInput value={null} onChange={noop} label="Stay" />);
     fireEvent.pointerEnter(trigger().parentElement as HTMLElement, {
       pointerType: 'mouse',
     });
-    await settle();
     act(() => {
       fireEvent.click(trigger());
     });
     expect(trigger()).toHaveAttribute('aria-expanded', 'true');
     expect(calendarImport.calls).toBe(1);
-    unmount();
-  });
+  }, 20000);
 });
