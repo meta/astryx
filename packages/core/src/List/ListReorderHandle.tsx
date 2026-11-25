@@ -8,30 +8,12 @@
  *   ListContext's `reorder`), the translator, theme tokens and the theme's
  *   `list-reorder-handle` icon slot
  * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle`,
- *   `reorderRowLayout`, `reorderListLayout`, `UNREAD_HANDLE_NAME` and
- *   `reorderHandleGrowth`. The handle ends a reorderable List row, or starts
- *   it, as the reorderable's `handle` option places it. A finger
- *   held still on it drags it, and so does a pen where the primary pointer is
- *   coarse. A mouse, or a pen where it is fine, drags it at once. It is also a
- *   toggle (`aria-pressed`): a click, Space or Enter turns its row's reorder
- *   mode on and off. The row name serves a row without one, and the style a
- *   row that has one
+ *   `reorderListStyle`, `INSERTION_LINE_THICKNESS`, `reorderRowLayout`,
+ *   `reorderListLayout`, `UNREAD_HANDLE_NAME` and `reorderHandleGrowth`
  * @position Part of the reorder machinery that createReorderable carries.
  *   ListItem renders it, from the List's context, in each row that can move.
  *   Its row and list layout come with it, so a List without `reorderable`
  *   loads none of them
- *
- * On iOS 26.2 (measured), a finger held still on a table's reorder control
- * for the scroll view's content-touch delay (150 ms) claims the drag. A flick
- * that starts on it scrolls the table instead. So until the claim, the handle
- * leaves the browser everything but double-tap zoom (`manipulation`). That
- * `touch-action` applies only where the primary pointer is coarse. Elsewhere
- * a finger gets the browser's defaults until the hold claims it. The handle
- * is the one element the reorder adds to a row. It is its grip alone: the
- * theme's `list-reorder-handle` icon, by default `drag`, hidden from
- * assistive technology. An invisible target of at least 24 px surrounds the
- * grip. The handle listens to nothing itself. The session's listeners take
- * its drags. Its keys go through React's.
  *
  * SYNC: When modified, update List/listReorderEngine.tsx and
  * List/ListItem.tsx.
@@ -199,9 +181,11 @@ const styles = stylex.create({
     // Where the primary pointer is coarse, the page keeps its scrolling and
     // its pinch-zoom until the hold claims the drag. A flick on the handle
     // scrolls, as on iOS. That is `manipulation`, what a long press leaves the
-    // browser. The hold's selection lock stops text selection while the
-    // finger is down, so a mouse keeps the page's selection. Where the
-    // pointer is fine, a finger gets the browser's defaults.
+    // browser. On iOS 26.2 (measured), UIKit's reorder control claims the
+    // drag only after a finger holds still for the scroll view's 150 ms
+    // content-touch delay. The hold's selection lock stops text selection
+    // while the finger is down, so a mouse keeps the page's selection. Where
+    // the pointer is fine, a finger gets the browser's defaults.
     touchAction: {
       default: null,
       '@media (pointer: coarse)': 'manipulation',
@@ -527,7 +511,11 @@ function labelTextOf(handle: HTMLElement | null, labelID: string | null) {
 
 /**
  * The reorder handle of a List row. Renders nothing outside a reorderable
- * List.
+ * List. It ends its row, or starts it, as the reorderable's `handle` option
+ * places it. A finger held still on it drags it, and so does a pen where the
+ * primary pointer is coarse. A mouse, or a pen where it is fine, drags it at
+ * once. It is also a toggle (`aria-pressed`): a click, Space or Enter turns
+ * its row's reorder mode on and off.
  */
 export function ListReorderHandle({
   label,
