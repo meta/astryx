@@ -6,8 +6,10 @@
  * @output `travellingStyles` for a List row that slides across other rows,
  *   and markTravelling, which marks the row for the length of its slide
  * @position Owner module of the private travelling attribute: the only file
- *   that writes its name. List/listLayoutUpdates.ts marks a row, and ListItem
- *   composes the styles. No package entry exports it.
+ *   that writes its name. List/listLayoutUpdates.ts marks a row, and so does
+ *   List/listReorderEngine.tsx for a dropped row's glide. ListItem composes
+ *   the styles, and so does the reorder session's row style for other rows.
+ *   No package entry exports it.
  */
 
 import * as stylex from '@stylexjs/stylex';

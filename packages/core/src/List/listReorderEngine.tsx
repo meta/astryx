@@ -74,6 +74,7 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import type {StyleXStyles} from '@stylexjs/stylex';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
@@ -122,6 +123,10 @@ import {
   markReorderSource,
 } from '../privateAttributes/reorderSource.stylex';
 import {markReorderPreview} from '../privateAttributes/reorderPreview.stylex';
+import {
+  markTravelling,
+  travellingStyles,
+} from '../privateAttributes/travelling.stylex';
 import {
   hideReorderLine,
   showReorderLine,
@@ -311,41 +316,24 @@ function boundsOf(movable: ReadonlyArray<boolean>): boolean[] {
  */
 const MOVING_OPACITY = '0.6';
 
-/**
- * The own inline stacking and background of each dropped row that rides
- * above its neighbours until its glide rests.
- */
-const raisedRows = new WeakMap<
-  HTMLElement,
-  {readonly zIndex: string; readonly backgroundColor: string}
->();
+/** The call that ends each dropped row's travelling mark. */
+const travelEnds = new WeakMap<HTMLElement, () => void>();
 
 /**
- * Raises a dropped row above the rows it passes, with the preview's
- * background, for the length of its glide.
+ * Marks a dropped row as travelling for the length of its glide: it rides
+ * above the rows it passes, on the surface behind them.
  */
-function raiseRow(row: HTMLElement, background: string | null): void {
-  if (!raisedRows.has(row)) {
-    raisedRows.set(row, {
-      zIndex: row.style.zIndex,
-      backgroundColor: row.style.backgroundColor,
-    });
-  }
-  row.style.zIndex = '2';
-  if (background != null) {
-    row.style.backgroundColor = background;
-  }
+function travel(row: HTMLElement): void {
+  travelEnds.set(row, markTravelling(row));
 }
 
-/** Gives a raised row its own stacking and background back. */
-function lowerRow(row: HTMLElement): void {
-  const own = raisedRows.get(row);
-  if (own == null) {
-    return;
+/** Ends a dropped row's travelling mark, if it has one. */
+function endTravel(row: HTMLElement): void {
+  const end = travelEnds.get(row);
+  if (end != null) {
+    travelEnds.delete(row);
+    end();
   }
-  raisedRows.delete(row);
-  row.style.zIndex = own.zIndex;
-  row.style.backgroundColor = own.backgroundColor;
 }
 
 /**
@@ -582,8 +570,6 @@ interface DragSession {
   readonly restore: RowRestore;
   /** The copy of the dragged row that follows the pointer. */
   readonly preview: HTMLElement;
-  /** The preview's background, or none where the row paints its own. */
-  readonly background: string | null;
   /** The preview's offset from its row's place, as last written. */
   previewOffset: number;
   /**
@@ -633,8 +619,6 @@ interface PendingDrop {
    */
   readonly velocity: number;
   readonly restore: RowRestore;
-  /** The preview's background: the dragged row glides on it. */
-  readonly background: string | null;
 }
 
 /** A reorder mode move, reported and waiting for its commit. */
@@ -752,7 +736,8 @@ export class ListReorderController implements ListReorderSession {
   readonly Host = ListReorderHost;
   readonly Handle = ListReorderHandle;
   readonly RowName = ListReorderRowName;
-  readonly rowStyle = reorderRowStyle;
+  // A row that is not a ListItem travels with the same styles as one.
+  readonly rowStyle = [reorderRowStyle, travellingStyles.row] as StyleXStyles;
   readonly listStyle = reorderListStyle;
   readonly rowLayout = reorderRowLayout;
   readonly listLayout = reorderListLayout;
@@ -1493,13 +1478,14 @@ export class ListReorderController implements ListReorderSession {
     const shown = shownY(row, at);
     const origin = row.getBoundingClientRect().top - shown - tops[dragged];
     const scroller = scrollerOf(list);
+    // A row grabbed again mid-glide still travels. Its preview rides above
+    // the rows now, so the mark ends.
+    endTravel(row);
     // Every row gets an identity offset for the session. Otherwise a row's
     // first offset changes how it paints in the middle of the drag, with a
     // layout and a paint. With one in place, neither a move nor a slide lays
     // out or paints. `will-change` would make each slide's start repaint its
-    // row. A row picked up again during its drop's glide is not raised while
-    // it is dragged, and its own stacking is the one to restore.
-    lowerRow(row);
+    // row. The dragged row goes above its neighbours.
     const restore: RowRestore = {
       zIndex: row.style.zIndex,
       backgroundColor: row.style.backgroundColor,
@@ -1564,7 +1550,6 @@ export class ListReorderController implements ListReorderSession {
       step: 0,
       restore,
       preview,
-      background,
       previewOffset: 0,
       scrollStale: false,
       ownScroll: false,
@@ -1868,7 +1853,6 @@ export class ListReorderController implements ListReorderSession {
       droppedTop,
       velocity,
       restore: session.restore,
-      background: session.background,
     };
     options.onReorder({key, to: position});
     // A consumer that does not apply the move by the end of the task gets
@@ -1977,7 +1961,7 @@ export class ListReorderController implements ListReorderSession {
         void running.handle.finished.then(settle);
         return;
       }
-      raisedRows.delete(element);
+      endTravel(element);
       element.style.zIndex = restore.zIndex;
       element.style.backgroundColor = restore.backgroundColor;
       // Identity offsets go; a row still moving keeps its own.
@@ -2154,7 +2138,7 @@ export class ListReorderController implements ListReorderSession {
         // The dragged row glides from where its preview was dropped into its
         // new layout place, starting at the release's velocity. It rides
         // above the rows it passes until it rests, as its preview did.
-        raiseRow(element, pending.background);
+        travel(element);
         touchMotion.glide(element, shift, spring, at, pending.velocity);
       } else if (spring != null) {
         // Every other row's place after the drop is its new layout place. So

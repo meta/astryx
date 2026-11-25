@@ -1815,8 +1815,8 @@ describe('List reorderable', () => {
       const row = again.closest('li')!;
       const top = 300 + 2 * 44 + 22;
       mouseDrag(again, top, top);
-      // Dragged, it is not raised: its preview rides above the rows.
-      expect(row.style.zIndex).toBe('');
+      // Dragged, it does not travel: its preview rides above the rows.
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
       act(() => {
         fireEvent.pointerUp(again, {...MOUSE, clientY: top});
       });
@@ -1853,13 +1853,16 @@ describe('List reorderable', () => {
         fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
       });
       expect(labels()).toEqual(['B', 'C', 'A', 'D']);
-      expect(row.style.zIndex).toBe('2');
+      // The travelling mark raises it, on the surface, as a ListItem that
+      // slides across rows is raised.
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(true);
       // The glide's rest timer was set on the real clock at the drop. This
       // wait is set after it, so it ends after the row rests.
       clock = start + 5000;
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 1500));
       });
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
       expect(row.style.zIndex).toBe('');
       expect(row.style.backgroundColor).toBe('');
     } finally {
