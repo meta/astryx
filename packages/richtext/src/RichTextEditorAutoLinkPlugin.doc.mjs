@@ -14,7 +14,7 @@ export const docs = {
       name: 'matchers',
       type: 'LinkMatcher[]',
       description:
-        'Link matchers to use. The default recognizes URLs and email addresses and opens the links in a new tab. Build extra matchers with createLinkMatcherWithRegExp from @lexical/react/LexicalAutoLinkPlugin.',
+        'Link matchers to use. The default recognizes URLs and email addresses and opens the links in a new tab. An array you pass replaces the default: spread DEFAULT_LINK_MATCHERS, exported by @astryxdesign/richtext, into it to keep URL and email links. Build extra matchers with createLinkMatcherWithRegExp from @lexical/react/LexicalAutoLinkPlugin; their links open in the same tab unless the matcher returns NEW_TAB_LINK_ATTRIBUTES as attributes.',
       default: 'DEFAULT_LINK_MATCHERS',
     },
     {
@@ -32,6 +32,11 @@ export const docs = {
         guidance: true,
         description:
           'Pass it as plugins={<RichTextEditorAutoLinkPlugin />}. Its links open in a new tab, with target="_blank" and rel="noopener noreferrer" in the node.',
+      },
+      {
+        guidance: true,
+        description:
+          'To link another pattern as well, pass matchers={[...DEFAULT_LINK_MATCHERS, myMatcher]}. Passing matchers={[myMatcher]} alone stops URL and email links.',
       },
       {
         guidance: false,

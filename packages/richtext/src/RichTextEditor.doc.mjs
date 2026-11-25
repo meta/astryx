@@ -286,7 +286,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Auto-linking: render RichTextEditorAutoLinkPlugin in the plugins slot to turn typed/pasted URLs and emails into links automatically. Created links open in a new tab by default (target=_blank, rel=noopener noreferrer, baked into the node). Pass matchers to recognize additional patterns (build them with createLinkMatcherWithRegExp).',
+          'Auto-linking: render RichTextEditorAutoLinkPlugin in the plugins slot to turn typed/pasted URLs and emails into links automatically. Created links open in a new tab by default (target=_blank, rel=noopener noreferrer, baked into the node). Pass matchers to recognize other patterns (build them with createLinkMatcherWithRegExp); the array replaces the URL and email defaults, so spread DEFAULT_LINK_MATCHERS into it to keep them.',
       },
       {
         guidance: true,
