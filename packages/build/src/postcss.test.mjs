@@ -56,12 +56,12 @@ beforeAll(() => {
     }),
     [LIBRARY_FILE]: [
       "import * as stylex from '@stylexjs/stylex';",
-      "export const styles = stylex.create({box: {color: 'red'}});",
+      "export const styles = stylex.create({box: {color: 'red'}, label: {color: {default: null, [stylex.when.ancestor(':hover')]: 'orange'}}});",
       '',
     ].join('\n'),
     [PRODUCT_FILE]: [
       "import * as stylex from '@stylexjs/stylex';",
-      "export const styles = stylex.create({page: {color: 'blue'}});",
+      "export const styles = stylex.create({page: {color: 'blue'}, label: {color: {default: null, [stylex.when.ancestor(':focus-within')]: 'purple'}}});",
       '',
     ].join('\n'),
     'src/components/astryx/astryx-swizzle.json': JSON.stringify({
@@ -146,6 +146,23 @@ describe('the PostCSS plugin and the app Babel config', () => {
     } finally {
       delete globalThis.appBabelConfigFiles;
     }
+  });
+});
+
+describe('the PostCSS plugin and relations', () => {
+  // `stylex.when.ancestor` prints a relation onto a bare `*`. Chromium then
+  // restyles the whole subtree of an element whose hover or focus changes, for
+  // every such rule in the document. Both passes key it to the rule's class.
+  it("keys each relation to its rule's own class in both layers", async () => {
+    const css = await compileApp();
+    const layer = name => css.slice(css.indexOf(`@layer ${name} {`));
+    expect(layer('astryx-base')).toMatch(
+      /:hover :where\(\.astryx[a-z0-9]{5,}\)\)/,
+    );
+    expect(layer('product')).toMatch(
+      /:focus-within :where\(\.x[a-z0-9]{5,}\)\)/,
+    );
+    expect(css).not.toMatch(/[\s>+~]\*\s*\)/);
   });
 });
 
