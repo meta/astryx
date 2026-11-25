@@ -647,6 +647,14 @@ test.describe('under a finger', () => {
       const record = window as unknown as {lowest: number[]; mark: number};
       record.lowest = [];
       record.mark = -1;
+      // The frames from the page's handling of the release on follow it.
+      window.addEventListener(
+        'pointerup',
+        () => {
+          record.mark = record.lowest.length;
+        },
+        {capture: true, once: true},
+      );
       const sample = () => {
         const rows = Array.from(
           document.querySelectorAll<HTMLElement>(
@@ -663,11 +671,6 @@ test.describe('under a finger', () => {
       requestAnimationFrame(sample);
     });
     await mouse('mouseReleased', at.y + rowHeight * 2, Date.now() / 1000 - 0.3);
-    // The page has handled the release: the frames from here on follow it.
-    await page.evaluate(() => {
-      const record = window as unknown as {lowest: number[]; mark: number};
-      record.mark = record.lowest.length;
-    });
     await page.waitForTimeout(800);
     expect(await labels(page)).toEqual([
       'Sent',
@@ -686,6 +689,7 @@ test.describe('under a finger', () => {
     // release on, no row is ever faded out.
     const afterRelease = lowest.slice(mark);
     const detail = JSON.stringify({mark, lowest});
+    expect(mark, detail).toBeGreaterThanOrEqual(0);
     expect(afterRelease.length, detail).toBeGreaterThan(10);
     expect(Math.min(...afterRelease), detail).toBeGreaterThanOrEqual(0.95);
   });
