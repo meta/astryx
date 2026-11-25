@@ -86,6 +86,7 @@ import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useLongPress} from '../hooks/useLongPress';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {surfaceEdgeStyles} from '../Popover/surfaceEdge.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {
   colorVars,
@@ -171,19 +172,7 @@ const styles = stylex.create({
     borderRadius: 'var(--_dropdown-menu-radius)',
     backgroundColor: colorVars['--color-background-popover'],
     boxShadow: shadowVars['--shadow-low'],
-    // Forced colors removes box-shadow, which is this surface's only edge.
-    borderWidth: {
-      default: null,
-      '@media (forced-colors: active)': '1px',
-    },
-    borderStyle: {
-      default: null,
-      '@media (forced-colors: active)': 'solid',
-    },
-    borderColor: {
-      default: null,
-      '@media (forced-colors: active)': 'CanvasText',
-    },
+    // Its forced-colors edge is surfaceEdgeStyles.edgeKeepingFocus.
     opacity: 1,
     transitionProperty: 'opacity',
     transitionDuration: durationVars['--duration-fast'],
@@ -810,7 +799,9 @@ export function ContextMenu({
 
   // The drill-in view stack for sub-menus on a phone; the bottom sheet has
   // its own drill-in.
-  const {drillIn, wrapContent} = useMenuDrillIn(isOpen && !usesBottomSheet);
+  const {drillIn, isDrilled, wrapContent} = useMenuDrillIn(
+    isOpen && !usesBottomSheet,
+  );
   const contextValue = useMemo<DropdownMenuContextValue>(
     () => ({closeMenu, menuSize: size, drillIn, menuLabel: label}),
     [closeMenu, size, drillIn, label],
@@ -840,10 +831,12 @@ export function ContextMenu({
     <div
       ref={listRef}
       id={menuId}
-      role="menu"
+      // While a sub-menu's view shows in place of the rows, that view is the
+      // one menu, so this box stops being a menu around it.
+      role={isDrilled ? 'none' : 'menu'}
       data-autofocus={usesBottomSheet ? '' : undefined}
       tabIndex={usesBottomSheet ? 0 : -1}
-      aria-label={label}
+      aria-label={isDrilled ? undefined : label}
       onKeyDown={listKeyDown}
       onContextMenu={e => e.preventDefault()}
       {...menuPress.menuProps}
@@ -856,7 +849,7 @@ export function ContextMenu({
                 menuBottomSheetStyles.content,
                 styles.sheetMenuInset,
               ]
-            : styles.menu,
+            : [styles.menu, surfaceEdgeStyles.edgeKeepingFocus],
           !usesBottomSheet &&
             (hasOverflow ? styles.touchPanYPinchZoom : styles.touchPinchZoom),
           xstyle,

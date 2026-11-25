@@ -85,6 +85,16 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Reflecting the resolved alignment on the `item` theme target.
 - Reflecting highlighted, selected, and disabled state on the `item` theme target.
 - The forwarding rule for rows that compose Item and expose `align`.
+- The edge control seam, `ItemTrailingContext`, internal to Core: a row
+  component that composes Item passes one control through it, with the edge
+  it sits at. Item renders that control before its slots or after them,
+  unwrapped, so the control adds one element to the row. Item resets the
+  seam for what it renders, so a nested Item never renders its parent's
+  control. ListItem passes its reorder handle through it, unless the handle
+  joins the end slot (`spec:AST-103` FR5).
+- The room after a list marker, a private variable a row that stays put in
+  a reorderable List sets: Item pads the content after the marker by it, and
+  every row resets it.
 
 **Does not own / non-goals**
 

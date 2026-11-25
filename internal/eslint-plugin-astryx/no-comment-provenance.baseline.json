@@ -85,14 +85,11 @@
     "family:action-groups"
   ],
   "packages/core/src/Button/Button.tsx": [
-    "#2508",
     "#2717",
     "#4879",
     "FR3",
-    "FR3",
     "INV11",
     "architecture:theme-tokens",
-    "spec quote",
     "spec:AST-086"
   ],
   "packages/core/src/ButtonGroup/ButtonGroup.tsx": ["#2508"],
@@ -467,7 +464,6 @@
   "packages/core/src/Indicator/CheckIndicator.tsx": ["#4838", "#4893"],
   "packages/core/src/Indicator/indicatorRegistry.ts": ["#4712"],
   "packages/core/src/Indicator/types.ts": ["#4831", "#4918"],
-  "packages/core/src/InputGroup/groupStyles.ts": ["FR3", "spec quote"],
   "packages/core/src/Item/Item.tsx": ["FR2", "FR4", "spec:AST-085"],
   "packages/core/src/Item/ItemDescriptionContext.tsx": [
     "spec quote",

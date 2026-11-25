@@ -14,6 +14,7 @@ import {
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {themeObjects} from '../../../generated/themeRegistry';
 import {useThemeMode} from '../../providers';
+import {SarinaAa} from './SarinaAa';
 
 // Built Butter theme (__built:true) — same registry the hero reel + /themes
 // page pull from, so the left preview renders pre-built CSS with no runtime
@@ -25,10 +26,6 @@ const butterTheme = themeObjects['@astryxdesign/theme-butter'];
 const BUTTER_BLUE = 'var(--color-accent)';
 const BUTTER_YELLOW = 'var(--color-background-yellow)';
 const BUTTER_CREAM = 'var(--color-background-body)';
-
-// Butter's signature display cursive — the theme only applies it to display-role
-// text, so the "Aa" sets the family explicitly.
-const BUTTER_SCRIPT = 'Sarina, "Brush Script MT", "Snell Roundhand", cursive';
 
 // The store template's natural (pre-scale) render width and the layout height
 // at which the first section ends — just below the 3 product cards (the cards'
@@ -127,6 +124,8 @@ const styles = stylex.create({
   // window with a hair to spare — no right-clip, no gutter — at any card width.
   // calc() dividing a length by a length yields the unitless number scale()
   // requires.
+  // SYNC: PHOTO_SIZES in themesStorePhotos.mjs states the size that this
+  // scale draws a store photo at.
   scaleInner: {
     width: STORE_RENDER_WIDTH,
     transform: `scale(calc(min(${STORE_MAX}px, calc(100cqw - ${RAIL_RESERVE}px)) / ${STORE_RENDER_WIDTH + 4}px))`,
@@ -148,9 +147,7 @@ const styles = stylex.create({
     borderColor: 'rgba(29, 28, 17, 0.12)',
   },
   railWordmark: {
-    fontFamily: BUTTER_SCRIPT,
     fontSize: 24,
-    lineHeight: 1,
     color: BUTTER_BLUE,
   },
 });
@@ -196,9 +193,7 @@ export function ThemesPreview({store}: {store: ReactNode}) {
             <div
               {...stylex.props(styles.swatch, swatchColors.fill(BUTTER_CREAM))}
             />
-            <span {...stylex.props(styles.railWordmark)} aria-hidden="true">
-              Aa
-            </span>
+            <SarinaAa xstyle={styles.railWordmark} />
           </HStack>
         </Theme>
       </div>

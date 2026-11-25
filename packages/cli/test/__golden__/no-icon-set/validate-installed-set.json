@@ -140,6 +140,11 @@
         "code": "icon_builtin_definition_missing",
         "severity": "error",
         "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
       }
     ],
     "docTypes": {
@@ -680,16 +685,6 @@
             "name": "download",
             "description": "<text>",
             "words": [
-              "<text>",
-              "<text>",
-              "<text>"
-            ]
-          },
-          {
-            "name": "drag",
-            "description": "<text>",
-            "words": [
-              "<text>",
               "<text>",
               "<text>",
               "<text>"
@@ -1788,15 +1783,11 @@
             },
             {
               "definition": "<text>",
-              "templates": 12
+              "templates": 13
             },
             {
               "definition": "<text>",
-              "templates": 12
-            },
-            {
-              "definition": "<text>",
-              "templates": 11
+              "templates": 13
             },
             {
               "definition": "<text>",
@@ -1820,11 +1811,15 @@
             },
             {
               "definition": "<text>",
-              "templates": 10
+              "templates": 11
             },
             {
               "definition": "<text>",
-              "templates": 10
+              "templates": 11
+            },
+            {
+              "definition": "<text>",
+              "templates": 11
             },
             {
               "definition": "<text>",

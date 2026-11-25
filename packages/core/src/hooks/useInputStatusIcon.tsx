@@ -218,7 +218,7 @@ export function useInputStatusIcon({
           type="button"
           ref={tooltip.ref}
           aria-label={t(STATUS_BUTTON_LABEL_KEY[status.type])}
-          aria-describedby={tooltip.describedBy}
+          aria-describedby={tooltip.describedBy || undefined}
           onClick={handleButtonClick}
           onBlur={handleButtonBlur}
           {...stylex.props(
