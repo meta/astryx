@@ -1873,6 +1873,50 @@ describe('List reorderable', () => {
     }
   });
 
+  it('lays the list out again once a dropped row rests, so a still pointer gets hover there, and leaves it as it was', async () => {
+    const start = performance.now();
+    let clock = start;
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    try {
+      stubPrimaryPointer(false);
+      render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+      const list = screen.getByRole('list');
+      layOut(list);
+      // Each change of the list's own end padding.
+      const paddings: string[] = [];
+      let padding = list.style.paddingBlockEnd;
+      const observer = new MutationObserver(() => {
+        if (list.style.paddingBlockEnd !== padding) {
+          padding = list.style.paddingBlockEnd;
+          paddings.push(padding);
+        }
+      });
+      observer.observe(list, {attributes: true, attributeFilter: ['style']});
+      const handle = handleOf('A');
+      const row = handle.closest('li')!;
+      mouseDrag(handle, 322, 322 + 70);
+      act(() => {
+        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+      });
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(true);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(paddings).toEqual([]);
+      clock = start + 5000;
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      });
+      observer.disconnect();
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+      expect(paddings[0]).toMatch(/^calc\(.*0\.02px\)$/);
+      expect(paddings.at(-1)).toBe('');
+      expect(list.style.paddingBlockEnd).toBe('');
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it.each([
     ['a fine', false],
     ['a coarse', true],

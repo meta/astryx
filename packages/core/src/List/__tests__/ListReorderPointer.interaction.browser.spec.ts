@@ -19,7 +19,9 @@
  *   preview and the insertion line run along a row set in from the list's
  *   start, in either direction. A checked radio in the dragged row stays
  *   checked through the drag. With a mouse, the handle keeps a plain
- *   button's text selection and callout
+ *   button's text selection and callout. Once a dropped row rests, hover is
+ *   on the row under a still pointer, and a press on a gliding row's handle
+ *   takes it back
  * @position Beside ListReorderTouch.interaction.browser.spec.ts, which proves
  *   the hold under a finger
  */
@@ -127,6 +129,99 @@ test('a mouse drags a row from its handle at once, where the primary pointer is 
     await page.mouse.move(at.x, at.y + rowHeight * 2.5, {steps: 12});
     await page.mouse.up();
     await expect.poll(async () => labels(page)).toEqual(movedTwoDown(before));
+  } finally {
+    await story.close();
+  }
+});
+
+test('once a dropped row rests, the row under a still pointer has hover', async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser);
+  try {
+    const {page} = story;
+    const before = await labels(page);
+    const {at, rowHeight} = await handleOf(page, before[0]);
+    // The drop leaves the pointer past the dropped row's place, over the next
+    // row's.
+    const rest = {x: at.x, y: at.y + rowHeight * 2.75};
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(rest.x, rest.y, {steps: 12});
+    await page.mouse.up();
+    await expect.poll(async () => labels(page)).toEqual(movedTwoDown(before));
+    await expect(page.locator('[data-astryx-travelling]')).toHaveCount(0);
+    // Two frames for the list's layout at rest to move hover.
+    await page.evaluate(
+      async () =>
+        new Promise(resolve =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
+    const atRest = await page.evaluate(({x, y}) => {
+      const rows = Array.from(
+        document.querySelectorAll('#storybook-root li:hover'),
+      );
+      return {
+        hovered: rows.at(-1)?.textContent?.trim(),
+        under: document.elementFromPoint(x, y)?.closest('li')?.textContent,
+      };
+    }, rest);
+    expect(atRest.hovered).toBe(atRest.under?.trim());
+    expect(atRest.hovered).not.toBe(before[0]);
+  } finally {
+    await story.close();
+  }
+});
+
+test("a press on a gliding row's handle takes the row back", async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser);
+  try {
+    const {page} = story;
+    const before = await labels(page);
+    const {at, rowHeight} = await handleOf(page, before[0]);
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(at.x, at.y + rowHeight * 2.5, {steps: 12});
+    await page.mouse.up();
+    // The glide stops where it is, so the row stays mid-glide for the
+    // presses.
+    const gliding = await page.evaluate(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-astryx-travelling]',
+      );
+      for (const animation of row?.getAnimations() ?? []) {
+        animation.pause();
+      }
+      const handle = row?.querySelector('[data-astryx-list-reorder]');
+      const rowBox = row?.getBoundingClientRect();
+      const handleBox = handle?.getBoundingClientRect();
+      return rowBox == null || handleBox == null
+        ? null
+        : {
+            label: row?.textContent?.trim(),
+            handle: {
+              x: handleBox.left + handleBox.width / 2,
+              y: handleBox.top + handleBox.height / 2,
+            },
+          };
+    });
+    if (gliding == null) {
+      throw new Error('no gliding row');
+    }
+    expect(gliding.label).toBe(before[0]);
+    await page.mouse.move(gliding.handle.x, gliding.handle.y);
+    await page.mouse.down();
+    await page.mouse.move(gliding.handle.x, gliding.handle.y + 20, {
+      steps: 4,
+    });
+    await expect(
+      page.locator('#storybook-root li[data-astryx-reorder-source]'),
+    ).toHaveText(before[0]);
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
   } finally {
     await story.close();
   }

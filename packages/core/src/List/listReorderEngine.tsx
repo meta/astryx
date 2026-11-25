@@ -1969,6 +1969,7 @@ export class ListReorderController implements ListReorderSession {
         void running.handle.finished.then(settle);
         return;
       }
+      const travelled = this.travelEnds.has(element);
       this.endTravel(element);
       element.style.zIndex = restore.zIndex;
       element.style.backgroundColor = restore.backgroundColor;
@@ -1976,8 +1977,37 @@ export class ListReorderController implements ListReorderSession {
       for (const row of restore.rows) {
         releaseMotion(row, 'translate');
       }
+      if (travelled) {
+        this.refreshHover();
+      }
     };
     settle();
+  }
+
+  /**
+   * Makes the browser hit-test a still pointer again. A dropped row travels
+   * above the rows it passes, so at the release it is under the pointer and
+   * takes hover. The browser moves hover only after a layout or a scroll,
+   * and a glide is neither, so the row now under the pointer could stay
+   * without hover and keep its hover controls hidden. A layout of the list
+   * once the row rests moves hover there. The list's end padding grows by
+   * 0.02 px for two frames, which no one can see.
+   */
+  private refreshHover(): void {
+    const list = this.getList();
+    if (list == null) {
+      return;
+    }
+    const padding = list.style.paddingBlockEnd;
+    const computed = getComputedStyle(list).paddingBlockEnd || '0px';
+    list.style.paddingBlockEnd = `calc(${computed} + 0.02px)`;
+    // Layout now, so the next frame hit-tests the pointer.
+    void list.offsetHeight;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        list.style.paddingBlockEnd = padding;
+      });
+    });
   }
 
   private flushPending(): void {
