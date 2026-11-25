@@ -7,10 +7,9 @@
  *   loaded touch sheet once
  * @position Test-only helper for suites that open a DropdownMenu bottom sheet
  *
- * DropdownMenu loads its touch sheet with React.lazy, so the first sheet
- * renders a tick after it opens. Opening one up front caches the resolved
- * modules on the lazy components, and every later sheet renders
- * synchronously. Call it from `beforeAll`.
+ * DropdownMenu loads its touch sheet on demand, so the first sheet renders a
+ * tick after it opens. Opening one up front loads the shared modules once, and
+ * every later sheet renders synchronously. Call it from `beforeAll`.
  */
 
 import {cleanup, render, screen} from '@testing-library/react';

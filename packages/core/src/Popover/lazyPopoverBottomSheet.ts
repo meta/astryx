@@ -4,7 +4,7 @@
 
 /**
  * @file lazyPopoverBottomSheet.ts
- * @input Uses React lazy and Suspense, useIsHydrating and BottomSheet
+ * @input Uses createModuleLoader, useSurfaceModule, warnOnce and BottomSheet
  * @output Exports `PopoverBottomSheet`, a BottomSheet that loads on its first
  *   render, and `preloadPopoverBottomSheet`, which loads it without rendering
  * @position Internal to Popover: the surface of its bottom-sheet presentation
@@ -14,25 +14,27 @@
  * popovers stay anchored, as DropdownMenu's sheet does
  * (DropdownMenu/lazyMenuBottomSheet.ts). It renders nothing until the module
  * loads, and nothing on the server or in the render that hydrates server HTML
- * (spec:AST-013 FR9); the closed sheet has no visible markup.
+ * (spec:AST-013 FR9); the closed sheet has no visible markup. A failed load
+ * closes the open sheet, so the trigger works again, and the next open asks
+ * the module loader again.
  */
 
-import {
-  createElement,
-  lazy,
-  Suspense,
-  type ComponentProps,
-  type ReactElement,
-} from 'react';
+import {createElement, type ComponentProps, type ReactElement} from 'react';
 import type {BottomSheet as EagerBottomSheet} from '../BottomSheet/BottomSheet';
-import {useIsHydrating} from '../hooks/useIsHydrating';
+import {warnOnce} from '../utils/devWarning';
+import {createModuleLoader} from '../utils/moduleLoader';
+import {useSurfaceModule} from '../utils/useSurfaceModule';
 
-const loadBottomSheet = async () => import('../BottomSheet/BottomSheet');
-
-const LazyBottomSheet = lazy(async () =>
-  loadBottomSheet().then(module => ({
-    default: module.BottomSheet,
-  })),
+const sheetModule = createModuleLoader(
+  async () => import('../BottomSheet/BottomSheet'),
+  {
+    onLoadFailure: () =>
+      warnOnce(
+        'popover:sheet-load-failed',
+        'Popover',
+        'The bottom sheet could not load. The next open tries again.',
+      ),
+  },
 );
 
 /**
@@ -40,18 +42,20 @@ const LazyBottomSheet = lazy(async () =>
  * can be the surface opens it at once.
  */
 export function preloadPopoverBottomSheet(): void {
-  void loadBottomSheet();
+  void sheetModule.tryLoad();
 }
 
 export function PopoverBottomSheet(
   props: ComponentProps<typeof EagerBottomSheet>,
 ): ReactElement | null {
-  if (useIsHydrating()) {
-    return null;
-  }
-  return createElement(
-    Suspense,
-    {fallback: null},
-    createElement(LazyBottomSheet, props),
-  );
+  const {isOpen, onOpenChange} = props;
+  const module = useSurfaceModule(sheetModule, {
+    isOpen,
+    onLoadFailure: () => {
+      if (isOpen === true) {
+        onOpenChange?.(false);
+      }
+    },
+  });
+  return module == null ? null : createElement(module.BottomSheet, props);
 }
