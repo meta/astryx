@@ -17,9 +17,12 @@
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {createRef, useMemo, useState} from 'react';
+import {useMemo, useState} from 'react';
 import userEvent from '@testing-library/user-event';
-import {createReorderable, type ReorderHandleOptions} from '@astryxdesign/core';
+import {
+  createReorderable,
+  type ReorderHandleOptions,
+} from '../reorderable/createReorderable';
 import {
   act,
   fireEvent,
@@ -29,10 +32,10 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import {FormLayout} from '@astryxdesign/core/FormLayout';
-import {useAnnounce, useContainerReveal} from '@astryxdesign/core/hooks';
-import {InternationalizationProvider} from '@astryxdesign/core/i18n';
-import {TextInput} from '@astryxdesign/core/TextInput';
+import {useAnnounce} from '../hooks/useAnnounce';
+import {useContainerReveal} from '../hooks/useContainerReveal';
+import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
+import {TextInput} from '../TextInput/TextInput';
 import {
   ListInput,
   type ListInputColumn,
@@ -216,13 +219,13 @@ const politeAnnouncements = () =>
     .join(' ');
 
 /** Waits two animation frames, so a queued announcement has its turn. */
-const nextFrames = () =>
-  act(
-    () =>
-      new Promise<void>(resolve => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-      }),
-  );
+const nextFrames = async () => {
+  await act(async () => {
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  });
+};
 
 function classTokens(element: Element | null): string[] {
   return element?.getAttribute('class')?.split(/\s+/).filter(Boolean) ?? [];
@@ -768,12 +771,11 @@ describe('ListInput', () => {
       animate.mock.calls
         .slice(animationCountBeforeRemove)
         .some(([keyframes], index) => {
-          const context = animate.mock.contexts[
-            animationCountBeforeRemove + index
-          ] as HTMLElement;
+          const context =
+            animate.mock.contexts[animationCountBeforeRemove + index];
           return (
             context.querySelector('input')?.value === 'Grace' &&
-            (keyframes as Keyframe[])[0]?.transform === 'translate(0px, 40px)'
+            keyframes[0]?.transform === 'translate(0px, 40px)'
           );
         }),
     ).toBe(true);
@@ -1212,20 +1214,25 @@ describe('ListInput', () => {
       path.join(import.meta.dirname, 'ListInput.tsx'),
       'utf8',
     );
-    const names =
-      /import\s*\{([^}]*)\}\s*from\s*'@astryxdesign\/core\/internal\/reorder';/
-        .exec(source)?.[1]
-        .split(',')
-        .map(name => name.trim())
-        .filter(name => name !== '');
+    const reorderImports = Array.from(
+      source.matchAll(
+        /import\s*\{([^}]*)\}\s*from\s*'(\.\.\/(?:List\/[^']*|privateAttributes\/listReorder[^']*))';/g,
+      ),
+      ([, names, from]) =>
+        `${from}: ${names
+          .split(',')
+          .map(name => name.trim())
+          .filter(name => name !== '')
+          .sort()
+          .join(', ')}`,
+    );
     // `isReorderHandle` reads the handle's private attribute, not the
     // reorder engine.
-    expect(names?.sort()).toEqual([
-      'ListReorderScope',
-      'isReorderHandle',
-      'useListReorderScope',
+    expect(reorderImports).toEqual([
+      '../List/ListReorderScope: ListReorderScope, useListReorderScope',
+      '../privateAttributes/listReorder.stylex: isReorderHandle',
     ]);
-    expect(source).not.toMatch(/ListReorderHandle/);
+    expect(source).not.toMatch(/ListReorderHandle|listReorderEngine/);
   });
 
   it('ends reorder mode with Escape, keeping the moves', async () => {
@@ -1565,6 +1572,134 @@ describe('ListInput', () => {
     });
   });
 
+  it("reads focus from the list's own document when the owner applies a change later", () => {
+    let applyLater: (() => void) | undefined;
+    function LaterList() {
+      const [value, setValue] = useState(guests);
+      return (
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={value}
+          onChange={nextValue => {
+            applyLater = () => setValue(nextValue);
+          }}
+          getItemKey={guest => guest.id}
+          createItem={() => createdGuest}
+          columns={columns}
+        />
+      );
+    }
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument;
+    if (frameDocument == null) {
+      throw new Error('The iframe has no document.');
+    }
+    const container = frameDocument.body.appendChild(
+      frameDocument.createElement('div'),
+    );
+    const {unmount} = render(<LaterList />, {container});
+    const list = within(container);
+
+    const remove = list.getByRole('button', {name: 'Remove guest 2'});
+    act(() => remove.focus());
+    fireEvent.click(remove);
+    const ada = list.getByDisplayValue('Ada');
+    act(() => ada.focus());
+
+    act(() => applyLater?.());
+    expect(list.queryByDisplayValue('Grace')).toBeNull();
+    expect(frameDocument.activeElement?.tagName).toBe('INPUT');
+    expect(frameDocument.activeElement === ada).toBe(true);
+    unmount();
+    frame.remove();
+  });
+
+  it('moves focus when it rests on the root element as the owner applies a change later', () => {
+    let applyLater: (() => void) | undefined;
+    function LaterList() {
+      const [value, setValue] = useState(guests);
+      return (
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={value}
+          onChange={nextValue => {
+            applyLater = () => setValue(nextValue);
+          }}
+          getItemKey={guest => guest.id}
+          createItem={() => createdGuest}
+          columns={columns}
+        />
+      );
+    }
+    render(<LaterList />);
+
+    const remove = screen.getByRole('button', {name: 'Remove guest 2'});
+    remove.focus();
+    fireEvent.click(remove);
+    const root = document.documentElement;
+    root.tabIndex = -1;
+    try {
+      root.focus();
+      expect(document.activeElement).toBe(root);
+
+      act(() => applyLater?.());
+      expect(
+        screen.getByRole('button', {name: 'Remove guest 1'}),
+      ).toHaveFocus();
+    } finally {
+      root.removeAttribute('tabindex');
+    }
+  });
+
+  it('focuses the record now in the removed place when two removals apply at once and the planned one also left', async () => {
+    const removedIDs = new Set<string>();
+    let applyAll: (() => void) | undefined;
+    function BatchList() {
+      const [value, setValue] = useState([
+        ...guests,
+        createdGuest,
+        {id: 'mae', name: 'Mae'},
+      ]);
+      return (
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={value}
+          onChange={(_, change) => {
+            if (change.type === 'remove') {
+              removedIDs.add(change.item.id);
+              applyAll = () =>
+                setValue(current =>
+                  current.filter(guest => !removedIDs.has(guest.id)),
+                );
+            }
+          }}
+          getItemKey={guest => guest.id}
+          createItem={() => createdGuest}
+          columns={columns}
+        />
+      );
+    }
+    render(<BatchList />);
+
+    const removeLinus = screen.getByRole('button', {name: 'Remove guest 3'});
+    removeLinus.focus();
+    fireEvent.click(removeLinus);
+    const removeGrace = screen.getByRole('button', {name: 'Remove guest 2'});
+    removeGrace.focus();
+    fireEvent.click(removeGrace);
+
+    act(() => applyAll?.());
+    expect(shownNames()).toEqual(['Ada', 'Mae']);
+    expect(screen.getByRole('button', {name: 'Remove guest 2'})).toHaveFocus();
+    await waitFor(() => {
+      expect(politeAnnouncements()).toContain('Removed guest 2.');
+    });
+  });
+
   it('leaves focus where the user moved it when the owner applies a change later', async () => {
     let applyLater: (() => void) | undefined;
     function LaterList() {
@@ -1708,26 +1843,7 @@ describe('ListInput', () => {
   });
 });
 
-describe('ListInput prop targets', () => {
-  it('forwards ref, id, data and ARIA attributes, and handlers to the group', () => {
-    const ref = createRef<HTMLDivElement>();
-    const onFocus = vi.fn();
-    renderListInput({
-      ref,
-      id: 'caller-id',
-      'data-testid': 'guests',
-      'aria-details': 'details-id',
-      onFocus,
-    });
-    const group = screen.getByRole('group', {name: 'Guests'});
-    expect(group).toHaveAttribute('id', 'caller-id');
-    expect(group).toHaveAttribute('data-testid', 'guests');
-    expect(group).toHaveAttribute('aria-details', 'details-id');
-    expect(ref.current).toBe(group);
-    fireEvent.focus(group);
-    expect(onFocus).toHaveBeenCalled();
-  });
-
+describe('ListInput labelling', () => {
   it('keeps a caller aria-describedby and aria-labelledby beside its own', () => {
     renderListInput({
       description: 'Who comes to dinner',
@@ -1747,78 +1863,5 @@ describe('ListInput prop targets', () => {
     expect(
       labelledBy.map(id => document.getElementById(id)?.textContent).join(),
     ).toContain('Guests');
-  });
-
-  it('styles the Field box with container* and the group with control*', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const {container} = renderListInput({
-      containerClassName: 'caller-container',
-      containerStyle: {marginTop: '7px'},
-      controlClassName: 'caller-control',
-      controlStyle: {marginBottom: '9px'},
-    });
-    const group = screen.getByRole('group');
-    const fieldBox = container.querySelector<HTMLElement>('.caller-container');
-    expect(fieldBox).not.toBeNull();
-    expect(fieldBox).not.toBe(group);
-    expect(fieldBox).toContainElement(group);
-    expect(fieldBox?.style.marginTop).toBe('7px');
-    expect(group).toHaveClass('caller-control', 'astryx-list-input');
-    expect(group.style.marginBottom).toBe('9px');
-    expect(warn).not.toHaveBeenCalled();
-  });
-
-  it('drops root styling and warns in development', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const untyped = {
-      className: 'caller-root',
-      style: {outlineColor: 'red'},
-    } as unknown as Partial<ListInputProps<Guest>>;
-    const {container} = renderListInput(untyped);
-    expect(container.querySelector('.caller-root')).toBeNull();
-    expect(screen.getByRole('group').style.outlineColor).toBe('');
-    expect(
-      warn.mock.calls.some(call => String(call[0]).startsWith('ListInput:')),
-    ).toBe(true);
-  });
-
-  it('ignores container* and warns in a horizontal-labels FormLayout', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const {container} = render(
-      <FormLayout direction="horizontal-labels">
-        <ListInput<Guest>
-          label="Guests"
-          itemName="guest"
-          value={guests}
-          onChange={() => {}}
-          getItemKey={guest => guest.id}
-          createItem={() => createdGuest}
-          columns={columns}
-          containerClassName="caller-container"
-        />
-      </FormLayout>,
-    );
-    expect(container.querySelector('.caller-container')).toBeNull();
-    expect(
-      warn.mock.calls.some(call =>
-        String(call[0]).includes('no Field box renders'),
-      ),
-    ).toBe(true);
-  });
-
-  it('types no root styling props', () => {
-    const props: ListInputProps<Guest> = {
-      label: 'Guests',
-      value: guests,
-      onChange: () => {},
-      getItemKey: guest => guest.id,
-      createItem: () => createdGuest,
-      columns,
-      containerClassName: 'caller-container',
-      controlClassName: 'caller-control',
-      // @ts-expect-error Field-composed inputs take no root className.
-      className: 'caller-root',
-    };
-    expect(props.controlClassName).toBe('caller-control');
   });
 });

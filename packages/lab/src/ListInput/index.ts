@@ -1,21 +1,18 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
- * @file index.ts
- * @input Imports ListInput and public types from ListInput.tsx
- * @output Public ListInput entry point for @astryxdesign/lab
- * @position Component barrel; re-exported by /packages/lab/src/index.ts
- *
- * SYNC: When modified, update /packages/lab/src/ListInput/ListInput.tsx.
+ * @file ListInput re-export
+ * @input `@astryxdesign/core/ListInput`
+ * @output Re-exports ListInput and its public types from Core
+ * @position Lab entry for callers that import ListInput from Lab; consumed by
+ *   packages/lab/src/index.ts
  */
 
-export {ListInput} from './ListInput';
+export {ListInput} from '@astryxdesign/core/ListInput';
 export type {
   ListInputChange,
   ListInputColumn,
   ListInputProps,
   ListInputRenderContext,
   ListInputValueContext,
-} from './ListInput';
+} from '@astryxdesign/core/ListInput';

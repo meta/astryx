@@ -1182,7 +1182,7 @@ export const PREVIEW_PLAN: ReadonlyArray<PreviewRow> = [
   },
   {
     id: 'listinput',
-    component: 'ListInput (lab)',
+    component: 'ListInput',
     group: 'Content & data',
     verdict: 'GOOD',
     motionCost: 'idle',

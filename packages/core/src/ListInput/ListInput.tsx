@@ -4,18 +4,19 @@
 
 /**
  * @file ListInput.tsx
- * @input React, StyleX, Astryx Field, list, button, icon, and empty-state
- *   primitives, size context, scroll geometry, theme tokens, and, through
- *   Core's internal `reorder` and `selectable-card` entries, List's reorder
- *   session and handle and Field's shared styling rule
+ * @input React, StyleX, Field and its styling rule, the list, button, icon,
+ *   and empty-state primitives, size context, scroll geometry, theme tokens,
+ *   the component translator, and List's reorder session and handle
  * @output Exports ListInput and its controlled data, column, renderer, and change types
- * @position Lab experiment (RFC meta/astryx#4531) for editing compact repeated records
+ * @position Core implementation; edits compact repeated records
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/lab/src/ListInput/ListInput.doc.mjs
- * - /packages/lab/src/ListInput/ListInput.test.tsx
- * - /packages/lab/src/ListInput/index.ts
+ * - /packages/core/src/ListInput/ListInput.doc.mjs
+ * - /docs/specs/components/ListInput/ListInput.spec.md
+ * - /packages/core/src/ListInput/ListInput.test.tsx
+ * - /packages/core/src/ListInput/index.ts
  * - /apps/storybook/stories/ListInput.stories.tsx
+ * - /packages/cli/assets/templates/blocks/components/ListInput/ (showcase and example blocks)
  */
 
 import {
@@ -28,42 +29,46 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Button} from '@astryxdesign/core/Button';
-import {EmptyState} from '@astryxdesign/core/EmptyState';
+import {Button} from '../Button/Button';
+import {EmptyState} from '../EmptyState/EmptyState';
+import {Field} from '../Field/Field';
 import {
-  Field,
   type FieldInputBaseProps,
-  type InputStatus,
-} from '@astryxdesign/core/Field';
-import {FieldStatus} from '@astryxdesign/core/FieldStatus';
-import {Icon} from '@astryxdesign/core/Icon';
+  useFieldInputStyling,
+} from '../Field/fieldParts';
+import type {InputStatus} from '../Field/types';
+import {FieldStatus} from '../FieldStatus/FieldStatus';
+import {useAnnounce} from '../hooks/useAnnounce';
+import {useContainerReveal} from '../hooks/useContainerReveal';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import english from '../i18n/generated-english/ListInput/ListInput.generated';
 import {
-  useAnnounce,
-  useContainerReveal,
-  useMediaQuery,
-  useMergedRefs,
-} from '@astryxdesign/core/hooks';
-import {IconButton} from '@astryxdesign/core/IconButton';
-import {useTranslator} from '@astryxdesign/core/i18n';
-import {
-  isReorderHandle,
-  ListReorderScope,
-  useListReorderScope,
-} from '@astryxdesign/core/internal/reorder';
-import {useFieldInputStyling} from '@astryxdesign/core/internal/selectable-card';
-import type {Reorderable} from '@astryxdesign/core';
-import {reorderHandle} from '@astryxdesign/core/internal/reorderHandle.stylex';
-import {SizeProvider} from '@astryxdesign/core/SizeContext';
-import type {ColumnWidth} from '@astryxdesign/core/Table';
-import {useTheme} from '@astryxdesign/core/theme';
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import {Icon} from '../Icon/Icon';
+import {IconButton} from '../IconButton/IconButton';
+import {reorderHandle} from '../internal/reorderHandle.stylex';
+import {ListReorderScope, useListReorderScope} from '../List/ListReorderScope';
+import {isReorderHandle} from '../privateAttributes/listReorder.stylex';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import type {Reorderable} from '../reorderable/createReorderable';
+import {SizeProvider} from '../SizeContext/SizeContext';
+import type {ColumnWidth} from '../Table/types';
+import {useTheme} from '../theme/useTheme';
 import {
   colorVars,
   fontWeightVars,
   sizeVars,
   spacingVars,
   typeScaleVars,
-} from '@astryxdesign/core/theme/tokens.stylex';
-import {mergeProps, themeProps} from '@astryxdesign/core/utils';
+} from '../theme/tokens.stylex';
+import {joinAriaIDs} from '../utils/inputAria';
+import {isFocusDetached} from '../utils/isFocusDetached';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
+
+registerEnglishFallback(english);
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -177,10 +182,10 @@ export interface ListInputProps<T> extends Omit<
   isRequired?: boolean;
 }
 
-interface PendingFocus {
-  itemKey?: string;
-  target: 'first-field' | 'remove' | 'add';
-}
+type PendingFocus =
+  | {target: 'add'}
+  | {target: 'first-field'; itemKey: string}
+  | {target: 'remove'; itemKey: string; removedIndex: number};
 
 /** A change that ListInput asked its owner for, until a value applies it. */
 interface PendingChange {
@@ -478,15 +483,14 @@ function resolveColumnTrack(width?: ColumnWidth): string {
   return `minmax(${minWidth}px, ${proportion}fr)`;
 }
 
-function joinIDs(...ids: Array<string | undefined>): string | undefined {
-  const resolved = ids.filter(Boolean);
-  return resolved.length > 0 ? resolved.join(' ') : undefined;
-}
-
 // A reorder handle at the record's start, a toggle button, starts the first
 // cell. Field focus skips it.
 const focusableFieldSelector =
   '[data-list-input-cell] input, [data-list-input-cell] select, [data-list-input-cell] textarea, [data-list-input-cell] button, [data-list-input-cell] [tabindex]:not([tabindex="-1"])';
+
+function ownerDocumentOf(node: Node | null): Document {
+  return node?.ownerDocument ?? document;
+}
 
 /** A record's first field control. The reorder handle in its cell is not one. */
 function firstFieldIn(
@@ -724,7 +728,7 @@ export function ListInput<T>({
   const descriptionID = description ? `${baseID}-description` : undefined;
   const statusID = status?.message ? `${baseID}-status` : undefined;
   const reorderInstructionsID = `${baseID}-reorder-instructions`;
-  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const rowsRef = useRef(new Map<string, HTMLDivElement>());
   const groupRef = useRef<HTMLDivElement>(null);
   const mergedGroupRef = useMergedRefs(ref, groupRef);
   const listRef = useRef<HTMLOListElement>(null);
@@ -738,7 +742,7 @@ export function ListInput<T>({
     null,
   );
   const activeMutationAnimationsRef = useRef(new Map<HTMLElement, Animation>());
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const itemName = itemNameProp ?? t('@astryx.listInput.defaultItemName');
   const announce = useAnnounce();
   const {tokens: themeTokens} = useTheme();
@@ -747,9 +751,7 @@ export function ListInput<T>({
   );
   const mutationEasing = themeTokens['--ease-standard'] ?? 'linear';
   const mutationEntryOffset = themeTokens['--spacing-2'] ?? '8px';
-  const prefersReducedMotion = useMediaQuery(
-    '(prefers-reduced-motion: reduce)',
-  );
+  const prefersReducedMotion = useReducesMotion();
   // Each record row reveals its row actions (Remove and, when reorderable, the
   // reorder handle) on hover or keyboard focus; touch keeps them visible.
   const {getContainerProps, getContentRevealProps} = useContainerReveal();
@@ -852,7 +854,7 @@ export function ListInput<T>({
       return;
     }
     const pendingChange = pendingChangesRef.current.get(pendingAnchor.itemKey);
-    const addedRow = rowRefs.current.get(pendingAnchor.itemKey);
+    const addedRow = rowsRef.current.get(pendingAnchor.itemKey);
     const focusTarget =
       pendingChange?.focus?.target === 'first-field'
         ? firstFieldIn(addedRow)
@@ -995,25 +997,28 @@ export function ListInput<T>({
     if (latestApplied == null || pendingFocus == null) {
       return;
     }
-    const focused = document.activeElement;
-    // A change never takes focus from where the user moved it.
+    const doc = ownerDocumentOf(groupRef.current);
+    // Focus that the user moved elsewhere in the list's document stays there.
     if (
-      focused !== latestApplied.focusedBefore &&
-      focused !== document.body &&
-      focused != null
+      doc.activeElement !== latestApplied.focusedBefore &&
+      !isFocusDetached(doc)
     ) {
       return;
     }
-    const row =
-      pendingFocus.itemKey == null
-        ? undefined
-        : rowRefs.current.get(pendingFocus.itemKey);
-    const target =
-      pendingFocus.target === 'remove'
-        ? row?.querySelector<HTMLElement>('[data-list-input-remove]')
-        : pendingFocus.target === 'first-field'
-          ? firstFieldIn(row)
-          : null;
+    let target: HTMLElement | null = null;
+    if (pendingFocus.target === 'first-field') {
+      target = firstFieldIn(rowsRef.current.get(pendingFocus.itemKey));
+    } else if (pendingFocus.target === 'remove') {
+      // The planned record can leave in the same value. Then the record now in
+      // the removed record's place takes focus.
+      const neighborKey =
+        keys[Math.min(pendingFocus.removedIndex, keys.length - 1)];
+      const row =
+        rowsRef.current.get(pendingFocus.itemKey) ??
+        (neighborKey == null ? undefined : rowsRef.current.get(neighborKey));
+      target =
+        row?.querySelector<HTMLElement>('[data-list-input-remove]') ?? null;
+    }
     (target ?? addButtonRef.current)?.focus();
   }, [announce, getItemKey, value]);
 
@@ -1118,7 +1123,7 @@ export function ListInput<T>({
           itemName,
           position: keys.indexOf(itemKey) + 1,
         }),
-      focusedBefore: document.activeElement,
+      focusedBefore: ownerDocumentOf(groupRef.current).activeElement,
       focus: {itemKey, target: 'first-field'},
     });
     if (event.detail > 0) {
@@ -1176,11 +1181,15 @@ export function ListInput<T>({
           itemName,
           position: index + 1,
         }),
-      focusedBefore: document.activeElement,
+      focusedBefore: ownerDocumentOf(groupRef.current).activeElement,
       focus:
         nextFocusItem == null
           ? {target: 'add'}
-          : {itemKey: String(getItemKey(nextFocusItem)), target: 'remove'},
+          : {
+              itemKey: String(getItemKey(nextFocusItem)),
+              target: 'remove',
+              removedIndex: index,
+            },
     });
     prepareMutationMotion(nextValue);
     onChange(nextValue, {type: 'remove', item: removedItem, index});
@@ -1232,8 +1241,12 @@ export function ListInput<T>({
           ref={mergedGroupRef}
           id={groupID}
           role="group"
-          aria-labelledby={joinIDs(labelID, ariaLabelledBy)}
-          aria-describedby={joinIDs(ariaDescribedBy, descriptionID, statusID)}
+          aria-labelledby={joinAriaIDs(labelID, ariaLabelledBy)}
+          aria-describedby={joinAriaIDs(
+            ariaDescribedBy,
+            descriptionID,
+            statusID,
+          )}
           aria-disabled={isDisabled || rest['aria-disabled']}
           aria-busy={isLoading || rest['aria-busy']}
           {...mergeProps(
@@ -1260,7 +1273,7 @@ export function ListInput<T>({
               ref={listRef}
               role="list"
               aria-labelledby={labelID}
-              aria-describedby={joinIDs(descriptionID, statusID)}
+              aria-describedby={joinAriaIDs(descriptionID, statusID)}
               {...stylex.props(
                 styles.list,
                 // The session's line marks where a dragged record would land.
@@ -1305,9 +1318,9 @@ export function ListInput<T>({
                       <div
                         ref={node => {
                           if (node == null) {
-                            rowRefs.current.delete(itemKeyString);
+                            rowsRef.current.delete(itemKeyString);
                           } else {
-                            rowRefs.current.set(itemKeyString, node);
+                            rowsRef.current.set(itemKeyString, node);
                           }
                         }}
                         data-list-input-row={itemKeyString}

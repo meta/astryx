@@ -225,6 +225,27 @@ export const samples = {
       isSelected: false,
       onChange: noop,
     }),
+  core__ListInput: ({C, React, Core}) =>
+    React.createElement(C, {
+      label: 'Tags',
+      value: [{id: '1', label: 'Alpha'}],
+      onChange: noop,
+      getItemKey: item => item.id,
+      createItem: () => ({id: String(Date.now()), label: ''}),
+      columns: [
+        {
+          key: 'label',
+          header: 'Label',
+          renderInput: ({item, label, isLabelHidden}) =>
+            React.createElement(Core.TextInput, {
+              label,
+              isLabelHidden,
+              value: item.label,
+              onChange: noop,
+            }),
+        },
+      ],
+    }),
   core__Toast: ({C, React}) =>
     React.createElement(C, {body: 'Changes saved', onDismiss: noop}),
   core__Toolbar: ({C, React, Core}) =>
@@ -419,27 +440,6 @@ export const samples = {
     ].join('\n');
     return React.createElement(C, {file: parse(patch)[0]});
   },
-  lab__ListInput: ({C, React, Core}) =>
-    React.createElement(C, {
-      label: 'Tags',
-      value: [{id: '1', label: 'Alpha'}],
-      onChange: noop,
-      getItemKey: item => item.id,
-      createItem: () => ({id: String(Date.now()), label: ''}),
-      columns: [
-        {
-          key: 'label',
-          header: 'Label',
-          renderInput: ({item, label, isLabelHidden}) =>
-            React.createElement(Core.TextInput, {
-              label,
-              isLabelHidden,
-              value: item.label,
-              onChange: noop,
-            }),
-        },
-      ],
-    }),
   lab__LogStream: ({C, React}) =>
     React.createElement(C, {
       entries: [

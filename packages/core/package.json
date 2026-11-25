@@ -449,6 +449,11 @@
       "types": "./dist/List/index.d.ts",
       "default": "./dist/List/index.js"
     },
+    "./ListInput": {
+      "source": "./src/ListInput/index.ts",
+      "types": "./dist/ListInput/index.d.ts",
+      "default": "./dist/ListInput/index.js"
+    },
     "./Markdown": {
       "source": "./src/Markdown/index.ts",
       "types": "./dist/Markdown/index.d.ts",

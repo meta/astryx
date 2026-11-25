@@ -9,10 +9,11 @@
  * @output `useListReorderScope`, a reorder session over rows that are not
  *   ListItems. `ListReorderScope` gives those rows the session as a
  *   reorderable List gives its own: `ListReorderHandle` inside a row finds it
- * @position Internal to core; Lab's ListInput reaches it through
- *   `@astryxdesign/core/internal/reorder`. It runs the same engine a
- *   reorderable List runs, List/listReorderEngine.tsx, which ships with the
- *   object. So the rows drag, take keys and announce their moves alike.
+ * @position Internal to core; ListInput runs its records on it, and
+ *   `@astryxdesign/core/internal/reorder` re-exports it. It runs the same
+ *   engine a reorderable List runs, List/listReorderEngine.tsx, which ships
+ *   with the object. So the rows drag, take keys and announce their moves
+ *   alike.
  *
  * SYNC: When modified, update List/List.tsx, which runs the same session for
  * its own rows through the hooks in List/listReorderContext.ts.
