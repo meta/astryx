@@ -1,4 +1,21 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+//
+// Course Detail — a long-form sales page for a single offering: a curriculum
+// and a purchase rail. The main column carries the course head with the
+// save/share actions, the teacher row and the fact tiles, the about block
+// with skill chips, a searchable module syllabus, the instructor with
+// credentials, what the price covers, and the written reviews; the rail
+// carries the price, the start picker and the weekly-pace slider that
+// computes a finish date; below both run the next-course rail, the numbered
+// questions and the closing band.
+//
+// Authored to the template contract: the page composes from core components
+// and every value rides a token or a component prop. The one custom block is
+// the sticky purchase rail below — Astryx layout primitives expose no sticky
+// prop yet (core issue #2613) — and nothing else in the file is styled by
+// hand. Every glyph goes through the Icon wrapper, each icon chosen for its
+// meaning so an icon set can draw it; directional icons mirror under RTL;
+// the images are sample fixtures a copy replaces with its own.
 
 'use client';
 
@@ -12,7 +29,7 @@ import {
   StackItem,
 } from '@astryxdesign/core/Layout';
 import {Grid} from '@astryxdesign/core/Grid';
-import {Text, Heading} from '@astryxdesign/core/Text';
+import {Text, Heading, useTruncation} from '@astryxdesign/core/Text';
 import {Card} from '@astryxdesign/core/Card';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -30,24 +47,14 @@ import {
 } from '@astryxdesign/core/SegmentedControl';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
-import {rtlStyles} from '@astryxdesign/core/utils';
+import {TextInput} from '@astryxdesign/core/TextInput';
+import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {Carousel} from '@astryxdesign/core/Carousel';
+import {ToggleButton} from '@astryxdesign/core/ToggleButton';
 import {useToast} from '@astryxdesign/core/Toast';
-import type {CSSProperties, ReactNode} from 'react';
-
-// Custom CSS here is limited to what Astryx components can't express today:
-// - image fill + corner radius (no Image primitive — #2582)
-// - the sticky enroll rail (no sticky prop on Astryx layout primitives — #2613)
-const stickyRail: CSSProperties = {
-  position: 'sticky',
-  top: 'var(--spacing-8)',
-  alignSelf: 'start',
-};
-const posterImage: CSSProperties = {
-  width: '100%',
-  height: '100%',
-  objectFit: 'cover',
-  borderRadius: 'var(--radius-container)',
-};
+import {useAnnounce, useClipboard} from '@astryxdesign/core/hooks';
+import {rtlStyles} from '@astryxdesign/core/utils';
+import type {CSSProperties} from 'react';
 
 import {
   PlayIcon,
@@ -59,10 +66,26 @@ import {
   BoltIcon,
   ArrowRightIcon,
   BookIcon,
+  HeartIcon,
+  ShareIcon,
+  SearchIcon,
+  ChevronRightIcon,
 } from '@astryxdesign/template-icons';
-import {StarIcon as StarIconSolid} from '@astryxdesign/template-icons/24/solid';
+import {
+  StarIcon as StarIconSolid,
+  HeartIcon as HeartIconSolid,
+} from '@astryxdesign/template-icons/24/solid';
 
-// ─── Data ────────────────────────────────────────────────────────────────────
+// The one piece of custom styling the page needs: Astryx layout primitives
+// expose no sticky prop yet, and a purchase rail that scrolls away stops
+// being the rail.
+
+const stickyRail: CSSProperties = {
+  position: 'sticky',
+  top: 'var(--spacing-8)',
+  alignSelf: 'start',
+};
+
 const COURSE = {
   title: 'Applied AI: Build with Language Models',
   level: 'Intermediate',
@@ -84,8 +107,32 @@ const COURSE = {
     'Vector search',
   ],
 };
-
-const MODULES = [
+const INSTRUCTOR = {
+  name: 'Gabriela Fernández',
+  role: 'Applied AI engineer, formerly search infrastructure',
+  portrait: '/template-assets/DATA-Gabriela-Fernandez.png',
+  learners: '12,840',
+  courses: '4',
+  rating: '4.9',
+  credentials: [
+    '9 years in search',
+    'Shipped this pipeline twice',
+    'Reviews every project',
+  ],
+  bio: 'Gabriela spent nine years building retrieval systems at scale before language models landed on her desk. She has shipped the exact pipeline this course teaches — twice, in production, with the scars to prove which parts matter.',
+};
+type Lesson = {
+  title: string;
+  duration: string;
+  badge?: 'Preview' | 'Project';
+};
+type CourseModule = {
+  id: string;
+  title: string;
+  meta: string;
+  lessons: Lesson[];
+};
+const MODULES: CourseModule[] = [
   {
     id: 'foundations',
     title: 'Foundations and tooling',
@@ -94,12 +141,18 @@ const MODULES = [
       {
         title: 'What a language model can and cannot promise',
         duration: '12 min',
+        badge: 'Preview',
       },
       {
         title: 'The working setup: SDK, keys, and a scratchpad',
         duration: '18 min',
+        badge: 'Preview',
       },
-      {title: 'Tokens, temperature, and the cost dial', duration: '18 min'},
+      {
+        title: 'Tokens, temperature, and the cost dial',
+        duration: '18 min',
+        badge: 'Preview',
+      },
     ],
   },
   {
@@ -136,34 +189,52 @@ const MODULES = [
       {title: 'Regression gates in continuous integration', duration: '20 min'},
     ],
   },
+  {
+    id: 'project',
+    title: 'Ship it: the reviewed project',
+    meta: '1 project · review included',
+    lessons: [
+      {
+        title: 'Build the extraction pipeline end to end',
+        duration: 'Project',
+        badge: 'Project',
+      },
+    ],
+  },
 ];
-
 const INCLUDES = [
   'Lifetime access to 13 lessons and all future revisions',
   'The reviewed project: a working extraction pipeline',
   'A graded certificate of completion',
   'Offline downloads for every lesson',
 ];
-
-const INSTRUCTOR = {
-  name: 'Gabriela Fernández',
-  role: 'Applied AI engineer, formerly search infrastructure',
-  portrait: '/template-assets/DATA-Gabriela-Fernandez.png',
-  learners: '12,840',
-  courses: '4',
-  rating: '4.9',
-  bio: 'Gabriela spent nine years building retrieval systems at scale before language models landed on her desk. She has shipped the exact pipeline this course teaches — twice, in production, with the scars to prove which parts matter.',
-};
-
-const ASPECTS = [
-  {label: 'Content depth', score: 4.9},
-  {label: 'Practical exercises', score: 4.8},
-  {label: 'Instructor clarity', score: 4.9},
-  {label: 'Pacing', score: 4.6},
-  {label: 'Materials and project', score: 4.7},
-  {label: 'Community support', score: 4.5},
+const COHORTS = [
+  {
+    id: 'march',
+    date: 'Cohort of March 10',
+    detail: 'Live reviews · 14 seats left',
+  },
+  {
+    id: 'april',
+    date: 'Cohort of April 7',
+    detail: 'Live reviews · 6 seats left',
+  },
 ];
+const COHORT_START = new Date('2026-03-02T00:00:00');
+const TOTAL_HOURS = 42;
+const PACE_MIN = 2;
+const PACE_MAX = 12;
 
+const fmt = (n: number) => `$${n.toFixed(0)}`;
+const finishFrom = (pace: number) => {
+  const weeks = Math.max(1, Math.ceil(TOTAL_HOURS / pace));
+  const finish = new Date(COHORT_START);
+  finish.setDate(finish.getDate() + weeks * 7);
+  return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} · finish around ${finish.toLocaleDateString(
+    'en-US',
+    {month: 'short', day: 'numeric'},
+  )}`;
+};
 const REVIEWS = [
   {
     name: 'Drew Young',
@@ -198,7 +269,14 @@ const REVIEWS = [
     helpful: 33,
   },
 ];
-
+const ASPECTS = [
+  {label: 'Content depth', score: 4.9},
+  {label: 'Practical exercises', score: 4.8},
+  {label: 'Instructor clarity', score: 4.9},
+  {label: 'Pacing', score: 4.6},
+  {label: 'Materials and project', score: 4.7},
+  {label: 'Community support', score: 4.5},
+];
 const FAQS = [
   {
     q: 'Do I need production access to a language model?',
@@ -217,40 +295,87 @@ const FAQS = [
     a: 'Yes — a graded certificate issued when the reviewed project passes. It lists the pipeline you built, not just attendance.',
   },
 ];
-
-const COHORTS = [
+const FACTS = [
+  {icon: ClockIcon, label: COURSE.runtime, detail: 'self-paced'},
   {
-    id: 'march',
-    date: 'Cohort of March 10',
-    detail: 'Live reviews · 14 seats left',
+    icon: BookIcon,
+    label: `${COURSE.lessonCount} lessons`,
+    detail: 'video, text and PDF',
+  },
+  {icon: GlobeIcon, label: COURSE.language, detail: 'with English captions'},
+  {icon: BoltIcon, label: 'Self-paced or cohort', detail: 'you set the pace'},
+];
+// The dialog lists the syllabus's preview lessons, so the badges are the
+// single source of truth and the copy cannot drift from them.
+const PREVIEW_LESSONS = MODULES.flatMap(module =>
+  module.lessons
+    .filter(lesson => lesson.badge === 'Preview')
+    .map(lesson => ({
+      title: lesson.title,
+      length: lesson.duration,
+      note: 'Free preview',
+    })),
+);
+// The copy counts that list rather than naming a fixed number, and it
+// says "the preview lessons" rather than "the first lessons", so it stays
+// true when a copy badges a lesson further down the syllabus. The noun
+// agrees with the count, so a copy that badges a single lesson reads
+// "one preview lesson" and not "one preview lessons".
+function previewLessons(count: number): string {
+  if (count === 1) {
+    return 'one preview lesson';
+  }
+  if (count === 2) {
+    return 'two preview lessons';
+  }
+  if (count === 3) {
+    return 'three preview lessons';
+  }
+  return `${count} preview lessons`;
+}
+
+// The poster line opens the phrase, so it carries the capital.
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+const STAR_COUNTS = [
+  {stars: 5, count: 1042},
+  {stars: 4, count: 186},
+  {stars: 3, count: 38},
+  {stars: 2, count: 12},
+  {stars: 1, count: 6},
+];
+const RELATED = [
+  {
+    topic: 'Evaluation',
+    title: 'Evaluation suites that catch regressions',
+    teacher: 'Gabriela Fernández',
+    rating: '4.9',
+    price: 89,
   },
   {
-    id: 'april',
-    date: 'Cohort of April 7',
-    detail: 'Live reviews · 6 seats left',
+    topic: 'Retrieval',
+    title: 'Dense retrieval for long documents',
+    teacher: 'Priya Raman',
+    rating: '4.7',
+    price: 69,
+  },
+  {
+    topic: 'Tooling',
+    title: 'A reproducible developer setup',
+    teacher: 'Tomas Beck',
+    rating: '4.6',
+    price: 49,
+  },
+  {
+    topic: 'Prompting',
+    title: 'Prompt design that survives production',
+    teacher: 'Ines Vogel',
+    rating: '4.8',
+    price: 59,
   },
 ];
 
-// A fixed reference date keeps the computed finish date deterministic
-// between server and client render.
-const COHORT_START = new Date('2026-03-02T00:00:00');
-const TOTAL_HOURS = 42;
-const PACE_MIN = 2;
-const PACE_MAX = 12;
-
-const fmt = (n: number) => `$${n.toFixed(0)}`;
-
-const finishFrom = (pace: number) => {
-  const weeks = Math.max(1, Math.ceil(TOTAL_HOURS / pace));
-  const finish = new Date(COHORT_START);
-  finish.setDate(finish.getDate() + weeks * 7);
-  return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} · finish around ${finish.toLocaleDateString(
-    'en-US',
-    {month: 'short', day: 'numeric'},
-  )}`;
-};
-
-// ─── Star Rating ─────────────────────────────────────────────────────────────
 function StarRating({rating, count}: {rating: number; count?: number}) {
   const filled = Math.round(rating);
   const empty = 5 - filled;
@@ -274,8 +399,13 @@ function StarRating({rating, count}: {rating: number; count?: number}) {
     </HStack>
   );
 }
-
-function SectionHeader({title, action}: {title: string; action?: ReactNode}) {
+function SectionHeader({
+  title,
+  action,
+}: {
+  title: string;
+  action?: React.ReactNode;
+}) {
   return (
     <HStack gap={2} vAlign="center" hAlign="between" wrap="wrap">
       <Heading level={2}>{title}</Heading>
@@ -283,64 +413,6 @@ function SectionHeader({title, action}: {title: string; action?: ReactNode}) {
     </HStack>
   );
 }
-
-// ─── Course head: title, poster, facts ──────────────────────────────────────
-function CourseHead() {
-  return (
-    <VStack gap={4}>
-      <VStack gap={2}>
-        <HStack gap={2} vAlign="center">
-          <Badge variant="warning" label="Bestseller" />
-          <Badge label={COURSE.level} />
-        </HStack>
-        <Heading level={1} maxLines={3}>
-          {COURSE.title}
-        </Heading>
-        <HStack gap={2} vAlign="center">
-          <StarRating rating={COURSE.rating} count={COURSE.ratingCount} />
-          <Text type="body" color="secondary">
-            · {COURSE.learnerCount} learners
-          </Text>
-        </HStack>
-      </VStack>
-      <AspectRatio ratio={16 / 9}>
-        <img
-          style={posterImage}
-          src="/template-assets/light-working-horizontal-1.png"
-          alt="Course preview: a laptop showing the extraction pipeline built in the project"
-        />
-      </AspectRatio>
-      <HStack gap={5} vAlign="center" wrap="wrap">
-        <HStack gap={1} vAlign="center">
-          <Icon icon={ClockIcon} size="sm" />
-          <Text type="body" color="secondary">
-            {COURSE.runtime}
-          </Text>
-        </HStack>
-        <HStack gap={1} vAlign="center">
-          <Icon icon={BookIcon} size="sm" />
-          <Text type="body" color="secondary">
-            {COURSE.lessonCount} lessons
-          </Text>
-        </HStack>
-        <HStack gap={1} vAlign="center">
-          <Icon icon={GlobeIcon} size="sm" />
-          <Text type="body" color="secondary">
-            {COURSE.language}
-          </Text>
-        </HStack>
-        <HStack gap={1} vAlign="center">
-          <Icon icon={BoltIcon} size="sm" />
-          <Text type="body" color="secondary">
-            Self-paced or cohort
-          </Text>
-        </HStack>
-      </HStack>
-    </VStack>
-  );
-}
-
-// ─── About ───────────────────────────────────────────────────────────────────
 function AboutSection() {
   return (
     <Section padding={6}>
@@ -359,9 +431,201 @@ function AboutSection() {
     </Section>
   );
 }
+function CourseHead() {
+  const [saved, setSaved] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const {copy, isCopied} = useClipboard({announce: 'Link copied'});
+  const shareHref =
+    typeof window === 'undefined'
+      ? ''
+      : new URL('/courses/applied-ai', window.location.origin).toString();
 
-// ─── Syllabus ────────────────────────────────────────────────────────────────
+  return (
+    <VStack gap={4}>
+      <VStack gap={2}>
+        <HStack gap={2} vAlign="center" hAlign="between" wrap="wrap">
+          <HStack gap={2} vAlign="center">
+            <Badge variant="warning" label="Bestseller" />
+            <Badge label={COURSE.level} />
+          </HStack>
+          <HStack gap={2} vAlign="center">
+            <ToggleButton
+              label="Save"
+              size="sm"
+              isPressed={saved}
+              onPressedChange={setSaved}
+              icon={<Icon icon={HeartIcon} size="sm" />}
+              pressedIcon={<Icon icon={HeartIconSolid} size="sm" />}
+            />
+            <Button
+              label={isCopied ? 'Link copied' : 'Share'}
+              variant="ghost"
+              size="sm"
+              icon={<Icon icon={ShareIcon} size="sm" />}
+              onClick={() => void copy(shareHref)}
+            />
+          </HStack>
+        </HStack>
+        <Heading level={1} maxLines={3}>
+          {COURSE.title}
+        </Heading>
+        <HStack gap={2} vAlign="center" wrap="wrap">
+          <StarRating rating={COURSE.rating} count={COURSE.ratingCount} />
+          <Text type="body" color="secondary">
+            · {COURSE.learnerCount} learners
+          </Text>
+        </HStack>
+      </VStack>
+
+      <HStack gap={3} vAlign="center" wrap="wrap">
+        <Avatar name={INSTRUCTOR.name} src={INSTRUCTOR.portrait} size="md" />
+        <VStack gap={1}>
+          <Text type="body" weight="bold">
+            {INSTRUCTOR.name}
+          </Text>
+          <Text type="supporting" color="secondary">
+            {INSTRUCTOR.role}
+          </Text>
+        </VStack>
+      </HStack>
+
+      <Grid columns={{minWidth: 180, repeat: 'fit'}} gap={3}>
+        {FACTS.map(fact => (
+          <Card key={fact.detail} padding={3}>
+            <HStack gap={2} vAlign="center">
+              <Icon icon={fact.icon} size="sm" />
+              <VStack gap={1}>
+                <Text type="body" weight="bold">
+                  {fact.label}
+                </Text>
+                <Text type="supporting" color="secondary">
+                  {fact.detail}
+                </Text>
+              </VStack>
+            </HStack>
+          </Card>
+        ))}
+      </Grid>
+
+      <VStack gap={3}>
+        <AspectRatio ratio={16 / 9} fit="cover">
+          <img
+            src="/template-assets/light-working-horizontal-1.png"
+            alt="Course preview: a laptop showing the extraction pipeline built in the project"
+          />
+        </AspectRatio>
+        <HStack gap={2} vAlign="center" wrap="wrap">
+          <StackItem>
+            <Button
+              label="See the preview lessons"
+              variant="secondary"
+              icon={<Icon icon={BookIcon} size="sm" />}
+              onClick={() => setPreviewOpen(true)}
+            />
+          </StackItem>
+          <Text type="supporting" color="secondary">
+            {`${capitalize(previewLessons(PREVIEW_LESSONS.length))} · no card needed`}
+          </Text>
+        </HStack>
+      </VStack>
+
+      <Dialog
+        isOpen={previewOpen}
+        onOpenChange={setPreviewOpen}
+        purpose="info"
+        variant="fullscreen">
+        <Layout
+          header={
+            <DialogHeader
+              title="Preview lessons"
+              subtitle={`The ${previewLessons(PREVIEW_LESSONS.length)} ${
+                PREVIEW_LESSONS.length === 1 ? 'is' : 'are'
+              } free — no card needed.`}
+              hasDivider
+              onOpenChange={setPreviewOpen}
+            />
+          }
+          content={
+            <LayoutContent padding={4}>
+              <VStack gap={3}>
+                {PREVIEW_LESSONS.map(lesson => (
+                  <Card key={lesson.title} padding={4}>
+                    <HStack
+                      gap={3}
+                      vAlign="center"
+                      hAlign="between"
+                      wrap="wrap">
+                      <HStack gap={2} vAlign="center">
+                        <Icon icon={PlayIcon} size="sm" />
+                        <Text type="body">{lesson.title}</Text>
+                      </HStack>
+                      <HStack gap={2} vAlign="center">
+                        <Badge label={lesson.note} />
+                        <Text type="supporting" color="secondary">
+                          {lesson.length}
+                        </Text>
+                      </HStack>
+                    </HStack>
+                  </Card>
+                ))}
+              </VStack>
+            </LayoutContent>
+          }
+        />
+      </Dialog>
+    </VStack>
+  );
+}
 function SyllabusSection() {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState<string[]>([MODULES[0].id]);
+  const announce = useAnnounce({hasReplace: true});
+  const fold = (value: string) => value.toLowerCase();
+  const needle = fold(query.trim());
+  // One match helper: a lesson matches when its title carries the text.
+  const matches = (lesson: Lesson, text: string) =>
+    fold(lesson.title).includes(text);
+  const modules = MODULES.filter(module =>
+    module.lessons.some(lesson => matches(lesson, needle)),
+  );
+
+  // The search owns the result count. A hit opens the module that holds it,
+  // and an open module lists only the matching lessons, so what shows is
+  // what the count says. Core `useAnnounce` speaks the count, so the page
+  // carries no live region.
+  const handleQueryChange = (value: string) => {
+    const next = fold(value.trim());
+    setQuery(value);
+    if (!next) {
+      // Clearing the query removes "No lessons match …" and brings every
+      // module back, so the restored syllabus is announced — the same words
+      // the section header shows.
+      announce(
+        `${MODULES.length} modules · ${COURSE.lessonCount} ${
+          COURSE.lessonCount === 1 ? 'lesson' : 'lessons'
+        }`,
+      );
+      setOpen([MODULES[0].id]);
+      return;
+    }
+    const hits = MODULES.filter(module =>
+      module.lessons.some(lesson => matches(lesson, next)),
+    );
+    setOpen(hits.map(module => module.id));
+    const count = hits.reduce(
+      (total, module) =>
+        total + module.lessons.filter(lesson => matches(lesson, next)).length,
+      0,
+    );
+    announce(
+      count === 0
+        ? `No lessons match “${value.trim()}”`
+        : `${count} ${
+            count === 1 ? 'lesson matches' : 'lessons match'
+          } “${value.trim()}”`,
+    );
+  };
+
   return (
     <Section padding={6}>
       <VStack gap={4}>
@@ -373,8 +637,34 @@ function SyllabusSection() {
             </Text>
           }
         />
-        <CollapsibleGroup type="multiple" defaultValue={[MODULES[0].id]}>
-          {MODULES.map(module => (
+        <HStack gap={3} vAlign="center" hAlign="between" wrap="wrap">
+          <StackItem size="fill">
+            <TextInput
+              label="Search lessons"
+              isLabelHidden
+              size="md"
+              width="100%"
+              placeholder="Search lessons"
+              value={query}
+              onChange={handleQueryChange}
+              hasClear
+              startIcon={<Icon icon={SearchIcon} size="sm" />}
+            />
+          </StackItem>
+          <Button
+            label="Open every module"
+            variant="ghost"
+            size="sm"
+            onClick={() => setOpen(MODULES.map(module => module.id))}
+          />
+        </HStack>
+        <CollapsibleGroup
+          type="multiple"
+          value={open}
+          onChange={value =>
+            setOpen(Array.isArray(value) ? value : value ? [value] : [])
+          }>
+          {modules.map(module => (
             <Collapsible
               key={module.id}
               value={module.id}
@@ -389,31 +679,49 @@ function SyllabusSection() {
                 </VStack>
               }>
               <VStack gap={2}>
-                {module.lessons.map(lesson => (
-                  <HStack
-                    key={lesson.title}
-                    gap={2}
-                    vAlign="center"
-                    hAlign="between">
-                    <HStack gap={2} vAlign="center">
-                      <Icon icon={PlayIcon} size="sm" />
-                      <Text type="body">{lesson.title}</Text>
+                {module.lessons
+                  .filter(lesson => !needle || matches(lesson, needle))
+                  .map(lesson => (
+                    <HStack
+                      key={lesson.title}
+                      gap={2}
+                      vAlign="center"
+                      hAlign="between">
+                      <HStack gap={2} vAlign="center">
+                        <Icon icon={PlayIcon} size="sm" />
+                        <Text type="body">{lesson.title}</Text>
+                        {lesson.badge && (
+                          <StackItem>
+                            <Badge
+                              label={lesson.badge}
+                              variant={
+                                lesson.badge === 'Project' ? 'warning' : 'info'
+                              }
+                            />
+                          </StackItem>
+                        )}
+                      </HStack>
+                      <Text
+                        type="supporting"
+                        color="secondary"
+                        textWrap="nowrap">
+                        {lesson.duration}
+                      </Text>
                     </HStack>
-                    <Text type="supporting" color="secondary">
-                      {lesson.duration}
-                    </Text>
-                  </HStack>
-                ))}
+                  ))}
               </VStack>
             </Collapsible>
           ))}
         </CollapsibleGroup>
+        {modules.length === 0 ? (
+          <Text type="body" color="secondary">
+            No lessons match “{query.trim()}”
+          </Text>
+        ) : null}
       </VStack>
     </Section>
   );
 }
-
-// ─── Instructor ──────────────────────────────────────────────────────────────
 function InstructorSection() {
   const showToast = useToast();
   return (
@@ -422,11 +730,12 @@ function InstructorSection() {
         <SectionHeader title="Your instructor" />
         <Card padding={5}>
           <VStack gap={4}>
-            <HStack gap={4} vAlign="start">
+            <HStack gap={4} vAlign="start" wrap="wrap">
               <Avatar
                 name={INSTRUCTOR.name}
                 src={INSTRUCTOR.portrait}
                 size="xl"
+                tooltip={false}
               />
               <VStack gap={1}>
                 <Text type="large" weight="bold">
@@ -435,9 +744,14 @@ function InstructorSection() {
                 <Text type="body" color="secondary">
                   {INSTRUCTOR.role}
                 </Text>
+                <HStack gap={2} wrap="wrap">
+                  {INSTRUCTOR.credentials.map(credential => (
+                    <Badge key={credential} label={credential} />
+                  ))}
+                </HStack>
               </VStack>
             </HStack>
-            <HStack gap={5} vAlign="center">
+            <HStack gap={5} vAlign="center" wrap="wrap">
               <HStack gap={1} vAlign="center">
                 <Icon icon={UsersIcon} size="sm" />
                 <Text type="body" color="secondary">
@@ -487,129 +801,25 @@ function InstructorSection() {
     </Section>
   );
 }
-
-// ─── Reviews ─────────────────────────────────────────────────────────────────
-function ReviewCard({review}: {review: (typeof REVIEWS)[number]}) {
-  const showToast = useToast();
-  return (
-    <Card padding={4}>
-      <VStack gap={3}>
-        <HStack gap={2} vAlign="center">
-          <Avatar name={review.name} src={review.avatar} size="sm" />
-          <VStack gap={1}>
-            <Text type="body" weight="bold">
-              {review.name}
-            </Text>
-            <Text type="supporting" color="secondary">
-              {review.date}
-            </Text>
-          </VStack>
-        </HStack>
-        <StarRating rating={review.rating} />
-        <Text type="body">{review.body}</Text>
-        <HStack gap={2} vAlign="center">
-          <Button
-            label={`Helpful (${review.helpful})`}
-            variant="ghost"
-            size="sm"
-            icon={<Icon icon={CheckIcon} size="xsm" />}
-            onClick={() =>
-              // Demo only: replace this toast with the call that performs the action.
-              showToast({
-                body: 'Demo: your vote would be counted here',
-                uniqueID: `helpful-${review.name}`,
-              })
-            }
-          />
-        </HStack>
-      </VStack>
-    </Card>
-  );
-}
-
-function ReviewsSection() {
+function CoversSection() {
   return (
     <Section padding={6}>
       <VStack gap={4}>
-        <SectionHeader
-          title="Reviews"
-          action={
-            <Link href="#" type="supporting" color="secondary">
-              How reviews work
-            </Link>
-          }
-        />
+        <SectionHeader title="What the price covers" />
         <Card padding={5}>
-          <VStack gap={4}>
-            <HStack gap={5} vAlign="center">
-              <VStack gap={1}>
-                <Text type="display-3">{COURSE.rating}</Text>
-                <StarRating rating={COURSE.rating} />
-                <Text type="supporting" color="secondary">
-                  {COURSE.ratingCount.toLocaleString('en-US')} reviews
-                </Text>
-              </VStack>
-              <StackItem size="fill">
-                <VStack gap={3}>
-                  {ASPECTS.map(aspect => (
-                    <VStack key={aspect.label} gap={1}>
-                      <HStack gap={2} vAlign="center" hAlign="between">
-                        <Text type="body" color="secondary">
-                          {aspect.label}
-                        </Text>
-                        <Text type="body" color="secondary">
-                          {aspect.score.toFixed(1)}
-                        </Text>
-                      </HStack>
-                      <ProgressBar
-                        label={aspect.label}
-                        isLabelHidden
-                        value={(aspect.score / 5) * 100}
-                      />
-                    </VStack>
-                  ))}
-                </VStack>
-              </StackItem>
-            </HStack>
+          <VStack gap={3}>
+            {INCLUDES.map(item => (
+              <HStack key={item} gap={2} vAlign="start">
+                <Icon icon={CheckIcon} size="sm" />
+                <Text type="body">{item}</Text>
+              </HStack>
+            ))}
           </VStack>
         </Card>
-        <Grid columns={{minWidth: 280, max: 4, repeat: 'fit'}} gap={4}>
-          {REVIEWS.map(review => (
-            <ReviewCard key={review.name} review={review} />
-          ))}
-        </Grid>
       </VStack>
     </Section>
   );
 }
-
-// ─── FAQ ─────────────────────────────────────────────────────────────────────
-function FaqSection() {
-  return (
-    <Section padding={6}>
-      <VStack gap={4}>
-        <SectionHeader title="Common questions" />
-        <CollapsibleGroup type="multiple">
-          {FAQS.map(faq => (
-            <Collapsible
-              key={faq.q}
-              value={faq.q}
-              defaultIsOpen={false}
-              trigger={
-                <Text type="large" weight="bold">
-                  {faq.q}
-                </Text>
-              }>
-              <Text type="body">{faq.a}</Text>
-            </Collapsible>
-          ))}
-        </CollapsibleGroup>
-      </VStack>
-    </Section>
-  );
-}
-
-// ─── Enroll rail ─────────────────────────────────────────────────────────────
 function EnrollRail() {
   const showToast = useToast();
   const [mode, setMode] = useState('self-paced');
@@ -698,20 +908,384 @@ function EnrollRail() {
             </RadioList>
           )}
         </VStack>
-        <Divider />
-        <VStack gap={2}>
-          <Text type="label">This course includes</Text>
-          {INCLUDES.map(item => (
-            <HStack key={item} gap={2} vAlign="start">
-              <Icon icon={CheckIcon} size="sm" />
-              <Text type="body" color="secondary">
-                {item}
-              </Text>
-            </HStack>
-          ))}
-        </VStack>
       </VStack>
     </Card>
+  );
+}
+function ReviewBody({body}: {body: string}) {
+  const [open, setOpen] = useState(false);
+  const clamped = !open;
+  const truncation = useTruncation({maxLines: clamped ? 4 : 0});
+
+  return (
+    <VStack gap={2}>
+      <Text type="body" maxLines={clamped ? 4 : undefined} ref={truncation.ref}>
+        {body}
+      </Text>
+      {(truncation.isTruncated || open) && (
+        <Button
+          label={open ? 'Show less' : 'Show more'}
+          variant="ghost"
+          size="sm"
+          onClick={() => setOpen(value => !value)}
+        />
+      )}
+    </VStack>
+  );
+}
+function ReviewCard({review}: {review: (typeof REVIEWS)[number]}) {
+  const showToast = useToast();
+  return (
+    <Card padding={4}>
+      <VStack gap={3}>
+        <HStack gap={2} vAlign="center">
+          <Avatar
+            name={review.name}
+            src={review.avatar}
+            size="sm"
+            tooltip={false}
+          />
+          <VStack gap={1}>
+            <Text type="body" weight="bold">
+              {review.name}
+            </Text>
+            <Text type="supporting" color="secondary">
+              {review.date}
+            </Text>
+          </VStack>
+        </HStack>
+        <StarRating rating={review.rating} />
+        <ReviewBody body={review.body} />
+        <HStack gap={2} vAlign="center">
+          <Button
+            label={`Helpful (${review.helpful})`}
+            variant="ghost"
+            size="sm"
+            icon={<Icon icon={CheckIcon} size="xsm" />}
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: your vote would be counted here',
+                uniqueID: `helpful-${review.name}`,
+              })
+            }
+          />
+        </HStack>
+      </VStack>
+    </Card>
+  );
+}
+function ReviewsSection() {
+  const [query, setQuery] = useState('');
+  const [rating, setRating] = useState('all');
+  const [sort, setSort] = useState('recent');
+  const announce = useAnnounce({hasReplace: true});
+  const fold = (value: string) => value.toLowerCase();
+  const needle = fold(query.trim());
+  // One match helper for both filters: a review stays in the list when it
+  // matches the text query and the rating.
+  const matchReviews = (text: string, ratingValue: string) =>
+    REVIEWS.filter(review => {
+      const matchesText = !text || fold(review.body).includes(text);
+      const matchesRating =
+        ratingValue === 'all' || review.rating === Number(ratingValue);
+      return matchesText && matchesRating;
+    });
+  const filtered = matchReviews(needle, rating);
+  // REVIEWS is authored newest-first, so "Newest" keeps the array order and
+  // only "Helpful" reorders it.
+  const shown =
+    sort === 'helpful'
+      ? [...filtered].sort((a, b) => b.helpful - a.helpful)
+      : filtered;
+
+  // Core `useAnnounce` speaks the result count, so the page carries no live
+  // region of its own.
+  const handleQueryChange = (value: string) => {
+    const next = fold(value.trim());
+    setQuery(value);
+    if (!next) {
+      // Clearing the query swaps "No reviews match …" for the rating's own
+      // result, so that result is announced too.
+      const count = matchReviews('', rating).length;
+      announce(
+        count === 0
+          ? 'No reviews carry this rating'
+          : `${count} ${count === 1 ? 'review' : 'reviews'}`,
+      );
+      return;
+    }
+    const count = matchReviews(next, rating).length;
+    announce(
+      count === 0
+        ? `No reviews match “${value.trim()}”`
+        : `${count} ${
+            count === 1 ? 'review matches' : 'reviews match'
+          } “${value.trim()}”`,
+    );
+  };
+
+  // The rating control filters the same search, so it announces the same
+  // count. With no query the visible message is the rating one, so the
+  // announcement says the same thing.
+  const handleRatingChange = (value: string) => {
+    setRating(value);
+    const count = matchReviews(needle, value).length;
+    if (needle) {
+      announce(
+        count === 0
+          ? `No reviews match “${query.trim()}”`
+          : `${count} ${
+              count === 1 ? 'review matches' : 'reviews match'
+            } “${query.trim()}”`,
+      );
+      return;
+    }
+    announce(
+      count === 0
+        ? 'No reviews carry this rating'
+        : `${count} ${count === 1 ? 'review' : 'reviews'}`,
+    );
+  };
+
+  return (
+    <Section padding={6}>
+      <VStack gap={4}>
+        <SectionHeader
+          title="Reviews"
+          action={
+            <Link href="#" type="supporting" color="secondary">
+              How reviews work
+            </Link>
+          }
+        />
+        <Grid columns={{minWidth: 280, repeat: 'fit'}} gap={4}>
+          <Card padding={5}>
+            <VStack gap={3}>
+              <HStack gap={2} vAlign="center">
+                <Text type="display-3">{COURSE.rating}</Text>
+                <StarRating rating={COURSE.rating} />
+              </HStack>
+              <Text type="supporting" color="secondary">
+                {COURSE.ratingCount.toLocaleString('en-US')} reviews
+              </Text>
+              <VStack gap={2}>
+                {STAR_COUNTS.map(row => (
+                  <HStack key={row.stars} gap={2} vAlign="center">
+                    <Text type="supporting" color="secondary">
+                      {row.stars} ★
+                    </Text>
+                    <StackItem size="fill">
+                      <ProgressBar
+                        label={`${row.stars} stars`}
+                        isLabelHidden
+                        value={(row.count / COURSE.ratingCount) * 100}
+                      />
+                    </StackItem>
+                    <Text type="supporting" color="secondary">
+                      {row.count}
+                    </Text>
+                  </HStack>
+                ))}
+              </VStack>
+            </VStack>
+          </Card>
+          <Card padding={5}>
+            <VStack gap={3}>
+              <Text type="label">What learners rate</Text>
+              <Grid columns={{minWidth: 140, repeat: 'fit'}} gap={3}>
+                {ASPECTS.map(aspect => (
+                  <VStack key={aspect.label} gap={1}>
+                    <Text type="supporting" color="secondary">
+                      {aspect.label}
+                    </Text>
+                    <Text type="large" weight="bold">
+                      {aspect.score.toFixed(1)}
+                    </Text>
+                  </VStack>
+                ))}
+              </Grid>
+            </VStack>
+          </Card>
+        </Grid>
+        <HStack gap={3} vAlign="center" hAlign="between" wrap="wrap">
+          <StackItem>
+            <TextInput
+              label="Search reviews"
+              isLabelHidden
+              size="md"
+              width={200}
+              placeholder="Search reviews"
+              value={query}
+              onChange={handleQueryChange}
+              hasClear
+              startIcon={<Icon icon={SearchIcon} size="sm" />}
+            />
+          </StackItem>
+          <SegmentedControl
+            value={rating}
+            onChange={handleRatingChange}
+            label="Rating">
+            <SegmentedControlItem value="all" label="All" />
+            <SegmentedControlItem value="5" label="5 star" />
+            <SegmentedControlItem value="4" label="4 star" />
+          </SegmentedControl>
+          <SegmentedControl value={sort} onChange={setSort} label="Sort">
+            <SegmentedControlItem value="recent" label="Newest" />
+            <SegmentedControlItem value="helpful" label="Helpful" />
+          </SegmentedControl>
+        </HStack>
+        {shown.length === 0 ? (
+          <Text type="body" color="secondary">
+            {needle
+              ? `No reviews match “${query.trim()}”`
+              : 'No reviews carry this rating'}
+          </Text>
+        ) : (
+          <Grid columns={{minWidth: 280, max: 4, repeat: 'fit'}} gap={4}>
+            {shown.map(review => (
+              <ReviewCard key={review.name} review={review} />
+            ))}
+          </Grid>
+        )}
+      </VStack>
+    </Section>
+  );
+}
+function RelatedRail() {
+  return (
+    <Section padding={6}>
+      <VStack gap={4}>
+        <SectionHeader
+          title="Next courses"
+          action={
+            <Link href="#" type="supporting" color="secondary">
+              Browse all
+            </Link>
+          }
+        />
+        <Carousel hasSnap hasEdgeFade gap={3} aria-label="More courses">
+          {RELATED.map(course => (
+            // A slide sizes to its content, so a long title would make the
+            // card wider than a phone's rail. A set width keeps the card and
+            // its price inside the rail; a longer title ends in an ellipsis
+            // after two lines.
+            <Card key={course.title} padding={4} width="min(18rem, 80vw)">
+              <VStack gap={2}>
+                <Badge label={course.topic} />
+                <Text type="large" weight="bold" maxLines={2}>
+                  {course.title}
+                </Text>
+                <Text type="supporting" color="secondary">
+                  {course.teacher}
+                </Text>
+                <HStack gap={2} vAlign="center" hAlign="between">
+                  <HStack gap={1} vAlign="center">
+                    <Icon icon={StarIcon} size="sm" />
+                    <Text type="supporting" color="secondary">
+                      {course.rating}
+                    </Text>
+                  </HStack>
+                  <Text type="body" weight="bold">
+                    {fmt(course.price)}
+                  </Text>
+                </HStack>
+              </VStack>
+            </Card>
+          ))}
+        </Carousel>
+      </VStack>
+    </Section>
+  );
+}
+function FaqSection() {
+  return (
+    <Section padding={6}>
+      <VStack gap={4}>
+        <SectionHeader title="Common questions" />
+        <CollapsibleGroup type="single" defaultValue={FAQS[0].q}>
+          {FAQS.map((faq, index) => (
+            <Collapsible
+              key={faq.q}
+              value={faq.q}
+              trigger={
+                <HStack gap={3} vAlign="center">
+                  <StackItem>
+                    <Badge label={String(index + 1)} />
+                  </StackItem>
+                  <Text type="large" weight="bold">
+                    {faq.q}
+                  </Text>
+                </HStack>
+              }>
+              <Text type="body">{faq.a}</Text>
+            </Collapsible>
+          ))}
+        </CollapsibleGroup>
+      </VStack>
+    </Section>
+  );
+}
+function ClosingBand() {
+  const showToast = useToast();
+  return (
+    <Section padding={6}>
+      <Card padding={6}>
+        <Grid columns={{minWidth: 280, repeat: 'fit'}} gap={6}>
+          <VStack gap={4}>
+            <Badge label="Start tonight" />
+            <Heading level={2}>
+              Watch lesson one tonight. Decide in the morning.
+            </Heading>
+            <Text type="body" color="secondary">
+              {`The ${previewLessons(PREVIEW_LESSONS.length)} ${
+                PREVIEW_LESSONS.length === 1 ? 'is' : 'are'
+              } free, the project ships with your enrolment, and the first cohort starts in March.`}
+            </Text>
+            <HStack gap={2} wrap="wrap">
+              <Button
+                label="Start lesson one free"
+                variant="primary"
+                size="lg"
+                icon={<Icon icon={PlayIcon} size="sm" />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: lesson one would play here',
+                    uniqueID: 'closing-lesson-one',
+                  })
+                }
+              />
+              <Button
+                label="Apply to teach"
+                variant="secondary"
+                size="lg"
+                icon={
+                  <Icon
+                    icon={ChevronRightIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
+                }
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the teaching application would open here',
+                    uniqueID: 'closing-teach',
+                  })
+                }
+              />
+            </HStack>
+          </VStack>
+          <AspectRatio ratio={4 / 3} fit="cover">
+            <img
+              src="/template-assets/colorful-working-horizontal-1.png"
+              alt="An open-plan office with people working at laptops"
+            />
+          </AspectRatio>
+        </Grid>
+      </Card>
+    </Section>
   );
 }
 
@@ -723,19 +1297,24 @@ export default function CourseDetailTemplate() {
       contentWidth={1200}
       content={
         <LayoutContent role="main" padding={6}>
-          <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={6}>
-            <VStack gap={4}>
-              <CourseHead />
-              <AboutSection />
-              <SyllabusSection />
-              <InstructorSection />
-              <ReviewsSection />
-              <FaqSection />
-            </VStack>
-            <VStack gap={4} style={stickyRail}>
-              <EnrollRail />
-            </VStack>
-          </Grid>
+          <VStack gap={6}>
+            <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={6}>
+              <VStack gap={4}>
+                <CourseHead />
+                <AboutSection />
+                <SyllabusSection />
+                <InstructorSection />
+                <CoversSection />
+                <ReviewsSection />
+              </VStack>
+              <VStack gap={4} style={stickyRail}>
+                <EnrollRail />
+              </VStack>
+            </Grid>
+            <RelatedRail />
+            <FaqSection />
+            <ClosingBand />
+          </VStack>
         </LayoutContent>
       }
     />
