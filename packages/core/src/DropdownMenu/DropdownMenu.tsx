@@ -694,8 +694,9 @@ function DropdownMenuBottomSheet({
   // back does not reopen it.
   const submenuDepth = openSubmenus.length;
   if (submenuDepth < submenuPath.length) {
-    setSubmenuPath(submenuPath.slice(0, submenuDepth));
-    setSubmenuTitles(submenuTitles.slice(0, submenuDepth));
+    // Updaters, so a close in the same render keeps its reset to the root.
+    setSubmenuPath(path => path.slice(0, submenuDepth));
+    setSubmenuTitles(titles => titles.slice(0, submenuDepth));
   }
   const submenuKey = submenuPath
     .slice(0, submenuDepth)

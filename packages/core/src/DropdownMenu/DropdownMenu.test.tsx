@@ -895,6 +895,54 @@ describe('DropdownMenu', () => {
     expect(screen.queryByRole('button', {name: 'Back'})).toBeNull();
   });
 
+  it('reopens the sheet at the root after a controlled close that also removed the open nested level', async () => {
+    const user = userEvent.setup();
+    let closeAndRemove: () => void = () => {};
+    function Controlled() {
+      const [isOpen, setIsOpen] = useState(false);
+      const [hasDeeper, setHasDeeper] = useState(true);
+      closeAndRemove = () => {
+        setIsOpen(false);
+        setHasDeeper(false);
+      };
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          isMenuOpen={isOpen}
+          onOpenChange={setIsOpen}
+          items={[
+            {label: 'First'},
+            {
+              label: 'More',
+              items: [
+                {label: 'Inner'},
+                ...(hasDeeper
+                  ? [{label: 'Deeper', items: [{label: 'Deep item'}]}]
+                  : []),
+              ],
+            },
+          ]}
+        />
+      );
+    }
+    render(<Controlled />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    await user.click(await screen.findByRole('button', {name: 'Deeper'}));
+    await screen.findByRole('button', {name: 'Deep item'});
+    // One render closes the menu and removes the open nested level.
+    act(() => closeAndRemove());
+    await act(async () => nextFrames(3));
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    expect(
+      await screen.findByRole('button', {name: 'First'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Inner'})).toBeNull();
+  });
+
   it('keeps an open sub-menu of the sheet closed when its removed row comes back', async () => {
     const user = userEvent.setup();
     let setHasMore: (value: boolean) => void = () => {};
