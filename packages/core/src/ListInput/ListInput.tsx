@@ -64,6 +64,7 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {joinAriaIDs} from '../utils/inputAria';
+import {isFocusDetached} from '../utils/isFocusDetached';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 
@@ -181,10 +182,10 @@ export interface ListInputProps<T> extends Omit<
   isRequired?: boolean;
 }
 
-interface PendingFocus {
-  itemKey?: string;
-  target: 'first-field' | 'remove' | 'add';
-}
+type PendingFocus =
+  | {target: 'add'}
+  | {target: 'first-field'; itemKey: string}
+  | {target: 'remove'; itemKey: string; removedIndex: number};
 
 /** A change that ListInput asked its owner for, until a value applies it. */
 interface PendingChange {
@@ -486,6 +487,10 @@ function resolveColumnTrack(width?: ColumnWidth): string {
 // cell. Field focus skips it.
 const focusableFieldSelector =
   '[data-list-input-cell] input, [data-list-input-cell] select, [data-list-input-cell] textarea, [data-list-input-cell] button, [data-list-input-cell] [tabindex]:not([tabindex="-1"])';
+
+function ownerDocumentOf(node: Node | null): Document {
+  return node?.ownerDocument ?? document;
+}
 
 /** A record's first field control. The reorder handle in its cell is not one. */
 function firstFieldIn(
@@ -992,25 +997,28 @@ export function ListInput<T>({
     if (latestApplied == null || pendingFocus == null) {
       return;
     }
-    const focused = document.activeElement;
+    const doc = ownerDocumentOf(groupRef.current);
     // A change never takes focus from where the user moved it.
     if (
-      focused !== latestApplied.focusedBefore &&
-      focused !== document.body &&
-      focused != null
+      doc.activeElement !== latestApplied.focusedBefore &&
+      !isFocusDetached(doc)
     ) {
       return;
     }
-    const row =
-      pendingFocus.itemKey == null
-        ? undefined
-        : rowsRef.current.get(pendingFocus.itemKey);
-    const target =
-      pendingFocus.target === 'remove'
-        ? row?.querySelector<HTMLElement>('[data-list-input-remove]')
-        : pendingFocus.target === 'first-field'
-          ? firstFieldIn(row)
-          : null;
+    let target: HTMLElement | null = null;
+    if (pendingFocus.target === 'first-field') {
+      target = firstFieldIn(rowsRef.current.get(pendingFocus.itemKey));
+    } else if (pendingFocus.target === 'remove') {
+      // The planned record can leave in the same value. Then the record now in
+      // the removed record's place takes focus.
+      const neighborKey =
+        keys[Math.min(pendingFocus.removedIndex, keys.length - 1)];
+      const row =
+        rowsRef.current.get(pendingFocus.itemKey) ??
+        (neighborKey == null ? undefined : rowsRef.current.get(neighborKey));
+      target =
+        row?.querySelector<HTMLElement>('[data-list-input-remove]') ?? null;
+    }
     (target ?? addButtonRef.current)?.focus();
   }, [announce, getItemKey, value]);
 
@@ -1115,7 +1123,7 @@ export function ListInput<T>({
           itemName,
           position: keys.indexOf(itemKey) + 1,
         }),
-      focusedBefore: document.activeElement,
+      focusedBefore: ownerDocumentOf(groupRef.current).activeElement,
       focus: {itemKey, target: 'first-field'},
     });
     if (event.detail > 0) {
@@ -1173,11 +1181,15 @@ export function ListInput<T>({
           itemName,
           position: index + 1,
         }),
-      focusedBefore: document.activeElement,
+      focusedBefore: ownerDocumentOf(groupRef.current).activeElement,
       focus:
         nextFocusItem == null
           ? {target: 'add'}
-          : {itemKey: String(getItemKey(nextFocusItem)), target: 'remove'},
+          : {
+              itemKey: String(getItemKey(nextFocusItem)),
+              target: 'remove',
+              removedIndex: index,
+            },
     });
     prepareMutationMotion(nextValue);
     onChange(nextValue, {type: 'remove', item: removedItem, index});
