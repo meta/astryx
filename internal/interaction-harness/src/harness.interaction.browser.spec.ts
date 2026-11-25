@@ -2202,7 +2202,9 @@ test.describe('frame evidence', () => {
     await expect(
       blockMainThread(page, 100, {during: dialog, timeout: 600}),
     ).rejects.toThrow(/no animation started/);
-    await expect(waitForAnimation(dialog, {timeout: 600})).rejects.toThrow();
+    await expect(waitForAnimation(dialog, {timeout: 600})).rejects.toThrow(
+      /no animation started.* The element is an open dialog\. /,
+    );
     // Its own animation answers both.
     await dialog.evaluate(el =>
       el.animate([{opacity: 1}, {opacity: 0.5}], {duration: 2000}),
@@ -2940,6 +2942,44 @@ test.describe('frame evidence', () => {
     expect(numbers.frames).toBeLessThan(3);
     expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
     expect((outcome as Error).message).toMatch(/^waitForRest: the page drew /);
+  });
+
+  test('waitForRest waits until no input hold covers the element, and one still in place at the deadline rejects by name', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="layer" style="width:40px;height:40px"><div id="box"></div><div data-astryx-layer-root><div id="nested"></div></div></div>',
+    );
+    // The shield that an input hold lays over its layer (Core's
+    // Layer/inputHold.ts), over the layer that holds the box. It goes
+    // `removeAfter` ms from now, or stays.
+    const addShield = (removeAfter: number | null) =>
+      page.evaluate(ms => {
+        const shield = document.createElement('div');
+        shield.setAttribute('aria-hidden', 'true');
+        Object.assign(shield.style, {
+          position: 'absolute',
+          inset: '0',
+          touchAction: 'pinch-zoom',
+        });
+        (document.getElementById('layer') as HTMLElement).append(shield);
+        if (ms != null) {
+          setTimeout(() => shield.remove(), ms);
+        }
+        return performance.now() + (ms ?? 0);
+      }, removeAfter);
+    const box = page.locator('#box');
+    const goneAt = await addShield(300);
+    await waitForRest(box, {timeout: 2000});
+    expect(await page.evaluate(() => performance.now())).toBeGreaterThanOrEqual(
+      goneAt,
+    );
+    await addShield(null);
+    // A layer inside the held one stays live: its element rests at once.
+    await waitForRest(page.locator('#nested'), {timeout: 1000});
+    await expect(waitForRest(box, {timeout: 300})).rejects.toThrow(
+      /waitForRest: the element rests, but an input hold still covers it at the deadline/,
+    );
   });
 
   test('waitForRest whose frame past the deadline shows motion after a starved gap fails by name, with the last move', async ({
