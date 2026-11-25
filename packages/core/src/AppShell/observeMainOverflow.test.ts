@@ -15,6 +15,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {observeMainOverflow} from './observeMainOverflow';
+import type * as SharedResizeObserver from '../utils/sharedResizeObserver';
 
 const observed = vi.hoisted(
   () =>
@@ -25,7 +26,7 @@ const observed = vi.hoisted(
 );
 const resizeObserver = vi.hoisted(() => ({exists: true}));
 
-vi.mock('../utils/sharedResizeObserver', () => {
+vi.mock('../utils/sharedResizeObserver', async importOriginal => {
   const register = (
     element: Element,
     callback: (entry: ResizeObserverEntry | null) => void,
@@ -37,6 +38,7 @@ vi.mock('../utils/sharedResizeObserver', () => {
     };
   };
   return {
+    ...(await importOriginal<typeof SharedResizeObserver>()),
     // Like the real one, it calls back once as it registers.
     observeResize: (
       element: Element,

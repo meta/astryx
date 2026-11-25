@@ -33,7 +33,10 @@ import {attachScrollKeyboardDelegation} from './scrollKeyboardDelegation';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {mergeProps} from '../utils/mergeProps';
 import {mergeRefs} from '../utils/mergeRefs';
-import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
+import {
+  observeResizeAfterLayout,
+  splitFirstResizeDelivery,
+} from '../utils/sharedResizeObserver';
 import {
   getLogicalAxisMapping,
   measureLogicalOverflowGeometry,
@@ -552,25 +555,11 @@ export function useScrollableArea({
     // The effect runs in React's commit, where a read forces a style and
     // layout pass before the browser's own. So the first measurement waits
     // for the first resize notification, which comes after the browser lays
-    // the viewport or the content out. The other box's first notification
-    // comes in the same delivery, and the first measurement already read it.
-    // A microtask follows every callback of that delivery.
-    let isFirstDelivery = false;
-    const onResize = () => {
-      if (isFirstDelivery) {
-        return;
-      }
-      if (isLaidOut) {
-        scheduleLayoutMeasure();
-        return;
-      }
+    // the viewport or the content out.
+    const onResize = splitFirstResizeDelivery(() => {
       isLaidOut = true;
-      isFirstDelivery = true;
-      queueMicrotask(() => {
-        isFirstDelivery = false;
-      });
       measureNow();
-    };
+    }, scheduleLayoutMeasure);
     registerScrollOwner(viewport, stateRef.current);
     measureRef.current = measureNow;
     const stopObservingViewport = observeResizeAfterLayout(viewport, onResize);
