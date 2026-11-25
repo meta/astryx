@@ -46,6 +46,7 @@ type AuditCase = {
   mode: Mode;
   direction: Direction;
   viewport: Viewport;
+  motion?: 'reduce' | 'no-preference';
   run: (page: Page, check: Check, frame: FrameSink) => Promise<void>;
 };
 
@@ -296,31 +297,69 @@ for (const direction of ['ltr', 'rtl'] as const) {
   });
 }
 
-cases.push({
-  key: 'end-content__light__ltr',
-  group: 'end content',
-  story: PLAYGROUND_STORY,
-  mode: 'light',
-  direction: 'ltr',
-  viewport: WIDE,
-  run: async (page, check, frame) => {
-    const toolbar = await readToolbar(page);
-    check(
-      toolbar.separators.length >= 3,
-      `${toolbar.separators.length} separators`,
-    );
-    const heights = toolbar.separators.map(separator => separator.height);
-    check(
-      heights.every(height => height >= 16),
-      `separator heights ${heights.join(', ')}`,
-    );
-    check(
-      Math.max(...heights) - Math.min(...heights) <= 1,
-      `separators differ in height: ${heights.join(', ')}`,
-    );
-    await frame('rest', {toolbar});
+const endContentCases: {
+  key: string;
+  mode: Mode;
+  direction: Direction;
+  viewport: Viewport;
+  motion?: 'reduce' | 'no-preference';
+}[] = [
+  {key: 'light__ltr', mode: 'light', direction: 'ltr', viewport: WIDE},
+  {key: 'dark__ltr', mode: 'dark', direction: 'ltr', viewport: WIDE},
+  {key: 'light__rtl', mode: 'light', direction: 'rtl', viewport: WIDE},
+  {key: 'dark__rtl', mode: 'dark', direction: 'rtl', viewport: WIDE},
+  {
+    key: 'light__ltr__motion',
+    mode: 'light',
+    direction: 'ltr',
+    viewport: WIDE,
+    motion: 'no-preference',
   },
-});
+  {key: 'light__ltr__phone', mode: 'light', direction: 'ltr', viewport: PHONE},
+];
+
+for (const variant of endContentCases) {
+  cases.push({
+    key: `end-content__${variant.key}`,
+    group: 'end content',
+    story: PLAYGROUND_STORY,
+    mode: variant.mode,
+    direction: variant.direction,
+    viewport: variant.viewport,
+    motion: variant.motion,
+    run: async (page, check, frame) => {
+      // At phone width the action row scrolls; bring its end into view.
+      await page.evaluate(() => {
+        const row = document.querySelector(
+          '#storybook-root [role="toolbar"] [role="group"]',
+        );
+        row?.scrollBy({
+          left: row.scrollWidth * (document.dir === 'rtl' ? -1 : 1),
+        });
+        row?.querySelector('[role="separator"]:last-of-type')?.scrollIntoView({
+          inline: 'center',
+          block: 'nearest',
+        });
+      });
+      await settle(page);
+      const toolbar = await readToolbar(page);
+      check(
+        toolbar.separators.length >= 3,
+        `${toolbar.separators.length} separators`,
+      );
+      const heights = toolbar.separators.map(separator => separator.height);
+      check(
+        heights.every(height => height >= 16),
+        `separator heights ${heights.join(', ')}`,
+      );
+      check(
+        Math.max(...heights) - Math.min(...heights) <= 1,
+        `separators differ in height: ${heights.join(', ')}`,
+      );
+      await frame('rest', {toolbar});
+    },
+  });
+}
 
 for (const mode of ['light', 'dark'] as const) {
   cases.push({
@@ -455,7 +494,10 @@ test.afterAll(async () => {
 
 async function runCase(page: Page, item: AuditCase) {
   await page.setViewportSize(item.viewport);
-  await page.emulateMedia({colorScheme: item.mode, reducedMotion: 'reduce'});
+  await page.emulateMedia({
+    colorScheme: item.mode,
+    reducedMotion: item.motion ?? 'reduce',
+  });
   const pageErrors: string[] = [];
   const onError = (error: Error) => pageErrors.push(String(error));
   page.on('pageerror', onError);
@@ -497,7 +539,10 @@ async function runCase(page: Page, item: AuditCase) {
     );
     check(sensors.dpr === 2, `dpr ${sensors.dpr}`);
     check(sensors.fonts === 'loaded', `fonts ${sensors.fonts}`);
-    check(sensors.reducedMotion, 'reduced motion not emulated');
+    check(
+      sensors.reducedMotion === ((item.motion ?? 'reduce') === 'reduce'),
+      `reduced motion ${sensors.reducedMotion}`,
+    );
     await item.run(page, check, frame);
   } catch (error) {
     check(false, `run threw: ${String(error)}`);
@@ -513,6 +558,7 @@ async function runCase(page: Page, item: AuditCase) {
     theme: 'neutral',
     direction: item.direction,
     viewport: item.viewport,
+    reducedMotion: item.motion ?? 'reduce',
     sensors,
     pageErrors,
     frames,
