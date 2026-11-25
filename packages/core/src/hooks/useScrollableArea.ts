@@ -564,12 +564,15 @@ export function useScrollableArea({
     registerScrollOwner(viewport, stateRef.current);
     measureRef.current = measureNow;
     const stopObservingViewport = observeResizeAfterLayout(viewport, onResize);
-    // A content box that another observer already watches sends no first
-    // notification; the viewport's own registration covers that.
-    const stopObservingContent = observeResizeAfterLayout(content, entry => {
-      if (entry != null) {
+    // The content box's first notification arrives in the same delivery as the
+    // viewport's; only its later resizes schedule a measurement.
+    let isContentLaidOut = false;
+    const stopObservingContent = observeResizeAfterLayout(content, () => {
+      if (isContentLaidOut) {
         onResize();
+        return;
       }
+      isContentLaidOut = true;
     });
     if (stopObservingViewport == null) {
       // No ResizeObserver exists, so nothing reports a layout. The viewport
