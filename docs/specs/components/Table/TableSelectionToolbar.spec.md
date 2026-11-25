@@ -103,6 +103,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR1 | With no selection, TableSelectionToolbar renders nothing. With a selection, it renders a Toolbar named by `label` (localized "Bulk actions" by default) holding the caller's `startContent`, and at its end the selected-count content (localized "{count} selected" by default, or `renderSelectionLabel`'s result) and a ghost button labelled `clearLabel` (localized "Unselect All"). Default text comes from the catalog (`architecture:internationalization` INV1a). | Current source and tests |
 | FR2 | The clear button clears the whole selection through the shared state, which removes the toolbar while the clear button holds focus. `spec:AST-085` FR4 has this record name where focus goes; the destination is open (OQ1). Implementation gap: focus is lost when the toolbar unmounts (Current-state impact).                                                                                                                                                           | Current source and tests |
 | FR3 | `size` defaults to `sm` and `variant` to `muted`; other Toolbar props pass to the Toolbar, and `endContent` is not accepted.                                                                                                                                                                                                                                                                                                                                               | Current source           |
+| FR4 | When the selected count appears or changes after the page loads, the toolbar announces the count content's rendered text once, politely, without moving focus (`spec:AST-020` SC 4.1.3, `spec:AST-086` FR11–FR13). It announces through a `hasReplace` announcer (`spec:AST-086` FR9), so changes made together speak only the latest count. A count present while the page loads, and a count renderer that renders nothing, announce nothing.                            | AST-020 SC 4.1.3         |
 
 ### Allowed variation
 
@@ -122,12 +123,12 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Performance and resources
 
-- **PR1 — No resources.** TableSelectionToolbar holds no state of its own.
+- **PR1 — No resources.** TableSelectionToolbar holds no selection state of its own; the count announcement keeps only what `useAnnounceRenderedText` needs to speak once per change.
 
 ## Accessibility contract
 
 - **AR1 — Named toolbar.** The bar is a Toolbar with an accessible name, and
-  the clear command is a native button with its label.
+  the clear command is a native button with its label. The selected count is announced as it changes (FR4).
 
 ## Design relationships
 
@@ -148,12 +149,13 @@ so no anatomy-theming block is declared here.
 
 ## Verification map
 
-| Contract       | Verification                                                                                             | Representative states                  | Mutation or failure expectation                                                                                                             | Audit section                          |
-| -------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| FR1, ORD1, AR1 | `TableSelectionToolbar.test.tsx` no-selection, actions and status, empty count, and custom-label tests   | No selection; selection; custom labels | A toolbar without a selection, a missing name, count, action, or clear button, or ignored custom labels fail.                               | `audit:TableSelectionToolbar/behavior` |
-| FR2            | `TableSelectionToolbar.test.tsx` clear test                                                              | Clear                                  | A clear that leaves rows selected fails. Gap: no test covers where focus goes after clearing.                                               | `audit:TableSelectionToolbar/a11y`     |
-| FR3, PR1       | `TableSelectionToolbar.test.tsx` defaults test; source review                                            | Defaults                               | A toolbar that does not default to `sm` and `muted` fails. Gap: no automated check fails if TableSelectionToolbar adds state or a listener. | `audit:TableSelectionToolbar/api`      |
-| RTL relation   | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TableSelection / Bulk actions` | One row selected; LTR and RTL          | A selected count that is not at the inline start of "Unselect All" fails D2.                                                                | `audit:TableSelectionToolbar/i18n-rtl` |
+| Contract       | Verification                                                                                             | Representative states                                                             | Mutation or failure expectation                                                                                                             | Audit section                          |
+| -------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| FR1, ORD1, AR1 | `TableSelectionToolbar.test.tsx` no-selection, actions and status, empty count, and custom-label tests   | No selection; selection; custom labels                                            | A toolbar without a selection, a missing name, count, action, or clear button, or ignored custom labels fail.                               | `audit:TableSelectionToolbar/behavior` |
+| FR2            | `TableSelectionToolbar.test.tsx` clear test                                                              | Clear                                                                             | A clear that leaves rows selected fails. Gap: no test covers where focus goes after clearing.                                               | `audit:TableSelectionToolbar/a11y`     |
+| FR3, PR1       | `TableSelectionToolbar.test.tsx` defaults test; source review                                            | Defaults                                                                          | A toolbar that does not default to `sm` and `muted` fails. Gap: no automated check fails if TableSelectionToolbar adds state or a listener. | `audit:TableSelectionToolbar/api`      |
+| FR4            | `TableSelectionToolbar.announce.test.tsx`                                                                | Appear, change, clear and reselect; changes made together; page load; empty count | A count change that is not announced, a superseded count spoken, or a count announced during page load fails.                               | `audit:TableSelectionToolbar/behavior` |
+| RTL relation   | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TableSelection / Bulk actions` | One row selected; LTR and RTL                                                     | A selected count that is not at the inline start of "Unselect All" fails D2.                                                                | `audit:TableSelectionToolbar/i18n-rtl` |
 
 ## Decision log
 
