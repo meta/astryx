@@ -476,8 +476,6 @@ describe('useScrollableArea', () => {
     const viewport = screen.getByTestId('viewport');
     makeMeasurable(viewport);
     flushFrame();
-    // The content's own first report asks for one more measurement.
-    flushFrame();
     expect(state().inline.isScrollable).toBe(false);
 
     // The loaded font makes the content wider than the viewport.
@@ -830,8 +828,6 @@ describe('useScrollableArea', () => {
     setGeometry(viewport, {scrollWidth: 300});
     void act(() => viewport.dispatchEvent(new Event('scroll')));
     flushFrame();
-    // The content's own first report asks for one more measurement.
-    flushFrame();
     expect(state().inline.isScrollable).toBe(true);
 
     const styleReads = vi.mocked(window.getComputedStyle).mock.calls.length;
@@ -926,8 +922,6 @@ describe('useScrollableArea', () => {
     setGeometry(viewport, {scrollWidth: 300});
     void act(() => viewport.dispatchEvent(new Event('scroll')));
     flushFrame();
-    // The content's own first report asks for one more measurement.
-    flushFrame();
     expect(state().inline).toEqual({
       isScrollable: true,
       atStart: true,
@@ -955,8 +949,6 @@ describe('useScrollableArea', () => {
     viewport.style.writingMode = 'vertical-rl';
     setGeometry(viewport, {scrollWidth: 220});
     void act(() => viewport.dispatchEvent(new Event('transitionend')));
-    flushFrame();
-    // The content's own first report asks for one more measurement.
     flushFrame();
     expect(state().block).toEqual({
       isScrollable: true,
@@ -1816,8 +1808,6 @@ describe('useScrollableArea', () => {
     render(<Fixture />);
     const viewport = screen.getByTestId('viewport');
     makeMeasurable(viewport);
-    flushFrame();
-    // The content's own first report asks for one more measurement.
     flushFrame();
     setGeometry(viewport, {scrollWidth: 180});
 
