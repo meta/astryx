@@ -510,10 +510,6 @@ export const docs = {
         visualProps: [],
       },
       {
-        className: 'astryx-transfer-list-collection',
-        visualProps: [],
-      },
-      {
         className: 'astryx-transfer-list-panel',
         visualProps: ['side'],
       },

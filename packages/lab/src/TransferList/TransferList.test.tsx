@@ -209,6 +209,25 @@ describe('TransferList', () => {
       expect(screen.queryByRole('option')).not.toBeInTheDocument();
     });
 
+    it('puts the panels in one layout wrapper that is no theme target', () => {
+      const {container} = render(
+        <ControlledTransferList initialValue={['name', 'status']} />,
+      );
+
+      const wrapper = container.querySelector(
+        '.astryx-transfer-list-panel',
+      )?.parentElement;
+      expect(wrapper).toBeInstanceOf(HTMLElement);
+      expect(
+        Array.from(wrapper?.classList ?? []).filter(name =>
+          name.startsWith('astryx-'),
+        ),
+      ).toEqual([]);
+      expect(
+        container.querySelector('.astryx-transfer-list-collection'),
+      ).toBeNull();
+    });
+
     it('uses one divided collection with direction-neutral row actions', () => {
       const {container} = render(
         <ControlledTransferList
@@ -218,13 +237,9 @@ describe('TransferList', () => {
         />,
       );
 
-      const collection = container.querySelector(
-        '.astryx-transfer-list-collection',
-      );
-      expect(collection).toBeInTheDocument();
-      expect(
-        collection?.querySelectorAll(':scope > .astryx-transfer-list-panel'),
-      ).toHaveLength(2);
+      const panels = container.querySelectorAll('.astryx-transfer-list-panel');
+      expect(panels).toHaveLength(2);
+      expect(panels[0]?.parentElement).toBe(panels[1]?.parentElement);
 
       expect(screen.queryByText('2 items')).not.toBeInTheDocument();
       expect(screen.getByRole('button', {name: 'Clear'})).toHaveAttribute(
