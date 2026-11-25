@@ -375,9 +375,9 @@ const LANDSCAPE_COVER = 200;
 const LANDSCAPE_LIMIT =
   LANDSCAPE.height - LANDSCAPE_COVER - LAYER_KEYBOARD_CLEARANCE_PX;
 
-async function openTallStoryNearEnd(page: Page) {
+async function openTallStoryNearEnd(page: Page, viewport = LANDSCAPE) {
   await installKeyboard(page);
-  await page.setViewportSize(LANDSCAPE);
+  await page.setViewportSize(viewport);
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-selector--flipped-overlay-beside-keyboard&viewMode=story`,
     {waitUntil: 'load'},
@@ -568,5 +568,37 @@ test('a list flipped above its trigger by an option that grows shrinks to the ro
     expect(facts.height).toBeCloseTo(naturalHeight, 0);
     expect(facts.capVar).toBe('100vh');
     expect(facts.inlineMaxHeight).toBe('');
+  }).toPass({timeout: 3_000});
+});
+
+test('a flipped list in a short viewport with no keyboard stays within both gutters', async ({
+  page,
+}) => {
+  const shortViewport = {width: 844, height: 280};
+  const trigger = await openTallStoryNearEnd(page, shortViewport);
+  await trigger.click();
+  const listbox = page.getByRole('listbox');
+  await expect(listbox).toBeVisible();
+  await openEnded(page);
+
+  await expect(async () => {
+    const facts = await listbox.evaluate(list => {
+      const box = list.getBoundingClientRect();
+      const layer = list.closest<HTMLElement>('[popover]');
+      const layerBox = layer?.getBoundingClientRect();
+      return {
+        top: box.top,
+        bottom: box.bottom,
+        layerBottom: layerBox?.bottom ?? Number.NaN,
+        scrolls: list.scrollHeight > list.clientHeight,
+      };
+    });
+    const detail = JSON.stringify({...facts, height: shortViewport.height});
+    expect(facts.top, detail).toBeGreaterThanOrEqual(15.5);
+    expect(facts.bottom, detail).toBeLessThanOrEqual(
+      shortViewport.height - 15.5,
+    );
+    expect(facts.bottom, detail).toBeLessThanOrEqual(facts.layerBottom + 0.5);
+    expect(facts.scrolls, detail).toBe(true);
   }).toPass({timeout: 3_000});
 });

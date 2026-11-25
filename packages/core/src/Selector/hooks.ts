@@ -314,11 +314,12 @@ export function useSelectedItemOverlayMargin({
       belowAnchor = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
       // A flip swaps the block margins, so this margin sets the list's end
       // from the anchor's top. It puts the list's top at the clamped top, or
-      // lifts the list's end above a software keyboard.
+      // lifts the list's end above a software keyboard. With no keyboard up,
+      // the inset falls back to the second gutter so both viewport gutters hold.
       const flipped = anchorTop - placement.clampedTop - listboxHeight;
       const keyboardEnd = anchorTop - viewport;
       aboveAnchor = `max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px)))`;
-      flippedMaxHeight = `min(300px, calc(${viewport}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px) - ${gutter}px))`;
+      flippedMaxHeight = `min(300px, calc(${viewport}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${gutter}px) - ${gutter}px))`;
     }
     // At the open, the browser picks the layer's side after this margin
     // applies. The margin below the anchor always fits there, so the layer
