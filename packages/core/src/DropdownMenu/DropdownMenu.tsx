@@ -650,7 +650,10 @@ function DropdownMenuBottomSheet({
   const viewHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousSubmenuDepthRef = useRef(0);
   const [internalIsOpen, setInternalIsOpen] = useState(false);
-  const [submenuPath, setSubmenuPath] = useState<DropdownMenuItemData[]>([]);
+  // The open sub-menus, outermost first, as keys into the current `items`:
+  // the row's `id`, else its position. The rows render from the current
+  // `items`, so a re-render shows a sub-menu's new labels and checks.
+  const [submenuPath, setSubmenuPath] = useState<SubmenuKey[]>([]);
   // A level whose label is not a string is named by the label's text, read
   // from its row when the level opened.
   const [submenuTitles, setSubmenuTitles] = useState<(string | undefined)[]>(
@@ -683,13 +686,27 @@ function DropdownMenuBottomSheet({
     (renderTrigger != null
       ? resolveCustomTriggerMenuName(rest['aria-label'], triggerName)
       : undefined) ?? button.label;
-  const currentSubmenu = submenuPath.at(-1);
+  const openSubmenus = resolveSubmenuPath(items, submenuPath);
+  const currentSubmenu = openSubmenus.at(-1);
   const currentItems = currentSubmenu?.items ?? items;
+  // A sub-menu whose row left `items`, or has no rows left, closes back to the
+  // deepest level that still resolves. Its key goes too, so the row coming
+  // back does not reopen it.
+  const submenuDepth = openSubmenus.length;
+  if (submenuDepth < submenuPath.length) {
+    // Updaters, so a close in the same render keeps its reset to the root.
+    setSubmenuPath(path => path.slice(0, submenuDepth));
+    setSubmenuTitles(titles => titles.slice(0, submenuDepth));
+  }
+  const submenuKey = submenuPath
+    .slice(0, submenuDepth)
+    .map(key => key.id ?? `#${key.index}`)
+    .join('/');
   const currentTitle = currentSubmenu?.label ?? rootTitle;
   const sheetLabel =
     typeof currentTitle === 'string'
       ? currentTitle
-      : (submenuTitles.at(-1) ?? rootTitle);
+      : (submenuTitles[submenuDepth - 1] ?? rootTitle);
 
   const setOpen = useCallback(
     (nextIsOpen: boolean) => {
@@ -765,22 +782,25 @@ function DropdownMenuBottomSheet({
     };
     // Re-run only on open or a sub-menu change. A new `items` array from a
     // parent render must not move focus.
-  }, [currentSubmenu, isOpen]);
+  }, [submenuKey, isOpen]);
 
+  // Syncs DOM focus with the level the sheet shows: when the open depth
+  // changes, focus moves to that level's heading after the frame that draws
+  // it.
   useEffect(() => {
     if (!isOpen) {
       previousSubmenuDepthRef.current = 0;
       return;
     }
-    if (submenuPath.length === previousSubmenuDepthRef.current) {
+    if (submenuDepth === previousSubmenuDepthRef.current) {
       return;
     }
-    previousSubmenuDepthRef.current = submenuPath.length;
+    previousSubmenuDepthRef.current = submenuDepth;
     const frame = requestAnimationFrame(() => {
       viewHeadingRef.current?.focus({preventScroll: true});
     });
     return () => cancelAnimationFrame(frame);
-  }, [isOpen, submenuPath.length]);
+  }, [isOpen, submenuDepth]);
 
   const handleSheetTriggerPointerDown = () => {
     openModalityRef.current = 'pointer';
@@ -816,7 +836,7 @@ function DropdownMenuBottomSheet({
       tabIndex={-1}
       xstyle={[
         bottomSheetStyles.viewHeading,
-        submenuPath.length === 0 && [
+        submenuDepth === 0 && [
           bottomSheetStyles.rootHeading,
           menuBottomSheetStyles.headingAlone,
         ],
@@ -898,7 +918,7 @@ function DropdownMenuBottomSheet({
             className,
             style,
           )}>
-          {submenuPath.length > 0 ? (
+          {submenuDepth > 0 ? (
             <div {...stylex.props(bottomSheetStyles.header)}>
               <Button
                 label={backLabel}
@@ -913,8 +933,8 @@ function DropdownMenuBottomSheet({
                 }
                 isIconOnly
                 onClick={() => {
-                  setSubmenuPath(path => path.slice(0, -1));
-                  setSubmenuTitles(titles => titles.slice(0, -1));
+                  setSubmenuPath(path => path.slice(0, submenuDepth - 1));
+                  setSubmenuTitles(titles => titles.slice(0, submenuDepth - 1));
                 }}
               />
               {viewHeading}
@@ -929,8 +949,15 @@ function DropdownMenuBottomSheet({
             items={currentItems}
             onSelect={handleSelect}
             onOpenSubmenu={(item, title) => {
-              setSubmenuPath(path => [...path, item]);
-              setSubmenuTitles(titles => [...titles, title]);
+              const key = {
+                id: item.id,
+                index: rowsOf(currentItems).indexOf(item),
+              };
+              setSubmenuPath(path => [...path.slice(0, submenuDepth), key]);
+              setSubmenuTitles(titles => [
+                ...titles.slice(0, submenuDepth),
+                title,
+              ]);
             }}
           />
           {isRenderable(footer) && (
@@ -2073,3 +2100,45 @@ export function DropdownMenu(props: DropdownMenuProps) {
 }
 
 DropdownMenu.displayName = 'DropdownMenu';
+
+/** An open sub-menu's row: its `id`, else its position among its level's rows. */
+interface SubmenuKey {
+  readonly id: string | undefined;
+  readonly index: number;
+}
+
+/**
+ * The open sub-menus' rows in the current `items`, outermost first. It stops
+ * at the first key that no longer names a row with rows of its own.
+ */
+function resolveSubmenuPath(
+  items: ReadonlyArray<DropdownMenuOption>,
+  path: ReadonlyArray<SubmenuKey>,
+): DropdownMenuItemData[] {
+  const resolved: DropdownMenuItemData[] = [];
+  let level = items;
+  for (const key of path) {
+    const rows = rowsOf(level);
+    const row =
+      key.id != null ? rows.find(item => item.id === key.id) : rows[key.index];
+    if (row?.items == null || row.items.length === 0) {
+      break;
+    }
+    resolved.push(row);
+    level = row.items;
+  }
+  return resolved;
+}
+
+/** A level's rows in order, with each section's rows in its place. */
+function rowsOf(
+  level: ReadonlyArray<DropdownMenuOption>,
+): DropdownMenuItemData[] {
+  return level.flatMap(option =>
+    'type' in option
+      ? option.type === 'section'
+        ? option.items
+        : []
+      : [option],
+  );
+}
