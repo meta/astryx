@@ -88,9 +88,10 @@ contract a surface folder keeps for base imports
 capability's own import (a Table plugin's folder index and the modules it
 re-exports, and `SnapPaging/SnapPaging`). INV7's wiring lives in base code:
 the component's own modules or the capability's own import. A wiring module
-such as the Table's `useTableRowsVirtualization` stays base code while it
-imports no engine code; its first static import of engine code is a
-crossing.
+such as the Table's `tableColumnWindowing` stays base code while it imports
+no engine code; its first static import of engine code is a crossing. A
+virtualization hook carries its window in the capability value, so only the
+hook's own import reaches the engine.
 
 The shared module loader (`utils/moduleLoader.ts`, `createModuleLoader`) holds
 one pending load per module, caches a success, and resets after a failure.
@@ -237,20 +238,19 @@ one pending load per module, caches a success, and resets after a failure.
 
 ### Allowlist
 
-| Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                                                        |
-| ----------------------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
-| `Text/TruncationTooltip` → `Layer/gestureCounter`                 | Text, Heading, Button, IconButton, Link, Table | 1.7 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer; the row moves with the recognizer |
-| `Button/Button` → `Tooltip/useTooltip`                            | Button, IconButton                             | 19.5 KB                | INV1       | Button's tooltip layer code is lazy                                                                    |
-| `Link/Link` → `Tooltip`                                           | Link                                           | 21.6 KB                | INV1       | Link's tooltip layer code is lazy                                                                      |
-| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 88.5 KB                | INV1       | cells without actions reach no menu module                                                             |
-| `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.6 KB                 | INV7       | a Table that never windows reaches neither the controller nor its engine                               |
+| Crossing (base module → module it imports statically) | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                                                        |
+| ----------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
+| `Text/TruncationTooltip` → `Layer/gestureCounter`     | Text, Heading, Button, IconButton, Link, Table | 1.7 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer; the row moves with the recognizer |
+| `Button/Button` → `Tooltip/useTooltip`                | Button, IconButton                             | 19.5 KB                | INV1       | Button's tooltip layer code is lazy                                                                    |
+| `Link/Link` → `Tooltip`                               | Link                                           | 21.6 KB                | INV1       | Link's tooltip layer code is lazy                                                                      |
+| `Table/tableContextMenu` → `ContextMenu`              | Table                                          | 88.5 KB                | INV1       | cells without actions reach no menu module                                                             |
 
 Costs are the check's own printout in CI: each crossing's removal from the
 entry with every other crossing kept, in the entry build above. A local run
 on another platform or Node version can print gzip sizes a few tenths of a KB
 apart. Rows share modules, so they do not add up. The truncation tooltip's touch code costs Button,
 IconButton, Link, and Table nothing on its own, because another of their
-crossings brings the same module. Table carries 134.5 KB eager.
+crossings brings the same module. Table carries 121.3 KB eager.
 
 ### Must not reach
 
@@ -292,8 +292,6 @@ an allowlist row does.
 - INV1 gap: Table's import reaches the cell context menu, 88.5 KB gzip, for
   cells with no actions, while `component:TableCell` PR1 loads a menu only
   when actions are given.
-- INV7 gap: Table's import reaches the window controller and the shared
-  windowing module, 3.6 KB gzip, for a Table that never windows.
 - INV3 gap: no record says how a tooltip's description reaches assistive
   technology before its surface loads, for the triggers whose tooltip is
   their description.
