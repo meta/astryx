@@ -6,8 +6,10 @@
  * @input Uses React, StyleX, useLayer, shared layer dismissal, the lazily
  *   loaded menu sheet (DropdownMenu/lazyMenuBottomSheet), useListFocus, and the
  *   shared menu-presentation resolver
- * @output Exports ContextMenu with cursor-popover and touch-sheet presentations
- * @position Core implementation; consumed by index.ts
+ * @output Exports ContextMenu with cursor-popover and touch-sheet presentations,
+ *   and ContextMenuAttached, the same menu for the element createContextMenu
+ *   attaches it to (internal)
+ * @position Core implementation; consumed by index.ts and createContextMenu.tsx
  *
  * Right-click context menu positioned at the cursor. The cursor point is
  * captured as an offset *inside the trigger* and materialized as a 1px
@@ -36,6 +38,7 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/ContextMenu/ContextMenu.doc.mjs
  * - /packages/core/src/ContextMenu/ContextMenu.test.tsx
+ * - /packages/core/src/ContextMenu/createContextMenu.tsx (ContextMenuAttached)
  * - /packages/core/src/ContextMenu/index.ts
  * - /apps/storybook/stories/ContextMenu.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/ContextMenu/ (showcase blocks)
@@ -45,6 +48,7 @@ import React, {
   useCallback,
   useEffect,
   useId,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -144,6 +148,12 @@ const styles = stylex.create({
     width: '1px',
     height: '1px',
     pointerEvents: 'none',
+  },
+  // The headless context menu's anchor: it lives in the factory's own
+  // container, outside the element, at a client point
+  // (createContextMenu.tsx).
+  cursorAnchorAttached: {
+    position: 'fixed',
   },
   menu: {
     boxSizing: 'border-box',
@@ -259,6 +269,31 @@ function keepAnchorInside(offset: number, size: number): number {
   return offset > size - 1 && offset <= size ? Math.max(size - 1, 0) : offset;
 }
 
+/**
+ * The `left` and `top` that put a fixed box's corner at a client point. A
+ * fixed box's containing block is the viewport unless an ancestor sets one
+ * up (a transform, a filter, `contain: paint`), as a Drawer's dialog does
+ * while it is open: the box is placed at two offsets, where it lands is
+ * measured, and the point is mapped through that block's offset and scale.
+ */
+function fixedOffsetOfClientPoint(
+  box: HTMLElement,
+  point: {x: number; y: number},
+): {x: number; y: number} {
+  box.style.left = '0px';
+  box.style.top = '0px';
+  const origin = box.getBoundingClientRect();
+  box.style.left = '100px';
+  box.style.top = '100px';
+  const shifted = box.getBoundingClientRect();
+  const scaleX = (shifted.left - origin.left) / 100 || 1;
+  const scaleY = (shifted.top - origin.top) / 100 || 1;
+  return {
+    x: (point.x - origin.left) / scaleX,
+    y: (point.y - origin.top) / scaleY,
+  };
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -333,6 +368,45 @@ interface ContextMenuCompoundProps extends ContextMenuBaseProps {
 
 export type ContextMenuProps = ContextMenuDataProps | ContextMenuCompoundProps;
 
+/**
+ * @internal A request the headless context menu forwards to the menu
+ * (createContextMenu.tsx): what made it, and its client point, none for a
+ * key or for `open()` without one.
+ */
+export interface ContextMenuAttachedRequest {
+  readonly kind: 'hold' | 'pointer' | 'keyboard' | 'open';
+  readonly point: {readonly x: number; readonly y: number} | null;
+}
+
+/** @internal How the headless context menu opens and closes the menu. */
+export interface ContextMenuAttachedHandle {
+  open(request: ContextMenuAttachedRequest): void;
+  close(): void;
+}
+
+/**
+ * @internal The element the headless context menu attaches the menu to,
+ * which is the trigger, and the handle its own open() and close() reach the
+ * menu through.
+ */
+export interface ContextMenuAttachment {
+  readonly element: HTMLElement;
+  readonly handleRef: React.Ref<ContextMenuAttachedHandle | null>;
+}
+
+/** @internal The menu createContextMenu renders for its element. */
+export type ContextMenuAttachedProps = Pick<
+  ContextMenuBaseProps,
+  'label' | 'isDisabled' | 'onOpenChange' | 'presentation'
+> & {attachment: ContextMenuAttachment} & (
+    | {items: ContextMenuOption[]; menuContent?: undefined}
+    | {items?: undefined; menuContent: ReactNode}
+  );
+
+type ContextMenuRootProps = ContextMenuProps & {
+  attachment?: ContextMenuAttachment | null;
+};
+
 // =============================================================================
 // ContextMenu
 // =============================================================================
@@ -360,7 +434,17 @@ export type ContextMenuProps = ContextMenuDataProps | ContextMenuCompoundProps;
  * </ContextMenu>
  * ```
  */
-export function ContextMenu({
+export function ContextMenu(props: ContextMenuProps) {
+  return <ContextMenuRoot {...props} />;
+}
+
+/**
+ * ContextMenu's menu and its trigger, or, given an `attachment`, the menu
+ * alone for the element the headless context menu attaches it to
+ * (createContextMenu.tsx): that element is the trigger, and the factory's
+ * requests reach the menu through the attachment's handle.
+ */
+function ContextMenuRoot({
   children,
   menuWidth,
   size = 'md',
@@ -380,8 +464,9 @@ export function ContextMenu({
   onTouchEnd: onTouchEndProp,
   onTouchCancel: onTouchCancelProp,
   'data-testid': testId,
+  attachment = null,
   ...rest
-}: ContextMenuProps) {
+}: ContextMenuRootProps) {
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.contextMenu.label');
   const backLabel = t('@astryx.dropdownMenu.back');
@@ -467,13 +552,20 @@ export function ContextMenu({
     onHide: useCallback(() => {
       setIsOpen(false);
       onOpenChange?.(false);
-      // Restore focus to the element that was focused before opening.
+      // Restore focus to the element that was focused before opening. An
+      // attached element can sit in a shadow root, which `document.contains`
+      // does not see into.
       const toRestore = triggerFocusRef.current;
       triggerFocusRef.current = null;
-      if (toRestore && document.contains(toRestore)) {
+      if (
+        toRestore &&
+        (attachment != null
+          ? toRestore.isConnected
+          : document.contains(toRestore))
+      ) {
         toRestore.focus();
       }
-    }, [onOpenChange]),
+    }, [onOpenChange, attachment]),
     onShow: useCallback(() => {
       setIsOpen(true);
       onOpenChange?.(true);
@@ -686,6 +778,47 @@ export function ContextMenu({
       }
     },
     [getAnchorBaseRect, layer, updateOpenState, usesBottomSheet],
+  );
+
+  // The headless context menu's open (createContextMenu.tsx). Its anchor is
+  // a fixed box in the factory's own container, at the request's client
+  // point. A key's request, and open() without a point, open at the
+  // element's bottom-left corner, as the trigger's keyboard path does.
+  // Focus returns to the element on close.
+  const openAttached = useCallback(
+    (request: ContextMenuAttachedRequest) => {
+      if (attachment == null || isDisabled) {
+        return;
+      }
+      const {element} = attachment;
+      const box = element.getBoundingClientRect();
+      const point = request.point ?? {x: box.left, y: box.bottom};
+      const anchorEl = cursorAnchorRef.current;
+      const offset =
+        anchorEl != null ? fixedOffsetOfClientPoint(anchorEl, point) : point;
+      positionRef.current = offset;
+      if (anchorEl != null) {
+        anchorEl.style.left = `${offset.x}px`;
+        anchorEl.style.top = `${offset.y}px`;
+      }
+      // A held finger is still down: its compatibility mousedown belongs to
+      // the press that opened the menu.
+      openingGestureRef.current =
+        request.kind === 'hold' ? currentGesture() : null;
+      triggerFocusRef.current = element;
+      if (usesBottomSheet) {
+        updateOpenState(true);
+      } else {
+        focusOnShowRef.current = true;
+        layer.show();
+      }
+    },
+    [attachment, isDisabled, layer, updateOpenState, usesBottomSheet],
+  );
+  useImperativeHandle(
+    attachment?.handleRef,
+    () => ({open: openAttached, close: () => closeMenu()}),
+    [openAttached, closeMenu],
   );
 
   const handleContextMenu = useCallback(
@@ -944,11 +1077,57 @@ export function ContextMenu({
   const SheetForContent = usesSheetActionList
     ? MenuBottomSheet
     : MenuBottomSheetWithoutActionList;
+  const triggerElementRef = useMergedRefs(ref, triggerRef);
+  const cursorAnchorElementRef = useMergedRefs(cursorAnchorRef, layer.ref);
+
+  const cursorAnchor = (
+    <span
+      ref={cursorAnchorElementRef}
+      aria-hidden="true"
+      {...mergeProps(
+        stylex.props(
+          styles.cursorAnchor,
+          attachment != null && styles.cursorAnchorAttached,
+        ),
+        {
+          style: {
+            left: `${positionRef.current.x}px`,
+            top: `${positionRef.current.y}px`,
+          },
+        },
+      )}
+    />
+  );
+  const surface = usesBottomSheet ? (
+    <SheetForContent
+      isOpen={isOpen}
+      onOpenChange={updateOpenState}
+      label={sheetLabel}>
+      {renderedBottomSheetContent}
+    </SheetForContent>
+  ) : (
+    layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
+      placement: 'below',
+      alignment: 'start',
+      xstyle: [popoverXstyle, layerAnimations.below],
+    })
+  );
+
+  // The headless context menu's element is the trigger: the menu adds no
+  // wrapper around it.
+  if (attachment != null) {
+    return (
+      <>
+        {cursorAnchor}
+        {surface}
+      </>
+    );
+  }
 
   return (
     <>
       <TriggerElement
-        ref={useMergedRefs(ref, triggerRef)}
+        ref={triggerElementRef}
         {...triggerProps}
         onContextMenu={handleTriggerContextMenu}
         onTouchStart={handleTriggerTouchStart}
@@ -965,34 +1144,20 @@ export function ContextMenu({
             : []),
         )}>
         {children}
-        <span
-          ref={useMergedRefs(cursorAnchorRef, layer.ref)}
-          aria-hidden="true"
-          {...mergeProps(stylex.props(styles.cursorAnchor), {
-            style: {
-              left: `${positionRef.current.x}px`,
-              top: `${positionRef.current.y}px`,
-            },
-          })}
-        />
+        {cursorAnchor}
       </TriggerElement>
 
-      {usesBottomSheet ? (
-        <SheetForContent
-          isOpen={isOpen}
-          onOpenChange={updateOpenState}
-          label={sheetLabel}>
-          {renderedBottomSheetContent}
-        </SheetForContent>
-      ) : (
-        layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
-          placement: 'below',
-          alignment: 'start',
-          xstyle: [popoverXstyle, layerAnimations.below],
-        })
-      )}
+      {surface}
     </>
   );
 }
 
 ContextMenu.displayName = 'ContextMenu';
+
+/**
+ * @internal The menu createContextMenu renders for its element, which is the
+ * trigger.
+ */
+export function ContextMenuAttached(props: ContextMenuAttachedProps) {
+  return <ContextMenuRoot {...props}>{null}</ContextMenuRoot>;
+}
