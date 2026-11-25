@@ -35,6 +35,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
+import {currentUid, isPrivateDir} from '../packages/cli/foundation/env/private-dir.mjs';
 import {userCacheDir} from '../packages/cli/foundation/env/user-dirs.mjs';
 
 const require = createRequire(import.meta.url);
@@ -935,25 +936,23 @@ Only record what you actually measured.`;
 /** The reused shallow clone. One per user, not one per run. */
 export const WIKI_CACHE_DIR = path.join(userCacheDir(), 'score-ledger-wiki');
 
-function assertSafeOwnedDir(dir) {
-  let st;
+function pathExists(target) {
   try {
-    st = fs.lstatSync(dir);
+    fs.lstatSync(target);
+    return true;
   } catch (e) {
     if (e && e.code === 'ENOENT') return false;
     throw e;
   }
+}
+
+function assertSafeWindowsDir(dir) {
+  const st = fs.lstatSync(dir);
   if (st.isSymbolicLink() || !st.isDirectory()) {
     throw new Error(
       `refusing to use unsafe wiki cache path (symlink or non-directory): ${dir}`,
     );
   }
-  if (typeof process.getuid === 'function' && st.uid !== process.getuid()) {
-    throw new Error(
-      `refusing to use wiki cache directory owned by uid ${st.uid}: ${dir}`,
-    );
-  }
-  return true;
 }
 
 function git(cwd, ...argv) {
@@ -982,27 +981,64 @@ function tryGit(cwd, ...argv) {
  * — the cache is an optimisation, never a state carrier.
  */
 export function ensureWikiClone(dir = WIKI_CACHE_DIR, remote = WIKI_REMOTE) {
-  const exists = assertSafeOwnedDir(dir);
   const gitDir = path.join(dir, '.git');
-  if (exists && assertSafeOwnedDir(gitDir)) {
-    git(dir, 'remote', 'set-url', 'origin', remote);
-    git(dir, 'fetch', '--depth', '1', 'origin', WIKI_BRANCH);
-  } else {
-    if (exists) {
-      fs.rmSync(dir, {recursive: true, force: true});
+  if (currentUid() != null) {
+    if (!pathExists(dir)) {
+      fs.mkdirSync(dir, {recursive: true, mode: 0o700});
     }
-    fs.mkdirSync(dir, {recursive: true, mode: 0o700});
-    assertSafeOwnedDir(dir);
-    git(
-      path.dirname(dir),
-      'clone',
-      '--depth',
-      '1',
-      '--branch',
-      WIKI_BRANCH,
-      remote,
-      dir,
-    );
+    if (!isPrivateDir(dir)) {
+      throw new Error(
+        `refusing to use unsafe wiki cache directory (must be a private mode-0700 directory owned by current user): ${dir}`,
+      );
+    }
+    if (pathExists(gitDir)) {
+      if (!isPrivateDir(gitDir)) {
+        throw new Error(
+          `refusing to use unsafe wiki cache .git directory: ${gitDir}`,
+        );
+      }
+      git(dir, 'remote', 'set-url', 'origin', remote);
+      git(dir, 'fetch', '--depth', '1', 'origin', WIKI_BRANCH);
+    } else {
+      git(
+        path.dirname(dir),
+        'clone',
+        '--depth',
+        '1',
+        '--branch',
+        WIKI_BRANCH,
+        remote,
+        dir,
+      );
+      fs.chmodSync(gitDir, 0o700);
+      if (!isPrivateDir(gitDir)) {
+        throw new Error(
+          `refusing to use unsafe wiki cache .git directory: ${gitDir}`,
+        );
+      }
+    }
+  } else {
+    if (pathExists(dir)) {
+      assertSafeWindowsDir(dir);
+    } else {
+      fs.mkdirSync(dir, {recursive: true});
+    }
+    if (pathExists(gitDir)) {
+      assertSafeWindowsDir(gitDir);
+      git(dir, 'remote', 'set-url', 'origin', remote);
+      git(dir, 'fetch', '--depth', '1', 'origin', WIKI_BRANCH);
+    } else {
+      git(
+        path.dirname(dir),
+        'clone',
+        '--depth',
+        '1',
+        '--branch',
+        WIKI_BRANCH,
+        remote,
+        dir,
+      );
+    }
   }
   git(dir, 'checkout', '-B', WIKI_BRANCH, `origin/${WIKI_BRANCH}`);
   git(dir, 'reset', '--hard', `origin/${WIKI_BRANCH}`);
@@ -2145,7 +2181,7 @@ async function cmdFileIssues(args) {
       body,
     );
     const number = Number(url.split('/').pop());
-    if (!Number.isInteger(number)) {
+    if (!Number.isInteger(number) || number <= 0) {
       console.error(
         `score-ledger: could not parse an issue number out of "${url}"`,
       );

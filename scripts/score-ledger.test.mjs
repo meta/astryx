@@ -1318,7 +1318,7 @@ describe('the generated table is gone', () => {
 });
 
 describe('hardening checks', () => {
-  it('ensureWikiClone clones fresh, reuses an existing clone, and rejects symlinked cache paths', () => {
+  it('ensureWikiClone clones fresh, reuses an existing clone, and rejects unsafe cache paths', () => {
     const wiki = makeWiki(ledgerWith());
     const cacheDir = path.join(wiki.root, 'cache-clone');
     const remote = `file://${wiki.bare}`;
@@ -1326,13 +1326,21 @@ describe('hardening checks', () => {
     ensureWikiClone(cacheDir, remote);
     expect(fs.existsSync(path.join(cacheDir, 'component-scores.json'))).toBe(true);
 
+    const sentinel = path.join(cacheDir, '.git', 'reuse-sentinel');
+    fs.writeFileSync(sentinel, 'keep');
     fs.writeFileSync(path.join(cacheDir, 'dirty.txt'), 'leftover');
     ensureWikiClone(cacheDir, remote);
     expect(fs.existsSync(path.join(cacheDir, 'dirty.txt'))).toBe(false);
+    expect(fs.existsSync(sentinel)).toBe(true);
 
     const linkDir = path.join(wiki.root, 'symlink-cache');
     fs.symlinkSync(cacheDir, linkDir);
-    expect(() => ensureWikiClone(linkDir, remote)).toThrow(/symlink/);
+    expect(() => ensureWikiClone(linkDir, remote)).toThrow(/unsafe wiki cache/);
+
+    if (typeof process.getuid === 'function') {
+      fs.chmodSync(cacheDir, 0o777);
+      expect(() => ensureWikiClone(cacheDir, remote)).toThrow(/unsafe wiki cache/);
+    }
   });
 
   it('applyScorecard and --file-issues reject non-positive block.issue before invoking gh', () => {
@@ -1376,7 +1384,7 @@ describe('hardening checks', () => {
       env: {...process.env, PATH: `${bin}:${process.env.PATH}`},
     });
     expect(r.code).toBe(1);
-    expect(r.err).toContain('invalid issue number on B2: 0');
+    expect(r.out).toContain('invalid issue number on B2: 0');
     expect(fs.existsSync(marker)).toBe(false);
   });
 });
