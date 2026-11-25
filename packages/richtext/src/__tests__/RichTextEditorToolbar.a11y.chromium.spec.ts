@@ -1,20 +1,20 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope core/Markdown richtext/* ^(apps/storybook/stories/RichTextEditor\.(markdownParity|stories)|packages/richtext/src/__tests__/(MarkdownParitySandbox|RichTextView|RichTextEditorToolbar)) ^packages/richtext/src/
+// @pr-a11y scope core/Markdown richtext/* ^(apps/storybook/stories/RichTextEditor\.(markdownParity|stories|playground)|packages/richtext/src/__tests__/(MarkdownParitySandbox|RichTextView|RichTextEditorToolbar)) ^packages/richtext/src/
 
 /**
  * @file RichTextEditorToolbar.a11y.chromium.spec.ts
- * @input The built Storybook's "With toolbar" and "With links" RichTextEditor
- *   stories.
- * @output Real-browser proof that every toolbar separator, the one before
- *   endContent too, spans the controls. That the link popover opens above the
- *   toolbar, below it with no room above, and at phone width fits the screen
- *   on one row. That the toolbar's action row scrolls at phone
- *   widths instead of squeezing a control: the block-format selector keeps its
- *   whole label, no control overlaps its neighbour, and every control keeps a
- *   24px target. And that the Link button's popover keeps the editor's
- *   selection through the keyboard: Escape returns focus and the selection to
- *   the editor, a refused URL keeps focus in the field, and Enter applies the
- *   link without the key reaching the editor as a new line.
+ * @input The built Storybook's "With toolbar", "With links", "With links no
+ *   room above" and "Playground" RichTextEditor stories.
+ * @output Real-browser proof of the toolbar's layout and link popover. The
+ *   action row scrolls at phone widths instead of squeezing a control: the
+ *   block-format selector keeps its whole label, no control overlaps its
+ *   neighbour, and every control keeps a 24px target. Every separator spans
+ *   the controls, the one before endContent too. The Link button's popover
+ *   keeps the editor's selection through the keyboard: Escape returns focus
+ *   and the selection to the editor, a refused URL keeps focus in the field,
+ *   and Enter applies the link without the key reaching the editor as a new
+ *   line. The popover opens above the toolbar, flips below the Link button
+ *   with no room above, and at phone width fits the screen on one row.
  *
  * Run after building Storybook:
  *   pnpm storybook:build
@@ -22,6 +22,7 @@
  */
 
 import AxeBuilder from '@axe-core/playwright';
+import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   expect,
   test,
@@ -193,6 +194,7 @@ test('every separator spans the controls, the one before endContent too', async 
     `${storybook.origin}/iframe.html?id=${PLAYGROUND_STORY}&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
     {waitUntil: 'load'},
   );
+  await holdMotionStill(page);
   const toolbar = page.getByRole('toolbar', {name: 'Text formatting'});
   await expect(toolbar.getByRole('button', {name: 'Table'})).toBeVisible();
   const heights = await toolbar.evaluate(root =>
@@ -213,6 +215,9 @@ async function openLinkPopover(page: Page, story: string, width: number) {
     `${storybook.origin}/iframe.html?id=${story}&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
     {waitUntil: 'load'},
   );
+  // The popover's open animation scales and moves it; hold it at its end
+  // state so its box is final.
+  await holdMotionStill(page);
   const editor = page.getByRole('textbox', {name: 'Notes'});
   await editor.click();
   await page.keyboard.type('Ship the notes.');
@@ -220,6 +225,11 @@ async function openLinkPopover(page: Page, story: string, width: number) {
   await page.keyboard.press('ControlOrMeta+k');
   const popover = page.getByRole('dialog', {name: 'Insert link'});
   await expect(popover).toBeVisible();
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(animation => animation.playState !== 'running'),
+  );
   const box = async (locator: Locator) => {
     const rect = await locator.boundingBox();
     if (rect == null) {

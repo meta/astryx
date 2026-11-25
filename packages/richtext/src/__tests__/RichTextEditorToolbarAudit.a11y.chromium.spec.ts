@@ -233,6 +233,10 @@ for (const mode of ['light', 'dark'] as const) {
         check(toolbar.name === 'Text formatting', `name ${toolbar.name}`);
         check(toolbar.tabStops === 1, `${toolbar.tabStops} tab stops`);
         check(
+          toolbar.separators.length >= 2,
+          `${toolbar.separators.length} separators`,
+        );
+        check(
           toolbar.separators.every(separator => separator.height >= 16),
           `separator heights ${toolbar.separators.map(s => s.height)}`,
         );
@@ -459,6 +463,7 @@ cases.push({
   viewport: DESKTOP,
   run: async (page, check, frame) => {
     const toolbar = await readToolbar(page);
+    check(toolbar.controls.length > 0, 'no controls found');
     const enabled = toolbar.controls.filter(control => !control.disabled);
     check(
       enabled.length === 0,
