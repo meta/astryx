@@ -425,10 +425,10 @@ async function drive(page: Page, scenario: Case) {
 }
 
 /**
- * The computed focus indicator on the active menu row, and the system colors
- * the browser can force it to. Forced colors replace the ring's token color
- * with a system color, and browsers choose different ones: Chromium uses
- * Highlight and Firefox uses CanvasText. Both stand out against Canvas.
+ * The computed focus indicator on the active menu row, and the page's system
+ * colors. Forced colors replace the ring's token color with a color that the
+ * browser chooses. Chromium uses Highlight. Firefox does not follow Highlight:
+ * its ring is the same as its CanvasText in every palette tested.
  */
 async function forcedColorsFocusIndicator(page: Page) {
   return page.locator(':focus').evaluate(node => {
@@ -442,7 +442,8 @@ async function forcedColorsFocusIndicator(page: Page) {
     };
     const style = getComputedStyle(node);
     return {
-      forcedRingColors: [systemColor('Highlight'), systemColor('CanvasText')],
+      highlight: systemColor('Highlight'),
+      canvasText: systemColor('CanvasText'),
       canvas: systemColor('Canvas'),
       color: style.outlineColor,
       style: style.outlineStyle,
@@ -991,7 +992,12 @@ async function capture(page: Page, scenario: Case) {
       expect(focusIndicator?.width ?? 0).toBeGreaterThanOrEqual(2);
       // Inset by the ring's own width (the focus-outline-width token).
       expect(focusIndicator?.offset).toBe(`-${focusIndicator?.width}px`);
-      expect(focusIndicator?.forcedRingColors).toContain(focusIndicator?.color);
+      const engine = page.context().browser()?.browserType().name();
+      expect(focusIndicator?.color).toBe(
+        engine === 'firefox'
+          ? focusIndicator?.canvasText
+          : focusIndicator?.highlight,
+      );
       expect(focusIndicator?.color).not.toBe(focusIndicator?.canvas);
     }
     if (scenario.forcedColors === 'before-control') {
