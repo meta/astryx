@@ -330,8 +330,6 @@ describe('useScrollableArea', () => {
     const viewport = screen.getByTestId('viewport');
     makeMeasurable(viewport);
     flushFrame();
-    // The content's own first report asks for one more measurement.
-    flushFrame();
     const calls: [boolean, boolean][] = [];
     const stop = subscribeScrollGeometry(viewport, (isContent, isLayout) =>
       calls.push([isContent, isLayout]),
@@ -384,6 +382,32 @@ describe('useScrollableArea', () => {
     expect(window.getComputedStyle).toHaveBeenCalledWith(viewport);
     expect(state().inline.isScrollable).toBe(true);
     expect(viewport).toHaveAttribute('tabindex', '0');
+  });
+
+  it('measures once at mount, though the viewport and the content both send a first notification', async () => {
+    mockOwnedComputedStyle();
+    render(<Fixture />);
+    makeMeasurable(screen.getByTestId('viewport'));
+
+    await act(async () => notifyFirstLayout());
+    expect(window.getComputedStyle).toHaveBeenCalled();
+    expect(frames).toHaveLength(0);
+
+    // A later content resize still measures.
+    const content = screen.getByTestId('content');
+    await act(async () => {
+      for (const callback of resizeObservers) {
+        callback(
+          [
+            {
+              target: content,
+            } as Partial<ResizeObserverEntry> as ResizeObserverEntry,
+          ],
+          {} as ResizeObserver,
+        );
+      }
+    });
+    expect(frames).toHaveLength(1);
   });
 
   it('lets no other signal read layout before the first resize notification', async () => {
