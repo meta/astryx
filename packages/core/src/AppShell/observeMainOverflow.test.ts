@@ -6,6 +6,7 @@
  *   recorded resize observer, and frames run by hand
  * @output Regression coverage for measuring a scroll container that holds its
  *   content as direct children: no read before the first resize notification,
+ *   one measurement for that notification's delivery,
  *   font loads, the children's sizes, the children coming and going, unknown
  *   geometry, and stopping
  * @position Unit contract of AppShell's internal overflow observer;
@@ -212,10 +213,23 @@ describe('observeMainOverflow', () => {
     expect(onChange.mock.calls).toEqual([[false], [true]]);
   });
 
-  it('watches each direct child, so content growing inside main is measured', () => {
+  it('measures once as it starts, though main and each child send a first notification', async () => {
+    stop = observeMainOverflow(main, vi.fn());
+    // One delivery reports the children, then main.
+    for (const element of [...main.children, main]) {
+      notify(element);
+    }
+    await Promise.resolve();
+    expect(window.getComputedStyle).toHaveBeenCalledWith(main);
+    expect(frames).toEqual([]);
+  });
+
+  it('watches each direct child, so content growing inside main is measured', async () => {
     const onChange = vi.fn();
     stop = observeMainOverflow(main, onChange);
     notify(main);
+    // A later delivery.
+    await Promise.resolve();
     const second = main.querySelector('#second');
     expect(observed.has(main)).toBe(true);
     expect(observed.has(main.querySelector('#first') as Element)).toBe(true);

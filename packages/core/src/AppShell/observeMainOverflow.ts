@@ -94,13 +94,23 @@ export function observeMainOverflow(
   };
 
   // The first notification measures at once: the browser has just laid out,
-  // so the read forces no pass.
+  // so the read forces no pass. The other first notifications of main and
+  // its children come in the same delivery, and that measurement already
+  // read them. A microtask follows every callback of that delivery.
+  let isFirstDelivery = false;
   const onResize = () => {
+    if (isFirstDelivery) {
+      return;
+    }
     if (isLaidOut) {
       scheduleMeasure();
       return;
     }
     isLaidOut = true;
+    isFirstDelivery = true;
+    queueMicrotask(() => {
+      isFirstDelivery = false;
+    });
     measure();
   };
 

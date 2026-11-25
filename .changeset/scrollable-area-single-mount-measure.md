@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[perf] `ScrollableArea` and other components built on `useScrollableArea` measure once as they mount. The content box's first resize notification arrives with the viewport's, and the first measurement already reads it, so it no longer schedules a second full measurement for the next frame. A later content resize still measures.
+[perf] `ScrollableArea` and other components built on `useScrollableArea`, a scrolling `LayoutContent`, `LayoutPanel` or `StackItem`, and `AppShell`'s main region under `height="fill"` measure once as they mount. The first resize notifications of the region and of its content arrive together, and the first measurement already reads them, so they no longer schedule a second full measurement for the next frame. A later resize still measures.
 
 @bstcoc
