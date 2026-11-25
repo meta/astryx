@@ -146,10 +146,14 @@ export default function UseLongPressHookUsage() {
       openMenuAt({x: buttonRect.right + MENU_GAP, y: buttonRect.top}, 'button');
       return;
     }
+    const x =
+      buttonRect.left + MENU_WIDTH <= surfaceRight
+        ? buttonRect.left
+        : buttonRect.right - MENU_WIDTH;
     const y = buttonRect.bottom + MENU_GAP;
     const minSurfaceHeight =
       Math.max(0, Math.round(y - (surfaceRect?.top ?? 0))) + SURFACE_MIN_HEIGHT;
-    openMenuAt({x: buttonRect.left, y}, 'button', minSurfaceHeight);
+    openMenuAt({x, y}, 'button', minSurfaceHeight);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {

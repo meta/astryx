@@ -341,9 +341,9 @@ describe('useLongPressHookUsage example', () => {
     const belowRtl = openFrom(
       DOMRect.fromRect({x: 156, y: 64, width: 88, height: 40}),
     );
-    expect(belowRtl?.textContent).toContain('Opened by button at (156, 112)');
+    expect(belowRtl?.textContent).toContain('Opened by button at (64, 112)');
     expect(panelPosition(belowRtl)).toMatchObject({
-      left: 'clamp(0px, 156px, calc(100% - 180px))',
+      left: 'clamp(0px, 64px, calc(100% - 180px))',
       top: '112px',
       transform: 'translateY(min(0px, max(-112px, calc(216px - 100%))))',
     });
