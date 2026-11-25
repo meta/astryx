@@ -191,3 +191,72 @@ describe('PowerSearch — SSR', () => {
     await unmount();
   });
 });
+
+describe('PowerSearch — SSR of a relative date range', () => {
+  it('server-renders a now or relative range without its days, and hydrates without a mismatch across a day boundary', async () => {
+    const {PowerSearch} = await import('./PowerSearch');
+    const rangeConfig: PowerSearchConfig = {
+      name: 'Issues',
+      fields: [
+        {
+          key: 'win',
+          label: 'Win',
+          operators: [{key: 'in', label: 'in', value: {type: 'date_range'}}],
+        },
+      ],
+    };
+    const rangeFilters: PowerSearchFilter[] = [
+      {
+        field: 'win',
+        operator: 'in',
+        value: {
+          type: 'date_range',
+          value: {
+            start: {type: 'RELATIVE', backValue: 7, unit: 'day'},
+            end: {type: 'NOW'},
+          },
+        },
+      },
+    ];
+    const tree = (
+      <PowerSearch
+        config={rangeConfig}
+        filters={rangeFilters}
+        onChange={() => {}}
+        presentation="popover"
+      />
+    );
+    const now = vi.spyOn(Date, 'now');
+    // The server renders before UTC midnight, and the page hydrates after
+    // it, as a cached page does. The server has no clock reading to share,
+    // so the range reads without its days there.
+    now.mockReturnValue(Date.parse('2024-03-10T23:30:00Z'));
+    const html = renderToString(tree);
+    expect(html).toContain('date range');
+    expect(html).not.toContain('Mar 3');
+
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    now.mockReturnValue(Date.parse('2024-03-11T00:30:00Z'));
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const recoverableErrors: unknown[] = [];
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, tree, {
+        onRecoverableError: error => recoverableErrors.push(error),
+      });
+    });
+    expect(recoverableErrors).toEqual([]);
+    expect(consoleError).not.toHaveBeenCalled();
+    // Right after hydration the range reads the days it covers now.
+    expect((container.textContent ?? '').replace(/\s/g, ' ')).toContain(
+      'Mar 4 – 11, 2024',
+    );
+    await act(async () => {
+      root.unmount();
+    });
+  });
+});

@@ -147,6 +147,7 @@ function formatListText(
  * width budget; pass `Number.MAX_SAFE_INTEGER` for the untruncated text.
  * A `date_absolute` value is written in `calendar`, the calendar that the
  * provider resolves, and a `date_range` as its two days in the same zone.
+ * Pass `canReadClock` false on the server and in the hydrating render.
  * The list and nested summaries and a relative date resolve through the
  * catalog; several labels join as a list in the locale.
  */
@@ -158,6 +159,7 @@ export function formatTokenValueText(
   calendar: CalendarSystem,
   t: TranslatorFn,
   timezoneID?: string,
+  canReadClock = true,
 ): string | null {
   switch (filterValue.type) {
     case 'empty':
@@ -234,11 +236,18 @@ export function formatTokenValueText(
         maxLength,
       );
 
-    case 'date_range':
-      return truncateString(
-        formatDateRange(filterValue.value, locale, timezoneID, calendar),
-        maxLength,
+    case 'date_range': {
+      const days = formatDateRange(
+        filterValue.value,
+        locale,
+        timezoneID,
+        calendar,
+        canReadClock,
       );
+      return days == null
+        ? t('@astryx.powersearch.valueEditor.dateRange')
+        : truncateString(days, maxLength);
+    }
 
     case 'custom':
       if (operatorValue.type === 'custom') {

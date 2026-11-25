@@ -5277,10 +5277,11 @@ describe('PowerSearch sheet value text', () => {
     ).toBeTruthy();
   });
 
-  it("resolves the sheet's date-range and nested summaries through the catalog with the popover token's words", () => {
-    // The row's value resolves "date range" and "{n} filters" through
-    // `@astryx.powersearch.valueEditor.*` (ICU plural) so a locale can
-    // translate them, while in English they stay the popover token's words.
+  it("reads the sheet's date-range days and nested summary with the popover token's words", () => {
+    // The row reads a date range as its days, as the token does, and resolves
+    // "{n} filters" through `@astryx.powersearch.valueEditor.*` (ICU plural)
+    // so a locale can translate it, while in English it stays the popover
+    // token's words.
     // (A list collapses to "{n} items" only under the token's width budget;
     // the untruncated row lists it in full.)
     const nestedConfig: PowerSearchConfig = {

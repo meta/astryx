@@ -740,6 +740,10 @@ export function PowerSearch({
     type: 'idle',
   });
 
+  // The server and the hydrating render write a range's days only when no
+  // clock reading is needed, so the markup matches.
+  const isHydrating = useIsHydrating();
+
   // A default filter token's visible text: its label (field and operator)
   // and its value. The token's remove button and editor dialog are named by
   // the same text.
@@ -764,6 +768,7 @@ export function PowerSearch({
             calendar,
             t,
             timezoneID,
+            !isHydrating,
           )
         : null;
       return {
@@ -772,7 +777,7 @@ export function PowerSearch({
         full: value != null ? formatTokenText(t, label, value) : label,
       };
     },
-    [config, maxTokenLength, t, locale, timezoneID, calendar],
+    [config, maxTokenLength, t, locale, timezoneID, calendar, isHydrating],
   );
   // The built-in token being edited. A token from a `components` override
   // names itself, so its editor keeps the plain popover.
@@ -916,7 +921,13 @@ export function PowerSearch({
   const dateRangeDays = filters
     .map(filter =>
       filter.value.type === 'date_range'
-        ? formatDateRange(filter.value.value, locale, timezoneID, calendar)
+        ? formatDateRange(
+            filter.value.value,
+            locale,
+            timezoneID,
+            calendar,
+            !isHydrating,
+          )
         : '',
     )
     .join('|');
@@ -942,6 +953,7 @@ export function PowerSearch({
             locale,
             timezoneID,
             calendar,
+            !isHydrating,
           )
         : '';
 
@@ -969,6 +981,7 @@ export function PowerSearch({
     t,
     locale,
     calendar,
+    isHydrating,
     dateRangeDays,
   ]);
 

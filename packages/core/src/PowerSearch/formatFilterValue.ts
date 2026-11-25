@@ -105,14 +105,23 @@ export function formatDateAbsolute(
  * zone `resolveDateZone` names, as the range editor reads it. A `NOW` or
  * `RELATIVE` part resolves to an instant first. The locale writes the fields
  * both days share once, and one day alone when both parts fall on it.
+ * `canReadClock` is false on the server and in the hydrating render, which
+ * must write the same markup: a range with a `NOW` or `RELATIVE` part then
+ * has no reading, and the result is null.
  */
 export function formatDateRange(
   range: DateTimeRange,
   locale: Locale,
   timezoneID: string | undefined,
   calendar: CalendarSystem = 'gregory',
-): string {
-  const nowSeconds = Date.now() / 1000;
+  canReadClock = true,
+): string | null {
+  const readsClock =
+    range.start.type !== 'ABSOLUTE' || range.end.type !== 'ABSOLUTE';
+  if (readsClock && !canReadClock) {
+    return null;
+  }
+  const nowSeconds = readsClock ? Date.now() / 1000 : 0;
   const [start, end] = [range.start, range.end].map(
     part => new Date(resolveDateTimeRangePart(part, nowSeconds) * 1000),
   );
@@ -140,6 +149,7 @@ export function formatFilterValue(
   locale: Locale,
   timezoneID?: string,
   calendar: CalendarSystem = 'gregory',
+  canReadClock = true,
 ): string {
   switch (filterValue.type) {
     case 'empty':
@@ -252,11 +262,18 @@ export function formatFilterValue(
         ? relativeDateLabel(operatorValue, filterValue.value, t)
         : filterValue.value;
 
-    case 'date_range':
-      return truncate(
-        formatDateRange(filterValue.value, locale, timezoneID, calendar),
-        maxLength,
+    case 'date_range': {
+      const days = formatDateRange(
+        filterValue.value,
+        locale,
+        timezoneID,
+        calendar,
+        canReadClock,
       );
+      return days == null
+        ? t('@astryx.powersearch.valueEditor.dateRange')
+        : truncate(days, maxLength);
+    }
 
     case 'custom':
       if (operatorValue.type === 'custom') {
