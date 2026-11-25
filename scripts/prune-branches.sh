@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-# scripts/prune-branches.sh ? Delete remote branches with merged/closed PRs
+# scripts/prune-branches.sh — Delete remote branches with merged/closed PRs
 # (an `assets/pr-<n>` branch the PR report created goes with PR #<n>)
 #
 # Usage:
@@ -26,7 +26,7 @@ DIM='\033[0;90m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-echo -e "${BOLD}?? XDS Branch Pruner${NC}"
+echo -e "${BOLD}🌿 XDS Branch Pruner${NC}"
 echo ""
 
 # Fetch + prune stale tracking refs
@@ -71,11 +71,11 @@ echo -e "Found ${BOLD}$total${NC} remote branches (active release branches prote
 echo ""
 
 if [ "$total" -eq 0 ]; then
-  echo -e "${GREEN}Nothing to prune. ??${NC}"
+  echo -e "${GREEN}Nothing to prune.${NC}"
   exit 0
 fi
 
-# Temp dirs ? one hashed file per branch avoids collisions and concurrent write corruption
+# Temp dirs — one file per branch avoids concurrent write corruption
 tmp_dir=$(mktemp -d)
 mkdir -p "$tmp_dir/delete" "$tmp_dir/keep" "$tmp_dir/stale"
 trap 'rm -rf -- "$tmp_dir"' EXIT
@@ -100,7 +100,6 @@ branch="$1"
 tmp_dir="$2"
 stale_cutoff="$3"
 repo="$4"
-owner="${repo%%/*}"
 safe_name=$(printf '%s' "$branch" | (sha256sum 2>/dev/null || shasum -a 256) | cut -d' ' -f1)
 
 # An `assets/pr-<n>` branch the PR report created (it carries the
@@ -109,7 +108,9 @@ safe_name=$(printf '%s' "$branch" | (sha256sum 2>/dev/null || shasum -a 256) | c
 if [[ "$branch" =~ ^assets/pr-([0-9]+)$ ]] && git cat-file -e "origin/$branch:.pr-report-frames" 2>/dev/null; then
   state=$(gh pr view "${BASH_REMATCH[1]}" --repo "$repo" --json state --jq '.state' 2>/dev/null || echo "error")
 else
-  state=$(gh pr list --repo "$repo" --head "${owner}:${branch}" --state all --json state --jq '.[0].state // "none"' 2>/dev/null || echo "error")
+  state=$(gh pr list --repo "$repo" --head "$branch" --state all \
+    --json state,isCrossRepository \
+    --jq '[.[] | select(.isCrossRepository | not)][0].state // "none"' 2>/dev/null || echo "error")
 fi
 
 if [ "$state" = "MERGED" ] || [ "$state" = "CLOSED" ]; then
@@ -153,9 +154,9 @@ delete_count=${#delete_branches[@]}
 stale_count=${#stale_branches[@]}
 
 echo ""
-echo -e "${RED}? Delete:${NC}  $delete_count branches (merged/closed PR)"
-echo -e "${YELLOW}? Stale:${NC}   $stale_count branches (no PR, >${STALE_DAYS} days old)"
-echo -e "${GREEN}? Keep:${NC}    $keep_count branches (open PR or recent)"
+echo -e "${RED}✗ Delete:${NC}  $delete_count branches (merged/closed PR)"
+echo -e "${YELLOW}⚠ Stale:${NC}   $stale_count branches (no PR, >${STALE_DAYS} days old)"
+echo -e "${GREEN}✓ Keep:${NC}    $keep_count branches (open PR or recent)"
 
 # Combine delete + stale for the kill list
 all_delete=("${delete_branches[@]}" "${stale_branches[@]}")
@@ -163,7 +164,7 @@ total_delete=${#all_delete[@]}
 
 if [ "$total_delete" -eq 0 ]; then
   echo ""
-  echo -e "${GREEN}Nothing to prune. ??${NC}"
+  echo -e "${GREEN}Nothing to prune. 🎉${NC}"
   exit 0
 fi
 
@@ -197,14 +198,14 @@ DELETER
   echo "" # newline after progress
 
   # grep exits 1 when a class is empty, and under `set -e` + `pipefail` that
-  # aborts the script ? on the all-succeeded path, which is the normal one.
+  # aborts the script — on the all-succeeded path, which is the normal one.
   deleted=$(grep -rl "ok" "$tmp_dir/results" 2>/dev/null | wc -l | tr -d ' ' || true)
   failed=$(grep -rl "fail" "$tmp_dir/results" 2>/dev/null | wc -l | tr -d ' ' || true)
 
   echo ""
   echo -e "${BOLD}Results:${NC}"
   echo -e "  ${GREEN}Deleted:${NC}   $deleted"
-  # `[ ? ] && echo` would return 1 here when nothing failed, which `set -e`
+  # `[ … ] && echo` would return 1 here when nothing failed, which `set -e`
   # reads as the script failing.
   if [ "$failed" -gt 0 ]; then
     echo -e "  ${RED}Failed:${NC}    $failed"
@@ -212,7 +213,7 @@ DELETER
   echo -e "  ${YELLOW}Remaining:${NC} $keep_count + protected"
 else
   echo ""
-  echo -e "${YELLOW}Dry run ? pass ${BOLD}--delete${NC}${YELLOW} to actually delete.${NC}"
+  echo -e "${YELLOW}Dry run — pass ${BOLD}--delete${NC}${YELLOW} to actually delete.${NC}"
 
   if [ "$delete_count" -gt 0 ]; then
     echo ""
