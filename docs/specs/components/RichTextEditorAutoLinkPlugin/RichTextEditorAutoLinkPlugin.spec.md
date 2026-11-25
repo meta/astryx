@@ -14,6 +14,7 @@ verified_by:
   [
     packages/richtext/src/RichTextEditorAutoLinkPlugin.test.tsx,
     packages/richtext/src/RichTextEditor.test.tsx,
+    packages/richtext/src/publicSurface.test.ts,
   ]
 modules: []
 families: []
@@ -97,6 +98,11 @@ intentional decision. A `current` contract contains no unresolved rows.
 | FR6 | Text in a code block never becomes a link: on import, on paste and as a person types.                                                                                                                         | `spec:AST-062` FR3, FR6                             | settled            |
 | FR7 | An edit that stops the match turns the link back into plain text. `onChange` receives the new URL and the previous one when a link is created or updated, and `null` and the previous URL when it is removed. | Current behavior (Lexical `AutoLinkPlugin`)         | verify             |
 
+### Allowed variation
+
+- **AV1 — Trailing punctuation.** Where a typed link ends at punctuation that
+  follows it may vary with Lexical's separator rules.
+
 ### Representative states
 
 | State                     | Required invariant                                                 | Allowed variation                   |
@@ -115,7 +121,7 @@ intentional decision. A `current` contract contains no unresolved rows.
 ## Accessibility contract
 
 - **AR1 — A link is a native link.** A created link is a native anchor named
-  by its text. It adds no tab stop of its own inside the editable text.
+  by its text. Keyboard focus inside the editable text belongs to the editor.
 
 ## Design relationships
 
@@ -130,15 +136,15 @@ No visual output. A link paints with RichTextEditor's editor theme.
 
 ## Verification map
 
-| Contract          | Verification                                                                                    | Representative states                   | Mutation or failure expectation                                    | Audit section |
-| ----------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------ | ------------- |
-| FR1               | `RichTextEditor.test.tsx` renders-inside-the-editor case; `publicSurface.test.ts`               | default                                 | A new export or a thrown render fails.                             | —             |
-| FR2, FR3          | `RichTextEditor.test.tsx` default-matcher and email cases                                       | URL, email, quoted and bracketed emails | A wrong destination fails.                                         | —             |
-| FR2 (`www.`), FR4 | `RichTextEditorAutoLinkPlugin.test.tsx` `www.` and new-tab cases                                | typed URL                               | A default link without `target` or `rel` fails.                    | —             |
-| FR5               | `RichTextEditorAutoLinkPlugin.test.tsx` caller-matchers and spread cases                        | caller array, spread defaults           | Ignoring the caller array, or merging it into the defaults, fails. | —             |
-| FR6               | `RichTextEditorAutoLinkPlugin.test.tsx` code-block cases                                        | import, rich paste, typed               | A link inside the code block fails.                                | —             |
-| FR7               | `RichTextEditorAutoLinkPlugin.test.tsx` `onChange` case                                         | create, remove                          | Dropping `onChange`, or a link that stays after the edit, fails.   | —             |
-| AR1               | Evidence gap: no ongoing test presses Tab past a link; the audit's browser receipts support it. | Tab                                     | —                                                                  | —             |
+| Contract          | Verification                                                                                                                      | Representative states                   | Mutation or failure expectation                                    | Audit section |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------ | ------------- |
+| FR1               | `RichTextEditor.test.tsx` renders-inside-the-editor case; `publicSurface.test.ts`                                                 | default                                 | A new export or a thrown render fails.                             | —             |
+| FR2, FR3          | `RichTextEditor.test.tsx` default-matcher and email cases                                                                         | URL, email, quoted and bracketed emails | A wrong destination fails.                                         | —             |
+| FR2 (`www.`), FR4 | `RichTextEditorAutoLinkPlugin.test.tsx` `www.` and new-tab cases                                                                  | typed URL                               | A default link without `target` or `rel` fails.                    | —             |
+| FR5               | `RichTextEditorAutoLinkPlugin.test.tsx` caller-matchers and spread cases                                                          | caller array, spread defaults           | Ignoring the caller array, or merging it into the defaults, fails. | —             |
+| FR6               | `RichTextEditorAutoLinkPlugin.test.tsx` code-block cases                                                                          | import, rich paste, typed               | A link inside the code block fails.                                | —             |
+| FR7               | `RichTextEditorAutoLinkPlugin.test.tsx` `onChange` case                                                                           | create, remove                          | Dropping `onChange`, or a link that stays after the edit, fails.   | —             |
+| AR1               | Evidence gap: no ongoing test checks the link's role and name in a browser; the audit's browser receipts and axe pass support it. | typed link                              | —                                                                  | —             |
 
 ## Decision log
 

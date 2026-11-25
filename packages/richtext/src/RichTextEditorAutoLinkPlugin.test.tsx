@@ -4,9 +4,9 @@
  * @file RichTextEditorAutoLinkPlugin.test.tsx
  * @input RichTextEditor with RichTextEditorAutoLinkPlugin mounted
  * @output Proof that auto-linking skips code blocks, on import and on paste,
- *   and still links a URL in ordinary text (spec:AST-062 FR3, FR6); that a
- *   caller's matchers replace the defaults; that onChange reports a link as it
- *   is created and removed; and that the default links open in a new tab
+ *   and still links a URL in ordinary text; that a caller's matchers replace
+ *   the defaults; that onChange reports a link as it is created and removed;
+ *   and that the default links open in a new tab
  * @position Colocated tests for the auto-link plugin
  */
 

@@ -4,7 +4,7 @@
 /**
  * @file RichTextEditorAutoLinkPluginAudit.a11y.chromium.spec.ts
  * @input Exact-head "With Auto Link" RichTextEditor story, driven with real
- *   key presses and a real paste event: URLs, scheme-less hosts, email
+ *   key presses and a dispatched paste event: URLs, scheme-less hosts, email
  *   addresses, code blocks, an edit that breaks a match, Tab, light and dark,
  *   both directions, and a narrow viewport
  * @output Screenshots and fail-closed sensor receipts for the
@@ -303,8 +303,8 @@ cases.push({
     await typeInEditor(page, 'See https://example.com today. ');
     const links = await readLinks(page);
     check(links.length === 1, `${links.length} links`);
-    // Tab indents inside the editor; Escape then Tab leaves it. A link
-    // inside the editable text adds no tab stop of its own.
+    // Editor evidence: Tab indents inside the editor, and Escape then Tab
+    // leaves it with a link in the text.
     await page.keyboard.press('Escape');
     await page.keyboard.press('Tab');
     const focus = await page.evaluate(() => ({
@@ -330,8 +330,7 @@ cases.push({
     await typeInEditor(page, 'Docs live at https://example.com/docs. Next ');
     const links = await readLinks(page);
     check(links.length === 1, `${links.length} links`);
-    // Records where the link ends. The owner has not decided whether a
-    // sentence's last period belongs to the link, so this does not fail.
+    // Records where the link ends. This frame does not pass or fail.
     await frame('linked', {links});
   },
 });
