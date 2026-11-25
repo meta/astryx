@@ -984,8 +984,9 @@ export function ToastViewport({
   // F6 jumps focus into the toast viewport — the standard "go to
   // notifications" affordance. Focus the first control in the newest toast,
   // or the viewport container if none. Toasts are non-modal, so this only
-  // moves focus in; Tab and Shift+Tab move focus out. Escape does nothing in
-  // a toast.
+  // moves focus in. Tab and Shift+Tab move focus out. A toast does not handle
+  // Escape. The layer stack sends it to the top open layer, such as a Dialog
+  // that holds the viewport.
   const hasToasts = toasts.length > 0;
   useEffect(() => {
     if (!hasToasts) {
