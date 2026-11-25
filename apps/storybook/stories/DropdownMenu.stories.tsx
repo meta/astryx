@@ -1213,7 +1213,7 @@ export const ActionSheetEndContentControls: Story = {
       story: {inline: false, height: '560px'},
       description: {
         story:
-          'A switch, a checkbox and a native checkbox in the end content of bottom-sheet rows. A press on a control toggles it and runs no row.',
+          'A press fixture for the sheet’s end-content handling, not a recommended layout. A press on an end-content control toggles it and runs no row. For a toggle in an action sheet, put the control in the menu header or footer; in a popover menu, a DropdownMenuCheckboxItem row also works.',
       },
     },
   },
