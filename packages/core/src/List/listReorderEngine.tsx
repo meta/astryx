@@ -2111,14 +2111,17 @@ export class ListReorderController implements ListReorderSession {
     const {list} = pending;
     // Under Reduce Motion the fade starts at the release. A late commit then
     // shortens the fade but never extends it past 200 ms. Nothing travels
-    // there, so the rows read the same at the release as now.
+    // there, so the rows read the same at the release as now. The release is
+    // on the motion clock and never after now.
     const now = motionNow();
     const releasedAt = reducesMotion(list) ? pending.releasedAt : undefined;
     const isReduced = releasedAt != null;
-    const at = releasedAt == null ? now : Math.min(releasedAt, now);
+    const at = releasedAt ?? now;
     // A commit that comes after the fade's first half has passed would show
     // the rows faded out where they were. They land at once instead, which
     // also ends the change within the fade's time from the release.
+    // SYNC: the half is where the Reduce Motion dip lands
+    // (motion/reducedMotionPlan.ts).
     const landsAtOnce =
       isReduced && now - at >= reducedMotionCrossFade.durationMs / 2;
     // Every read comes before the first write, so the drop lays out once.
