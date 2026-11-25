@@ -168,13 +168,17 @@ const styles = stylex.create({
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   pressable: {
+    // An open layer that names this Button as an anchor apart from its
+    // trigger sets the factor to 1 on it (Popover/usePopover.tsx). `initial`
+    // here keeps the factor of a control around this Button out.
+    '--_astryx-press-scale': 'initial',
     transform: {
       default: 'scale(1)',
       // A mouse press. Under a coarse pointer `:active` is not a press (it
       // paints on the touch and outlives a scroll), so the touch press model
       // writes `data-astryx-press` instead; see interactionOverlay.stylex.ts.
       [`:active:where(:not(:disabled,[aria-disabled="true"],${POPUP_OPEN}))`]: {
-        default: 'scale(0.98)',
+        default: 'scale(var(--_astryx-press-scale, 0.98))',
         '@media (pointer: coarse)': 'scale(1)',
         // Under reduced motion a press never scales the button. The overlay
         // alone shows the press.
@@ -184,7 +188,7 @@ const styles = stylex.create({
           'scale(1)',
       },
       [`${PRESSED_ON}:not(${POPUP_OPEN})`]: {
-        default: 'scale(0.98)',
+        default: 'scale(var(--_astryx-press-scale, 0.98))',
         '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
           'scale(1)',
         '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
@@ -199,10 +203,11 @@ const styles = stylex.create({
   },
   // A tracked action's press is painted by its group's tracker alone.
   pressableTracked: {
+    '--_astryx-press-scale': 'initial',
     transform: {
       default: 'scale(1)',
       [`${PRESSED_ON}:not(${POPUP_OPEN})`]: {
-        default: 'scale(0.98)',
+        default: 'scale(var(--_astryx-press-scale, 0.98))',
         '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
           'scale(1)',
         '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
