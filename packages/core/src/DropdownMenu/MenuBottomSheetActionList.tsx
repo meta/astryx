@@ -17,7 +17,7 @@ import {Icon, renderIconSlot} from '../Icon/Icon';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
 import {pressBelongsToControl} from '../hooks/useClickableContainer';
-import {elementAtMenuPoint, useMenuPress} from '../hooks/useMenuPress';
+import {elementAtMenuPoint, useMenuPressInternal} from '../hooks/useMenuPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {rtlStyles} from '../utils/rtlStyles';
@@ -70,6 +70,25 @@ function sheetElementAtPoint(
   return element;
 }
 
+/**
+ * Whether a press that starts on `target` is on a control in a row's content.
+ * Such a control, other than the row's own action, handles its own press. A
+ * switch decides its own drag.
+ */
+function isRowContentControl(target: Element): boolean {
+  const row = target.closest('li');
+  if (row == null || !pressBelongsToControl(target, row)) {
+    return false;
+  }
+  for (const child of row.children) {
+    if (child.matches('button, a') && child.contains(target)) {
+      // The row's own action.
+      return false;
+    }
+  }
+  return true;
+}
+
 const styles = stylex.create({
   // The row under a held finger is the highlight; the browser's held-press
   // callout and text selection must not compete with it.
@@ -119,15 +138,18 @@ export function MenuBottomSheetActionList({
   // The press model: the row under a finger's RELEASE acts, and the
   // highlight (focus) follows the finger across the rows. The sheet is modal,
   // so a release outside it is the scrim's, not a dismissal of ours.
-  const menuPress = useMenuPress({
-    menuRef: listRef,
-    itemSelector: SHEET_ROW_SELECTOR,
-    // A document without elementFromPoint (jsdom) keeps the hook's own
-    // lookup, which reads the event's target.
-    hitTest: canHitTestByPoint()
-      ? (x, y) => sheetElementAtPoint(listRef.current, x, y)
-      : undefined,
-  });
+  const {press: menuPress} = useMenuPressInternal(
+    {
+      menuRef: listRef,
+      itemSelector: SHEET_ROW_SELECTOR,
+      // A document without elementFromPoint (jsdom) keeps the hook's own
+      // lookup, which reads the event's target.
+      hitTest: canHitTestByPoint()
+        ? (x, y) => sheetElementAtPoint(listRef.current, x, y)
+        : undefined,
+    },
+    {ownsPress: isRowContentControl},
+  );
 
   // `rowPath` names the row within the whole list: an index alone restarts in
   // every section.
