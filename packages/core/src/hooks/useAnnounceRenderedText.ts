@@ -185,9 +185,14 @@ export function useAnnounceRenderedText(
   const announcedOccasionRef = useRef<string | null>(null);
   const isHydrating = useIsHydrating();
   // Captured once: an owner rendered before the document finished loading, or
-  // hydrated from server HTML, is part of the page the person arrived at.
+  // hydrated from server HTML, is part of the page the person arrived at. A
+  // render with no document at all (server rendering, a test renderer) is
+  // part of that page too, and must not throw.
   const [renderedWithPage] = useState(
-    () => isHydrating || document.readyState !== 'complete',
+    () =>
+      isHydrating ||
+      typeof document === 'undefined' ||
+      document.readyState !== 'complete',
   );
   const isFirstRunRef = useRef(true);
 
