@@ -6,11 +6,12 @@
  *   module mocked to fail, and jsdom stubs for <dialog>
  * @output Tests that a caller's open (a controlled open prop), whose sheet
  *   module fails to load, is closed through `onOpenChange(false)` and leaves
- *   the page rendered
+ *   the page rendered, also when the caller applies the open after the
+ *   trigger's own load failed
  * @position Testing for lazyMenuBottomSheet.ts
  */
 
-import {act, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
 import {Component, type ReactNode} from 'react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 
@@ -83,5 +84,43 @@ describe('DropdownMenu bottom sheet opened by the caller whose module fails to l
     await settle();
     expect(screen.queryByText('The page failed')).toBeNull();
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("closes a caller's open applied only after the trigger's load failed", async () => {
+    const onOpenChange = vi.fn();
+    const {rerender} = render(
+      <PageBoundary>
+        <DropdownMenu
+          button={{label: 'Actions'}}
+          presentation="bottom-sheet"
+          isMenuOpen={false}
+          onOpenChange={onOpenChange}
+          items={[{label: 'Rename'}]}
+        />
+      </PageBoundary>,
+    );
+    await settle();
+    // The caller declines the trigger's open while the load fails.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
+    });
+    await settle();
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    // Then the caller opens the sheet itself.
+    rerender(
+      <PageBoundary>
+        <DropdownMenu
+          button={{label: 'Actions'}}
+          presentation="bottom-sheet"
+          isMenuOpen={true}
+          onOpenChange={onOpenChange}
+          items={[{label: 'Rename'}]}
+        />
+      </PageBoundary>,
+    );
+    await settle();
+    await settle();
+    expect(screen.queryByText('The page failed')).toBeNull();
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
   });
 });

@@ -774,7 +774,14 @@ export function Popover({
         // A sheet whose module fails to load closes, so the trigger works
         // again.
         void loadPopoverBottomSheet().then(isLoaded => {
-          if (!isLoaded && isSheetOpenRef.current) {
+          if (!isSheetOpenRef.current) {
+            // The sheet did not open, or closed, before the load settled: a
+            // later open is not this handler's, so the caller-open sync owns
+            // its load.
+            isSheetOpenedHereRef.current = false;
+            return;
+          }
+          if (!isLoaded) {
             if (!isControlled) {
               setIsSheetOpenState(false);
             }

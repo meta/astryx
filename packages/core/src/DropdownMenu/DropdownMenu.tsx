@@ -644,6 +644,8 @@ function DropdownMenuBottomSheet({
   const isOpen = isControlled ? controlledIsOpen : internalIsOpen;
   const isOpenRef = useRef(isOpen);
   useCommittedRefInto(isOpenRef, isOpen);
+  const onOpenChangeRef = useRef(onOpenChange);
+  useCommittedRefInto(onOpenChangeRef, onOpenChange);
   // Whether the open sheet was opened here, whose handler then owns its load.
   const isOpenedHereRef = useRef(false);
   const [previousIsOpen, setPreviousIsOpen] = useState(isOpen);
@@ -691,8 +693,15 @@ function DropdownMenuBottomSheet({
         // A sheet whose module or rows fail to load closes, so the trigger
         // works again.
         void loadMenuBottomSheet().then(isLoaded => {
-          if (!isLoaded && isOpenRef.current) {
-            onOpenChange?.(false);
+          if (!isOpenRef.current) {
+            // The sheet did not open, or closed, before the load settled: a
+            // later open is not this handler's, so the caller-open sync owns
+            // its load.
+            isOpenedHereRef.current = false;
+            return;
+          }
+          if (!isLoaded) {
+            onOpenChangeRef.current?.(false);
             if (!isControlled) {
               setInternalIsOpen(false);
             }
@@ -719,7 +728,7 @@ function DropdownMenuBottomSheet({
     let isCurrent = true;
     void loadMenuBottomSheet().then(isLoaded => {
       if (!isLoaded && isCurrent) {
-        onOpenChange?.(false);
+        onOpenChangeRef.current?.(false);
         if (!isControlled) {
           setInternalIsOpen(false);
         }
@@ -728,7 +737,7 @@ function DropdownMenuBottomSheet({
     return () => {
       isCurrent = false;
     };
-  }, [isControlled, isOpen, onOpenChange]);
+  }, [isControlled, isOpen]);
 
   const handleSelect = useCallback(
     (item: DropdownMenuItemData, event: React.MouseEvent) => {

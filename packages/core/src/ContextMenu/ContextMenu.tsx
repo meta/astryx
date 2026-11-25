@@ -59,6 +59,7 @@ import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {currentGesture} from '../Layer/gestureCounter';
 import {noteOutsideDismissal} from '../Layer/outsidePress';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import {
   MenuBottomSheet,
   MenuBottomSheetActionList,
@@ -431,6 +432,8 @@ export function ContextMenu({
   const openingGestureRef = useRef<number | null>(null);
 
   const [isOpen, setIsOpen] = useState(false);
+  const isOpenRef = useRef(isOpen);
+  useCommittedRefInto(isOpenRef, isOpen);
   // An open from the trigger moves focus into the menu once it shows: a frame
   // after the show, which for a first open comes as its layer attaches.
   const focusOnShowRef = useRef(false);
@@ -461,7 +464,7 @@ export function ContextMenu({
           ? loadMenuBottomSheet
           : loadMenuBottomSheetWithoutActionList;
         void load().then(isLoaded => {
-          if (!isLoaded) {
+          if (!isLoaded && isOpenRef.current) {
             setIsOpen(false);
             onOpenChange?.(false);
           }
