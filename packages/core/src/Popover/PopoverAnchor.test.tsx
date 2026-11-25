@@ -22,6 +22,7 @@ import {Button} from '../Button/Button';
 import {Selector} from '../Selector/Selector';
 import {MultiSelector} from '../MultiSelector/MultiSelector';
 import {ComplexSelector} from '../ComplexSelector/ComplexSelector';
+import {inTabOrder} from '../hooks/focusableSelector';
 import {__resetDevWarnings} from '../utils/devWarning';
 
 function query(selector: string): Element {
@@ -848,6 +849,42 @@ describe('usePopover anchor', () => {
       }
     }
 
+    it("counts in a focus region's Tab order only in a browser that reads the option", () => {
+      const order = () => {
+        const anchor = document.querySelector<HTMLElement>('[data-anchor]');
+        const start = screen.getByRole('button', {name: 'Start'});
+        const close = screen.getByRole('button', {
+          name: /close/i,
+          hidden: true,
+        });
+        return inTabOrder([anchor as HTMLElement, start, close]).map(
+          element => element.textContent,
+        );
+      };
+      // The test environment's `showPopover` does not read its options.
+      const {unmount} = render(
+        <Coachmark isAnchorFocusable hasTrigger={false} />,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Start'}));
+      const closeLabel = order()[2];
+      expect(order()).toEqual(['Chart', 'Start', closeLabel]);
+      unmount();
+
+      const original = HTMLElement.prototype.showPopover;
+      HTMLElement.prototype.showPopover = function (
+        options?: ShowPopoverOptions,
+      ) {
+        void options?.source;
+      };
+      try {
+        render(<Coachmark isAnchorFocusable hasTrigger={false} />);
+        fireEvent.click(screen.getByRole('button', {name: 'Start'}));
+        expect(order()).toEqual(['Chart', closeLabel, 'Start']);
+      } finally {
+        HTMLElement.prototype.showPopover = original;
+      }
+    });
+
     it('is the trigger when the popover has one', () => {
       const source = openAndReadSource(
         <Coachmark isAnchorFocusable hasTrigger />,
@@ -867,6 +904,71 @@ describe('usePopover anchor', () => {
         <Coachmark isAnchorFocusable={false} hasTrigger={false} />,
       );
       expect(source).toBeUndefined();
+    });
+
+    it('is the anchor that the ref holds when the layer element mounts again while the popover is open', () => {
+      const step = {id: 'first'};
+      const anchorRef = {
+        get current() {
+          return document.querySelector<HTMLElement>(
+            `[data-step="${step.id}"]`,
+          );
+        },
+      };
+      function Steps() {
+        const [mountKey, setMountKey] = useState('first');
+        const popover = usePopover({
+          anchorRef,
+          dialogLabel: 'Tip',
+          tabBehavior: 'pageOrder',
+          hasLightDismiss: false,
+          hasAutoFocus: false,
+        });
+        return (
+          <>
+            <button type="button" data-step="first">
+              First
+            </button>
+            <button type="button" data-step="second">
+              Second
+            </button>
+            <button type="button" onClick={() => popover.show()}>
+              Start
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                step.id = 'second';
+                setMountKey('second');
+              }}>
+              Move
+            </button>
+            <React.Fragment key={mountKey}>
+              {popover.render(<span>Tip content</span>)}
+            </React.Fragment>
+          </>
+        );
+      }
+      const original = HTMLElement.prototype.showPopover;
+      const sources: unknown[] = [];
+      HTMLElement.prototype.showPopover = function (
+        this: HTMLElement,
+        options?: ShowPopoverOptions,
+      ) {
+        sources.push(options?.source);
+        original.call(this, options);
+      };
+      try {
+        render(<Steps />);
+        fireEvent.click(screen.getByRole('button', {name: 'Start'}));
+        fireEvent.click(screen.getByRole('button', {name: 'Move'}));
+        expect(sources).toEqual([
+          query('[data-step="first"]'),
+          query('[data-step="second"]'),
+        ]);
+      } finally {
+        HTMLElement.prototype.showPopover = original;
+      }
     });
 
     function Wrapped({tabBehavior}: {tabBehavior: 'contain' | 'pageOrder'}) {

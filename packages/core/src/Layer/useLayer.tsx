@@ -25,6 +25,10 @@ import React, {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {
+  notePopoverSource,
+  popoverSourceOptions,
+} from '../hooks/focusableSelector';
 import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
@@ -1452,6 +1456,46 @@ function useLayerImplementation(
       setIsAnchorInView(inView);
     }
   }, []);
+  // Anchor visibility (FR5). The first read is synchronous, against the
+  // visual viewport, so the frame that shows the layer is already right
+  // (FR8). IntersectionObserver then tracks changes; with no root it reports
+  // against the viewport and through every ancestor clip, so an anchor
+  // scrolled out of a panel reads as out of view too. `null` stops the watch.
+  const inViewObserverRef = useRef<IntersectionObserver | null>(null);
+  const watchAnchorInView = useCallback(
+    (anchor: Element | null) => {
+      inViewObserverRef.current?.disconnect();
+      inViewObserverRef.current = null;
+      if (anchor == null) {
+        return;
+      }
+      const view = anchor.ownerDocument.defaultView;
+      if (view) {
+        // Edge-adjacent counts as in view, as IntersectionObserver reports
+        // it; an engine with no layout (a zero rect) therefore reads as in
+        // view too.
+        const rect = anchor.getBoundingClientRect();
+        updateAnchorInView(
+          rect.bottom >= 0 &&
+            rect.right >= 0 &&
+            rect.top <= view.innerHeight &&
+            rect.left <= view.innerWidth,
+        );
+      }
+      if (typeof IntersectionObserver === 'undefined') {
+        return;
+      }
+      const observer = new IntersectionObserver(entries => {
+        const latest = entries[entries.length - 1];
+        if (latest) {
+          updateAnchorInView(latest.isIntersecting);
+        }
+      });
+      observer.observe(anchor);
+      inViewObserverRef.current = observer;
+    },
+    [updateAnchorInView],
+  );
   // The inset the app declared on LayerProvider (FR6). Read through context
   // and written inline on the layer, so a corrective portal cannot escape it
   // and no measurement is needed to apply it.
@@ -1606,13 +1650,16 @@ function useLayerImplementation(
                 ? getInvokerRef.current()
                 : triggerRef.current;
             const invokerView = invoker?.ownerDocument.defaultView;
-            popover.showPopover({
-              source:
-                invokerView != null &&
-                invoker instanceof invokerView.HTMLElement
-                  ? invoker
-                  : undefined,
-            });
+            const source =
+              invokerView != null && invoker instanceof invokerView.HTMLElement
+                ? invoker
+                : null;
+            // A browser that orders the popover after its source reads the
+            // option. A focus region then finds its first and last control
+            // in that order.
+            const {options, wasRead} = popoverSourceOptions(source);
+            popover.showPopover(options);
+            notePopoverSource(popover, wasRead() ? source : null);
           });
         } catch (error) {
           // The name, not the constructor: a popover in another document throws
@@ -1627,6 +1674,7 @@ function useLayerImplementation(
         }
       } else {
         popover.style.display = 'block';
+        notePopoverSource(popover, null);
       }
       openedPopoverRef.current = popover;
       return true;
@@ -2222,6 +2270,11 @@ function useLayerImplementation(
 
       const previous = triggerRef.current;
       triggerRef.current = el;
+      // The in-view watch follows a trigger replaced while the layer is
+      // open.
+      if (mode === 'context' && isOpenRef.current && el !== previous) {
+        watchAnchorInView(el);
+      }
       // A trigger in another document (a frame, a pop-out window) has its
       // presses counted there too, before its first press.
       listenForGestures(el.ownerDocument);
@@ -2269,8 +2322,10 @@ function useLayerImplementation(
       anchorId,
       cancelPendingAnchorWait,
       keepsAnchorClear,
+      mode,
       onPlacedAfreshRef,
       waitsForAnchorRef,
+      watchAnchorInView,
     ],
   );
 
@@ -2572,44 +2627,16 @@ function useLayerImplementation(
     };
   }, [handleToggle, bindToggleListener, handleBeforeToggle]);
 
-  // Anchor visibility (FR5). The first frame must already be right (FR8), so
-  // the opening read is synchronous — a layout effect runs before paint, and a
-  // state change inside it re-renders before paint — against the visual
-  // viewport. IntersectionObserver then tracks changes while open; with no
-  // root it reports against the viewport and through every ancestor clip, so
-  // an anchor scrolled out of a panel reads as out of view too.
+  // Syncs the in-view watch (IntersectionObserver) with the open layer's
+  // anchor. A layout effect runs before paint, and a state change inside it
+  // re-renders before paint, so the opening read reaches the first frame.
   useIsomorphicLayoutEffect(() => {
     if (!isOpen || mode !== 'context') {
       return;
     }
-    const anchor = triggerRef.current;
-    if (!anchor) {
-      return;
-    }
-    const view = anchor.ownerDocument.defaultView;
-    if (view) {
-      // Edge-adjacent counts as in view, as IntersectionObserver reports it;
-      // an engine with no layout (a zero rect) therefore reads as in view too.
-      const rect = anchor.getBoundingClientRect();
-      const inView =
-        rect.bottom >= 0 &&
-        rect.right >= 0 &&
-        rect.top <= view.innerHeight &&
-        rect.left <= view.innerWidth;
-      updateAnchorInView(inView);
-    }
-    if (typeof IntersectionObserver === 'undefined') {
-      return;
-    }
-    const observer = new IntersectionObserver(entries => {
-      const latest = entries[entries.length - 1];
-      if (latest) {
-        updateAnchorInView(latest.isIntersecting);
-      }
-    });
-    observer.observe(anchor);
-    return () => observer.disconnect();
-  }, [isOpen, mode, updateAnchorInView]);
+    watchAnchorInView(triggerRef.current);
+    return () => watchAnchorInView(null);
+  }, [isOpen, mode, watchAnchorInView]);
 
   // A layer that keeps its anchor clear re-reads its geometry while it
   // is open: content that grows, an anchor that resizes or moves (in layout or
