@@ -1392,3 +1392,53 @@ describe('the truncation tooltip mounts on the first interaction', () => {
     }
   });
 });
+
+describe('Text cut by maxLines keeps the start of a one-script label', () => {
+  it.each([
+    {label: 'Monthly revenue report', dir: 'ltr'},
+    {label: 'דוח הכנסות חודשי', dir: 'rtl'},
+    {label: 'דוח Revenue', dir: null},
+  ])('"$label" takes dir $dir', ({label, dir}) => {
+    render(
+      <div dir="rtl">
+        <Text maxLines={1} hasTruncateTooltip={false}>
+          {label}
+        </Text>
+      </div>,
+    );
+    const text = screen.getByText(label);
+    if (dir == null) {
+      expect(text).not.toHaveAttribute('dir');
+    } else {
+      expect(text).toHaveAttribute('dir', dir);
+    }
+  });
+
+  it('keeps the page direction without maxLines, for end-aligned text and for a rich node', () => {
+    render(
+      <div dir="rtl">
+        <Text>Uncut label</Text>
+        <Text maxLines={1} justify="end" hasTruncateTooltip={false}>
+          End label
+        </Text>
+        <Text maxLines={1} hasTruncateTooltip={false}>
+          <em>Rich label</em>
+        </Text>
+      </div>,
+    );
+    expect(screen.getByText('Uncut label')).not.toHaveAttribute('dir');
+    expect(screen.getByText('End label')).not.toHaveAttribute('dir');
+    expect(screen.getByText('Rich label').parentElement).not.toHaveAttribute(
+      'dir',
+    );
+  });
+
+  it("lets the caller's dir win", () => {
+    render(
+      <Text maxLines={1} dir="rtl" hasTruncateTooltip={false}>
+        Caller label
+      </Text>,
+    );
+    expect(screen.getByText('Caller label')).toHaveAttribute('dir', 'rtl');
+  });
+});
