@@ -43,18 +43,6 @@ export function resolveDateZone(
 
 const pad = (n: number, width = 2) => String(n).padStart(width, '0');
 
-/**
- * Today's calendar day in the zone a date-only value reads in
- * (`resolveDateZone`). A `NOW` or `RELATIVE` part of a date range reads as a
- * new day after this zone's midnight.
- */
-export function todayInDateZone(timezoneID: string | undefined): ISODateString {
-  return unixSecondsToISODate(
-    Date.now() / 1000,
-    resolveDateZone(timezoneID, true),
-  );
-}
-
 export function unixSecondsToISODate(
   unixSeconds: number,
   zone: string | undefined,

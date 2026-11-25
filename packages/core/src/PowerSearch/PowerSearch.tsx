@@ -77,11 +77,10 @@ import {isFocusDetached} from '../utils/isFocusDetached';
 import {isRenderable} from '../utils/isRenderable';
 import {useInternalConfig} from './useInternalConfig';
 import {usePowerSearchSource} from './usePowerSearchSource';
-import {formatFilterValue} from './formatFilterValue';
+import {formatDateRange, formatFilterValue} from './formatFilterValue';
 import {NestedEditor, PowerSearchEditPopover} from './PowerSearchEditPopover';
 import {PowerSearchValueEditor} from './PowerSearchValueEditor';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
-import {todayInDateZone} from './powerSearchDateZone';
 import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
@@ -911,9 +910,16 @@ export function PowerSearch({
     },
   }));
 
-  // A `NOW` or `RELATIVE` part of a date range reads as a new day after the
-  // zone's midnight, so the items' labels follow the day as the token does.
-  const today = todayInDateZone(timezoneID);
+  // A `NOW` or `RELATIVE` part of a date range can read other days at each
+  // render. The days every range reads now key the items' labels, so the
+  // removal announcement names the days the token shows.
+  const dateRangeDays = filters
+    .map(filter =>
+      filter.value.type === 'date_range'
+        ? formatDateRange(filter.value.value, locale, timezoneID, calendar)
+        : '',
+    )
+    .join('|');
 
   // Convert filters to tokenizer items
   const tokenizerValue: PowerSearchItem[] = useMemo(() => {
@@ -954,8 +960,17 @@ export function PowerSearch({
         },
       };
     });
-    // eslint-disable-next-line @eslint-react/exhaustive-deps -- `today` re-reads a NOW or RELATIVE date range after the zone's midnight
-  }, [filters, config, maxTokenLength, timezoneID, t, locale, calendar, today]);
+    // eslint-disable-next-line @eslint-react/exhaustive-deps -- `dateRangeDays` re-reads a NOW or RELATIVE date range when its days change
+  }, [
+    filters,
+    config,
+    maxTokenLength,
+    timezoneID,
+    t,
+    locale,
+    calendar,
+    dateRangeDays,
+  ]);
 
   // Handle tokenizer onChange (field selected from typeahead)
   const handleTokenizerChange = useCallback(
