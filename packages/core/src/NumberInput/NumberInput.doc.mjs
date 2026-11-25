@@ -42,6 +42,12 @@ export const docs = {
       required: true,
     },
     {
+      name: 'changeAction',
+      type: '(value: number | null) => void | Promise<void>',
+      description:
+        'Async action fired after onChange. Triggers optimistic update and shows a loading spinner while pending.',
+    },
+    {
       name: 'size',
       type: "'sm' | 'md' | 'lg'",
       description: 'Size variant.',
@@ -92,6 +98,13 @@ export const docs = {
       type: 'string',
       description:
         'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the input focusable via aria-disabled (the field becomes read-only). Use this instead of wrapping a disabled NumberInput in Tooltip.',
+    },
+    {
+      name: 'isLoading',
+      type: 'boolean',
+      description:
+        'Puts the input in a loading state, showing a spinner and setting aria-busy.',
+      default: 'false',
     },
     {
       name: 'placeholder',
@@ -389,6 +402,12 @@ export const docsZh = {
       required: true,
     },
     {
+      name: 'changeAction',
+      type: '(value: number | null) => void | Promise<void>',
+      description:
+        '在 onChange 之后触发的异步操作。触发乐观更新并在挂起时显示加载旋转器。',
+    },
+    {
       name: 'size',
       type: "'sm' | 'md' | 'lg'",
       description: '尺寸变体。',
@@ -431,6 +450,12 @@ export const docsZh = {
       type: 'string',
       description:
         '说明输入框被禁用的原因。与 isDisabled 一起使用时，在悬停/键盘聚焦时显示工具提示，并通过 aria-disabled 保持输入框可聚焦（字段变为只读）。请使用此属性，而不是用 Tooltip 包裹已禁用的 NumberInput。',
+    },
+    {
+      name: 'isLoading',
+      type: 'boolean',
+      description: '使输入框处于加载状态，显示加载指示器并设置 aria-busy。',
+      default: 'false',
     },
     {
       name: 'placeholder',
@@ -772,6 +797,8 @@ export const docsDense = {
     value: 'Current input value.',
     onChange:
       'Callback when a valid text edit commits on blur/Enter, or a step/clear control changes the value.',
+    changeAction:
+      'Async action after onChange. Triggers optimistic update+spinner while pending.',
     size: 'Size variant.',
     isLabelHidden: 'Visually hide label (still accessible to screen readers).',
     description: 'Text between label + input.',
@@ -782,6 +809,7 @@ export const docsDense = {
       'Read-only: value visible + still submits, but not editable. Unlike isDisabled: not dimmed.',
     disabledMessage:
       'Explains why input is disabled. With isDisabled, shows tooltip on hover/focus + keeps input focusable via aria-disabled (field becomes read-only). Use instead of wrapping a disabled NumberInput in Tooltip.',
+    isLoading: 'Loading state w/ spinner+aria-busy.',
     placeholder: 'Placeholder text.',
     labelTooltip: 'Tooltip text in info icon at label end.',
     startIcon: 'Icon at input start; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',

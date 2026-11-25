@@ -4,7 +4,7 @@
 
 /**
  * @file NumberInput.tsx
- * @input Uses React, useId, useState, useMemo, useCallback, useEffect, Field, Icon, InputGroupContext
+ * @input Uses React, useId, useState, useMemo, useCallback, useEffect, useTransition, useOptimistic, Field, Icon, Spinner, InputGroupContext, useBusyAnnouncement
  * @output Exports NumberInput component, NumberInputProps, NumberInputEntryError, EntryErrorBehavior; optional steppers are hidden on coarse pointers, and a held one repeats into the draft
  * @position Core implementation; consumed by index.ts, tested by NumberInput.test.tsx
  *
@@ -28,6 +28,8 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useTransition,
+  useOptimistic,
   type FocusEvent,
   type KeyboardEvent,
   type MouseEvent,
@@ -53,6 +55,7 @@ import {
   inputStatusFocusWithinStyles,
 } from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
+import {Spinner} from '../Spinner/Spinner';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA} from '../utils';
@@ -70,6 +73,7 @@ import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 
@@ -226,7 +230,6 @@ export type {
 export type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {isImeKeyEvent, mergeProps, mergeRefs} from '../utils';
-import type {BaseProps} from '../BaseProps';
 import {
   type FieldInputBaseProps,
   useFieldInputStyling,
@@ -315,6 +318,11 @@ interface NumberInputPropsBase extends Omit<
    * @default false
    */
   isRequired?: boolean;
+  /**
+   * Whether the input is in a loading state. Shows a loading spinner and sets aria-busy.
+   * @default false
+   */
+  isLoading?: boolean;
   /**
    * Whether the input is disabled.
    * @default false
@@ -541,6 +549,10 @@ interface NumberInputPropsBase extends Omit<
 type NumberInputPropsNonClearable = NumberInputPropsBase & {
   hasClear?: false;
   onChange: (value: number) => void;
+  /**
+   * Action to perform when the value changes. Supports async actions with optimistic updates.
+   */
+  changeAction?: (value: number) => void | Promise<void>;
 };
 
 type NumberInputPropsClearable = NumberInputPropsBase & {
@@ -554,6 +566,11 @@ type NumberInputPropsClearable = NumberInputPropsBase & {
    */
   hasClear: true;
   onChange: (value: number | null) => void;
+  /**
+   * Action to perform when the value changes. Supports async actions with optimistic updates.
+   * When clearable, the action may receive null when cleared.
+   */
+  changeAction?: (value: number | null) => void | Promise<void>;
 };
 
 export type NumberInputProps =
@@ -699,6 +716,8 @@ export function NumberInput({
   statusVariant = 'attached',
   size: sizeProp,
   onChange,
+  changeAction,
+  isLoading = false,
   value,
   placeholder,
   labelTooltip,
@@ -754,6 +773,28 @@ export function NumberInput({
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
+
+  const [, startTransition] = useTransition();
+  const [optimisticValue, setOptimisticValue] = useOptimistic(value);
+  const effectiveValue = optimisticValue;
+  const isBusy = isLoading || !Object.is(optimisticValue, value);
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), containerRef);
+
+  const runChangeAction = useCallback(
+    (nextValue: number | null) => {
+      if (!changeAction) {
+        return;
+      }
+      const action = changeAction as (
+        value: number | null,
+      ) => void | Promise<void>;
+      startTransition(async () => {
+        setOptimisticValue(nextValue);
+        await action(nextValue);
+      });
+    },
+    [changeAction, setOptimisticValue],
+  );
 
   // Pending input while user is typing (null = show formatted value)
   const [pendingInput, setPendingInput] = useState<string | null>(null);
@@ -886,11 +927,11 @@ export function NumberInput({
   );
 
   const formattedValue = useMemo(() => {
-    if (value == null) {
+    if (effectiveValue == null) {
       return '';
     }
-    return formatValue?.(value) ?? String(value);
-  }, [formatValue, value]);
+    return formatValue?.(effectiveValue) ?? String(effectiveValue);
+  }, [effectiveValue, formatValue]);
 
   // Preserve pending text while editing. Otherwise show the formatted value
   // at rest and, while focused, the plain number with the locale's decimal
@@ -902,21 +943,31 @@ export function NumberInput({
     if (pendingInput !== null) {
       return pendingInput;
     }
-    if (value == null) {
+    if (effectiveValue == null) {
       return '';
     }
-    return isFocused ? formatEditableNumber(value, locale) : formattedValue;
-  }, [formattedValue, holdDraft, isFocused, locale, pendingInput, value]);
+    return isFocused
+      ? formatEditableNumber(effectiveValue, locale)
+      : formattedValue;
+  }, [
+    effectiveValue,
+    formattedValue,
+    holdDraft,
+    isFocused,
+    locale,
+    pendingInput,
+  ]);
 
-  // The form value is the committed number as the field shows it with no
-  // draft: raw with `formatValue`, otherwise the plain number at rest and the
+  // The form value is the number the field shows with no draft. While an
+  // Action is pending, that is the optimistic value. With `formatValue` it is
+  // the raw number; otherwise the plain number at rest and the
   // locale-formatted number while focused.
   const hiddenFormValue =
-    value == null
+    effectiveValue == null
       ? ''
       : !formatValue && isFocused
-        ? formatEditableNumber(value, locale)
-        : String(value);
+        ? formatEditableNumber(effectiveValue, locale)
+        : String(effectiveValue);
 
   // Keep the whole text edit as a draft until an explicit commit boundary.
   const handleInputChange = useCallback(
@@ -956,7 +1007,9 @@ export function NumberInput({
       const input = e.currentTarget;
       const editableText =
         pendingInput ??
-        (value == null ? '' : formatEditableNumber(value, locale));
+        (effectiveValue == null
+          ? ''
+          : formatEditableNumber(effectiveValue, locale));
       const shouldReselect =
         input.value.length > 0 &&
         input.value !== editableText &&
@@ -971,7 +1024,7 @@ export function NumberInput({
         input.setSelectionRange(0, input.value.length);
       }
     },
-    [onFocus, pendingInput, value, locale],
+    [effectiveValue, locale, onFocus, pendingInput],
   );
 
   const commitPendingInput = useCallback(
@@ -1015,14 +1068,20 @@ export function NumberInput({
       }
 
       if (decision.type === 'clear') {
-        if (hasClear && value != null) {
+        if (hasClear && effectiveValue != null) {
           onChange(null);
+          runChangeAction(null);
         }
-      } else if (decision.type === 'commit' && decision.value !== value) {
+      } else if (
+        decision.type === 'commit' &&
+        decision.value !== effectiveValue
+      ) {
         onChange(decision.value);
+        runChangeAction(decision.value);
       }
     },
     [
+      effectiveValue,
       endDraft,
       hasClear,
       isDisabled,
@@ -1030,7 +1089,7 @@ export function NumberInput({
       pendingInput,
       rejectionRules,
       reportEntryError,
-      value,
+      runChangeAction,
     ],
   );
 
@@ -1046,13 +1105,13 @@ export function NumberInput({
 
   const valueForStepping = useMemo(() => {
     if (pendingInput === null) {
-      return value ?? null;
+      return effectiveValue ?? null;
     }
     if (pendingInput.trim() === '') {
       return null;
     }
-    return parseInput(pendingInput) ?? value ?? null;
-  }, [parseInput, pendingInput, value]);
+    return parseInput(pendingInput) ?? effectiveValue ?? null;
+  }, [effectiveValue, parseInput, pendingInput]);
 
   const getNextValue = useCallback(
     (direction: StepDirection) =>
@@ -1079,11 +1138,20 @@ export function NumberInput({
         return;
       }
       endDraft();
-      if (nextValue !== value) {
+      if (nextValue !== effectiveValue) {
         onChange(nextValue);
+        runChangeAction(nextValue);
       }
     },
-    [endDraft, getNextValue, isDisabled, isReadOnly, onChange, value],
+    [
+      effectiveValue,
+      endDraft,
+      getNextValue,
+      isDisabled,
+      isReadOnly,
+      onChange,
+      runChangeAction,
+    ],
   );
 
   // A held stepper repeats into its own draft and commits once, when the hold
@@ -1242,8 +1310,9 @@ export function NumberInput({
       return;
     }
     endDraft();
-    if (hold.held !== value) {
+    if (hold.held !== effectiveValue) {
       onChange(hold.held);
+      runChangeAction(hold.held);
     }
   };
 
@@ -1339,6 +1408,7 @@ export function NumberInput({
     (e?: React.MouseEvent<HTMLButtonElement>) => {
       if (hasClear) {
         onChange(null);
+        runChangeAction(null);
       }
       endDraft();
       if (!e || e.detail === 0) {
@@ -1352,7 +1422,7 @@ export function NumberInput({
         inputRef.current?.focus({preventScroll: true});
       }
     },
-    [endDraft, hasClear, onChange],
+    [endDraft, hasClear, onChange, runChangeAction],
   );
 
   // Focus input when clicking anywhere on the wrapper (icons, padding, etc.)
@@ -1430,11 +1500,12 @@ export function NumberInput({
         data-autofocus={hasAutoFocus || undefined}
         aria-valuemin={min ?? undefined}
         aria-valuemax={max ?? undefined}
-        // The ARIA value and hidden form input expose the committed value;
-        // pendingInput is still an uncommitted edit and may be invalid.
-        aria-valuenow={value ?? undefined}
+        // While an Action is pending, the ARIA value and the hidden form input
+        // expose the optimistic value, else the committed value. They never expose
+        // pendingInput: it is an uncommitted edit and can be invalid.
+        aria-valuenow={effectiveValue ?? undefined}
         aria-valuetext={
-          value == null || !formatValue ? undefined : formattedValue
+          effectiveValue == null || !formatValue ? undefined : formattedValue
         }
         aria-describedby={
           [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
@@ -1446,6 +1517,7 @@ export function NumberInput({
             ? 'true'
             : undefined
         }
+        aria-busy={isBusy || undefined}
         aria-labelledby={inputLabelledBy}
         {...stylex.props(
           styles.input,
@@ -1468,7 +1540,8 @@ export function NumberInput({
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
         {alertMessage}
       </VisuallyHidden>
-      {hasClear && value != null && !isDisabled && !isReadOnly && (
+      {isBusy && <Spinner size="sm" aria-hidden="true" />}
+      {hasClear && effectiveValue != null && !isDisabled && !isReadOnly && (
         <InputClearButton
           label={t('@astryx.numberInput.clearLabel', {label})}
           onClick={handleClear}

@@ -3237,3 +3237,314 @@ describe('NumberInput stepper padding coupling', () => {
     expect(css).toContain('border-radius: 2px');
   });
 });
+
+// =============================================================================
+// Family-aligned isLoading + changeAction (input-field family FR5/FR6)
+// =============================================================================
+
+describe('NumberInput changeAction and isLoading', () => {
+  function createDeferred() {
+    let resolve!: () => void;
+    const promise = new Promise<void>(r => {
+      resolve = r;
+    });
+    return {promise, resolve};
+  }
+
+  function DeferredOwner({
+    initialValue,
+    onSave,
+    hasClear,
+  }: {
+    initialValue: number | null;
+    onSave: (value: number | null) => Promise<void>;
+    hasClear?: true;
+  }) {
+    const [value, setValue] = useState<number | null>(initialValue);
+    const handleSave = async (next: number | null) => {
+      await onSave(next);
+      setValue(next);
+    };
+    if (hasClear) {
+      return (
+        <NumberInput
+          label="Seats"
+          value={value}
+          hasClear
+          hasNumberSteppers
+          onChange={() => {}}
+          changeAction={handleSave}
+        />
+      );
+    }
+    return (
+      <NumberInput
+        label="Seats"
+        value={value ?? 0}
+        hasNumberSteppers
+        onChange={() => {}}
+        changeAction={handleSave}
+      />
+    );
+  }
+
+  it('shows a spinner and aria-busy when isLoading is true', () => {
+    render(
+      <NumberInput label="Amount" value={42} onChange={vi.fn()} isLoading />,
+    );
+    const input = screen.getByRole('spinbutton');
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(document.querySelector('.astryx-spinner')).toBeInTheDocument();
+  });
+
+  it('does not show spinner or aria-busy when value is NaN at rest', () => {
+    render(<NumberInput label="Amount" value={NaN} onChange={vi.fn()} />);
+    const input = screen.getByRole('spinbutton');
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(document.querySelector('.astryx-spinner')).toBeNull();
+  });
+
+  it('runs changeAction after onChange for typed input on blur', async () => {
+    const calls: string[] = [];
+    const onChange = vi.fn(() => calls.push('onChange'));
+    const changeAction = vi.fn(async () => {
+      calls.push('changeAction');
+    });
+
+    render(
+      <NumberInput
+        label="Amount"
+        value={1}
+        onChange={onChange}
+        changeAction={changeAction}
+      />,
+    );
+
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
+    fireEvent.change(input, {target: {value: '15'}});
+    fireEvent.blur(input);
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(15);
+    expect(changeAction).toHaveBeenCalledExactlyOnceWith(15);
+    expect(calls).toEqual(['onChange', 'changeAction']);
+  });
+
+  it('runs changeAction after onChange for typed input on Enter', async () => {
+    const calls: string[] = [];
+    const onChange = vi.fn(() => calls.push('onChange'));
+    const changeAction = vi.fn(async () => {
+      calls.push('changeAction');
+    });
+
+    render(
+      <NumberInput
+        label="Amount"
+        value={1}
+        onChange={onChange}
+        changeAction={changeAction}
+      />,
+    );
+
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
+    fireEvent.change(input, {target: {value: '25'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(25);
+    expect(changeAction).toHaveBeenCalledExactlyOnceWith(25);
+    expect(calls).toEqual(['onChange', 'changeAction']);
+  });
+
+  it('runs changeAction after onChange on stepper buttons', async () => {
+    const calls: string[] = [];
+    const onChange = vi.fn(() => calls.push('onChange'));
+    const changeAction = vi.fn(async () => {
+      calls.push('changeAction');
+    });
+
+    render(
+      <NumberInput
+        label="Amount"
+        value={5}
+        hasNumberSteppers
+        onChange={onChange}
+        changeAction={changeAction}
+      />,
+    );
+
+    const incrementButton = screen.getByLabelText(/increment/i);
+    fireEvent.click(incrementButton);
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(6);
+    expect(changeAction).toHaveBeenCalledExactlyOnceWith(6);
+    expect(calls).toEqual(['onChange', 'changeAction']);
+  });
+
+  it('runs changeAction after onChange on clear button with null', async () => {
+    const calls: string[] = [];
+    const onChange = vi.fn(() => calls.push('onChange'));
+    const changeAction = vi.fn(async () => {
+      calls.push('changeAction');
+    });
+
+    render(
+      <NumberInput
+        label="Amount"
+        value={5}
+        hasClear
+        onChange={onChange}
+        changeAction={changeAction}
+      />,
+    );
+
+    const clearButton = screen.getByLabelText(/clear/i);
+    fireEvent.click(clearButton);
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(null);
+    expect(changeAction).toHaveBeenCalledExactlyOnceWith(null);
+    expect(calls).toEqual(['onChange', 'changeAction']);
+  });
+
+  it('runs changeAction after onChange when held stepper is released', async () => {
+    vi.useFakeTimers();
+    try {
+      const calls: string[] = [];
+      const onChange = vi.fn(() => calls.push('onChange'));
+      const changeAction = vi.fn(async () => {
+        calls.push('changeAction');
+      });
+
+      render(
+        <NumberInput
+          label="Amount"
+          value={5}
+          hasNumberSteppers
+          onChange={onChange}
+          changeAction={changeAction}
+        />,
+      );
+
+      const increment = screen.getByLabelText(/increment/i);
+      const mousePress = {button: 0, pointerId: 1, pointerType: 'mouse'};
+
+      fireEvent.pointerDown(increment, mousePress);
+      act(() => {
+        vi.advanceTimersByTime(500 + 250);
+      });
+      fireEvent.pointerUp(increment, mousePress);
+
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(7);
+      expect(changeAction).toHaveBeenCalledExactlyOnceWith(7);
+      expect(calls).toEqual(['onChange', 'changeAction']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('runs changeAction after onChange when draft is emptied on blur and Enter', async () => {
+    // 1. Emptied on blur
+    const blurCalls: string[] = [];
+    const onBlurChange = vi.fn(() => blurCalls.push('onChange'));
+    const onBlurAction = vi.fn(async () => {
+      blurCalls.push('changeAction');
+    });
+
+    const {unmount} = render(
+      <NumberInput
+        label="Amount"
+        value={10}
+        hasClear
+        onChange={onBlurChange}
+        changeAction={onBlurAction}
+      />,
+    );
+
+    const blurInput = screen.getByRole<HTMLInputElement>('spinbutton');
+    fireEvent.change(blurInput, {target: {value: ''}});
+    fireEvent.blur(blurInput);
+
+    expect(onBlurChange).toHaveBeenCalledExactlyOnceWith(null);
+    expect(onBlurAction).toHaveBeenCalledExactlyOnceWith(null);
+    expect(blurCalls).toEqual(['onChange', 'changeAction']);
+
+    unmount();
+
+    // 2. Emptied on Enter
+    const enterCalls: string[] = [];
+    const onEnterChange = vi.fn(() => enterCalls.push('onChange'));
+    const onEnterAction = vi.fn(async () => {
+      enterCalls.push('changeAction');
+    });
+
+    render(
+      <NumberInput
+        label="Amount"
+        value={10}
+        hasClear
+        onChange={onEnterChange}
+        changeAction={onEnterAction}
+      />,
+    );
+
+    const enterInput = screen.getByRole<HTMLInputElement>('spinbutton');
+    fireEvent.change(enterInput, {target: {value: ''}});
+    fireEvent.keyDown(enterInput, {key: 'Enter'});
+
+    expect(onEnterChange).toHaveBeenCalledExactlyOnceWith(null);
+    expect(onEnterAction).toHaveBeenCalledExactlyOnceWith(null);
+    expect(enterCalls).toEqual(['onChange', 'changeAction']);
+  });
+
+  it('presents proposed value optimistically while changeAction is pending', async () => {
+    const deferred = createDeferred();
+    const onSave = vi.fn(async () => deferred.promise);
+
+    render(<DeferredOwner initialValue={2} onSave={onSave} />);
+
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
+    const increment = screen.getByLabelText(/increment/i);
+
+    expect(input.value).toBe('2');
+    expect(input).toHaveAttribute('aria-valuenow', '2');
+    expect(input).not.toHaveAttribute('aria-busy');
+
+    // Step 1: 2 -> 3
+    fireEvent.click(increment);
+
+    expect(input.value).toBe('3');
+    expect(input).toHaveAttribute('aria-valuenow', '3');
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(onSave).toHaveBeenCalledWith(3);
+
+    // Step 2 during in-flight action: advances from 3 -> 4
+    fireEvent.click(increment);
+    expect(input.value).toBe('4');
+    expect(input).toHaveAttribute('aria-valuenow', '4');
+
+    // Settle async save
+    await act(async () => {
+      deferred.resolve();
+    });
+
+    expect(input).not.toHaveAttribute('aria-busy');
+  });
+
+  it('does not show duplicate spinners when both isLoading and changeAction are active', () => {
+    const deferred = createDeferred();
+    render(
+      <NumberInput
+        label="Amount"
+        value={2}
+        isLoading
+        hasNumberSteppers
+        onChange={vi.fn()}
+        changeAction={async () => deferred.promise}
+      />,
+    );
+
+    const increment = screen.getByLabelText(/increment/i);
+    fireEvent.click(increment);
+
+    const spinners = document.querySelectorAll('.astryx-spinner');
+    expect(spinners).toHaveLength(1);
+  });
+});
