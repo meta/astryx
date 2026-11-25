@@ -379,12 +379,24 @@ test.describe('a record that stays put', () => {
 
 test.describe('a finger on the reorder handle', () => {
   /** The span across the first handle's centre that lands on it, each axis. */
-  async function handleTarget(page: Page, placement: 'start' | 'end') {
+  async function handleTarget(
+    page: Page,
+    placement: 'start' | 'end',
+    isClipped = false,
+  ) {
     await page.goto(
       `${storybook.origin}/iframe.html?id=lab-listinput--reorder-handle-options&viewMode=story&args=placement:${placement};revealBehavior:always`,
     );
     const handle = page.locator(HANDLE).first();
     await handle.waitFor();
+    if (isClipped) {
+      // A host that clips at the list's edges and publishes no padding.
+      await page.evaluate(() => {
+        const root = document.getElementById('storybook-root');
+        root?.style.setProperty('padding', '0');
+        root?.style.setProperty('overflow', 'clip');
+      });
+    }
     // The hit area's observers settle its reach after layout.
     await sleep(300);
     return handle.evaluate(element => {
@@ -424,6 +436,20 @@ test.describe('a finger on the reorder handle', () => {
     );
     const end = await handleTarget(page, 'end');
     const start = await handleTarget(page, 'start');
+    const detail = JSON.stringify({start, end});
+    expect(start.width, detail).toBeGreaterThanOrEqual(end.width - 0.5);
+    expect(start.height, detail).toBeGreaterThanOrEqual(end.height - 0.5);
+  });
+
+  test("in a host that clips at the list's edges, a start handle's target is still at least as large as an end handle's", async ({
+    page,
+  }) => {
+    test.skip(
+      !(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)),
+      'the finger target applies under (pointer: coarse)',
+    );
+    const end = await handleTarget(page, 'end', true);
+    const start = await handleTarget(page, 'start', true);
     const detail = JSON.stringify({start, end});
     expect(start.width, detail).toBeGreaterThanOrEqual(end.width - 0.5);
     expect(start.height, detail).toBeGreaterThanOrEqual(end.height - 0.5);
