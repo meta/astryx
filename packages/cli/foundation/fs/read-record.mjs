@@ -274,7 +274,7 @@ function installRecorder() {
             : fileURLToPath(target);
       } catch {
         // A URL that names no local file reaches the original unrecorded, so
-        // it fails as it does outside a run: the promise API rejects.
+        // it behaves as it does outside a run: the promise API rejects.
         return original.apply(this, args);
       }
       if (kind !== 'realpath') {

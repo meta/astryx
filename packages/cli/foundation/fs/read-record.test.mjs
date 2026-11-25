@@ -82,7 +82,7 @@ describe('recordReads', () => {
     expect(outside.size).toBe(0);
   });
 
-  it('rejects a URL that names no local file, as outside a run', async () => {
+  it('treats a URL that names no local file as outside a run: a promise read rejects, an existence check says no', async () => {
     /** @type {Map<string, string>} */
     const seen = new Map();
     for (const url of [
@@ -95,6 +95,7 @@ describe('recordReads', () => {
         pending = recordReads(seen, () => fs.promises.readFile(url));
       }).not.toThrow();
       await expect(pending).rejects.toThrow();
+      expect(recordReads(seen, () => fs.existsSync(url))).toBe(false);
     }
     expect(seen.size).toBe(0);
   });
