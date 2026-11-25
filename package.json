@@ -77,6 +77,7 @@
     "rtl:audit": "node apps/storybook/rtl-audit/rtl-audit.mjs",
     "lab:readiness": "node internal/lab-readiness/audit.mjs",
     "lab:readiness:check": "node internal/lab-readiness/audit.mjs --check",
+    "lab:sync": "node scripts/lab-sync.mjs",
     "guard:modal-close": "node .github/scripts/modal-close-visibility.js",
     "guard:modal-close:webkit": "node .github/scripts/modal-close-visibility.js --browser webkit",
     "guard:theme-vars": "node .github/scripts/theme-var-reachability.js",

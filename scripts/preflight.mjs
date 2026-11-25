@@ -40,6 +40,12 @@ export const NOT_RUN =
 /** Files CI's formatting step checks with Prettier. */
 const FORMATTED = /\.(?:tsx?|md)$/;
 
+/** Every Lab route-lock entry and swizzle sample is present (`pnpm lab:sync`). */
+const LAB_SYNC_CHECK = {
+  id: 'lab sync',
+  commands: [{kind: 'light', argv: ['pnpm', 'lab:sync', '--check']}],
+};
+
 /** Files ESLint lints. */
 const LINTED = /\.(?:[cm]?[jt]sx?)$/;
 /** Vitest test files. */
@@ -312,6 +318,7 @@ export function planChecks({
     id: 'changesets',
     commands: [{kind: 'light', argv: ['pnpm', 'check:changesets']}],
   });
+  checks.push(LAB_SYNC_CHECK);
 
   if (browser) {
     if (noBuild) {
@@ -473,6 +480,7 @@ function quickChecks({scope, mergeBase, changed, tmp}) {
       id: 'changesets',
       commands: [{kind: 'light', argv: ['pnpm', 'check:changesets']}],
     },
+    LAB_SYNC_CHECK,
   ];
 }
 
