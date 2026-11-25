@@ -2066,9 +2066,9 @@ export class ListReorderController implements ListReorderSession {
 
   private rebase(pending: PendingDrop): void {
     const {list} = pending;
-    // Under Reduce Motion the drop's cross-fade is timed from the release, so
-    // it ends within its 200 ms of the release however late the commit runs.
-    // Nothing travels there, so the rows read the same at the release as now.
+    // Under Reduce Motion the fade starts at the release. A late commit then
+    // shortens the fade but never extends it past 200 ms. Nothing travels
+    // there, so the rows read the same at the release as now.
     const at =
       pending.releasedAt != null && reducesMotion(list)
         ? Math.min(pending.releasedAt, motionNow())

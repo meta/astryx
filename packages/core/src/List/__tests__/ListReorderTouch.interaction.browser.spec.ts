@@ -10,7 +10,8 @@
  *   place. While the finger holds the drag, the rows stay still, the source
  *   dims, a preview follows and an insertion line marks the drop position. A
  *   flick on a handle scrolls and moves nothing. A cancelled drag puts the
- *   row back. With Reduce Motion the drop takes its place without travel. A
+ *   row back. With Reduce Motion the drop takes its place without travel,
+ *   and its cross-fade ends within 200 ms of the lift. A
  *   flush row's handle stays inside the list. A finger held on a handle
  *   refuses text selection on the list until it lifts. A drag that crosses
  *   rows forces no style or layout pass, and neither does the pick-up. A
@@ -538,6 +539,76 @@ test.describe('under a finger', () => {
           ),
         ),
     ).toBe(false);
+  });
+
+  test("with Reduce Motion a finger drop's cross-fade ends within 200 ms of the lift", async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    // Each row animation's scheduled end on the document timeline, read every
+    // frame while it lives, and the lift's time on the same clock.
+    await page.evaluate(() => {
+      const record = window as unknown as {
+        liftedAt: number;
+        ends: Map<Animation, number>;
+      };
+      record.liftedAt = Number.NaN;
+      record.ends = new Map();
+      window.addEventListener(
+        'touchend',
+        event => {
+          record.liftedAt = event.timeStamp;
+        },
+        {capture: true},
+      );
+      const sample = () => {
+        for (const animation of document.getAnimations()) {
+          const target =
+            animation.effect instanceof KeyframeEffect
+              ? animation.effect.target
+              : null;
+          const start = animation.startTime;
+          if (
+            target?.closest('#storybook-root li') == null ||
+            typeof start !== 'number'
+          ) {
+            continue;
+          }
+          const end = animation.effect?.getComputedTiming().endTime;
+          if (typeof end === 'number') {
+            record.ends.set(animation, start + end);
+          }
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+    const {at, rowHeight} = await handleOf(page, 'Inbox');
+    const driver = await touchDriver(page);
+    await driver.play(
+      holdThenDrag(
+        at,
+        {x: at.x, y: at.y + rowHeight * 2},
+        {holdMs: HOLD_MS, durationMs: 400, restMs: 120},
+      ),
+    );
+    await page.waitForTimeout(600);
+    const {liftedAt, lastEnd} = await page.evaluate(() => {
+      const record = window as unknown as {
+        liftedAt: number;
+        ends: Map<Animation, number>;
+      };
+      return {
+        liftedAt: record.liftedAt,
+        lastEnd: Math.max(...record.ends.values()),
+      };
+    });
+    const detail = JSON.stringify({liftedAt, lastEnd});
+    expect(Number.isFinite(liftedAt), detail).toBe(true);
+    expect(Number.isFinite(lastEnd), detail).toBe(true);
+    // The dip's halves are timed to the millisecond; half a millisecond
+    // covers the timeline's rounding.
+    expect(lastEnd - liftedAt, detail).toBeLessThanOrEqual(200.5);
   });
 });
 
