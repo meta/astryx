@@ -101,6 +101,7 @@ import {
 } from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {isHTMLElement} from '../utils/nodeType';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 import {
   reducesMotion,
   themeReducesMotion,
@@ -260,8 +261,9 @@ const styles = stylex.create({
     // reduced-motion cross-fade, 200 ms on easeInOut whatever the theme's
     // duration (design:reduced-motion DR2, DR4). Moves to
     // reducedMotionFadeConsts once that is on main.
+    // A theme that reduces motion for everyone shows the dialog at once.
     animationDuration: {
-      default: durationVars['--duration-medium-max'],
+      default: `calc(${durationVars['--duration-medium-max']} * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '200ms',
     },
     animationTimingFunction: {

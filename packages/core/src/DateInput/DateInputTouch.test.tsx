@@ -3301,8 +3301,13 @@ describe('DateInput — scroll CSS (definition-level)', () => {
       source.indexOf('const styles = stylex.create('),
     );
     // The arrows, Reset, the weekday row, the layer beneath, the layer
-    // above, and the chevron.
-    expect(styles.match(/transitionDuration: SWAP_DURATION/g)).toHaveLength(6);
+    // above, and the chevron (whose turn also reads the reduced-motion
+    // factor).
+    expect(
+      styles.match(
+        /transitionDuration: (?:SWAP_DURATION|`calc\(\$\{SWAP_DURATION\})/g,
+      ),
+    ).toHaveLength(6);
     // And no leftover hand-rolled timing beside them.
     expect(styles).not.toContain('PANEL_FADE_MS');
     expect(source).toContain(

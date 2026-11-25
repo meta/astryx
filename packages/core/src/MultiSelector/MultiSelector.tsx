@@ -125,6 +125,7 @@ import english from '../i18n/generated-english/MultiSelector/MultiSelector.gener
 import {getLocaleDirection} from '../i18n/getLocaleDirection';
 import {useListPartsFormatter} from '../i18n/useListFormatter';
 import {useLocale} from '../i18n/useLocale';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -245,7 +246,10 @@ const styles = stylex.create({
   // picks these up and needs no transition opt-out.
   triggerIconRotation: {
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
     transformOrigin: 'center',
   },
