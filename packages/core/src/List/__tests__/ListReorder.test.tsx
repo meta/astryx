@@ -1856,6 +1856,8 @@ describe('List reorderable', () => {
       // The travelling mark raises it, on the surface, as a ListItem that
       // slides across rows is raised.
       expect(row.hasAttribute('data-astryx-travelling')).toBe(true);
+      // It rides on its preview's backdrop, not always the surface.
+      expect(row.style.getPropertyValue('--_travelling-backdrop')).not.toBe('');
       // The glide's rest timer was set on the real clock at the drop. This
       // wait is set after it, so it ends after the row rests.
       clock = start + 5000;
@@ -1863,10 +1865,31 @@ describe('List reorderable', () => {
         await new Promise(resolve => setTimeout(resolve, 1500));
       });
       expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+      expect(row.style.getPropertyValue('--_travelling-backdrop')).toBe('');
       expect(row.style.zIndex).toBe('');
       expect(row.style.backgroundColor).toBe('');
     } finally {
       now.mockRestore();
+    }
+  });
+
+  it('does not mark a dropped row as travelling under Reduce Motion', () => {
+    document.body.setAttribute('data-astryx-reduced-motion', '');
+    try {
+      stubPrimaryPointer(false);
+      render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+      const list = screen.getByRole('list');
+      layOut(list);
+      const handle = handleOf('A');
+      const row = handle.closest('li')!;
+      mouseDrag(handle, 322, 322 + 70);
+      act(() => {
+        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+      });
+      expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+    } finally {
+      document.body.removeAttribute('data-astryx-reduced-motion');
     }
   });
 

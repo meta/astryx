@@ -16,6 +16,12 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 
 const TRAVELLING = 'data-astryx-travelling';
+/**
+ * The backdrop a travelling row rides on, where it is not the surface: a
+ * dropped row keeps the backdrop its preview had.
+ */
+const BACKDROP = '--_travelling-backdrop';
+const SURFACE = `var(${BACKDROP}, ${colorVars['--color-background-surface']})`;
 
 /**
  * Each row's latest mark, so the end of an earlier slide leaves a later
@@ -24,18 +30,27 @@ const TRAVELLING = 'data-astryx-travelling';
 const marks = new WeakMap<Element, object>();
 
 /**
- * Marks `row` as sliding across rows that move the other way. Returns the
- * call that removes the mark when the slide ends. A later mark on the row
- * stays when that call runs.
+ * Marks `row` as sliding across rows that move the other way, on `backdrop`
+ * or else the surface. Returns the call that removes the mark when the slide
+ * ends. A later mark on the row stays when that call runs.
  */
-export function markTravelling(row: Element): () => void {
+export function markTravelling(
+  row: HTMLElement,
+  backdrop: string | null = null,
+): () => void {
   const mark = {};
   marks.set(row, mark);
   row.setAttribute(TRAVELLING, '');
+  if (backdrop == null) {
+    row.style.removeProperty(BACKDROP);
+  } else {
+    row.style.setProperty(BACKDROP, backdrop);
+  }
   return () => {
     if (marks.get(row) === mark) {
       marks.delete(row);
       row.removeAttribute(TRAVELLING);
+      row.style.removeProperty(BACKDROP);
     }
   };
 }
@@ -59,7 +74,7 @@ export const travellingStyles = stylex.create({
     },
     boxShadow: {
       default: null,
-      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected])': `inset 0 0 0 100vmax ${colorVars['--color-background-surface']}`,
+      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected])': `inset 0 0 0 100vmax ${SURFACE}`,
     },
     // A row of a List with dividers takes its shadow from the press layer's
     // `overDividers`, composed later, which wins over the one above. So the
@@ -68,7 +83,7 @@ export const travellingStyles = stylex.create({
     // does not inherit it.
     '--_travelling-surface': {
       default: null,
-      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected])': `inset 0 0 0 100vmax ${colorVars['--color-background-surface']}`,
+      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected])': `inset 0 0 0 100vmax ${SURFACE}`,
       ':not([data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected]))':
         'initial',
     },
