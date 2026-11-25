@@ -47,7 +47,7 @@ import {
 } from './useLongPress';
 import {LONG_PRESS_DURATION_MS} from '../motion/uikit/longPress';
 import {DELAYS_CONTENT_TOUCHES_MS} from '../motion/uikit/scroll';
-import {isInsideScrollView} from '../utils/scrollView';
+import {isInsideScrollView, parseTouchAction} from '../utils/scrollView';
 import {edgeAutoscroll} from '../utils/edgeAutoscroll';
 import {subscribeInput} from '../utils/inputStream';
 import {focusForLastInput} from '../utils/focusReturn';
@@ -349,6 +349,18 @@ function touchOfPointer(
     touches.find(touch => touch.identifier === pointerId) ??
     (touches.length === 1 ? touches[0] : null)
   );
+}
+
+/**
+ * Whether the menu's own `touch-action` leaves no one-finger pan to the
+ * browser, as a menu whose rows fit declares with `pinch-zoom`.
+ */
+function allowsNoPan(menu: HTMLElement): boolean {
+  const pans = parseTouchAction(
+    menu.ownerDocument.defaultView?.getComputedStyle(menu).touchAction ||
+      'auto',
+  );
+  return !pans.x && !pans.y;
 }
 
 function isRowFocusable(row: HTMLElement): boolean {
@@ -1087,8 +1099,15 @@ export function useMenuPressInternal(
         },
         native,
       );
+      // Chrome makes a lift's touchend uncancelable after an uncancelled
+      // move. Claim the moves only when nothing under the finger can pan.
+      // A menu that scrolls, or a list in a sheet that scrolls, keeps its
+      // moves for its pan.
+      if (pointerType !== 'mouse' && allowsNoPan(menu)) {
+        installTouchMovePreventer();
+      }
     },
-    [attach, optionsRef, resolvePoint, step],
+    [attach, installTouchMovePreventer, optionsRef, resolvePoint, step],
   );
 
   const isTriggerClickFromPress = useCallback((): boolean => {

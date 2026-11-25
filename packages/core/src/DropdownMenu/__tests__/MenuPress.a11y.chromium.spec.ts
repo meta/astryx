@@ -356,6 +356,115 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     expect(activations).toEqual(['Delete clicked']);
   });
 
+  test('touch: a finger that begins on a row of a menu whose rows fit has every move and its lift cancelled, and acts once (spec:AST-094 FR19, FR21)', async ({
+    page,
+  }) => {
+    const activations = collectActivations(page);
+    const cdp = await enableTouch(page);
+    await mount(page, MENU_STORY);
+    await touch.tap(cdp, await center(page, TRIGGER));
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await presented(page);
+    // Read each touch event last, at the window, after every listener ran.
+    await page.evaluate(() => {
+      const seen = {
+        moves: 0,
+        cancelledMoves: 0,
+        endCancelled: null as boolean | null,
+      };
+      (window as unknown as {__touches: typeof seen}).__touches = seen;
+      window.addEventListener('touchmove', event => {
+        seen.moves += 1;
+        if (event.defaultPrevented) {
+          seen.cancelledMoves += 1;
+        }
+      });
+      window.addEventListener('touchend', event => {
+        seen.endCancelled = event.defaultPrevented;
+      });
+    });
+
+    const edit = await center(page, 'menuitem', 'Edit');
+    const del = await center(page, 'menuitem', 'Delete');
+    await touch.start(cdp, edit);
+    await touch.slide(cdp, edit, del);
+    await touch.end(cdp);
+
+    const seen = await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __touches: {
+              moves: number;
+              cancelledMoves: number;
+              endCancelled: boolean | null;
+            };
+          }
+        ).__touches,
+    );
+    expect(seen.moves).toBeGreaterThan(0);
+    // An uncancelled move lets the browser make the lift uncancelable.
+    expect(seen.cancelledMoves).toBe(seen.moves);
+    expect(seen.endCancelled).toBe(true);
+    await expect.poll(() => activations).toEqual(['Delete clicked']);
+    await page.waitForTimeout(500);
+    expect(activations).toEqual(['Delete clicked']);
+  });
+
+  test('touch: a swipe that begins on a row of a bottom-sheet menu scrolls the sheet and acts on nothing (module:DropdownMenu/useMenuPress FR4)', async ({
+    page,
+  }) => {
+    const seen: string[] = [];
+    page.on('console', message => {
+      if (message.text().endsWith(' selected')) {
+        seen.push(message.text());
+      }
+    });
+    // Short enough that the sheet body scrolls its four rows.
+    await page.setViewportSize({width: 390, height: 300});
+    const cdp = await enableTouch(page);
+    await mount(page, 'core-dropdownmenu--action-sheet-presentation');
+    // The sheet's rows are the action list's buttons under the press list.
+    const share = page
+      .locator('dialog[open] [data-astryx-menu-press] button')
+      .filter({hasText: 'Share project'});
+    // The story's play function opens the sheet.
+    await expect(share).toBeVisible({timeout: 10_000});
+    await page.waitForTimeout(600);
+    // The sheet body is the box that scrolls; the list inside it does not.
+    const readScroll = async () =>
+      share.evaluate(row => {
+        for (
+          let node = row.parentElement;
+          node != null;
+          node = node.parentElement
+        ) {
+          const {overflowY} = getComputedStyle(node);
+          if (
+            (overflowY === 'auto' || overflowY === 'scroll') &&
+            node.scrollHeight > node.clientHeight + 1
+          ) {
+            return node.scrollTop;
+          }
+        }
+        return null;
+      });
+    const before = await readScroll();
+    expect(before, 'the sheet body scrolls at this height').not.toBeNull();
+    const box = await share.boundingBox();
+    if (box == null) {
+      throw new Error('Share project has no rendered bounds');
+    }
+    const from = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    await touch.start(cdp, from);
+    await touch.slide(cdp, from, {x: from.x, y: from.y - 110}, 11);
+    await touch.end(cdp);
+    await page.waitForTimeout(500);
+    expect((await readScroll()) ?? 0).toBeGreaterThan((before ?? 0) + 20);
+    expect(seen).toEqual([]);
+  });
+
   test('touch: a tap on a row acts exactly once', async ({page}) => {
     const activations = collectActivations(page);
     const cdp = await enableTouch(page);
