@@ -321,6 +321,32 @@ describe('useLongPressHookUsage example', () => {
       DOMRect.fromRect({x: 16, y: 64, width: 88, height: 40}),
     );
     expect(after?.textContent).toContain('Opened by button at (112, 64)');
+
+    // A narrow card has no room on either side of the button, so the panel
+    // opens below it in both left-to-right and right-to-left layouts.
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 0, y: 0, width: 260, height: 216}),
+    );
+
+    const belowLtr = openFrom(
+      DOMRect.fromRect({x: 16, y: 64, width: 88, height: 40}),
+    );
+    expect(belowLtr?.textContent).toContain('Opened by button at (16, 112)');
+    expect(panelPosition(belowLtr)).toMatchObject({
+      left: 'clamp(0px, 16px, calc(100% - 180px))',
+      top: '112px',
+      transform: 'translateY(min(0px, max(-112px, calc(216px - 100%))))',
+    });
+
+    const belowRtl = openFrom(
+      DOMRect.fromRect({x: 156, y: 64, width: 88, height: 40}),
+    );
+    expect(belowRtl?.textContent).toContain('Opened by button at (156, 112)');
+    expect(panelPosition(belowRtl)).toMatchObject({
+      left: 'clamp(0px, 156px, calc(100% - 180px))',
+      top: '112px',
+      transform: 'translateY(min(0px, max(-112px, calc(216px - 100%))))',
+    });
   });
 
   it('provides an explicit Actions button fallback and returns focus when closed', () => {

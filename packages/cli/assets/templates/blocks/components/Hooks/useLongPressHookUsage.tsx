@@ -34,15 +34,15 @@ const MENU_WIDTH = 180;
 const SURFACE_MIN_HEIGHT = 216;
 
 const styles = stylex.create({
-  surface: {
+  surface: (minHeight: number) => ({
     position: 'relative',
     width: '100%',
     maxWidth: 360,
-    minHeight: SURFACE_MIN_HEIGHT,
+    minHeight,
     // Safari, the browser that starts a text selection on a long press, reads
     // only the prefixed property; Chrome and Firefox read it too.
     WebkitUserSelect: 'none',
-  },
+  }),
   // The card fills the surface, so the area that listens for the press is
   // the area a person sees.
   card: {flexGrow: 1},
@@ -69,7 +69,11 @@ export default function UseLongPressHookUsage() {
     'Hold on touch, right-click, or use Actions.',
   );
 
-  const openMenuAt = (point: {x: number; y: number}, source: TriggerSource) => {
+  const openMenuAt = (
+    point: {x: number; y: number},
+    source: TriggerSource,
+    minSurfaceHeight = 0,
+  ) => {
     const surface = surfaceRef.current;
     if (!surface) {
       return;
@@ -77,7 +81,8 @@ export default function UseLongPressHookUsage() {
     const rect = surface.getBoundingClientRect();
     const x = Math.max(0, Math.round(point.x - rect.left));
     const y = Math.max(0, Math.round(point.y - rect.top));
-    setMenu({x, y, surfaceHeight: Math.round(rect.height), source});
+    const surfaceHeight = Math.max(Math.round(rect.height), minSurfaceHeight);
+    setMenu({x, y, surfaceHeight, source});
   };
 
   // Only the four touch handlers belong on the DOM element; start, moveTo, and
@@ -119,18 +124,32 @@ export default function UseLongPressHookUsage() {
     openMenuAt({x: e.clientX, y: e.clientY}, 'right-click');
   };
 
-  // The panel opens beside the Actions button, never over it: before the
-  // button when there is room, after it otherwise (the button can wrap to the
-  // start of its own row on a narrow card).
+  // The panel opens beside the Actions button when a side has room. On a
+  // narrower card it opens below the button, so it never covers the trigger.
   const handleOpenFromButton = (e: MouseEvent<HTMLButtonElement>) => {
     const buttonRect = e.currentTarget.getBoundingClientRect();
-    const surfaceLeft = surfaceRef.current?.getBoundingClientRect().left ?? 0;
+    const surfaceRect = surfaceRef.current?.getBoundingClientRect();
+    const surfaceLeft = surfaceRect?.left ?? 0;
+    const surfaceRight = surfaceRect?.right ?? 0;
     const hasRoomBefore =
       buttonRect.left - surfaceLeft >= MENU_WIDTH + MENU_GAP;
-    const x = hasRoomBefore
-      ? buttonRect.left - MENU_WIDTH - MENU_GAP
-      : buttonRect.right + MENU_GAP;
-    openMenuAt({x, y: buttonRect.top}, 'button');
+    const hasRoomAfter =
+      surfaceRight - buttonRect.right >= MENU_WIDTH + MENU_GAP;
+    if (hasRoomBefore) {
+      openMenuAt(
+        {x: buttonRect.left - MENU_WIDTH - MENU_GAP, y: buttonRect.top},
+        'button',
+      );
+      return;
+    }
+    if (hasRoomAfter) {
+      openMenuAt({x: buttonRect.right + MENU_GAP, y: buttonRect.top}, 'button');
+      return;
+    }
+    const y = buttonRect.bottom + MENU_GAP;
+    const minSurfaceHeight =
+      Math.max(0, Math.round(y - (surfaceRect?.top ?? 0))) + SURFACE_MIN_HEIGHT;
+    openMenuAt({x: buttonRect.left, y}, 'button', minSurfaceHeight);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
@@ -160,7 +179,9 @@ export default function UseLongPressHookUsage() {
       <VStack
         ref={surfaceRef}
         data-testid="long-press-surface"
-        xstyle={styles.surface}
+        xstyle={styles.surface(
+          Math.max(SURFACE_MIN_HEIGHT, menu?.surfaceHeight ?? 0),
+        )}
         onTouchStart={handleTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={handleTouchEnd}
