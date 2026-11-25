@@ -342,6 +342,154 @@ test('after a finger opens the menu, a mouse that moves onto another row while t
   expect(await readPicked(page)).toEqual(['Duplicate']);
 });
 
+/**
+ * Holds the page's timer callbacks that come due until `releaseLateTimers`,
+ * as a busy main thread leaves them, while frames keep running. Install it
+ * before the story loads, so the page's own timers go through it.
+ */
+async function installLateTimers(page: Page) {
+  await page.addInitScript(() => {
+    const realTimeout = window.setTimeout.bind(window);
+    const queue: (() => void)[] = [];
+    const late = {isHolding: false, queue};
+    (window as unknown as {__lateTimers: typeof late}).__lateTimers = late;
+    window.setTimeout = ((
+      handler: TimerHandler,
+      ms?: number,
+      ...args: unknown[]
+    ) =>
+      realTimeout(() => {
+        const run = () => {
+          if (typeof handler === 'function') {
+            handler(...args);
+          }
+        };
+        if (late.isHolding) {
+          queue.push(run);
+        } else {
+          run();
+        }
+      }, ms)) as typeof window.setTimeout;
+  });
+}
+
+const holdLateTimers = async (page: Page) =>
+  page.evaluate(() => {
+    (
+      window as unknown as {__lateTimers: {isHolding: boolean}}
+    ).__lateTimers.isHolding = true;
+  });
+
+const releaseLateTimers = async (page: Page) =>
+  page.evaluate(() => {
+    const late = (
+      window as unknown as {
+        __lateTimers: {isHolding: boolean; queue: (() => void)[]};
+      }
+    ).__lateTimers;
+    late.isHolding = false;
+    for (const run of late.queue.splice(0)) {
+      run();
+    }
+  });
+
+/**
+ * Waits until the menu's surface draws the same box for three frames in a
+ * row: the entrance is at rest on screen, whatever its timers do.
+ */
+async function untilDrawnAtRest(page: Page, layer: Locator) {
+  const surface = layer.locator('> *').first();
+  let last = '';
+  let still = 0;
+  for (let frame = 0; frame < 600 && still < 3; frame++) {
+    await frames(page, 1);
+    const box = await boxOf(surface);
+    const now = [box.x, box.y, box.width, box.height]
+      .map(value => value.toFixed(1))
+      .join(',');
+    still = now === last ? still + 1 : 0;
+    last = now;
+  }
+  if (still < 3) {
+    throw new Error('the menu never came to rest');
+  }
+}
+
+test("once the menu is drawn at rest, a tap outside dismisses it while the page's timers run late: the hold ends with the frame that draws the entrance's end (spec:AST-094 FR35)", async ({
+  page,
+}) => {
+  await installLateTimers(page);
+  await openStory(page, storybook(), 'core-dropdownmenu--default');
+  const driver = await touchDriver(page);
+  const trigger = page.getByRole('button', {name: 'Actions'});
+  const box = await boxOf(trigger);
+  await driver.tap({
+    x: Math.round(box.x + box.width / 2),
+    y: Math.round(box.y + box.height / 2),
+  });
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  const layer = menuLayer(page);
+  await untilEntering(page, layer);
+  // From inside the entrance, no timer callback runs until the end of the
+  // test, as on a main thread busy with other work.
+  await holdLateTimers(page);
+  await untilDrawnAtRest(page, layer);
+  const viewport = page.viewportSize() ?? {width: 402, height: 714};
+  await driver.tap({x: 20, y: viewport.height - 20});
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false', {
+    timeout: 2000,
+  });
+  await releaseLateTimers(page);
+});
+
+test("once the menu is drawn at rest, a pan outside scrolls the page while the page's timers run late (spec:AST-094 FR35)", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'a scripted touch scrolls the page only through Chromium\u2019s input pipeline',
+  );
+  await installLateTimers(page);
+  await openStory(page, storybook(), 'core-dropdownmenu--default');
+  // A page taller than the screen, so a pan can scroll it.
+  await page.evaluate(() => {
+    const tall = document.createElement('div');
+    Object.assign(tall.style, {
+      position: 'absolute',
+      top: '0',
+      left: '0',
+      width: '1px',
+      height: '4000px',
+    });
+    document.body.append(tall);
+  });
+  const driver = await touchDriver(page);
+  const trigger = page.getByRole('button', {name: 'Actions'});
+  const box = await boxOf(trigger);
+  await driver.tap({
+    x: Math.round(box.x + box.width / 2),
+    y: Math.round(box.y + box.height / 2),
+  });
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  const layer = menuLayer(page);
+  await untilEntering(page, layer);
+  await holdLateTimers(page);
+  await untilDrawnAtRest(page, layer);
+  const viewport = page.viewportSize() ?? {width: 402, height: 714};
+  const start = {x: 20, y: viewport.height - 40};
+  const finger = await driver.press(start);
+  for (let step = 1; step <= 10; step++) {
+    await finger.move({x: start.x, y: start.y - 20 * step});
+    await frames(page, 1);
+  }
+  await finger.lift();
+  await expect
+    .poll(async () => page.evaluate(() => window.scrollY), {timeout: 2000})
+    .toBeGreaterThan(0);
+  await releaseLateTimers(page);
+});
+
 test.describe('under a desktop mouse', () => {
   test.use({
     isMobile: false,
