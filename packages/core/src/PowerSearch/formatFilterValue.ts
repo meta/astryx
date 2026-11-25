@@ -141,7 +141,7 @@ export function formatDateRange(
  * its provider resolves.
  */
 export function formatFilterValue(
-  _config: InternalConfig,
+  config: InternalConfig,
   operatorValue: OperatorValue,
   filterValue: FilterValue,
   maxLength: number,
@@ -149,7 +149,36 @@ export function formatFilterValue(
   locale: Locale,
   timezoneID?: string,
   calendar: CalendarSystem = 'gregory',
-  canReadClock = true,
+): string {
+  return formatFilterValueForRender(
+    config,
+    operatorValue,
+    filterValue,
+    maxLength,
+    t,
+    locale,
+    timezoneID,
+    calendar,
+    true,
+  );
+}
+
+/**
+ * `formatFilterValue` for a component's render. `canReadClock` is false on
+ * the server and in the hydrating render, which must write the same markup:
+ * a date range with a `NOW` or `RELATIVE` part then reads as the catalog's
+ * "date range".
+ */
+export function formatFilterValueForRender(
+  _config: InternalConfig,
+  operatorValue: OperatorValue,
+  filterValue: FilterValue,
+  maxLength: number,
+  t: TranslatorFn,
+  locale: Locale,
+  timezoneID: string | undefined,
+  calendar: CalendarSystem,
+  canReadClock: boolean,
 ): string {
   switch (filterValue.type) {
     case 'empty':

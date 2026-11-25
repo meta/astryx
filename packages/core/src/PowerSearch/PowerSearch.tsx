@@ -77,7 +77,7 @@ import {isFocusDetached} from '../utils/isFocusDetached';
 import {isRenderable} from '../utils/isRenderable';
 import {useInternalConfig} from './useInternalConfig';
 import {usePowerSearchSource} from './usePowerSearchSource';
-import {formatDateRange, formatFilterValue} from './formatFilterValue';
+import {formatDateRange, formatFilterValueForRender} from './formatFilterValue';
 import {NestedEditor, PowerSearchEditPopover} from './PowerSearchEditPopover';
 import {PowerSearchValueEditor} from './PowerSearchValueEditor';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
@@ -944,7 +944,7 @@ export function PowerSearch({
         resolvedOp,
       );
       const valueStr = operator
-        ? formatFilterValue(
+        ? formatFilterValueForRender(
             config,
             operator.value,
             filter.value,
