@@ -96,7 +96,8 @@ import {
   easeVars,
   shadowVars,
 } from '../theme/tokens.stylex';
-import {mergeProps, rtlStyles} from '../utils';
+import {mergeProps} from '../utils';
+import {menuDirectionMirror} from '../DropdownMenu/menuDirectionMirror.stylex';
 import type {BaseProps} from '../BaseProps';
 import type {StyleXStyles} from '../theme/types';
 import {themeProps} from '../utils/themeProps';
@@ -907,7 +908,11 @@ export function ContextMenu({
               variant="ghost"
               size="sm"
               icon={
-                <Icon icon="chevronLeft" size="sm" xstyle={rtlStyles.mirror} />
+                <Icon
+                  icon="chevronLeft"
+                  size="sm"
+                  xstyle={menuDirectionMirror.mirror}
+                />
               }
               isIconOnly
               onClick={() => {

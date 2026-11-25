@@ -411,6 +411,46 @@ describe('DropdownMenu', () => {
     ).toBeInTheDocument();
   });
 
+  it.each([
+    {pageDir: 'rtl', menuDir: 'ltr', isFlipped: false},
+    {pageDir: 'ltr', menuDir: 'rtl', isFlipped: true},
+  ] as const)(
+    'points the sheet chevrons by the menu direction, not the page (page $pageDir, menu $menuDir)',
+    async ({pageDir, menuDir, isFlipped}) => {
+      const user = userEvent.setup();
+      render(
+        <div dir={pageDir}>
+          <div dir={menuDir}>
+            <DropdownMenu
+              button={{label: 'Project actions'}}
+              presentation="bottom-sheet"
+              items={[
+                {label: 'Move to project', items: [{label: 'Apollo launch'}]},
+              ]}
+            />
+          </div>
+        </div>,
+      );
+
+      await user.click(screen.getByRole('button', {name: /Project actions/}));
+      const row = screen.getByRole('button', {name: /Move to project/});
+      const rowChevron = row
+        .closest('li')
+        ?.querySelector<HTMLElement>('.astryx-icon:last-of-type');
+      expect(rowChevron).not.toBeNull();
+      const flipped = (element: Element) =>
+        getComputedStyle(element).transform === 'scaleX(-1)';
+      expect(flipped(rowChevron as HTMLElement)).toBe(isFlipped);
+
+      await user.click(row);
+      const backIcon = screen
+        .getByRole('button', {name: 'Back'})
+        .querySelector('.astryx-icon');
+      expect(backIcon).not.toBeNull();
+      expect(flipped(backIcon as Element)).toBe(isFlipped);
+    },
+  );
+
   it('names the sheet after the node-label submenu that opened, also across sections', async () => {
     const user = userEvent.setup();
 
