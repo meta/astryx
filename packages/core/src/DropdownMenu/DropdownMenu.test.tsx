@@ -33,7 +33,6 @@ import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
 import {DropdownMenuSubMenu} from './DropdownMenuSubMenu';
 import {Divider} from '../Divider';
 import {Tooltip} from '../Tooltip/Tooltip';
-import {rtlStyles} from '../utils';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {spacingVars} from '../theme/tokens.stylex';
@@ -586,9 +585,8 @@ describe('DropdownMenu', () => {
 
   it('mirrors bottom-sheet drill-in affordances under RTL', async () => {
     const user = userEvent.setup();
-    const {className: mirrorClassName} = stylex.props(rtlStyles.mirror);
-    const mirrorClasses = mirrorClassName?.split(' ') ?? [];
-    expect(mirrorClasses.length).toBeGreaterThan(0);
+    const flipped = (element: Element) =>
+      getComputedStyle(element).transform === 'scaleX(-1)';
 
     render(
       <div dir="rtl">
@@ -613,17 +611,13 @@ describe('DropdownMenu', () => {
       .closest('li')
       ?.querySelector('.astryx-icon');
     expect(forwardIcon).not.toBeNull();
-    for (const className of mirrorClasses) {
-      expect(forwardIcon).toHaveClass(className);
-    }
+    expect(flipped(forwardIcon as Element)).toBe(true);
 
     await user.click(submenuButton);
     const backButton = screen.getByRole('button', {name: 'Back'});
     const backIcon = backButton.querySelector('.astryx-icon');
     expect(backIcon).not.toBeNull();
-    for (const className of mirrorClasses) {
-      expect(backIcon).toHaveClass(className);
-    }
+    expect(flipped(backIcon as Element)).toBe(true);
   });
 
   it('uses the BottomSheet for adaptive presentation on compact touch', async () => {
