@@ -4,11 +4,13 @@
  * @file privateAttributes/listReorder.stylex.ts
  * @input A reorder handle: a reorderable List row's, or an attached one's
  * @output listReorderHandleProps and markReorderHandle, which mark a handle,
- *   and closestReorderHandle and reorderHandlesIn, which find marked handles
+ *   and closestReorderHandle, isReorderHandle and reorderHandlesIn, which
+ *   find marked handles
  * @position Owner module of the private list-reorder attribute: the only
  *   file that writes its name. List/ListReorderHandle.tsx and
  *   reorderable/attachReorderable.ts mark handles, and the reorder machinery
- *   (List/listReorderEngine.tsx) finds them. No package entry exports it.
+ *   (List/listReorderEngine.tsx) finds them. Only `isReorderHandle` leaves
+ *   Core, through the internal reorder entry.
  */
 
 const LIST_REORDER = 'data-astryx-list-reorder';
@@ -37,6 +39,11 @@ export function markReorderHandle(handle: Element): () => void {
 /** The reorder handle that holds `target`, or null. */
 export function closestReorderHandle(target: Element): HTMLElement | null {
   return target.closest<HTMLElement>(`[${LIST_REORDER}]`);
+}
+
+/** Whether `element` is a reorder handle. */
+export function isReorderHandle(element: Element): boolean {
+  return element.hasAttribute(LIST_REORDER);
 }
 
 /** The reorder handles inside `root`. */

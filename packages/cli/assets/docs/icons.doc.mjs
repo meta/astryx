@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Icons reference doc: semantic icon names available in Astryx
+ * @file Icons reference doc: built-in meanings available in Astryx
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -9,17 +9,18 @@ export const docs = {
   name: 'icons',
   title: 'Icons',
   category: 'foundations',
+  keywords: ['semantic icon', 'semantic icon name', 'semantic icon names', 'icon registry'],
   description:
-    "Semantic icon names available in the design system. These adapt to the active theme's icon registry.",
+    "Built-in meanings available in the design system. These adapt to the active theme's icons.",
 
   sections: [
     {
       title: 'Available Names',
-  category: 'foundations',
+      category: 'foundations',
       content: [
         {
           type: 'prose',
-          text: 'Components that accept an icon prop use IconType: either a semantic name string or a direct SVG component. The semantic names below are resolved through the global icon registry.',
+          text: 'Components that accept an icon prop use IconType: either a built-in meaning string or a direct SVG component. The built-in meanings below are resolved through the global icon registry.',
         },
         {
           type: 'table',
@@ -54,17 +55,18 @@ export const docs = {
             ['wrench', 'Settings, configuration'],
             ['stop', 'Stop/cancel action'],
             ['microphone', 'Voice input, audio recording'],
+            ['drag', 'Drag handles, reorder grips'],
           ],
         },
       ],
     },
     {
       title: 'Custom Icons',
-  category: 'foundations',
+      category: 'foundations',
       content: [
         {
           type: 'prose',
-          text: 'For icons not in the semantic list, pass an SVG component directly. Any ComponentType<SVGProps<SVGSVGElement>> works; Icon applies size and color styling automatically.',
+          text: 'For icons not in the built-in list, pass an SVG component directly. Any ComponentType<SVGProps<SVGSVGElement>> works; Icon applies size and color styling automatically.',
         },
         {
           type: 'code',
@@ -80,11 +82,11 @@ import { HeartIcon } from 'lucide-react';
     },
     {
       title: 'Theme Overrides',
-  category: 'foundations',
+      category: 'foundations',
       content: [
         {
           type: 'prose',
-          text: 'Themes can replace the default SVGs for any semantic name with the `icons` field in `defineTheme()`. This lets you swap the icon set (e.g. heroicons → lucide) without touching component code, and keeps lookup scoped to the active theme instead of mutating global defaults.',
+          text: 'Themes can replace the default SVGs for any built-in meaning with the `icons` field in `defineTheme()`. This lets you swap the icon set (e.g. heroicons → lucide) without touching component code, and keeps lookup scoped to the active theme instead of mutating global defaults.',
         },
         {
           type: 'code',
@@ -128,11 +130,11 @@ export const brandTheme = defineTheme({
     },
     {
       title: 'Icon Variants',
-  category: 'foundations',
+      category: 'foundations',
       content: [
         {
           type: 'prose',
-          text: "A theme lists the icon variant names it supports once, with `iconVariants` in `defineTheme()`. The list belongs to the whole theme, never to one icon, and Astryx defines no names of its own. Inside `defineTheme`, an entry function receives `variant` typed as the listed names, or `undefined`, so a misspelled name is a type error. An entry that receives `undefined` draws its normal artwork.",
+          text: 'A theme lists the icon variant names it supports once, with `iconVariants` in `defineTheme()`. The list belongs to the whole theme, never to one icon, and Astryx defines no names of its own. Inside `defineTheme`, an entry function receives `variant` typed as the listed names, or `undefined`, so a misspelled name is a type error. An entry that receives `undefined` draws its normal artwork.',
         },
         {
           type: 'code',
@@ -169,7 +171,7 @@ brandTheme.iconVariants; // ['outline', 'filled']`,
         },
         {
           type: 'prose',
-          text: 'An application declares the variant names it uses by augmenting `IconVariantMap` from `@astryxdesign/core/Icon`. `IconVariant` is those names, and an entry passed to `registerIcons()` receives `variant` typed as `IconVariant`. `astryx theme build` writes this augmentation for a built theme\'s list.',
+          text: "An application declares the variant names it uses by augmenting `IconVariantMap` from `@astryxdesign/core/Icon`. `IconVariant` is those names, and an entry passed to `registerIcons()` receives `variant` typed as `IconVariant`. `astryx theme build` writes this augmentation for a built theme's list.",
         },
         {
           type: 'code',
@@ -190,7 +192,7 @@ brandTheme.iconVariants; // ['outline', 'filled']`,
       content: [
         {
           type: 'prose',
-          text: 'A glyph that belongs to one component or library gets a namespaced key (`numberInput:stepperDown`, `richtext:bold`) instead of a new semantic name. It resolves through the same registry and a theme overrides it the same way, but the shared IconName list stays reserved for glyphs the whole system uses, so adding one does not make every downstream icon registry grow a key.',
+          text: 'A glyph that belongs to one component or library gets a namespaced key (`numberInput:stepperDown`, `richtext:bold`) instead of a new built-in meaning. It resolves through the same registry and a theme overrides it the same way, but the shared IconName list stays reserved for glyphs the whole system uses, so adding one does not make every downstream theme\'s icons grow a key.',
         },
         {
           type: 'code',
@@ -239,7 +241,7 @@ export const brandTheme = defineTheme({
         },
         {
           type: 'prose',
-          text: "An unknown icon name, a variant the theme does not list, or a size other than `xsm`, `sm`, `md`, or `lg` is ignored for that field, with one development warning. A theme that extends another merges `componentIcons` by slot ({@link generic:author-a-theme}). `theme.componentIcons` reads back names, `null` values, and static requests, and leaves out the slots a function resolves.",
+          text: 'An unknown icon name, a variant the theme does not list, or a size other than `xsm`, `sm`, `md`, or `lg` is ignored for that field, with one development warning. A theme that extends another merges `componentIcons` by slot ({@link generic:author-a-theme}). `theme.componentIcons` reads back names, `null` values, and static requests, and leaves out the slots a function resolves.',
         },
       ],
     },

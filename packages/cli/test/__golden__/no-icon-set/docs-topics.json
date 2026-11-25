@@ -117,7 +117,7 @@
         "supporting-older-browsers",
         "how-these-tiers-move-over-time"
       ],
-      "skeleton": "463a740e90118dea23181c46a2cca01695d9295027863282835518f0bd655bdb",
+      "skeleton": "a8c4fca4a86dc991627c229925b5fadbfe7ff1684b0e39fcd494cc5140f1c34e",
       "mentions": []
     },
     "color": {
@@ -166,7 +166,7 @@
         "component-and-library-icons",
         "component-icon-slots"
       ],
-      "skeleton": "206b12fc6081d11de22b5e9aa8c2cbf3755acf167da9442cab0f89c3080ca101",
+      "skeleton": "9b46e2eb5bbd3553e3f209954acd13e50e07e4efd71e26936f68c050e001eef2",
       "mentions": [
         "This lets you swap the icon set (e.g."
       ]
@@ -202,10 +202,11 @@
         "movement-principles",
         "respecting-user-preferences",
         "usage",
+        "own-css",
         "theme-motion",
         "best-practices"
       ],
-      "skeleton": "fd00e4ddb07bfdb6b20ba2d257fe04877d634ce3906fa2fae2a0c21da4161e2f",
+      "skeleton": "8a2a77f6eb2c4fe1f9238f9c12c3fad4ca21ebfdc4af699fac795c541dc9faca",
       "mentions": []
     },
     "principles": {
@@ -258,6 +259,7 @@
         "look-after-each-change",
         "denser-or-roomier",
         "one-kind-of-part",
+        "values-a-part-shows",
         "no-app-yet",
         "share-with-other-teams",
         "quick-start",
@@ -266,7 +268,7 @@
         "light-dark-mode",
         "integration-themes"
       ],
-      "skeleton": "0265677164b16d22adfd3e60e3a7238e4c89b1f27f1a2aab9fcd0ad9bc4042ef",
+      "skeleton": "5a279841589fba38be44c2d05ef19f6d5f9002dd8d8bd538ead8b2907752a353",
       "mentions": []
     },
     "use-a-theme": {

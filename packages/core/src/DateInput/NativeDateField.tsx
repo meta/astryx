@@ -56,6 +56,8 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
 import {useLocale} from '../i18n';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {localeTextStyles} from '../utils/textDirection';
 import {useInputGroup} from '../InputGroup';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {joinAriaIDs} from '../utils/inputAria';
@@ -311,6 +313,8 @@ export function NativeDateField({
   } = rest;
   const t = useComponentTranslator();
   const locale = useLocale();
+  // A date the locale formats reads in the locale's direction.
+  const textDirection = getLocaleDirection(locale);
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.dateInput.placeholder');
@@ -701,8 +705,10 @@ export function NativeDateField({
             fieldStatus?.type === 'error' || !isInputValid ? 'true' : undefined
           }
           aria-busy={isBusy || undefined}
+          dir={controlProps.dir ?? textDirection}
           {...stylex.props(
             styles.input,
+            localeTextStyles.pageAlign,
             showsOverlay && styles.inputTextHidden,
             isEffectivelyDisabled && styles.inputDisabled,
             !isInputValid && styles.inputInvalid,
@@ -711,8 +717,10 @@ export function NativeDateField({
         {showsOverlay && (
           <span
             aria-hidden="true"
+            dir={textDirection}
             {...stylex.props(
               styles.overlay,
+              localeTextStyles.pageAlign,
               nativeValue ? styles.overlayValue : styles.overlayPlaceholder,
               isEffectivelyDisabled && styles.inputDisabled,
               !isInputValid && !!nativeValue && styles.inputInvalid,

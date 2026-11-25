@@ -32,6 +32,7 @@ import {
 } from './scrollOwnerRegistry';
 import {getLogicalAxisMapping} from './scrollGeometry';
 import {subscribeScrollGeometry} from './scrollGeometrySubscriptions';
+import {observeResize} from '../utils/sharedResizeObserver';
 
 const testStyles = stylex.create({
   viewport: {borderWidth: 1, borderStyle: 'solid'},
@@ -158,17 +159,62 @@ function mockOwnedComputedStyle(
   });
 }
 
+/**
+ * A font set that counts reads of `ready` and lets a test end a load.
+ * jsdom has no `document.fonts`.
+ */
+function stubFonts() {
+  const events = new EventTarget();
+  const fonts = {
+    readyReads: 0,
+    addEventListener: events.addEventListener.bind(events),
+    removeEventListener: events.removeEventListener.bind(events),
+    dispatchEvent: events.dispatchEvent.bind(events),
+    get ready() {
+      fonts.readyReads += 1;
+      return Promise.resolve(fonts);
+    },
+  };
+  Object.defineProperty(document, 'fonts', {configurable: true, value: fonts});
+  return fonts;
+}
+
+/**
+ * Spies on the layout reads the hook makes, with a viewport whose content
+ * overflows its inline axis. Returns the spies.
+ */
+function spyOnOverflowingGeometry() {
+  const fixed = (name: 'clientWidth' | 'clientHeight' | 'scrollHeight') =>
+    vi.spyOn(HTMLElement.prototype, name, 'get').mockReturnValue(100);
+  return [
+    fixed('clientWidth'),
+    fixed('clientHeight'),
+    fixed('scrollHeight'),
+    vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return this.dataset.testid === 'viewport' ? 180 : 100;
+      }),
+    vi.spyOn(HTMLElement.prototype, 'scrollLeft', 'get').mockReturnValue(0),
+  ];
+}
+
 describe('useScrollableArea', () => {
   let frames: FrameRequestCallback[];
   // A computed `direction` set by a stylesheet alone: no attribute changes.
   let stylesheetDirection: string | null;
   // The callbacks handed to ResizeObserver, to report a resize from a test.
   let resizeObservers: ResizeObserverCallback[];
+  // The elements an observer watches and has not reported yet, each with
+  // that observer's callback. A browser reports each element once, after it
+  // lays the element out.
+  let unreported: Map<Element, ResizeObserverCallback>;
 
   beforeEach(() => {
     frames = [];
     stylesheetDirection = null;
     resizeObservers = [];
+    unreported = new Map();
     vi.stubGlobal(
       'requestAnimationFrame',
       vi.fn((callback: FrameRequestCallback) => {
@@ -181,7 +227,13 @@ describe('useScrollableArea', () => {
       'ResizeObserver',
       vi.fn(function (callback: ResizeObserverCallback) {
         resizeObservers.push(callback);
-        return {observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn()};
+        return {
+          observe: vi.fn((element: Element) =>
+            unreported.set(element, callback),
+          ),
+          unobserve: vi.fn((element: Element) => unreported.delete(element)),
+          disconnect: vi.fn(),
+        };
       }),
     );
     const nativeGetComputedStyle = window.getComputedStyle.bind(window);
@@ -206,15 +258,41 @@ describe('useScrollableArea', () => {
   });
 
   afterEach(() => {
+    Reflect.deleteProperty(document, 'fonts');
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
-  function flushFrame() {
+  /**
+   * The first resize notification of each element observed since the last
+   * one. A browser sends it after it lays those elements out.
+   */
+  function notifyFirstLayout() {
+    const reports = new Map<ResizeObserverCallback, ResizeObserverEntry[]>();
+    for (const [target, callback] of unreported) {
+      const entry = {target} as Partial<ResizeObserverEntry>;
+      reports.set(callback, [
+        ...(reports.get(callback) ?? []),
+        entry as ResizeObserverEntry,
+      ]);
+    }
+    unreported.clear();
+    for (const [callback, entries] of reports) {
+      callback(entries, {} as ResizeObserver);
+    }
+  }
+
+  function flushFrameCallbacks() {
     void act(() => {
       const pending = frames.splice(0);
       pending.forEach(callback => callback(performance.now()));
     });
+  }
+
+  /** A frame runs its callbacks, then lays out and notifies. */
+  function flushFrame() {
+    flushFrameCallbacks();
+    void act(() => notifyFirstLayout());
   }
 
   function setInlineOverflow(viewport: HTMLElement, isOverflowing: boolean) {
@@ -252,6 +330,8 @@ describe('useScrollableArea', () => {
     const viewport = screen.getByTestId('viewport');
     makeMeasurable(viewport);
     flushFrame();
+    // The content's own first report asks for one more measurement.
+    flushFrame();
     const calls: [boolean, boolean][] = [];
     const stop = subscribeScrollGeometry(viewport, (isContent, isLayout) =>
       calls.push([isContent, isLayout]),
@@ -286,6 +366,117 @@ describe('useScrollableArea', () => {
     expect(viewport.getAttribute('style')).toContain('clip');
   });
 
+  it('reads no layout or style in the commit that mounts it, and measures at the first resize notification', () => {
+    mockOwnedComputedStyle();
+    const geometry = spyOnOverflowingGeometry();
+
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    expect(window.getComputedStyle).not.toHaveBeenCalled();
+    for (const read of geometry) {
+      expect(read).not.toHaveBeenCalled();
+    }
+    expect(frames).toHaveLength(0);
+    expect(state().inline.isScrollable).toBe(false);
+
+    // The browser lays the viewport out, then notifies: the read happens there.
+    act(() => notifyFirstLayout());
+    expect(window.getComputedStyle).toHaveBeenCalledWith(viewport);
+    expect(state().inline.isScrollable).toBe(true);
+    expect(viewport).toHaveAttribute('tabindex', '0');
+  });
+
+  it('lets no other signal read layout before the first resize notification', async () => {
+    mockOwnedComputedStyle();
+    const geometry = spyOnOverflowingGeometry();
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+
+    await act(async () => {
+      viewport.dispatchEvent(new Event('scroll'));
+      viewport.dispatchEvent(new Event('transitionend'));
+      window.dispatchEvent(new Event('resize'));
+      screen.getByTestId('descendant').append(document.createElement('b'));
+    });
+    flushFrameCallbacks();
+
+    expect(window.getComputedStyle).not.toHaveBeenCalled();
+    for (const read of geometry) {
+      expect(read).not.toHaveBeenCalled();
+    }
+    expect(state().inline.isScrollable).toBe(false);
+  });
+
+  it('waits for the viewport when another observer already watches the content', async () => {
+    // The content's ref attaches before the hook's effect runs.
+    const watchContent = (node: HTMLDivElement | null) =>
+      node == null ? undefined : observeResize(node, () => {});
+    function WatchedContent() {
+      const area = useScrollableArea({
+        axis: 'inline',
+        keyboardAccess: {owner: 'viewport', label: 'Watched'},
+      });
+      return (
+        <div
+          data-testid="viewport"
+          {...area.getViewportProps<HTMLDivElement>()}>
+          <div {...area.getContentProps<HTMLDivElement>({ref: watchContent})}>
+            Content
+          </div>
+        </div>
+      );
+    }
+    mockOwnedComputedStyle();
+    spyOnOverflowingGeometry();
+
+    render(<WatchedContent />);
+    // An element that is already observed gets no first notification. The
+    // content's stand-in for it must not measure before the layout.
+    await act(async () => {});
+    expect(window.getComputedStyle).not.toHaveBeenCalled();
+
+    act(() => notifyFirstLayout());
+    expect(screen.getByTestId('viewport')).toHaveAttribute('tabindex', '0');
+  });
+
+  it('does not read fonts.ready, which updates style and layout in Chromium', () => {
+    const fonts = stubFonts();
+    render(<Fixture />);
+    flushFrame();
+    expect(fonts.readyReads).toBe(0);
+  });
+
+  it('measures again when a font finishes loading after layout', () => {
+    const fonts = stubFonts();
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    flushFrame();
+    // The content's own first report asks for one more measurement.
+    flushFrame();
+    expect(state().inline.isScrollable).toBe(false);
+
+    // The loaded font makes the content wider than the viewport.
+    setGeometry(viewport, {scrollWidth: 180});
+    act(() => {
+      fonts.dispatchEvent(new Event('loadingdone'));
+    });
+    flushFrame();
+    expect(state().inline.isScrollable).toBe(true);
+  });
+
+  it('measures at once, and again in the next frame, where no ResizeObserver exists', () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    mockOwnedComputedStyle();
+    spyOnOverflowingGeometry();
+
+    render(<Fixture />);
+
+    expect(state().inline.isScrollable).toBe(true);
+    expect(screen.getByTestId('viewport')).toHaveAttribute('tabindex', '0');
+    expect(frames).toHaveLength(1);
+  });
+
   it('is a tab stop from the first frame its content overflows, before any animation frame (AST-025 FR12)', () => {
     mockOwnedComputedStyle();
     // Content that is already taller than the viewport when it mounts, such
@@ -309,6 +500,12 @@ describe('useScrollableArea', () => {
 
     render(<Fixture axis="block" />);
     const viewport = screen.getByTestId('viewport');
+    // Until the browser lays the viewport out, it cannot scroll and is no
+    // tab stop.
+    expect(viewport.getAttribute('style')).toContain('--x-overflowY: clip');
+    expect(viewport).not.toHaveAttribute('tabindex');
+
+    act(() => notifyFirstLayout());
 
     // No animation frame has run.
     expect(viewport.getAttribute('style')).toContain('--x-overflowY: auto');
@@ -368,6 +565,7 @@ describe('useScrollableArea', () => {
     );
 
     const {unmount} = render(<Fixture axis="block" />);
+    act(() => notifyFirstLayout());
     // Let the style change reach the MutationObserver.
     await act(async () => {});
     expect(screen.getByTestId('viewport')).toHaveAttribute('tabindex', '0');
@@ -453,6 +651,7 @@ describe('useScrollableArea', () => {
 
     render(<Fixture axis="block" />);
     const viewport = screen.getByTestId('viewport');
+    act(() => notifyFirstLayout());
     expect(viewport).toHaveAttribute('tabindex', '0');
 
     isVertical = true;
@@ -607,6 +806,8 @@ describe('useScrollableArea', () => {
     setGeometry(viewport, {scrollWidth: 300});
     void act(() => viewport.dispatchEvent(new Event('scroll')));
     flushFrame();
+    // The content's own first report asks for one more measurement.
+    flushFrame();
     expect(state().inline.isScrollable).toBe(true);
 
     const styleReads = vi.mocked(window.getComputedStyle).mock.calls.length;
@@ -701,6 +902,8 @@ describe('useScrollableArea', () => {
     setGeometry(viewport, {scrollWidth: 300});
     void act(() => viewport.dispatchEvent(new Event('scroll')));
     flushFrame();
+    // The content's own first report asks for one more measurement.
+    flushFrame();
     expect(state().inline).toEqual({
       isScrollable: true,
       atStart: true,
@@ -728,6 +931,8 @@ describe('useScrollableArea', () => {
     viewport.style.writingMode = 'vertical-rl';
     setGeometry(viewport, {scrollWidth: 220});
     void act(() => viewport.dispatchEvent(new Event('transitionend')));
+    flushFrame();
+    // The content's own first report asks for one more measurement.
     flushFrame();
     expect(state().block).toEqual({
       isScrollable: true,
@@ -1212,6 +1417,8 @@ describe('useScrollableArea', () => {
     expect(viewport).toHaveAttribute('tabindex', '0');
 
     rerender(<Fixture axis="block" />);
+    // The new axis is measured at its first resize notification.
+    flushFrame();
 
     expect(viewport).not.toHaveAttribute('tabindex');
   });
@@ -1585,6 +1792,9 @@ describe('useScrollableArea', () => {
     render(<Fixture />);
     const viewport = screen.getByTestId('viewport');
     makeMeasurable(viewport);
+    flushFrame();
+    // The content's own first report asks for one more measurement.
+    flushFrame();
     setGeometry(viewport, {scrollWidth: 180});
 
     void act(() => {

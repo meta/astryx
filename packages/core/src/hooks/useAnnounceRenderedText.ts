@@ -92,6 +92,11 @@ export interface AnnounceRenderedTextOptions {
    * a custom layout. Applied to the element's descendants.
    */
   exclude?: string;
+  /**
+   * Speak once per occasion. Text that changes later under the same occasion
+   * stays silent, as a notification is announced once when it is shown.
+   */
+  isOncePerOccasion?: boolean;
 }
 
 /**
@@ -143,9 +148,11 @@ export function renderedText(element: HTMLElement, exclude?: string): string {
  * Announce the text of a rendered element through the shared polite live
  * region, once per occasion.
  *
- * Announces when the element appears and whenever its rendered text changes.
+ * Announces when the element appears and whenever its rendered text changes,
+ * or only when it appears for an occasion with `isOncePerOccasion`.
  * Pass `isShown: false` for every state where the element is not on screen —
- * including while loading — and the hook stays silent and re-arms.
+ * including while loading — and the hook stays silent and re-arms. With
+ * `isOncePerOccasion`, only a new occasion re-arms it.
  *
  * @param ref - The element whose rendered text to speak
  * @param isShown - Whether that element is currently on screen
@@ -169,11 +176,13 @@ export function useAnnounceRenderedText(
     fallbackText,
     announce: ownerAnnounce,
     exclude,
+    isOncePerOccasion = false,
   }: AnnounceRenderedTextOptions = {},
 ): void {
   const ownAnnounce = useAnnounce();
   const announce = ownerAnnounce ?? ownAnnounce;
   const spokenRef = useRef<string | null>(null);
+  const announcedOccasionRef = useRef<string | null>(null);
   const isHydrating = useIsHydrating();
   // Captured once: an owner rendered before the document finished loading, or
   // hydrated from server HTML, is part of the page the person arrived at.
@@ -190,18 +199,20 @@ export function useAnnounceRenderedText(
     const isFirstRun = isFirstRunRef.current;
     isFirstRunRef.current = false;
     const element = ref.current;
-    if (
-      !isShown ||
-      element?.closest(HIDDEN) ||
-      element?.checkVisibility?.() === false
-    ) {
+    if (!isShown || element?.closest(HIDDEN)) {
       spokenRef.current = null;
       return;
     }
     if (!element) {
       return;
     }
+    // A live container speaks its own content. The ancestor walk is cheap, so
+    // it comes before the visibility read, which forces a style update.
     if (skipFirstRender && element.parentElement?.closest(LIVE_CONTAINER)) {
+      return;
+    }
+    if (element.checkVisibility?.() === false) {
+      spokenRef.current = null;
       return;
     }
     let text = skipFirstRender
@@ -231,6 +242,10 @@ export function useAnnounceRenderedText(
       return;
     }
     spokenRef.current = spoken;
+    if (isOncePerOccasion && announcedOccasionRef.current === occasion) {
+      return;
+    }
+    announcedOccasionRef.current = occasion;
     const isPageLoad =
       (isFirstRun && renderedWithPage) || document.readyState !== 'complete';
     if (skipFirstRender && isPageLoad) {

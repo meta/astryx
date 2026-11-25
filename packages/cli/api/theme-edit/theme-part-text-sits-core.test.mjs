@@ -127,7 +127,7 @@ describe('a resting shadow on a ringed part', () => {
     css = cssOf('r2');
     expect(
       shadowOf(css, '.astryx-text-input[data-status="error"]:focus-within'),
-    ).toBe('0 2px 6px #0000004d, inset 0 0 0 2px var(--color-accent-muted)');
+    ).toBe('inset 0 0 0 2px var(--color-accent-muted), 0 2px 6px #0000004d');
     // A later hover shadow for the part wins on every render.
     await themeEditSet('r2', 'box-shadow', '0 0 0 1px red', {
       cwd,

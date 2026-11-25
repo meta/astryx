@@ -64,6 +64,26 @@ export function visibleText(
 }
 
 /**
+ * The text of the elements `element` names itself by with `aria-labelledby`,
+ * or `undefined` when no id resolves to non-empty text.
+ */
+export function labelledByText(element: HTMLElement): string | undefined {
+  const labelledBy = element.getAttribute('aria-labelledby');
+  if (labelledBy == null || labelledBy.trim() === '') {
+    return undefined;
+  }
+  const text = labelledBy
+    .trim()
+    .split(/\s+/)
+    .map(id => element.ownerDocument.getElementById(id))
+    .filter((node): node is HTMLElement => node != null)
+    .map(node => visibleText(node))
+    .join(' ')
+    .trim();
+  return text === '' ? undefined : text;
+}
+
+/**
  * The accessible name of `element`: its own `aria-labelledby` targets, its
  * `aria-label`, its labels, an input button's value, its text, or its
  * `title`, in that order. A custom DropdownMenu trigger names the menu it
@@ -77,18 +97,9 @@ export function readAccessibleName(
   if (element == null) {
     return undefined;
   }
-  const labelledBy = element.getAttribute('aria-labelledby');
-  if (labelledBy != null && labelledBy.trim() !== '') {
-    const text = labelledBy
-      .split(/\s+/)
-      .map(id => element.ownerDocument.getElementById(id))
-      .filter((node): node is HTMLElement => node != null)
-      .map(node => visibleText(node))
-      .join(' ')
-      .trim();
-    if (text !== '') {
-      return text;
-    }
+  const labelledBy = labelledByText(element);
+  if (labelledBy != null) {
+    return labelledBy;
   }
   const label = element.getAttribute('aria-label')?.trim();
   if (label) {

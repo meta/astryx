@@ -127,6 +127,27 @@ describe('outsideDismissalCount', () => {
     owner.remove();
     outside.remove();
   });
+
+  it('counts no dismissal for an outside press whose owner closes no layer', () => {
+    const owner = document.createElement('div');
+    const outside = document.createElement('div');
+    document.body.append(owner, outside);
+    const onOutside = vi.fn();
+    const stop = watchOutsidePress(
+      owner,
+      path => path.includes(owner),
+      onOutside,
+      {isDismissal: false},
+    );
+    const before = outsideDismissalCount(document);
+    outside.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+    outside.dispatchEvent(new Event('pointerup', {bubbles: true}));
+    expect(onOutside).toHaveBeenCalledTimes(1);
+    expect(outsideDismissalCount(document)).toBe(before);
+    stop();
+    owner.remove();
+    outside.remove();
+  });
 });
 
 describe('watchOutsidePress, ignoring a pan', () => {
