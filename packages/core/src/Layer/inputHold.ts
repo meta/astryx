@@ -5,7 +5,8 @@
 /**
  * @file inputHold.ts
  * @input A layer root, what ends its hold (a promise or an animator handle),
- *   and the hold's scope
+ *   the hold's scope, and when the entrance on the layer ends on screen (its
+ *   animations, with the curve ends the motion animator shares)
  * @output holdInput, holdsTouch, isInHeldLayer, isInputShield, LATE_PRESS_MS
  *   and LATE_RELEASE_FRAMES: input held away from a layer while it presents
  *   or dismisses, or while it dismisses with focus kept inside
@@ -32,6 +33,7 @@ import {timeOn} from '../utils/inputAge';
 import {isDocument, isElement, isHTMLElement, isNode} from '../utils/nodeType';
 import {observeMutations} from '../utils/sharedMutationObserver';
 import {realmValue, sharedKey} from '../utils/sharedRealm';
+import {curveEnds} from '../motion/curveEnds';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {
   hasLayerRootWithin,
@@ -88,6 +90,12 @@ interface HeldLayer {
    * last heard it, until its press ends.
    */
   pressOpenings: Set<number>;
+  /**
+   * The layer's presenting holds (`'viewport'` and `'surface'`): each
+   * one's end, which takes the time its presentation ended, and what it
+   * waits on. A copy of Core without them leaves this unset.
+   */
+  presentations?: Map<(endedAt?: number) => void, InputHoldEnd>;
 }
 
 /** A document while any of its layers is held. */
@@ -540,7 +548,7 @@ export function holdInput(
   const clock = layer.ownerDocument.defaultView?.performance;
   const from = clock?.now() ?? 0;
   let isReleased = false;
-  const release = () => {
+  const endHold = (endedAt?: number) => {
     if (isReleased) {
       return;
     }
@@ -549,9 +557,10 @@ export function holdInput(
     if (current == null) {
       return;
     }
+    current.presentations?.delete(endHold);
     pressHolds
       .get(layer.ownerDocument)
-      ?.ended({layer, scope, from, to: clock?.now() ?? from});
+      ?.ended({layer, scope, from, to: endedAt ?? clock?.now() ?? from});
     if (scope === 'viewport') {
       current.viewport -= 1;
     } else if (scope === 'surface') {
@@ -576,9 +585,137 @@ export function holdInput(
       stopHolding(layer);
     }
   };
+  if (scope !== 'layer') {
+    (state.presentations ??= new Map()).set(endHold, until);
+    armEntranceEnd(layer, endHold, until);
+  }
+  const release = () => {
+    endHold();
+  };
   const end = 'finished' in until ? until.finished : until;
   void Promise.resolve(end).then(release, release);
   return release;
+}
+
+/**
+ * When the entrance on `layer` ends on screen: the latest end of the
+ * animations on it and in it. An animator run ends where its curve ends, not
+ * at the end of the held tail after it. Null while none runs, or while any
+ * one has no end that can be read: one not started yet, one that repeats
+ * without end (a spinner in the menu), or one played backward. Then the hold
+ * waits for its own release.
+ */
+function entranceEndOf(layer: Element): number | null {
+  const animations =
+    typeof layer.getAnimations === 'function'
+      ? layer.getAnimations({subtree: true})
+      : [];
+  let latest: number | null = null;
+  for (const animation of animations) {
+    // An animation the browser has not started yet has not begun to enter.
+    const end =
+      animation.startTime == null
+        ? null
+        : (curveEnds.get(animation) ?? scheduledEndOf(animation));
+    if (end == null) {
+      return null;
+    }
+    latest = latest == null ? end : Math.max(latest, end);
+  }
+  return latest;
+}
+
+/** Where an animation's effect ends on its timeline, when it plays forward. */
+function scheduledEndOf(animation: Animation): number | null {
+  const start = animation.startTime;
+  const end = animation.effect?.getComputedTiming().endTime;
+  if (start == null || end == null || animation.playbackRate !== 1) {
+    return null;
+  }
+  const at = Number(start) + Number(end);
+  return Number.isFinite(at) ? at : null;
+}
+
+/**
+ * Ends each presenting hold in `doc` whose entrance ended on screen before
+ * `time`. A press then is not the entrance's, though the hold's own release
+ * has not run: a busy main thread runs a release late.
+ */
+function endEnteredPresentations(doc: Document, time: number): void {
+  for (const layer of liveLayers(doc)) {
+    const presentations = held.get(layer)?.presentations;
+    if (presentations == null || presentations.size === 0) {
+      continue;
+    }
+    for (const [endHold, until] of [...presentations]) {
+      // A hold on an animator handle ends with its curves, whether or not an
+      // animation is still on the layer.
+      const end =
+        (typeof until === 'object' ? curveEnds.get(until) : undefined) ??
+        entranceEndOf(layer);
+      if (end != null && time >= end) {
+        endHold(end);
+      }
+    }
+  }
+}
+
+/**
+ * Ends a presenting hold in the first frame past its entrance's end, though
+ * the page's timers run late and the hold's release with them. A marker
+ * animation with no target waits out the entrance in its delay, so it asks
+ * for no frame before that end. Each look reads the end again: a retargeted
+ * entrance moves it. A marker ends only the hold it was armed for.
+ */
+function armEntranceEnd(
+  layer: Element,
+  endHold: (endedAt?: number) => void,
+  until: InputHoldEnd,
+): void {
+  const timeline = layer.ownerDocument.timeline;
+  if (
+    timeline == null ||
+    typeof layer.getAnimations !== 'function' ||
+    typeof Animation !== 'function' ||
+    typeof KeyframeEffect !== 'function'
+  ) {
+    return;
+  }
+  const look = () => {
+    if (held.get(layer)?.presentations?.has(endHold) !== true) {
+      return;
+    }
+    const end =
+      (typeof until === 'object' ? curveEnds.get(until) : undefined) ??
+      entranceEndOf(layer);
+    const now = timeline.currentTime;
+    if (end == null || typeof now !== 'number') {
+      return;
+    }
+    if (now >= end) {
+      endHold(end);
+      return;
+    }
+    try {
+      const marker = new Animation(
+        new KeyframeEffect(null, null, {delay: end - now, duration: 0}),
+        timeline,
+      );
+      marker.onfinish = look;
+      marker.play();
+      // Started now, not at the next commit, so it ends on the entrance's
+      // clock.
+      marker.startTime = now;
+    } catch {
+      // An engine without a full Web Animations API: a press ends the hold.
+    }
+  };
+  // The entrance's start times are known once its animations are ready. A
+  // cancelled entrance rejects, and its hold's own release ends the hold.
+  const ready = layer
+    .getAnimations({subtree: true})
+    .map(async animation => animation.ready);
+  void Promise.all(ready).then(look, () => {});
 }
 
 /** The keys a dismissing layer that keeps focus lets through. */
@@ -1114,6 +1251,9 @@ function createPressHold(doc: Document): PressHold | null {
   const onPointer = (event: Event): boolean => {
     const {pointerId, pointerType, type} = event as PointerEvent;
     const time = timeOfInput(event);
+    if (type === 'pointerdown') {
+      endEnteredPresentations(doc, time);
+    }
     noteInputAt(time);
     if (
       HELD_POINTERS.has(pointerType) &&
@@ -1175,6 +1315,9 @@ function createPressHold(doc: Document): PressHold | null {
   const onTouch = (event: Event): boolean => {
     const {changedTouches, touches: down, type} = event as TouchEvent;
     const time = timeOfInput(event);
+    if (type === 'touchstart') {
+      endEnteredPresentations(doc, time);
+    }
     noteInputAt(time);
     const changed = Array.from(changedTouches);
     if (type === 'touchstart') {
