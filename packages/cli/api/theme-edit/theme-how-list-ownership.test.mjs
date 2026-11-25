@@ -181,9 +181,42 @@ describe("a part's colon list owns its items", () => {
       ),
     ).toBe(true);
     expect(r.text).toContain(
-      'two colors were said for the text, #ffffff and #9e9e9e; the later one, #9e9e9e, is written',
+      'two colors were said for the text, #ffffff and #9e9e9e; the last one, #9e9e9e, is written',
     );
     expect(r.text).not.toMatch(/"then"/);
+  });
+
+  it('names every text color said, on the text result only', async () => {
+    if (unbuilt) return;
+    const three = (
+      await themeEditHow(
+        'hovered tabs: white text and gray text and black text',
+        {
+          cwd,
+          theme: 'n',
+        },
+      )
+    ).data.results?.[0];
+    expect(three.text).toContain(
+      '3 colors were said for the text, #ffffff, #9e9e9e and #000000; the last one, #000000, is written',
+    );
+    // (A border said in the same list gets no word about the text.)
+    const results =
+      (
+        await themeEditHow(
+          'hovered tabs: a 2px border, white text and gray text',
+          {
+            cwd,
+            theme: 'n',
+          },
+        )
+      ).data.results ?? [];
+    for (const r of results)
+      if (
+        r.commands.length &&
+        r.commands.every((/** @type {string} */ c) => / border /.test(c))
+      )
+        expect(r.text).not.toMatch(/were said for the text/);
   });
 
   it('reads "the active page in pagination" as its current page cell', async () => {

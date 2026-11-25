@@ -32,16 +32,21 @@ import {
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {sharedKey} from '../utils/sharedRealm';
-import type {Reorderable} from '../reorderable/createReorderable';
+import type {
+  Reorderable,
+  ReorderHandleOptions,
+} from '../reorderable/createReorderable';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {reorderListStyle} from './ListReorderHandle';
 
 /**
  * The key a reorderable object carries its machinery under. `sharedKey`
  * registers it, so a swizzled List reads a package object, and the package
- * List reads an object a copy adapted.
+ * List reads an object a copy adapted. Version 2: the session lays out its
+ * rows (`rowLayout`, `listLayout`), so a List never reads a session from a
+ * copy that cannot.
  */
-export const REORDER_ENGINE = sharedKey('list/reorder-engine', 1);
+export const REORDER_ENGINE = sharedKey('list/reorder-engine', 2);
 
 /** What a List's reorder reports and asks, as createReorderable took them. */
 export interface ListReorderOptions {
@@ -49,6 +54,8 @@ export interface ListReorderOptions {
   readonly onReorder: (move: {key: Key; to: number}) => void;
   /** Whether the item with `key` moves; every item does without it. */
   readonly isReorderable?: (key: Key) => boolean;
+  /** Where each row's handle sits and when it shows. */
+  readonly handle?: ReorderHandleOptions;
   /**
    * An adapted object's (internal/reorder `adaptReorderable`): the owner's
    * options, which the owner's `start` finds this list by, while the moves go
@@ -80,10 +87,65 @@ export interface ListReorderHandleProps {
   readonly isDisabled?: boolean;
   /**
    * The row's alignment (ListItem `align`) when the handle is the row's own
-   * child, after its label. That is a row without end content, which has no
-   * end slot to align it. Absent inside the end slot.
+   * child, outside an end slot that would align it. Absent inside the end
+   * slot.
    */
   readonly rowAlign?: ItemAlign;
+  /**
+   * The row's edge the handle sits at.
+   * @default 'end'
+   */
+  readonly placement?: 'start' | 'end';
+  /**
+   * The handle shows for every pointer, in a place of its own. Otherwise it
+   * shows while its row is hovered or holds the focus where the primary
+   * pointer is fine, and hangs outside the row's content.
+   * @default true
+   */
+  readonly isAlwaysVisible?: boolean;
+  /**
+   * The handle keeps its place in its row where it shows only on hover or
+   * focus: after a list marker, or in a row that reaches its container's
+   * padding edge.
+   */
+  readonly isInRow?: boolean;
+  /**
+   * The handle sits in an Item's end slot, which dims its contents with a
+   * disabled row. Elsewhere a disabled row's handle dims itself.
+   */
+  readonly isInEndSlot?: boolean;
+}
+
+/** What a List knows of itself that its handles' layout depends on. */
+export interface ReorderListFacts {
+  readonly edge: 'padded' | 'flush' | 'outset' | 'bleed';
+  readonly density: 'compact' | 'balanced' | 'spacious';
+  readonly handle: ReorderHandleOptions | undefined;
+  /** The list draws a marker before each row (`listStyle`). */
+  readonly hasMarkers: boolean;
+}
+
+/** What a List row knows of itself that its handle's layout depends on. */
+export interface ReorderRowFacts {
+  readonly edge: ReorderListFacts['edge'];
+  readonly handle: ReorderHandleOptions | undefined;
+  readonly hasHandle: boolean;
+  readonly hasMarker: boolean;
+  readonly hasEndContent: boolean;
+}
+
+/** Where a row's handle sits, and the row's own style for it. */
+export interface ReorderRowLayout {
+  readonly placement: 'start' | 'end';
+  readonly isAlwaysVisible: boolean;
+  readonly isInRow: boolean;
+  /** At the row's end, with end content, the handle joins the end slot. */
+  readonly isInEndSlot: boolean;
+  /**
+   * The row's style: a row with a handle rings itself without it and reveals
+   * it; a row that stays put keeps its neighbours' handle room.
+   */
+  readonly rowStyle: StyleXStyles;
 }
 
 /**
@@ -124,6 +186,16 @@ export interface ListReorderSession {
   readonly rowStyle: StyleXStyles;
   /** The list itself: its insertion line, a pseudo-element. */
   readonly listStyle: typeof reorderListStyle;
+  /**
+   * The layout of one of a List's rows. It ships with the machinery, so a
+   * List without `reorderable` loads none of it.
+   */
+  rowLayout(row: ReorderRowFacts): ReorderRowLayout;
+  /**
+   * The List's own style while it reorders: its insertion line, the values
+   * its rows read for their handle room, and the room hanging handles take.
+   */
+  listLayout(list: ReorderListFacts): StyleXStyles;
 }
 
 /** How a reorder session finds a collection's rows in its container. */

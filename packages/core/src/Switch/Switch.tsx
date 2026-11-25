@@ -966,7 +966,7 @@ export function Switch({
   if (status?.message) {
     describedByParts.push(statusMessageID);
   }
-  if (showsDisabledMessage) {
+  if (showsDisabledMessage && disabledMessageTooltip.describedBy) {
     describedByParts.push(disabledMessageTooltip.describedBy);
   }
   const ariaDescribedBy =

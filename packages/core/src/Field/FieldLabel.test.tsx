@@ -42,9 +42,12 @@ describe('FieldLabel', () => {
     );
     const label = screen.getByText('Email').closest('label') as Element;
     expect(declaredValue(label, 'color')).toBe('var(--color-text-primary)');
-    expect(declaredValue(screen.getByText('We never share it'), 'color')).toBe(
-      'var(--color-text-secondary)',
-    );
+    expect(
+      declaredValue(
+        screen.getByText('We never share it').parentElement!,
+        'color',
+      ),
+    ).toBe('var(--color-text-secondary)');
     const marker = screen.getByText('Optional').closest('span') as Element;
     expect(declaredValue(marker, 'color')).toBe('var(--color-text-secondary)');
   });
@@ -451,5 +454,33 @@ describe('FieldLabel', () => {
       const label = screen.getByText('Email').closest('label');
       expect(label).not.toHaveAttribute('data-layout');
     });
+  });
+});
+
+describe('FieldLabel caller text direction', () => {
+  it('adds no direction span to a hidden label or its description', () => {
+    render(
+      <div dir="rtl">
+        <FieldLabel
+          label="Prefix https://"
+          description="Prefix https://"
+          inputID="hidden"
+          isLabelHidden
+        />
+      </div>,
+    );
+    expect(document.querySelector('[dir="ltr"]')).toBeNull();
+    expect(screen.getAllByText('Prefix https://')).toHaveLength(2);
+  });
+
+  it('marks a visible label with plain text left to right', () => {
+    render(
+      <div dir="rtl">
+        <FieldLabel label="Prefix https://" inputID="shown" />
+      </div>,
+    );
+    expect(document.querySelector('span[dir="ltr"]')).toHaveTextContent(
+      'Prefix https://',
+    );
   });
 });

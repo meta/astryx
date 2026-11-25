@@ -203,7 +203,10 @@ for (const {width, mode} of [
                 const nested = content
                   .querySelector('ol')
                   ?.getBoundingClientRect();
-                const label = content.querySelector(':scope > span > span');
+                // The avatar's hidden tooltip description has no line box.
+                const label = content.querySelector(
+                  ':scope > span > span:not([hidden])',
+                );
                 const labelRect = label?.getBoundingClientRect();
                 const labelLine =
                   label == null

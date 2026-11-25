@@ -144,6 +144,52 @@ const styles = stylex.create({
       ],
     },
     {
+      id: 'own-css',
+      title: 'Motion tokens in your CSS',
+      category: 'foundations',
+      content: [
+        {
+          type: 'prose',
+          text: "The motion tokens are CSS custom properties, so plain CSS reads them with `var()`; for the Web Animations API, read a token's value with `getComputedStyle` first. Time an animation with a `--duration-*` token and ease it with an `--ease-*` token, so it follows the theme's motion. Under Reduce Motion, keep the change but drop the travel: nothing moves, scales or clips. With a mouse or trackpad the change happens at once; under a finger it cross-fades, opacity only, in 200 ms or less.",
+        },
+        {
+          type: 'code',
+          lang: 'css',
+          label: 'A panel that slides in, with its Reduce Motion fallback',
+          code: `.panel {
+  transition:
+    transform var(--duration-medium) var(--ease-entrance),
+    opacity var(--duration-medium) var(--ease-entrance);
+}
+.panel[data-hidden] {
+  transform: translateY(16px);
+  opacity: 0;
+  /* Leaving eases on the exit tokens. */
+  transition:
+    transform var(--duration-exit) var(--ease-exit),
+    opacity var(--duration-exit) var(--ease-exit);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* No travel: the panel appears in its final place. */
+  .panel,
+  .panel[data-hidden] {
+    transform: none;
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) and (pointer: coarse) {
+  /* Under a finger, a short cross-fade instead, both ways. */
+  .panel,
+  .panel[data-hidden] {
+    transition: opacity 200ms linear;
+  }
+}`,
+        },
+      ],
+    },
+    {
       id: 'theme-motion',
       title: 'Tune motion from the theme',
       category: 'foundations',

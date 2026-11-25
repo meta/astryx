@@ -19,6 +19,7 @@ import {monthlyData} from './_data';
 const meta: Meta<typeof Chart> = {
   title: 'Charts/Color',
   component: Chart,
+  tags: ['autodocs'],
 };
 export default meta;
 

@@ -6,8 +6,9 @@
  * @file TruncationTooltip.tsx
  * @input A truncated element's ref, its full text and the tooltip placement
  * @output Exports `useTruncationTooltipInterest`, which loads the Tooltip
- *   module once text is truncated and tracks the first hover, tap or focus on
- *   it, and `TruncationTooltip`, the Tooltip that mounts on that interaction
+ *   module once text is truncated, or after the page's first paint for text
+ *   that measures on interest, and tracks the first hover, tap or focus on it,
+ *   and `TruncationTooltip`, the Tooltip that mounts on that interaction
  * @position Shared by Text, Heading and Lab's LineClamp (through Core's internal
  *   line-clamp entry). Until the first interaction a page of
  *   truncated text mounts no tooltip layers, and the tooltip that then mounts
@@ -26,11 +27,8 @@ import {
 } from 'react';
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
-import type {
-  Tooltip as TooltipType,
-  UndescribedTooltip as UndescribedTooltipType,
-} from '../Tooltip/Tooltip';
-import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
+import type {UndescribedTooltip as UndescribedTooltipType} from '../Tooltip/Tooltip';
+import {holdMouseMoves, isMouseMove} from '../utils/inputStream';
 import {useTapRecognizer} from '../Layer/gestureCounter';
 import {isElement} from '../utils/nodeType';
 import {
@@ -38,7 +36,7 @@ import {
   type TooltipPresentInterestState,
 } from '../Tooltip/tooltipPresentInterest';
 
-type TooltipComponent = typeof TooltipType;
+type UndescribedTooltipComponent = typeof UndescribedTooltipType;
 
 // The Tooltip module. Once loaded, a tooltip renders from it at once: no
 // boundary suspends, so the first hover's delay starts on the hover.
@@ -46,14 +44,27 @@ const tooltipModule = createModuleLoader(
   async () => import('../Tooltip/Tooltip'),
 );
 
+// The page's texts share one preload. It waits a frame and a task for the
+// paint, then loads the module once. The shared loader keeps no failed load,
+// so the next text tries again.
+const afterPaintModule = createModuleLoader(async () => {
+  await new Promise<void>(resolve => {
+    requestAnimationFrame(() => {
+      setTimeout(resolve, 0);
+    });
+  });
+  return tooltipModule.load();
+});
+const loadAfterNextPaint = afterPaintModule.load;
+
 export interface TruncationTooltipInterest {
   /** Whether a hover, tap or focus has reached the element. It stays true. */
   readonly isWanted: boolean;
-  /** The Tooltip component, once its module has loaded. */
-  readonly tooltip: TooltipComponent | null;
+  /** The tooltip component, once its module has loaded. */
+  readonly tooltip: UndescribedTooltipComponent | null;
   /** The interaction that mounted the tooltip, until the tooltip reads it. */
   readonly interestRef: RefObject<TooltipPresentInterestState>;
-  readonly onPointerEnter: (event: PointerEvent<HTMLElement>) => void;
+  readonly onPointerMove: (event: PointerEvent<HTMLElement>) => void;
   readonly onPointerLeave: (event: PointerEvent<HTMLElement>) => void;
   readonly onPointerDown: (event: PointerEvent<HTMLElement>) => void;
   readonly onFocus: (event: FocusEvent<HTMLElement>) => void;
@@ -62,54 +73,79 @@ export interface TruncationTooltipInterest {
 
 /**
  * Tracks the interaction that mounts a truncated element's tooltip, while
- * `isEnabled`, until the mounted tooltip reads it. A finger's arrival does not
+ * `isEnabled` or, with `measure`, while the interaction measures the text
+ * truncated, until the mounted tooltip reads it. A finger's arrival does not
  * count: only a press that the touch trigger's recognizer takes for a tap
  * does. Once the tooltip has read the interaction, its own listeners take
  * over.
  */
 export function useTruncationTooltipInterest(
   isEnabled: boolean,
+  // For text that measures on interest: measures now and returns whether the
+  // text is truncated, so the interaction that measures it can mount the
+  // tooltip.
+  measure?: () => boolean,
+  // The element, so the window it is in hears mouse moves while it can show
+  // a tooltip.
+  elementRef?: RefObject<HTMLElement | null>,
 ): TruncationTooltipInterest {
   const [isWanted, setIsWanted] = useState(false);
-  const [tooltip, setTooltip] = useState<TooltipComponent | null>(
-    () => tooltipModule.loaded()?.Tooltip ?? null,
+  const [tooltip, setTooltip] = useState<UndescribedTooltipComponent | null>(
+    () => tooltipModule.loaded()?.UndescribedTooltip ?? null,
   );
   // Syncs with the module loader: truncated text loads the Tooltip module, so
-  // the first interaction mounts the tooltip at once.
+  // the first interaction mounts the tooltip at once. Text that measures on
+  // interest has no answer yet. It joins the page's one after-paint preload,
+  // so the page shows first, and a hover never hurries the load.
   useEffect(() => {
-    if (!isEnabled || tooltip != null) {
+    if ((!isEnabled && measure == null) || tooltip != null) {
       return;
     }
     let isCurrent = true;
-    tooltipModule.load().then(
-      loaded => {
-        if (isCurrent) {
-          setTooltip(() => loaded.Tooltip);
-        }
-      },
+    const show = (loaded: {
+      UndescribedTooltip: UndescribedTooltipComponent;
+    }) => {
+      if (isCurrent) {
+        setTooltip(() => loaded.UndescribedTooltip);
+      }
+    };
+    (measure == null ? tooltipModule.load() : loadAfterNextPaint()).then(
+      show,
       () => {},
     );
     return () => {
       isCurrent = false;
     };
-  }, [isEnabled, tooltip]);
+  }, [isEnabled, measure, tooltip]);
   const interestRef = useRef<TooltipPresentInterestState>({
     interest: null,
     tapEvent: null,
     isRead: false,
   });
   const tapRecognizer = useTapRecognizer();
+  // A tooltip that read an interaction unmounts while the text fits. When the
+  // text is cut off again, the next tooltip reads the next interaction.
+  const measureInterest = useCallback((): boolean => {
+    if (measure == null) {
+      return isEnabled;
+    }
+    const isTruncated = measure();
+    if (isTruncated && !isEnabled) {
+      interestRef.current.isRead = false;
+    }
+    return isTruncated;
+  }, [isEnabled, measure]);
   const want = useCallback(
     (interest: 'hover' | 'tap' | 'focus', tapEvent: Event | null = null) => {
       const state = interestRef.current;
-      if (!isEnabled || state.isRead) {
+      if (!measureInterest() || state.isRead) {
         return;
       }
       state.interest = interest;
       state.tapEvent = tapEvent;
       setIsWanted(true);
     },
-    [isEnabled],
+    [measureInterest],
   );
   const forget = useCallback((interest: 'hover' | 'focus') => {
     const state = interestRef.current;
@@ -117,18 +153,47 @@ export function useTruncationTooltipInterest(
       state.interest = null;
     }
   }, []);
-  const onPointerEnter = useCallback(
+  // Set by a mouse press until the pointer leaves: the press ends the hover,
+  // so a later move does not start it again.
+  const isHoverEndedRef = useRef(false);
+  // Set by the first move of a hover until the pointer leaves, so a hover
+  // measures the text once, not on every move.
+  const isHoverStartedRef = useRef(false);
+  // The text holds its window's mouse moves while it can show a tooltip.
+  // isMouseMove then tells a still mouse's repeated move from a real move.
+  useEffect(() => {
+    if (!isEnabled && measure == null) {
+      return;
+    }
+    return holdMouseMoves(elementRef?.current?.ownerDocument.defaultView);
+  }, [isEnabled, measure, elementRef]);
+  // A hover starts at the first mouse or pen move over the element. A
+  // `pointerenter` also comes when the element appears or moves under a still
+  // pointer. After a scroll, WebKit also sends a move at the still point
+  // (isMouseMove).
+  const onPointerMove = useCallback(
     (event: PointerEvent<HTMLElement>) => {
-      if (event.pointerType !== 'touch') {
-        want('hover');
+      if (
+        event.pointerType === 'touch' ||
+        isHoverEndedRef.current ||
+        isHoverStartedRef.current ||
+        !isMouseMove(event.nativeEvent)
+      ) {
+        return;
       }
+      isHoverStartedRef.current = true;
+      want('hover');
     },
     [want],
   );
-  const onPointerLeave = useCallback(() => forget('hover'), [forget]);
+  const onPointerLeave = useCallback(() => {
+    isHoverEndedRef.current = false;
+    isHoverStartedRef.current = false;
+    forget('hover');
+  }, [forget]);
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
-      if (!isEnabled || interestRef.current.isRead) {
+      if (!measureInterest() || interestRef.current.isRead) {
         tapRecognizer.forget();
         return;
       }
@@ -140,10 +205,11 @@ export function useTruncationTooltipInterest(
       // A mouse press cancels a hover show, as a mounted tooltip does. A pen
       // press waits for its tap.
       if (!isTouch) {
+        isHoverEndedRef.current = true;
         forget('hover');
       }
     },
-    [isEnabled, tapRecognizer, want, forget],
+    [measureInterest, tapRecognizer, want, forget],
   );
   const onFocus = useCallback(
     (event: FocusEvent<HTMLElement>) => {
@@ -165,7 +231,7 @@ export function useTruncationTooltipInterest(
     isWanted,
     tooltip,
     interestRef,
-    onPointerEnter,
+    onPointerMove,
     onPointerLeave,
     onPointerDown,
     onFocus,
@@ -173,7 +239,10 @@ export function useTruncationTooltipInterest(
   };
 }
 
-/** The truncated element's Tooltip, given the interaction that mounted it. */
+/**
+ * The truncated element's tooltip, given the interaction that mounted it. Its
+ * text is the element's own, so it adds no description.
+ */
 export function TruncationTooltip({
   anchorRef,
   content,
@@ -196,167 +265,4 @@ export function TruncationTooltip({
       <Tooltip anchorRef={anchorRef} content={content} placement={placement} />
     </TooltipPresentInterestContext>
   );
-}
-
-/** Whether a box clips its content. */
-function overflows(element: Element): boolean {
-  const box =
-    element.clientWidth ||
-    (element instanceof HTMLElement ? element.offsetWidth : 0);
-  return box > 0 && element.scrollWidth > box;
-}
-
-/** Whether an element is visually hidden: a screen-reader-only label. */
-function isVisuallyHidden(element: Element): boolean {
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-  return (
-    style != null &&
-    style.position === 'absolute' &&
-    ((style.clip !== '' && style.clip !== 'auto') ||
-      (style.clipPath !== '' && style.clipPath !== 'none'))
-  );
-}
-
-// A field and its value: an input, or a widget that shows a chosen value (a
-// Selector's combobox). Its value is not the component's text.
-const FIELD_SELECTOR =
-  'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="combobox"], [role="listbox"], [role="searchbox"], [role="spinbutton"], [role="slider"], [role="textbox"]';
-
-/**
- * Whether an element is left out of the measured text: hidden, a hidden copy
- * (ToggleButton's bold-width reservation), visually hidden, or a field, whose
- * value clips inside its own box and is not the cut text.
- */
-function isLeftOut(element: Element): boolean {
-  return (
-    element.closest(`[hidden], [aria-hidden="true"], ${FIELD_SELECTOR}`) !=
-      null || isVisuallyHidden(element)
-  );
-}
-
-/** Whether text is cut: its box, or a box inside it that a reader sees, clips it. */
-function isTextCut(element: HTMLElement): boolean {
-  return (
-    overflows(element) ||
-    [...element.querySelectorAll('*')].some(
-      child => !isLeftOut(child) && overflows(child),
-    )
-  );
-}
-
-/**
- * The text a sighted reader sees, without hidden, visually hidden and field
- * text: the label or heading itself.
- */
-function visibleText(root: HTMLElement): string {
-  let text = '';
-  const walk = (node: Node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      text += node.textContent ?? '';
-    } else if (node instanceof Element && !isLeftOut(node)) {
-      node.childNodes.forEach(walk);
-    }
-  };
-  walk(root);
-  return text.replace(/\s+/g, ' ').trim();
-}
-
-type UndescribedTooltipComponent = typeof UndescribedTooltipType;
-
-export interface CutTextOnKeyboardFocus {
-  /** The full text while keyboard focus is inside and the text is cut. */
-  readonly cutText: string | null;
-  /**
-   * The tooltip that shows `cutText` with no description, once its module
-   * has loaded (after the first render, as tooltip code loads).
-   */
-  readonly Tooltip: UndescribedTooltipComponent | null;
-  /** Closes the tooltip; pass it as the tooltip's `onHide` (Escape). */
-  readonly hide: () => void;
-  readonly onFocus: (event: FocusEvent<HTMLElement>) => void;
-  readonly onBlur: (event: FocusEvent<HTMLElement>) => void;
-  /** A press closes it, as a press closes a tooltip. */
-  readonly onPointerDown: () => void;
-}
-
-/**
- * Shows a component's cut text in an undescribed tooltip on keyboard focus:
- * a Button's cut label, a table header cell's cut heading. When keyboard focus
- * reaches the anchor (or an element inside it), it measures `measureRef`'s
- * text; if the text is cut, `cutText` holds it until focus leaves the anchor,
- * Escape, or a press. A hover, a pointer-focused field and a touch tap show
- * nothing, and nothing is measured at rest. Internal: the package does not
- * export it.
- */
-export function useCutTextOnKeyboardFocus({
-  anchorRef,
-  measureRef,
-  isEnabled,
-  isSuppressed,
-}: {
-  /** The element focus reaches and the tooltip attaches to. */
-  anchorRef: RefObject<HTMLElement | null>;
-  /** The element whose text is cut; the anchor itself when omitted. */
-  measureRef?: RefObject<HTMLElement | null>;
-  isEnabled: boolean;
-  /** Returns true when another tooltip already describes the anchor. */
-  isSuppressed?: (anchor: HTMLElement) => boolean;
-}): CutTextOnKeyboardFocus {
-  const [cutText, setCutText] = useState<string | null>(null);
-  const [Tooltip, setTooltip] = useState<UndescribedTooltipComponent | null>(
-    () => tooltipModule.loaded()?.UndescribedTooltip ?? null,
-  );
-  const readModality = useInteractionModalityTrackingFor(anchorRef, isEnabled);
-  // Syncs with the module loader: the tooltip loads after the first render,
-  // so keyboard focus shows it at once.
-  useEffect(() => {
-    if (!isEnabled || Tooltip != null) {
-      return;
-    }
-    let isCurrent = true;
-    tooltipModule.load().then(
-      loaded => {
-        if (isCurrent) {
-          setTooltip(() => loaded.UndescribedTooltip);
-        }
-      },
-      () => {},
-    );
-    return () => {
-      isCurrent = false;
-    };
-  }, [isEnabled, Tooltip]);
-  const hide = useCallback(() => setCutText(null), []);
-  const onFocus = (event: FocusEvent<HTMLElement>) => {
-    const anchor = anchorRef.current;
-    const measured = measureRef?.current ?? anchor;
-    const target = event.target;
-    // `:focus-visible` also matches a text field a pointer focused, so the
-    // modality reader decides: only keyboard focus counts.
-    if (
-      !isEnabled ||
-      anchor == null ||
-      measured == null ||
-      !isElement(target) ||
-      // React delivers focus from a portal (a header's filter popover) to the
-      // anchor's handlers; only focus inside the anchor counts.
-      !anchor.contains(target) ||
-      !target.matches(':focus-visible') ||
-      readModality() !== 'keyboard'
-    ) {
-      return;
-    }
-    const text = visibleText(measured);
-    const isCut =
-      text !== '' && !(isSuppressed?.(anchor) ?? false) && isTextCut(measured);
-    setCutText(isCut ? text : null);
-  };
-  const onBlur = (event: FocusEvent<HTMLElement>) => {
-    const next = event.relatedTarget;
-    if (isElement(next) && anchorRef.current?.contains(next)) {
-      return;
-    }
-    setCutText(null);
-  };
-  return {cutText, Tooltip, hide, onFocus, onBlur, onPointerDown: hide};
 }

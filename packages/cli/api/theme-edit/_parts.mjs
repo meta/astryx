@@ -103,6 +103,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} [innerSets] - inherited text properties a visible unnamed element inside the part that holds text sets to values of its own -> those values (a code block's lines: white-space pre or pre-wrap)
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {string[]} [drawnAs] - the other parts drawn on the same element (a select's option is drawn as an Item)
  * @property {string[]} [repeats] - parts it holds more than one of side by side, as the nearest part around them (a shortcut's keys, a button group's buttons)
  * @property {string[]} [listed] - the parts inside it drawn more than once in one of its elements (a menu's items), unlike a part drawn there once (a header's nav)
  * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
@@ -854,6 +855,7 @@ const STATE_NAMES = new WeakMap();
  * @returns {Promise<PartData>}
  */
 export async function partData(project) {
+  if (!project.cacheDir) return buildPartData(project);
   const file = path.join(project.cacheDir, 'parts.json');
   try {
     // The file is read again only when it changed: every command reads it,
@@ -965,7 +967,10 @@ function addIndicatorRings(project, map) {
  * attribute (`themeDataAttributes({selected: 'selected'})`) and an inline
  * property from a color token (`el.style.backgroundColor = …` with
  * `colorVars['--color-accent-muted']`) paints that state with it, on each
- * of the component's targets that lists the state.
+ * of the component's targets that lists the state. The inline write can
+ * also live in a module of the same component that the stateful module
+ * imports: Table's selection plugin writes the `selected` state and hands
+ * the row's paint to Table's row-paint module.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {Record<string, PartRecord>} map
  */
@@ -992,7 +997,17 @@ function addInlineStatePaint(project, map) {
     if (!folder || folder !== name) continue;
     const withStates = info.targets.filter(t => t.states.length);
     if (!withStates.length) continue;
-    for (const file of modules(path.join(dist, folder))) {
+    const folderDir = path.join(dist, folder);
+    /** @param {string} source */
+    const inlinePaint = source => ({
+      props: [...source.matchAll(/\.style\.([a-z][A-Za-z]*)\s*=(?!=)/g)].map(
+        m => m[1].replace(/[A-Z]/g, c => `-${c.toLowerCase()}`),
+      ),
+      colorTokens: [
+        ...source.matchAll(/colorVars\[['"](--color-[\w-]+)['"]\]/g),
+      ].map(m => m[1]),
+    });
+    for (const file of modules(folderDir)) {
       const source = fs.readFileSync(file, 'utf8');
       const states = [
         ...source.matchAll(
@@ -1000,12 +1015,27 @@ function addInlineStatePaint(project, map) {
         ),
       ].map(m => m[1]);
       if (!states.length) continue;
-      const props = [
-        ...source.matchAll(/\.style\.([a-z][A-Za-z]*)\s*=(?!=)/g),
-      ].map(m => m[1].replace(/[A-Z]/g, c => `-${c.toLowerCase()}`));
-      const colorTokens = [
-        ...source.matchAll(/colorVars\[['"](--color-[\w-]+)['"]\]/g),
-      ].map(m => m[1]);
+      let {props, colorTokens} = inlinePaint(source);
+      if (!props.length) {
+        // The paint of a module this one imports from the same component.
+        for (const [, spec] of source.matchAll(
+          /from\s+['"](\.{1,2}\/[^'"]+\.js)['"]/g,
+        )) {
+          const target = path.resolve(path.dirname(file), spec);
+          if (!target.startsWith(folderDir + path.sep)) continue;
+          let imported;
+          try {
+            imported = fs.readFileSync(target, 'utf8');
+          } catch {
+            continue;
+          }
+          const paint = inlinePaint(imported);
+          if (paint.props.length && paint.colorTokens.length === 1) {
+            ({props, colorTokens} = paint);
+            break;
+          }
+        }
+      }
       if (!props.length || colorTokens.length !== 1) continue;
       for (const t of withStates) {
         const key = t.className.replace(/^astryx-/, '');
@@ -1356,21 +1386,38 @@ const refs = v => [...v.matchAll(/var\((--[a-zA-Z0-9_-]+)/g)].map(m => m[1]);
  * @param {string} v
  * @param {Record<string, string>} env
  * @param {Set<string>} tokens
+ * @param {(v: string) => string[]} [refsOf] - the variables a value reads
+ *   (refs), kept for one walk by walkMarkup
  * @param {Set<string>} [seen]
  * @param {number} [depth]
  * @returns {Set<string>}
  */
-function expand(v, env, tokens, seen = new Set(), depth = 0) {
+function expand(v, env, tokens, refsOf = refs, seen = new Set(), depth = 0) {
   /** @type {Set<string>} */
   const out = new Set();
-  for (const r of refs(v)) {
+  for (const r of refsOf(v)) {
     if (tokens.has(r)) out.add(r);
     else if (env[r] && !seen.has(r) && depth < 8) {
       seen.add(r);
-      for (const t of expand(env[r], env, tokens, seen, depth + 1)) out.add(t);
+      for (const t of expand(env[r], env, tokens, refsOf, seen, depth + 1))
+        out.add(t);
     }
   }
   return out;
+}
+
+/**
+ * refs for one walk: each value's variables are read once.
+ * @returns {(v: string) => string[]}
+ */
+function refsMemo() {
+  /** @type {Map<string, string[]>} */
+  const kept = new Map();
+  return (/** @type {string} */ v) => {
+    let r = kept.get(v);
+    if (r === undefined) kept.set(v, (r = refs(v)));
+    return r;
+  };
 }
 
 /**
@@ -1401,8 +1448,9 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, listed?: Set<string>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, listed?: Set<string>, drawnAs?: Set<string>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
+  const refsOf = refsMemo();
   /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>, seen?: Map<string, number>}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
@@ -1494,10 +1542,15 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       .filter(x => x[2] !== 'false')
       .map(x => `${x[1]}=${x[2]}`);
     const open = context.includes('aria-expanded=true');
-    const env = {...parent.env};
+    // An element that sets no variable shares its parent's map: nothing
+    // changes a map after the element that made it.
+    let env = parent.env;
     const own = cls.flatMap(c => decls.get(c) ?? []);
     for (const d of own)
-      if (d.prop.startsWith('--') && !d.cond) env[d.prop] = d.value;
+      if (d.prop.startsWith('--') && !d.cond) {
+        if (env === parent.env) env = {...parent.env};
+        env[d.prop] = d.value;
+      }
     const named = cls.filter(
       c => c.startsWith('astryx-') && !c.startsWith('astryx-theme'),
     );
@@ -1527,7 +1580,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     ) =>
       !d.cond &&
       /^(background(-color)?|border(-[a-z-]+)?-color)$/.test(d.prop) &&
-      expand(d.value, env, tokens).size > 0;
+      expand(d.value, env, tokens, refsOf).size > 0;
     // (Every part the parent element carries: a menu's separator is a
     // divider too.)
     const lineOf =
@@ -1571,6 +1624,8 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       if (ownsTarget) {
         const mine = targets.get(t);
         if (named.length === 1) T.alone = true;
+        for (const o of named)
+          if (o.slice(7) !== t) (T.drawnAs ??= new Set()).add(o.slice(7));
         for (const [k, v] of Object.entries(dataAttrs))
           if (!mine || mine.props.includes(k) || mine.states.includes(k))
             (T.attrs[k] ??= new Set()).add(v);
@@ -1601,7 +1656,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         if (open && d.cond && /disabled/.test(d.cond)) continue;
         // (An inherited background paints nothing of its own: it reads no
         // token, and what shows is its parent's.)
-        const toks = expand(d.value, env, tokens);
+        const toks = expand(d.value, env, tokens, refsOf);
         const cond = [cond0, d.cond].filter(Boolean).join(' ');
         // A line's paint and its thickness (a size read from the border
         // width) are the part's; its layout is not.
@@ -1660,11 +1715,11 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         d.prop === 'color' &&
         !/^(inherit|currentcolor|unset|initial)$/i.test(d.value)
       ) {
-        const t = [...expand(d.value, env, tokens)];
+        const t = [...expand(d.value, env, tokens, refsOf)];
         fg = {target, tokens: t, raw: t.length ? null : d.value};
       }
       if (d.prop === 'background-color') {
-        const t = [...expand(d.value, env, tokens)];
+        const t = [...expand(d.value, env, tokens, refsOf)];
         if (t.length || !/transparent|^\s*inherit\s*$/i.test(d.value))
           bg = {target, tokens: t, raw: t.length ? null : d.value};
       }
@@ -1686,7 +1741,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
           d => d.prop === 'color' && /placeholder/.test(d.cond ?? ''),
         );
         if (attr('placeholder') && ph) {
-          const t = [...expand(ph.value, env, tokens)];
+          const t = [...expand(ph.value, env, tokens, refsOf)];
           addPair(
             target,
             {target, tokens: t, raw: t.length ? null : ph.value},
@@ -1738,7 +1793,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
             const A = map[at];
             for (const d of own)
               if (!d.cond && !d.prop.startsWith('--'))
-                for (const tk of expand(d.value, env, tokens))
+                for (const tk of expand(d.value, env, tokens, refsOf))
                   ((A.held ??= {})[tk] ??= new Set()).add(d.prop);
           }
     if (ownsTarget) {
@@ -1749,7 +1804,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       if (parent.target && !named.includes(`astryx-${parent.target}`))
         for (const d of own)
           if (/^border-(start|end)-(start|end)-radius$/.test(d.prop))
-            for (const tok of expand(d.value, env, tokens))
+            for (const tok of expand(d.value, env, tokens, refsOf))
               if (/^--radius-/.test(tok))
                 map[parent.target].innerCorners.add(tok);
     }
@@ -1851,6 +1906,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       contains: [...v.contains],
       ...(v.repeats?.size ? {repeats: [...v.repeats]} : {}),
       ...(v.listed?.size ? {listed: [...v.listed]} : {}),
+      ...(v.drawnAs?.size ? {drawnAs: [...v.drawnAs]} : {}),
       ...(v.holdsVariants
         ? {
             holdsVariants: Object.fromEntries(
@@ -1897,12 +1953,16 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
  *   whose fill follows a prop whose values name the theme's status roles
  *   (info, success, warning, error);
  * - `overlay-headers`: an Overlay component's part, not its surface, that
- *   holds a heading and a control (its title and its close button).
+ *   holds a heading and a control (its title and its close button);
+ * - `controls`: the parts that take their height from the control size
+ *   tokens (`--size-element-sm`, `-md`, `-lg`) and are a button, an input,
+ *   or a form control's own part (an input group): at each size they share
+ *   one height.
  * @param {{MAP: Record<string, any>}} C
  * @param {{target: Map<string, any>, components: Record<string, any>}} project
  * @param {string[]} inputs the inputs group's members
  * @param {string[]} statusWords the theme's status role words
- * @returns {Record<'button-like' | 'overlays' | 'option-rows' | 'selected-items' | 'accent-fills' | 'inset-fields' | 'status-surfaces' | 'overlay-headers', string[]>}
+ * @returns {Record<'button-like' | 'overlays' | 'option-rows' | 'selected-items' | 'accent-fills' | 'inset-fields' | 'status-surfaces' | 'overlay-headers' | 'controls', string[]>}
  */
 export function familyRoles(
   C,
@@ -1920,6 +1980,7 @@ export function familyRoles(
     'inset-fields': [],
     'status-surfaces': [],
     'overlay-headers': [],
+    controls: [],
   };
   /** @param {string} key @param {string} prop @param {(cond: string) => boolean} keep */
   const values = (key, prop, keep) =>
@@ -2033,9 +2094,41 @@ export function familyRoles(
       (rec.contains ?? []).includes('button')
     )
       out['overlay-headers'].push(key);
+    /** Whether a part's own height reads a control size token. @param {string} part */
+    const sizedOwn = part =>
+      Object.entries(C.MAP?.[part]?.own ?? {}).some(
+        ([prop, v]) =>
+          CONTROL_HEIGHT_PROPS.test(prop) &&
+          Object.keys(/** @type {any} */ (v)?.tokens ?? {}).some(t =>
+            CONTROL_SIZE_TOKEN.test(t),
+          ),
+      );
+    // (A field whose boxes are its parts, a date and time input's two
+    // segments, is sized through them: the token set on the field reaches
+    // them.)
+    const sizedByControlSize =
+      sizedOwn(key) ||
+      (own &&
+        inputs.includes(key) &&
+        [...project.target].some(
+          ([k, t]) => k !== key && t.component === tg.component && sizedOwn(k),
+        ));
+    if (
+      sizedByControlSize &&
+      (inputs.includes(key) ||
+        out['button-like'].includes(key) ||
+        (comp?.category === 'Form Controls' && own))
+    )
+      out.controls.push(key);
   }
   return /** @type {any} */ (out);
 }
+
+/** The properties a control's height is set by. */
+export const CONTROL_HEIGHT_PROPS = /^(height|min-height|block-size)$/;
+
+/** The tokens that hold a control's height at each size. */
+export const CONTROL_SIZE_TOKEN = /^--size-element-(sm|md|lg)$/;
 
 /**
  * The properties that size a part in the block direction: a part that sets

@@ -72,6 +72,14 @@ import {
   printedEntry,
   readSavedStates,
   keyOf,
+  sharedControlHeight,
+  setsControlHeight,
+  narrowedGroupHeight,
+  CONTROL_SIZES,
+  partHasWhen,
+  isControlHeight,
+  growsWithContent,
+  notGrowingWhens,
   loadTheme,
   maskedSettings,
   modesOf,
@@ -79,6 +87,11 @@ import {
   nearest,
   closestOf,
   partsOf,
+  boxFrameOf,
+  FILL_THING,
+  FRAME_THING,
+  widerFrameOf,
+  rowFrameOf,
   undoArgs,
   isCheckNote,
   withoutBadValues,
@@ -117,6 +130,8 @@ import {
   refuseThemeParse,
   ownSourceTokens,
   ownSourceTokenValues,
+  baseTopTokens,
+  baseComponentReads,
   ownTokenEntries,
   fontOf,
   ownThemeInput,
@@ -153,9 +168,15 @@ import {
   baseRedraws,
   groupsOf,
   savedSetting,
+  membersOf,
+  controlHeightValue,
 } from './_settings.mjs';
 import {
+  BORDER_COLOR_PROP,
+  BORDER_TO_COLOR,
   borderFor,
+  broughtBorderAt,
+  turnsBorderOff,
   checkSetting,
   indicatorLines,
   selectedBoxes,
@@ -214,6 +235,7 @@ import {
   exactTokens,
   lookCollapsed,
   categoryNotes,
+  vibrancyTakes,
   derivedStatusWords,
   paletteRecipeUnknown,
 } from './_palette.mjs';
@@ -1925,6 +1947,8 @@ function borderWidthOf(res, data) {
  * @returns {Promise<{file: string} | {problem: string}>}
  */
 async function sizeSheet(ctx, slug, data, tag, measured) {
+  if (!ctx.project.cacheDir)
+    return {problem: 'the sheet has no cache folder to be drawn in'};
   const out = path.join(
     ctx.project.cacheDir,
     `size-${slug}-${process.pid}-${tag}.html`,
@@ -2770,6 +2794,8 @@ async function withSavedRepair(e, slug, cwd) {
         when: scoped.when,
         state: scoped.state,
         mode: scoped.mode,
+        // Checked as `set` runs the line: a box shorthand as its sides.
+        sides: true,
       },
       false,
     );
@@ -3198,11 +3224,30 @@ async function leaveOutStored(ctx, slug, data, cwd, skip) {
       .map(x => x.name)
       .filter(n => n.startsWith(`${P} `));
   }
-  const what = quiet
-    .map(b => `${describe(b.setting)} (${b.why.replace(/\.+$/, '')})`)
-    .join('; ');
+  // (A top or bottom padding on a control that keeps Core's padding no
+  // longer builds: the note says so, never that it builds as before.)
+  const unbuilt = quiet.filter(b =>
+    /keeps Core's top and bottom padding/.test(b.why),
+  );
+  const built = quiet.filter(b => !unbuilt.includes(b));
+  const what = (/** @type {typeof quiet} */ list) =>
+    list
+      .map(b => `${describe(b.setting)} (${b.why.replace(/\.+$/, '')})`)
+      .join('; ');
+  const clear = lines.length
+    ? `; to clear ${quiet.length === 1 ? 'it' : 'them'}: ${lines.join(', then ')}`
+    : '';
   return [
-    `${slug}.settings.json holds what this editor no longer takes, as it does not do there what was meant: ${what}. ${quiet.length === 1 ? 'It is' : 'They are'} kept and built as an earlier editor built ${quiet.length === 1 ? 'it' : 'them'}, so the theme opens as it was${lines.length ? `; to clear ${quiet.length === 1 ? 'it' : 'them'}: ${lines.join(', then ')}` : ''}`,
+    ...(built.length
+      ? [
+          `${slug}.settings.json holds what this editor no longer takes, as it does not do there what was meant: ${what(built)}. ${built.length === 1 ? 'It is' : 'They are'} kept and built as an earlier editor built ${built.length === 1 ? 'it' : 'them'}, so the theme opens as it was${unbuilt.length ? '' : clear}`,
+        ]
+      : []),
+    ...(unbuilt.length
+      ? [
+          `${slug}.settings.json holds what this editor no longer takes: ${what(unbuilt)}. ${unbuilt.length === 1 ? 'It is' : 'They are'} kept, but those top and bottom sides no longer build${clear}`,
+        ]
+      : []),
   ];
 }
 
@@ -4891,7 +4936,9 @@ async function followChangeLine(sub, slug, line, cwd, skip) {
           structuredClone(data),
           read.thing,
           read.value,
-          read.flags,
+          // A set line is checked the way it runs: a typed box shorthand as
+          // its sides.
+          sub === 'set' ? {...read.flags, sides: true} : read.flags,
           sub === 'undo',
         );
         return sub === 'undo' && !data.settings.some(x => keyOf(x) === keyOf(s))
@@ -5558,6 +5605,21 @@ async function change(sub, slug, thing, value, options) {
 }
 
 /**
+ * The parts a height setting reaches that are not controls (the text area
+ * of the inputs) and have the variant it is set for: the parts the
+ * controls' shared height does not reach.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').Setting} x
+ * @returns {string[]}
+ */
+function notControlsReached(ctx, x) {
+  const controls = new Set(groupsOf(ctx).controls ?? []);
+  return partsOf(ctx, x).filter(
+    t => !controls.has(t) && partHasWhen(ctx, t, x.when),
+  );
+}
+
+/**
  * @param {'set' | 'undo'} sub
  * @param {string} slug
  * @param {string} thing
@@ -5798,7 +5860,15 @@ async function changeOnce(
     s =
       sub === 'undo' && rawIdx >= 0
         ? data.settings[rawIdx]
-        : checkSetting(ctx, slug, data, thing, value, flags, sub === 'undo');
+        : checkSetting(
+            ctx,
+            slug,
+            data,
+            thing,
+            value,
+            sub === 'set' ? {...flags, sides: true} : flags,
+            sub === 'undo',
+          );
   } catch (e) {
     // A stored setting this Core no longer knows (a renamed part or
     // property, or a hand edit) can still be removed.
@@ -6116,7 +6186,47 @@ async function changeOnce(
     data.settings.some(x => keyOf(x) === keyOf({...s, mode: ownMode}))
   )
     s = {...s, mode: ownMode};
+  // A box shorthand written as its sides (a menu's padding of two to four
+  // lengths): the first side is this change's setting, and the others are
+  // written beside it in the same change, so one undo takes back all.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  const sidesBeside = [];
+  const shorthand = sub === 'set' && s.sides?.length ? s : null;
+  if (shorthand?.sides) {
+    const [first, ...rest] = shorthand.sides;
+    s = first;
+    sidesBeside.push(...rest);
+  }
+  // The sides this change writes or moves: the ones its undo takes back.
+  /** @type {Set<import('./_settings.mjs').Setting>} */
+  const sidesMoved = new Set();
+  // A height set on a control is the height every control takes at that
+  // size, so it is written as the size's token on the controls group.
+  const sharedHeight = sub === 'set' ? sharedControlHeight(ctx, s) : null;
+  const heightAsked = sharedHeight ? s : null;
+  if (sharedHeight) s = sharedHeight.setting;
+  // An undo of a control height named as it was set removes the size
+  // token set wrote for it.
+  if (sub === 'undo' && !data.settings.some(x => keyOf(x) === keyOf(s))) {
+    const asSet = sharedControlHeight(ctx, {
+      ...s,
+      value: String(s.value ?? ''),
+    });
+    if (asSet && data.settings.some(x => keyOf(x) === keyOf(asSet.setting)))
+      s = {...asSet.setting, value: s.value};
+  }
   let k = keyOf(s);
+  // (The settings as the theme held them before this change: what a carried
+  // height read there, and which box a pager's border drew on.)
+  const settingsBefore = [...data.settings];
+  // (A saved control height the shared one gives way to is replaced below,
+  // with the sizes it keeps.)
+  if (
+    sharedHeight &&
+    rawIdx >= 0 &&
+    setsControlHeight(ctx, data.settings[rawIdx], sharedHeight.size)
+  )
+    rawIdx = -1;
   let prevIdx =
     rawIdx >= 0
       ? rawIdx
@@ -6272,7 +6382,25 @@ async function changeOnce(
       );
     }
   }
-  const compiledBefore = compileTheme(ctx, data, base);
+  // (Settings whose colors were changed by hand away from a palette kept
+  // as saved cannot be built: a change that brings them back is the way
+  // back, compared with nothing built before.)
+  let beforeUnbuilt = false;
+  const compiledBefore = (() => {
+    try {
+      return compileTheme(ctx, data, base);
+    } catch (e) {
+      if (
+        /** @type {any} */ (e)?.code !== E.ERR_PALETTE_GENERATION ||
+        !paletteRecipeUnknown(ctx.project.cwd, slug)
+      )
+        throw e;
+      beforeUnbuilt = true;
+      return /** @type {ReturnType<typeof compileTheme>} */ (
+        /** @type {unknown} */ ({tokens: {}, components: {}})
+      );
+    }
+  })();
   // The build notes the theme had before this change: only new ones are
   // this change's to report.
   const notesBefore = new Set(buildNotes(ctx));
@@ -6345,7 +6473,9 @@ async function changeOnce(
           exactTokens(data),
         ).lines,
         changedPartTokens: r.changedParts ?? [],
-        styled: styledChanges(compiledBefore, compileTheme(ctx, data, after)),
+        styled: beforeUnbuilt
+          ? []
+          : styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
         lifted: r.lifted,
         leftOut: [],
@@ -6363,6 +6493,19 @@ async function changeOnce(
               ]
             : []),
           ...otherModeNotes(data),
+          // (A theme made one-mode draws its page in that mode only: the
+          // page note, once, when the theme has said no page color yet,
+          // since that note would have come with it.)
+          ...(s.thing === 'mode' &&
+          (data.mode === 'light-only' || data.mode === 'dark-only') &&
+          before !== data.mode &&
+          before !== 'light-only' &&
+          before !== 'dark-only' &&
+          !data.settings.some(
+            x => x.thing === '--color-background-body' && !x.on,
+          )
+            ? [pageColorNote(data.mode)]
+            : []),
           // A theme the app lists takes its mode from the app's theme
           // module: `theme add` writes it again.
           ...(s.thing === 'mode' && before !== data.mode
@@ -6412,6 +6555,7 @@ async function changeOnce(
                 x.thing,
                 slug,
                 modesOf(data),
+                vibrancyTakes(data, ownSourceTokenValues(cwd, slug)),
               ).slice(0, -1),
             ),
           ...cutShort.map(cutShortNote),
@@ -6516,6 +6660,35 @@ async function changeOnce(
     // is named.
     alsoReplaced = data.settings.filter(x => keyOf(x) === k);
     data.settings = data.settings.filter(x => keyOf(x) !== k);
+    // A border the theme turned off, undone: a border color it hid on
+    // those parts brings the border it needs now, so it shows. (Only an
+    // undone none or zero: undoing the brought border itself, or a width
+    // or style that drew, leaves the colors as they are.)
+    if (
+      String(prev?.value ?? s.value).trim() !== BORDER_TO_COLOR &&
+      turnsBorderOff({thing: s.thing, value: prev?.value ?? s.value})
+    )
+      for (const x of [...data.settings]) {
+        if (
+          x.source !== 'property' ||
+          !BORDER_COLOR_PROP.test(x.thing) ||
+          !partsOf(ctx, x).some(t => partsOf(ctx, s).includes(t))
+        )
+          continue;
+        const edge = borderFor(ctx, slug, data, x);
+        if (edge) {
+          // (Before the part's own border settings and the color both.)
+          data.settings.splice(
+            Math.min(
+              broughtBorderAt(ctx, data.settings, edge),
+              data.settings.indexOf(x),
+            ),
+            0,
+            edge,
+          );
+          borderAdded = edge;
+        }
+      }
     // Vibrancy needs a color: undoing the last one takes it along, so the
     // theme never holds a state `set` refuses.
     if (
@@ -6546,7 +6719,17 @@ async function changeOnce(
           partsOf(ctx, x).some(t => partsOf(ctx, s).includes(t)),
       )
   ) {
-    // The same setting again: nothing moves.
+    // The same setting again: nothing moves, unless it is a border color
+    // that has lost the border it needs (the none that hid it undone).
+    const edge = sub === 'set' ? borderFor(ctx, slug, data, s) : null;
+    if (edge) {
+      data.settings.splice(
+        Math.min(broughtBorderAt(ctx, data.settings, edge), prevIdx),
+        0,
+        edge,
+      );
+      borderAdded = edge;
+    }
   } else {
     // A changed setting goes last, so it wins over what came before it.
     if (prev) data.settings.splice(prevIdx, 1);
@@ -6554,9 +6737,39 @@ async function changeOnce(
     // needs, written before it in the same change.
     if (sub === 'set') {
       borderAdded = borderFor(ctx, slug, data, s);
-      if (borderAdded) data.settings.push(borderAdded);
+      if (borderAdded)
+        data.settings.splice(
+          broughtBorderAt(ctx, data.settings, borderAdded),
+          0,
+          borderAdded,
+        );
     }
     data.settings.push(s);
+    sidesMoved.add(s);
+  }
+  for (const side of sidesBeside) {
+    // An unchanged side stays where it is, as the first side does, unless a
+    // later setting covers it.
+    const at = data.settings.map(x => keyOf(x)).lastIndexOf(keyOf(side));
+    if (
+      at >= 0 &&
+      // (By what is saved: a note the side's check adds is no change.)
+      JSON.stringify(savedSetting(data.settings[at])) ===
+        JSON.stringify(savedSetting(side)) &&
+      !data.settings
+        .slice(at + 1)
+        .some(
+          x =>
+            x.thing === side.thing &&
+            partsOf(ctx, x).some(t => partsOf(ctx, side).includes(t)),
+        )
+    ) {
+      data.settings[at] = side;
+      continue;
+    }
+    data.settings = data.settings.filter(x => keyOf(x) !== keyOf(side));
+    data.settings.push(side);
+    sidesMoved.add(side);
   }
   // A setting listed twice by hand keeps only the entry this command left;
   // every other entry it replaces is named in the notes.
@@ -6577,6 +6790,256 @@ async function changeOnce(
     alsoReplaced = data.settings.filter(replaced);
     data.settings = data.settings.filter((x, i) => !replaced(x, i));
   }
+  // The other heights that set controls at that size give way to it, so
+  // every control at that size takes the one height.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  // (The same setting set again is not replaced by itself. A height kept
+  // on one control replaces nothing.)
+  const heightsReplaced =
+    sharedHeight && !sharedHeight.own
+      ? data.settings.filter(
+          x =>
+            x !== s &&
+            keyOf(x) !== keyOf(s) &&
+            // (A height on a group that mixes controls with other parts
+            // reaches its controls too: it gives way there, and stays on
+            // the other parts.)
+            setsControlHeight(ctx, x, sharedHeight.size),
+        )
+      : [];
+  // A replaced height set for every size stays every control's height at
+  // the other sizes: those sizes' tokens on controls take its place, where
+  // no other control height is set at that size.
+  /** @type {string[]} */
+  const heightsKept = [];
+  // A replaced height also set on parts that are not controls (the text
+  // area of the inputs) stays on those parts: only the controls take the
+  // shared height.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  const heightsLeftOn = [];
+  /** @param {import('./_settings.mjs').Setting} x */
+  const leftOnOthers = x => {
+    const kept = notControlsReached(ctx, x)
+      // (A size token stays where the part reads it, or where what the
+      // part reads is not known, as set saves it there.)
+      .filter(t => {
+        if (x.source !== 'token') return true;
+        if (baseComponentReads(ctx.project.cwd, data.like, t).has(x.thing))
+          return true;
+        const failure = ctx.C.checkTokenOn(
+          slug,
+          t,
+          x.thing,
+          String(x.value),
+          P,
+          x.when,
+          '',
+        );
+        return failure == null || !!failure.soft;
+      })
+      .map(
+        t =>
+          /** @type {import('./_settings.mjs').Setting} */ ({
+            ...x,
+            on: t,
+            ...(onlyMeans(t) === 'member' ? {only: true} : {}),
+          }),
+      );
+    heightsLeftOn.push(...kept);
+    return kept;
+  };
+  /**
+   * A carried height, as the build showed it: every control size token it
+   * reads is read as the theme held it before this change, since this
+   * change writes those tokens (one of them would read itself). Null when
+   * that is not known.
+   * @param {string} v
+   * @returns {string | null}
+   */
+  const carried = v => {
+    let known = true;
+    const out = v.replace(
+      /var\(\s*(--size-element-(?:sm|md|lg))\s*(?:,[^()]*)?\)/g,
+      (_, token) => {
+        const held = String(
+          settingsBefore
+            .filter(
+              y =>
+                y.source === 'token' &&
+                y.thing === token &&
+                (!y.on || y.on === 'controls') &&
+                !y.when &&
+                !y.state,
+            )
+            .at(-1)?.value ??
+            ownSourceTokenValues(ctx.project.cwd, slug)[token] ??
+            baseTopTokens(ctx.project.cwd, data.like).get(token) ??
+            ctx.project.core.tokenDefaults?.[token] ??
+            '',
+        ).trim();
+        if (!held || /var\(\s*--size-element-/.test(held)) known = false;
+        return held;
+      },
+    );
+    // (A word height is not a size: it is not carried as a size token.)
+    return known && controlHeightValue(out) ? out : null;
+  };
+  // (Of several, the last one is the one the build showed there.)
+  const lastEverySize = sharedHeight
+    ? heightsReplaced
+        .filter(x => x.source === 'property' && x.when == null)
+        .at(-1)
+    : undefined;
+  if (sharedHeight)
+    data.settings = data.settings.flatMap(x => {
+      if (!heightsReplaced.includes(x)) return [x];
+      const others =
+        x.source === 'property' || groupsOf(ctx)[String(x.on)]
+          ? leftOnOthers(x)
+          : [];
+      if (x !== lastEverySize) return others;
+      return [
+        ...others,
+        ...CONTROL_SIZES.filter(
+          size =>
+            size !== sharedHeight.size &&
+            !data.settings.some(
+              y =>
+                y !== x &&
+                !heightsReplaced.includes(y) &&
+                setsControlHeight(ctx, y, size),
+            ) &&
+            carried(String(x.value)) != null,
+        ).map(size => {
+          heightsKept.push(size);
+          return /** @type {import('./_settings.mjs').Setting} */ ({
+            thing: `--size-element-${size}`,
+            value: /** @type {string} */ (carried(String(x.value))),
+            source: 'token',
+            on: 'controls',
+            ...(x.mode ? {mode: x.mode} : {}),
+          });
+        }),
+      ];
+    });
+  // A shared height replaces the heights kept on one control at that size
+  // too (its own size token, or a height saved with --only): every control
+  // at that size takes the one height. One kept for every size stays that
+  // control's own height at the other sizes.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  const ownHeightsReplaced =
+    sharedHeight && !sharedHeight.own
+      ? data.settings.filter(
+          x =>
+            x !== s &&
+            keyOf(x) !== keyOf(s) &&
+            !x.state &&
+            (groupsOf(ctx).controls ?? []).includes(String(x.on)) &&
+            ((x.source === 'token' &&
+              x.thing === sharedHeight.token &&
+              x.when == null) ||
+              (x.source === 'property' &&
+                x.only === true &&
+                !narrowedGroupHeight(x) &&
+                isControlHeight(ctx, x) &&
+                (x.when == null || x.when === `size:${sharedHeight.size}`))),
+        )
+      : [];
+  if (sharedHeight && ownHeightsReplaced.length)
+    data.settings = data.settings.flatMap(x => {
+      if (!ownHeightsReplaced.includes(x)) return [x];
+      const value =
+        x.source === 'property' && x.when == null
+          ? carried(String(x.value))
+          : null;
+      if (value == null) return [];
+      return CONTROL_SIZES.filter(
+        z =>
+          z !== sharedHeight.size &&
+          !data.settings.some(
+            y =>
+              y.source === 'token' &&
+              y.thing === `--size-element-${z}` &&
+              y.on === x.on,
+          ),
+      ).map(
+        z =>
+          /** @type {import('./_settings.mjs').Setting} */ ({
+            thing: `--size-element-${z}`,
+            value,
+            source: 'token',
+            on: String(x.on),
+            ...(onlyMeans(String(x.on)) === 'member' ? {only: true} : {}),
+            ...(x.mode ? {mode: x.mode} : {}),
+          }),
+      );
+    });
+  // A height kept on one control (--only) replaces the plain heights saved
+  // for that control at its size, which would beat its own size token. One
+  // set on the control alone goes; one set on a group (the inputs) stays on
+  // the group's other parts. One set for every size stays that control's
+  // height at the other sizes, as its own size tokens there.
+  const ownOn = sharedHeight?.own ? String(sharedHeight.setting.on) : null;
+  /** @type {import('./_settings.mjs').Setting[]} */
+  const ownReplaced = ownOn
+    ? data.settings.filter(
+        x =>
+          x !== s &&
+          x.source === 'property' &&
+          !x.state &&
+          isControlHeight(ctx, x) &&
+          (x.when == null || x.when === `size:${sharedHeight?.size}`) &&
+          partsOf(ctx, x).includes(ownOn),
+      )
+    : [];
+  /** @type {string[]} */
+  const ownNarrowed = [];
+  if (ownOn && sharedHeight)
+    data.settings = data.settings.flatMap(x => {
+      if (!ownReplaced.includes(x)) return [x];
+      const others = partsOf(ctx, x)
+        .filter(t => t !== ownOn && partHasWhen(ctx, t, x.when))
+        .map(
+          t =>
+            /** @type {import('./_settings.mjs').Setting} */ ({
+              ...x,
+              on: t,
+              // (Marked as the group's height, never one kept on t.)
+              ...(onlyMeans(t) === 'member'
+                ? {only: true, narrowed: true}
+                : {}),
+            }),
+        );
+      ownNarrowed.push(...others.map(o => String(o.on)));
+      const value = x.when == null ? carried(String(x.value)) : null;
+      const sizes =
+        value == null
+          ? []
+          : CONTROL_SIZES.filter(
+              z =>
+                z !== sharedHeight.size &&
+                !data.settings.some(
+                  y =>
+                    y.source === 'token' &&
+                    y.thing === `--size-element-${z}` &&
+                    y.on === ownOn,
+                ),
+            );
+      return [
+        ...others,
+        ...sizes.map(
+          z =>
+            /** @type {import('./_settings.mjs').Setting} */ ({
+              thing: `--size-element-${z}`,
+              value: /** @type {string} */ (value),
+              source: 'token',
+              on: ownOn,
+              ...(onlyMeans(ownOn) === 'member' ? {only: true} : {}),
+              ...(x.mode ? {mode: x.mode} : {}),
+            }),
+        ),
+      ];
+    });
   // A setting for both modes replaces the ones made for one mode, which it
   // would otherwise sit under.
   /** @type {import('./_settings.mjs').Setting[]} */
@@ -6601,31 +7064,44 @@ async function changeOnce(
         )
       : [];
   data.settings = data.settings.filter(x => !covered.includes(x));
-  // A shorthand set after its longhands on the same part replaces them.
-  const longhands =
-    sub === 'set' && s.source === 'property'
+  // A shorthand set after its longhands on the same part replaces them
+  // (each side a box shorthand is written as replaces its own).
+  const written = [s, ...sidesBeside];
+  // An earlier setting of the typed shorthand in the same place goes: the
+  // sides written replace it, as a plain set replaces its value.
+  const typedBefore = shorthand
+    ? data.settings.filter(
+        x => !written.includes(x) && keyOf(x) === keyOf(shorthand),
+      )
+    : [];
+  data.settings = data.settings.filter(x => !typedBefore.includes(x));
+  const sidesChanged = written.filter(w => sidesMoved.has(w));
+  /** @param {import('./_settings.mjs').Setting} w */
+  const longhandsOf = w =>
+    sub === 'set' && w.source === 'property'
       ? data.settings.filter(
           x =>
-            x !== s &&
+            !written.includes(x) &&
             x.source === 'property' &&
             // On the same part, or on a member of the group it is set on:
             // the later setting wins, whichever way Core writes it.
-            (x.on === s.on ||
-              (s.on != null &&
-                (groupsOf(ctx)[s.on] ?? []).includes(
+            (x.on === w.on ||
+              (w.on != null &&
+                (groupsOf(ctx)[w.on] ?? []).includes(
                   /** @type {string} */ (x.on),
                 ))) &&
-            x.when === s.when &&
-            x.state === s.state &&
+            x.when === w.when &&
+            x.state === w.state &&
             // A shorthand for one mode replaces longhands of that mode only:
             // a longhand set for both modes still holds the other mode.
-            (!s.mode || x.mode === s.mode) &&
+            (!w.mode || x.mode === w.mode) &&
             // A longhand the shorthand really sets (MDN's data), never a
             // property that only shares its name (overflow-wrap).
-            (coversProperty(s.thing, x.thing) ||
-              coversProperty(logicalSide(s.thing), logicalSide(x.thing))),
+            (coversProperty(w.thing, x.thing) ||
+              coversProperty(logicalSide(w.thing), logicalSide(x.thing))),
         )
       : [];
+  const longhands = [...new Set(written.flatMap(longhandsOf))];
   // They go, as the note says: Core writes each side to its own variable,
   // where a later shorthand would not win over them (undo brings them back).
   data.settings = data.settings.filter(x => !longhands.includes(x));
@@ -6733,7 +7209,8 @@ async function changeOnce(
     !alsoReplaced.length &&
     !covered.length &&
     !longhands.length &&
-    !covers.length
+    !covers.length &&
+    !beforeUnbuilt
   ) {
     const trial = compileTheme(ctx, data, base);
     const raw = styledChanges(compiledBefore, trial, base);
@@ -6767,12 +7244,11 @@ async function changeOnce(
   const sizeNotes =
     /** @type {{sizeNotes?: string[]}} */ (/** @type {unknown} */ (ctx))
       .sizeNotes ?? [];
-  const styled = styledChanges(
-    compiledBefore,
-    compiledAfter,
-    base,
-    drawnAtRest,
-  );
+  // (Nothing built before a change from unbuildable settings: no styles
+  // are compared.)
+  const styled = beforeUnbuilt
+    ? []
+    : styledChanges(compiledBefore, compiledAfter, base, drawnAtRest);
   const parts = partsOf(ctx, s);
   // Exact whole-theme tokens that win over what this dial writes: the dial
   // changes them only in a theme without them.
@@ -7069,9 +7545,78 @@ async function changeOnce(
     n =>
       n.includes('could not be read') || n.includes('there was no last build'),
   );
+  // A sides change that moved no side and removed nothing (a repeat over a
+  // stale build) adds no undo step, so its note claims none.
+  const sidesStep = Boolean(
+    sidesChanged.length ||
+    typedBefore.length ||
+    longhands.length ||
+    alsoReplaced.length,
+  );
+  // The entries this change removed that undo puts back: undo leaves out
+  // one the editor no longer accepts, so the note never promises it.
+  const removedBefore = [
+    ...new Set([...typedBefore, ...longhands, ...alsoReplaced]),
+  ];
+  const refusedBefore = new Set(
+    shorthand && removedBefore.length
+      ? storedProblems(ctx, slug, {...data, settings: removedBefore})
+          .filter(p => !p.noEffect)
+          .map(p => p.setting)
+      : [],
+  );
+  const bringsBack = removedBefore.filter(x => !refusedBefore.has(x));
   /** @type {string[]} */
   const notes = [
+    ...(shorthand && !r.unchanged && sidesStep
+      ? [
+          `wrote ${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))} as its sides, ${written.map(x => `${x.thing} ${x.value}`).join(', ')}: ${shorthand.on} reads ${shorthand.thing} inside calc(), where one length works; undo ${slug} ${
+            [
+              sidesChanged.length === written.length
+                ? `takes back all ${written.length}`
+                : sidesChanged.length
+                  ? `takes back ${sidesChanged.map(x => x.thing).join(' and ')}, the ${sidesChanged.length === 1 ? 'side' : 'sides'} this changes or moves`
+                  : null,
+              bringsBack.length
+                ? `brings back ${bringsBack.map(describe).join(', ')}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' and ') || 'takes back this change'
+          }`,
+        ]
+      : []),
+    ...(typedBefore.length
+      ? [`replaces ${typedBefore.map(describe).join(', ')}`]
+      : []),
     ...fieldNotes,
+    ...(sharedHeight && heightAsked && sharedHeight.own
+      ? [
+          `${describe(heightAsked)} is ${heightAsked.on}'s own height at ${sharedHeight.size}: written as ${sharedHeight.token} on ${heightAsked.on} alone, so the other controls keep the height they share there${ownReplaced.length ? `; it replaces ${ownReplaced.map(describe).join(', ')}${ownNarrowed.length ? `, which stays on ${[...new Set(ownNarrowed)].join(', ')}` : ''}` : ''}`,
+        ]
+      : []),
+    ...(sharedHeight && heightAsked && !sharedHeight.own
+      ? [
+          `${describe(heightAsked)} is the height every control takes at ${sharedHeight.size}: written as ${sharedHeight.token} on controls, so buttons, inputs, selectors and input groups at ${sharedHeight.size} are all ${s.value} (a selector, typeahead or tokenizer whose content is taller keeps its content's height; a complex selector keeps its own)${
+            heightAsked.when
+              ? ''
+              : (() => {
+                  const kept = new Set(heightsKept);
+                  const left = CONTROL_SIZES.filter(
+                    z => z !== sharedHeight.size && !kept.has(z),
+                  );
+                  return left.length
+                    ? `; at ${left.join(' and ')} the controls keep their own heights (set one with --when size:${left[0]})`
+                    : '';
+                })()
+          }${heightsReplaced.length ? `; it replaces ${heightsReplaced.map(describe).join(', ')} at ${sharedHeight.size}` : ''}${heightsKept.length && lastEverySize ? `; ${carried(String(lastEverySize.value)) ?? lastEverySize.value} stays every control's height at ${[...new Set(heightsKept)].join(' and ')}` : ''}${ownHeightsReplaced.length ? `; it replaces ${ownHeightsReplaced.map(x => `${x.source === 'token' ? 'height' : x.thing} = ${x.value} on ${x.on}, which was kept on ${x.on} alone`).join('; ')}` : ''}${heightsLeftOn.length ? `; ${heightsLeftOn.map(x => `${x.on} keeps ${x.value}`).join(', ')}, as ${heightsLeftOn.length === 1 ? 'it is not a control' : 'they are not controls'}` : ''}${(() => {
+            const notControls = notControlsReached(ctx, heightAsked);
+            return notControls.length
+              ? `; ${notControls.join(', ')} ${notControls.length === 1 ? 'is not a control and keeps its' : 'are not controls and keep their'} own height (for this height there too: ${notControls.map(t => `${P} set ${slug} height ${heightAsked.value} --on ${t}${heightAsked.when ? ` --when ${heightAsked.when}` : ''}`).join(', ')})`
+              : '';
+          })()}; to give one control alone another height: ${P} set ${slug} height ${s.value} --on ${groupsOf(ctx)[String(heightAsked.on)] ? (membersOf(ctx, String(heightAsked.on)).find(t => (groupsOf(ctx).controls ?? []).includes(t)) ?? 'button') : heightAsked.on} --only${heightAsked.when ? ` --when ${heightAsked.when}` : ''}`,
+        ]
+      : []),
     ...(borderAdded
       ? [
           `added a ${borderWidthOf(r.res, data)} border to ${borderAdded.on}${borderAdded.when ? ` when ${borderAdded.when}` : ''} so the color shows: ${borderAdded.on} drew none there; ${describe(borderAdded)}, see-through at rest, so ${borderAdded.on} keeps one size in every state; undo ${slug} takes back both`,
@@ -7241,14 +7786,19 @@ async function changeOnce(
       : []),
     ...(longhands.length
       ? [
-          `${s.thing} comes after ${longhands.map(x => x.thing).join(', ')} on ${s.on}, so it replaces them there`,
+          `${shorthand ? `${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))}` : s.thing} comes after ${longhands.map(x => x.thing).join(', ')} on ${s.on}, so it replaces them there`,
+        ]
+      : []),
+    ...(shorthand && !r.unchanged && !sidesStep
+      ? [
+          `no change: ${describe({...s, thing: shorthand.thing, value: String(shorthand.value)})} (${written.map(x => `${x.thing} ${x.value}`).join(', ')}) is already set; the theme was built again, and no undo step was added`,
         ]
       : []),
     ...(r.unchanged
       ? [
           drawnAlready
             ? `no change: ${s.on} already draws ${drawnAlready.map(x => x.replace(/^[^:]*:\s*/, '')).join(', ')} at rest, so ${describe(s)} was not written; to change it, set another value`
-            : `no change: ${describe(s)} is already set, so nothing was built and no undo step was added`,
+            : `no change: ${shorthand ? `${describe({...s, thing: shorthand.thing, value: String(shorthand.value)})} (${written.map(x => `${x.thing} ${x.value}`).join(', ')})` : describe(s)} is already set, so nothing was built and no undo step was added`,
         ]
       : []),
     // (A plain part rule whose value matches what the part draws today
@@ -7275,8 +7825,74 @@ async function changeOnce(
         ? familyOf(s.on)
         : null
     : null;
-  if (s.note) notes.push(s.note);
-  if (s.stateNote) notes.push(s.stateNote);
+  // Every side written carries its own check's note, and the typed
+  // shorthand its note for the whole value.
+  for (const note of new Set(
+    [shorthand?.note, ...written.map(w => w.note)].filter(Boolean),
+  ))
+    notes.push(/** @type {string} */ (note));
+  // (A state word the typed shorthand's check read as another state is
+  // said once, for every side written.)
+  const stateNote = shorthand?.stateNote ?? s.stateNote;
+  if (stateNote) notes.push(stateNote);
+  // (A border or shadow on a pager goes on the row that frames its pages:
+  // said, with its undo, when it changed something.)
+  {
+    const frame = sub === 'set' && !r.unchanged ? boxFrameOf(ctx, s) : null;
+    if (frame)
+      notes.push(
+        `wrote on ${frame}, the row that frames ${s.on}'s controls as one strip, so they draw one box together; to undo it: ${P} undo ${slug} ${undoArgs(s)}`,
+      );
+    // (A fill or a frame setting set or undone on a pager can change which
+    // box its other border, radius and shadow entries draw on: the filled
+    // bar, or the row that frames its pages, as the wider frame they
+    // narrow does. Each one that moves is said, with the line that puts it
+    // back.)
+    const row = s.on ? rowFrameOf(ctx, s.on) : null;
+    if (
+      row &&
+      !r.unchanged &&
+      (FILL_THING.test(kebab(String(s.thing))) ||
+        FRAME_THING.test(kebab(String(s.thing)))) &&
+      (sub === 'set' || sub === 'undo')
+    ) {
+      const same = (/** @type {any} */ x) =>
+        x.on === s.on &&
+        x.thing === s.thing &&
+        (x.state ?? null) === (s.state ?? null) &&
+        (x.when ?? null) === (s.when ?? null) &&
+        (x.mode ?? null) === (s.mode ?? null);
+      const after = data.settings;
+      const box = (/** @type {any} */ x, /** @type {any[]} */ settings) =>
+        boxFrameOf({...ctx, themeSettings: settings}, x) ?? x.on;
+      // (An undone fill comes back with its own scope and value.)
+      const undone = settingsBefore.find(same);
+      const putBack =
+        sub === 'set'
+          ? `${P} undo ${slug} ${undoArgs(s)}`
+          : undone
+            ? `${P} set ${slug} ${setArgs(undone, String(undone.value ?? ''))}`
+            : `${P} undo ${slug}`;
+      for (const x of after) {
+        if (same(x)) continue;
+        if (x.on !== s.on || x.source !== 'property') continue;
+        const from = box(x, settingsBefore);
+        const to = box(x, after);
+        if (from === to) continue;
+        // (The reason is where it draws now: with a wider frame that still
+        // covers it, else on the bar or the row as the fill there says.)
+        const wider = widerFrameOf(after, x);
+        const why = wider
+          ? `it goes with the wider ${s.on} frame it narrows, on ${to}`
+          : to === s.on
+            ? `${s.on} is filled there, so it is its own box`
+            : `${s.on} shows no fill there, so its pages draw one strip on ${row}`;
+        notes.push(
+          `${x.thing} on ${s.on}${x.when ? ` (--when ${x.when})` : ''}${x.mode ? ` (--mode ${x.mode})` : ''} draws on ${to} now, not on ${from}: ${why}; to put it back: ${putBack}`,
+        );
+      }
+    }
+  }
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
   // lines that change one of them, or only the part at rest.
@@ -7455,12 +8071,36 @@ async function changeOnce(
     notes.push(
       `a ${data.mode} theme shows ${s.mode} mode only where Core draws a ${s.mode} region (a toast, a lightbox), so this value applies there`,
     );
+  // A padding with top or bottom sides reaches a control that grows with its
+  // content at its sides only: its height sets the rest.
+  if (
+    sub === 'set' &&
+    s.source === 'property' &&
+    s.on &&
+    /^padding(-(top|bottom|block(-start|-end)?))?$/.test(s.thing)
+  ) {
+    const grows = partsOf(ctx, s).filter(t => growsWithContent(ctx, t, s.when));
+    if (grows.length)
+      notes.push(
+        `${grows.join(', ')} ${grows.length > 1 ? 'keep' : 'keeps'} Core's top and bottom padding, so a theme's padding never makes ${grows.length > 1 ? 'them' : 'it'} taller than the other controls: ${/^padding$/.test(s.thing) ? `only the sides of ${s.thing} reach ${grows.length > 1 ? 'them' : 'it'}` : `${s.thing} does not reach ${grows.length > 1 ? 'them' : 'it'}`}${grows
+          .map(t => [t, notGrowingWhens(ctx, t, s.when)])
+          .filter(([, w]) => w.length)
+          .map(
+            ([t, w]) =>
+              `; ${t} takes them when ${/** @type {string[]} */ (w).join(' or ')}, where it does not grow`,
+          )
+          .join('')}`,
+      );
+  }
   // A group kept alike (inputs share one height) loses that when one member
   // changes its height alone.
   const family =
     s.on && s.only && onlyMeans(s.on) === 'member' ? familyOf(s.on) : null;
   if (
     family &&
+    !(
+      /^padding/.test(s.thing) && growsWithContent(ctx, String(s.on), s.when)
+    ) &&
     (s.thing === 'spacing' ||
       /^--size-element-/.test(s.thing) ||
       /^(min-|max-)?(height|block-size)$|^padding(-block(-start|-end)?|-top|-bottom)?$/.test(
@@ -7513,7 +8153,13 @@ async function changeOnce(
     );
   if (PALETTE_DIALS.includes(s.thing) && sub === 'set')
     notes.push(
-      ...paletteNotes(dialPal, s.thing, slug, modesOf(data))
+      ...paletteNotes(
+        dialPal,
+        s.thing,
+        slug,
+        modesOf(data),
+        vibrancyTakes(data, ownSourceTokenValues(cwd, slug)),
+      )
         // A shade the mapping would pick for a token the theme's own source
         // sets never shows: the file's value does (named once above).
         .filter(n => {
@@ -7555,9 +8201,13 @@ async function changeOnce(
     );
     if (pal?.families.some(x => x.dial === dialOfToken)) {
       notes.push(
-        ...paletteNotes(pal, dialOfToken, slug, modesOf(data)).filter(
-          n => !n.startsWith('the generated colors are in '),
-        ),
+        ...paletteNotes(
+          pal,
+          dialOfToken,
+          slug,
+          modesOf(data),
+          vibrancyTakes(data, ownSourceTokenValues(cwd, slug)),
+        ).filter(n => !n.startsWith('the generated colors are in ')),
       );
       colorFails.push(
         ...newFailures(paletteFailures(pal, dialOfToken, modesOf(data))),
@@ -7681,7 +8331,7 @@ async function changeOnce(
     );
   }
   // The status roles the look derives (deriveStatusColors) sit with the
-  // palette already: only a role kept at the base theme's is said.
+  // palette already: only a role the look leaves unset is said.
   const grownRoles = new Set(
     Object.entries(
       (s.thing === 'accent' || s.thing === 'vibrancy'
@@ -7723,15 +8373,18 @@ async function changeOnce(
   // An earlier setting this one now covers (through a spread too) is named.
   else if (sub === 'set')
     for (const [m, why] of maskedSettings(data, ctx))
-      if (m !== s && why.startsWith(describe(s)))
+      if (
+        !written.includes(m) &&
+        written.some(w => why.startsWith(describe(w)))
+      )
         notes.push(`${describe(m)} no longer shows: ${why}`);
   if (s.thing === 'type' && sub === 'set' && TYPE_STYLES[s.value].ratio > 1.2)
     notes.push(
       'text below the base size keeps its standard sizes, so small text stays readable',
     );
-  // A change that moved the category or chart colors says why they keep the
-  // base theme's when the look would draw two hues alike (an accent change
-  // says it with the accent's notes).
+  // A change that moved the category or chart colors says what they gave
+  // up to stay written (an accent change says it with the accent's
+  // notes).
   if (
     lookCollapsed(r.changed, derivedStatusWords(data), exactTokens(data)).look
       .length &&
@@ -7744,7 +8397,14 @@ async function changeOnce(
       base,
       ctx.project.core.tokenDefaults,
     );
-    for (const n of look ? categoryNotes(look, '', slug) : [])
+    for (const n of look
+      ? categoryNotes(
+          look,
+          '',
+          slug,
+          vibrancyTakes(data, ownSourceTokenValues(cwd, slug)),
+        )
+      : [])
       if (!notes.includes(n)) notes.push(n);
   }
   // A change that changed nothing writes nothing, the preview included,
@@ -7786,6 +8446,15 @@ async function changeOnce(
         sub === 'set'
           ? {...savedSetting(s), ...(s.note == null ? {} : {note: s.note})}
           : /** @type {import('./_settings.mjs').Setting} */ (prev),
+      ...(shorthand
+        ? {
+            asSides: {
+              thing: shorthand.thing,
+              value: String(shorthand.value),
+              sides: [s, ...sidesBeside],
+            },
+          }
+        : {}),
       // On undo, the setting above is the one removed, named as such.
       ...(sub === 'undo' && prev
         ? {
@@ -7799,7 +8468,9 @@ async function changeOnce(
       // A plain value that replaced per-mode ones names the first of them;
       // the notes name them all.
       replaced:
-        sub === 'set' ? (prev ?? covered[0] ?? longhands[0] ?? null) : null,
+        sub === 'set'
+          ? (prev ?? typedBefore[0] ?? covered[0] ?? longhands[0] ?? null)
+          : null,
       // A whole-theme dial names the value it replaced, as base and mode do.
       was:
         sub === 'set' && prev && prev.source === 'dial' && !prev.on
@@ -8031,10 +8702,21 @@ const PHONE_SIZES_NOTE =
  * @experimental
  * @param {string} theme
  * @param {import('./theme-edit.type.mjs').ThemeEditShowOptions} [options]
- * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditShowResponse>}
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditShowResponse | import('./theme-edit.type.mjs').ThemeEditShowPartResponse>}
  */
 export async function themeEditShow(theme, options = {}) {
   const {cwd = process.cwd(), png = false} = options;
+  if (options.on != null) {
+    requireProject(cwd);
+    if (png || options.section)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `--on looks up what one part shows and writes nothing; --png and --section are for the pages show writes, so drop ${png && options.section ? 'them' : png ? '--png' : '--section'}.`,
+        {run: [`${P} show ${theme} --on ${options.on}`]},
+      );
+    const {themePartValues} = await import('./_resolved.mjs');
+    return themePartValues(cwd, theme, String(options.on));
+  }
   // Without the theme lock (it cannot be taken), show writes nothing: it
   // reports the last build as it is.
   const readOnly = Boolean(/** @type {any} */ (options).readOnly);
@@ -8052,6 +8734,7 @@ export async function themeEditShow(theme, options = {}) {
     throw await savedDamageRefusal(e, theme, cwd);
   }
   const ctx = await context(cwd);
+  ctx.themeSettings = data.settings;
   // show --png takes its sheet too, after any build it makes.
   ctx.takesPictures = png ? {sheet: section ? `sheet-${section}` : null} : null;
   // The app copy is written once show succeeds (at its end), never by a
@@ -8131,7 +8814,10 @@ export async function themeEditShow(theme, options = {}) {
             n === path.basename(f.settingsTs) ||
             (n.startsWith(`${theme}.`) &&
               /\.(css|js|d\.ts|css\.d\.ts|variants\.d\.ts)$/.test(n)) ||
-            /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?\.png)$/.test(n),
+            // (A picture cut from a tall one, sheet-inputs-2.png, too.)
+            /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?(-\d+)?\.png)$/.test(
+              n,
+            ),
         )
         .map(n => [path.join(f.dir, n), fs.readFileSync(path.join(f.dir, n))]),
     );
@@ -8371,15 +9057,15 @@ export async function themeEditShow(theme, options = {}) {
               png: out,
               most: FAMILY_PICTURE_HEIGHT,
             })),
-            // A section is photographed from its own sheet, a family cut
-            // as above. The full sheet, every component, is too tall to
+            // A section is photographed from its own sheet, a family or the
+            // pages cut as above. The full sheet, every component, is too tall to
             // read whole and slow to take: it is not photographed.
             ...(section
               ? [
                   {
                     html: path.join(f.dir, `sheet-${section}.html`),
                     png: path.join(f.dir, `sheet-${section}.png`),
-                    ...(FAMILY_SECTIONS.includes(section)
+                    ...(section !== OPEN_SECTION
                       ? {most: FAMILY_PICTURE_HEIGHT}
                       : {}),
                   },
@@ -9474,7 +10160,7 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
     let refused = false;
     for (const st0 of x.steps) {
       const st = {...st0, value: passingDialValue(ctx, slug, data, base, st0)};
-      const typed = `${P} set ${slug} ${st.thing} ${quoteCommandArgument(st.value)}${st.on ? ` --on ${st.on}` : ''}${st.when ? ` --when ${st.when}` : ''}${st.state ? ` --state ${st.state}` : ''}${st.mode ? ` --mode ${st.mode}` : ''}`;
+      const typed = `${P} set ${slug} ${st.thing} ${quoteCommandArgument(st.value)}${st.on ? ` --on ${st.on}` : ''}${st.when ? ` --when ${st.when}` : ''}${st.state ? ` --state ${st.state}` : ''}${st.mode ? ` --mode ${st.mode}` : ''}${/** @type {any} */ (st).only ? ' --only' : ''}`;
       const followed = await followChangeLine(
         'set',
         slug,
@@ -9601,12 +10287,11 @@ function colorsReport(pal, data, built, slug = '', own = {}) {
     return {vibrancy: null, colors: [], colorNotes: [], colorProblems: []};
   /**
    * The category colors (badges, tokens and card tints), chart colors and
-   * status roles: why a themed look leaves some at the base theme's, or that
-   * the build still shows the base theme's where the palette now derives
-   * them.
+   * status roles: what a themed look gave up to write them, or that the
+   * build still shows the base theme's where the palette now derives them.
    */
   const lookNote = () => {
-    const said = categoryNotes(pal, '', slug);
+    const said = categoryNotes(pal, '', slug, vibrancyTakes(data, own));
     const c = pal.categories;
     if (!c || c.badges !== 'derived' || c.chart !== 'derived') return said;
     const words = derivedStatusWords(data);

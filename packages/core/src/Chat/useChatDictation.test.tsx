@@ -1,11 +1,18 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {Suspense, startTransition, use, type ReactNode} from 'react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render, renderHook} from '@testing-library/react';
 import {InternationalizationProvider} from '../i18n';
 import {useSpeechRecognition} from './useSpeechRecognition';
 import {useChatDictation} from './useChatDictation';
+import type {ChatComposerInputHandle} from './ChatComposerInput';
 
 // =============================================================================
 // Mock SpeechRecognition
@@ -262,6 +269,32 @@ describe('useChatDictation', () => {
   it('reports isSupported from speech recognition', () => {
     const {result} = renderHook(() => useChatDictation());
     expect(result.current.isSupported).toBe(true);
+  });
+
+  it('draws words not yet confirmed in italic secondary text, at full opacity (spec:AST-020 FR1)', () => {
+    const editable = document.createElement('div');
+    editable.setAttribute('role', 'textbox');
+    editable.setAttribute('contenteditable', 'true');
+    document.body.appendChild(editable);
+    const inputRef = {
+      current: {focus: vi.fn(), insertText: vi.fn()},
+    } as unknown as RefObject<ChatComposerInputHandle | null>;
+    try {
+      const {result} = renderHook(() => useChatDictation({inputRef}));
+      act(() => {
+        result.current.start();
+      });
+      const interim = editable.querySelector<HTMLElement>(
+        '[data-astryx-dictation-interim]',
+      );
+      expect(interim).not.toBeNull();
+      expect(interim?.style.color).toBe('var(--color-text-secondary)');
+      expect(interim?.style.fontStyle).toBe('italic');
+      // Opacity would thin the color below the contrast it is chosen for.
+      expect(interim?.style.opacity).toBe('');
+    } finally {
+      editable.remove();
+    }
   });
 
   it('includes volume, bands, rawBands in return', () => {

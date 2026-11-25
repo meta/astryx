@@ -191,7 +191,8 @@ const routes: ReadonlyArray<EntranceRoute> = [
     story: 'core-tooltip--default',
     requested: 'above',
     layer: anchoredLayer,
-    layerIsMountedClosed: true,
+    // The tooltip's layer mounts at its first show.
+    layerIsMountedClosed: false,
     playsOnLayer: true,
     open: async page =>
       hover(page, page.getByRole('button', {name: 'Hover me'})),

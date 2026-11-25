@@ -29,7 +29,8 @@ export interface TooltipSeriesValue {
 
 /**
  * Build the ordered list of tooltip rows for a given hovered datum.
- * Skips utility marks and any series the layout couldn't resolve.
+ * Skips utility marks, series that read no data key, and any series the
+ * layout couldn't resolve.
  *
  * Pure / synchronous — safe to memoize on the caller.
  */
@@ -43,7 +44,7 @@ export function deriveTooltipSeriesValues(
   }
   const out: TooltipSeriesValue[] = [];
   for (const s of series) {
-    if (isUtilityMarkType(s.type)) {
+    if (isUtilityMarkType(s.type) || s.dataKeys.length === 0) {
       continue;
     }
     // resolvedKeys holds layout-assigned _uids (collision-free), not `key`.
@@ -61,6 +62,16 @@ export function deriveTooltipSeriesValues(
     });
   }
   return out;
+}
+
+/**
+ * Whether the chart draws more than one primary series. The default card then
+ * labels every row, also when only one row resolves at the hovered x.
+ */
+export function hasMultiplePrimarySeries(
+  series: readonly SeriesDef[],
+): boolean {
+  return series.filter(s => !isUtilityMarkType(s.type)).length > 1;
 }
 
 /**

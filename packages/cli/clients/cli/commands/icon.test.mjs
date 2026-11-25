@@ -165,7 +165,7 @@ describe('astryx experimental icon with no icon set installed', () => {
     });
     const text = await runCli(['experimental', 'icon', 'delete'], bare);
     expect(text.stdout).toContain(
-      'Icon definitions that match; an icon set draws them once one is installed:',
+      'Icon meanings that match; an icon set draws them once one is installed:',
     );
     expect(text.stdout).not.toContain('Core draws these names');
   });
@@ -406,7 +406,7 @@ describe('astryx experimental icon in the look the project picks', () => {
     expect(res.stdout).toMatch(
       /import: +import \{XIcon\} from '@acme\/glyphs';/,
     );
-    expect(res.stdout).toMatch(/look: +no solid look; draws outline/);
+    expect(res.stdout).toMatch(/look: +no solid variant; draws outline/);
     const json = JSON.parse(
       (
         await runCli(

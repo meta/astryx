@@ -13,7 +13,7 @@ import type {NativeAdditions} from '../contract/fromComponentDoc.js';
 export const selector: NativeAdditions = {
   name: 'Selector',
   baseTarget: 'trigger',
-  typeNames: {SelectorOption: 'SelectorOption'},
+  typeNames: {SelectorOptionType: 'SelectorOption'},
   types: {
     // The portable part of core's option data. Its rich description, icon,
     // and secondary control are web-only until typed slots exist.

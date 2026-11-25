@@ -78,8 +78,8 @@ export function useMenuDrillIn(isOpen: boolean): UseMenuDrillInReturn {
   // Derived from the open transition during render (the documented pattern
   // for state that follows a prop): the pointer kind is sampled as the menu
   // opens, and closing forgets the drilled view so the next open starts at
-  // the root.
-  const [wasOpen, setWasOpen] = useState(isOpen);
+  // the root. A menu that mounts open counts as opening, so it samples too.
+  const [wasOpen, setWasOpen] = useState(false);
   if (wasOpen !== isOpen) {
     setWasOpen(isOpen);
     if (isOpen) {

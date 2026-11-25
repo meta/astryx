@@ -7,7 +7,8 @@
  * @input A target's rect and its neighbours' rects (or, for a live control,
  *   the element and the page around it)
  * @output The touch hit area: how far a target may grow toward 44 px on each
- *   side without taking a tap that is nearer a neighbour. `clampedHitInsets`
+ *   side without taking a tap that is nearer a neighbour. `centeredGrowth` is
+ *   the unclamped growth toward 44 px. `clampedHitInsets`
  *   and `resolveHitTarget` answer from rects. `watchHitArea` keeps a control's
  *   insets live where the primary pointer is coarse. `groupGrowth` sizes a
  *   group's box from its edge members, and shrinks a side the members do not
@@ -32,6 +33,7 @@
 // layout px. A layer that opens from a smaller scale then keeps the insets of
 // the size it settles at.
 
+import {stableClassName} from '../naming';
 import {subscribeInput} from './inputStream';
 import {isElement} from './nodeType';
 import {sharedState} from './sharedRealm';
@@ -101,7 +103,7 @@ function intersects(a: HitRect, b: HitRect): boolean {
 }
 
 /** How far `rect` grows toward `minSize` on each axis, centered, unclamped. */
-function growth(rect: HitRect, minSize: number): HitInsets {
+export function centeredGrowth(rect: HitRect, minSize: number): HitInsets {
   const x = Math.max(0, (minSize - (rect.right - rect.left)) / 2);
   const y = Math.max(0, (minSize - (rect.bottom - rect.top)) / 2);
   return {top: y, right: x, bottom: y, left: x};
@@ -129,7 +131,7 @@ export function groupGrowth(
     left: -Infinity,
   };
   for (const member of members) {
-    const own = growth(member, minSize);
+    const own = centeredGrowth(member, minSize);
     insets.top = Math.max(insets.top, own.top - (member.top - group.top));
     insets.right = Math.max(
       insets.right,
@@ -161,7 +163,7 @@ export function clampedHitInsets(
   target: HitRect,
   neighbours: ReadonlyArray<HitRect>,
   minSize: number = MIN_TOUCH_TARGET,
-  full: HitInsets = growth(target, minSize),
+  full: HitInsets = centeredGrowth(target, minSize),
 ): HitInsets {
   if (
     full.top === 0 &&
@@ -187,7 +189,7 @@ export function clampedHitInsets(
     // Either one, at full growth, would reach into the other's half, or
     // their full areas would meet (a wide and a tall target, diagonally).
     const reach = grown(target, full);
-    const neighbourReach = grown(rect, growth(rect, minSize));
+    const neighbourReach = grown(rect, centeredGrowth(rect, minSize));
     const crosses =
       intersects(reach, grown(rect, half)) ||
       intersects(neighbourReach, grown(target, half)) ||
@@ -253,7 +255,9 @@ export function resolveHitTarget(
     return -1;
   }
   const rect = rects[nearest];
-  return contains(grown(rect, growth(rect, minSize)), x, y) ? nearest : -1;
+  return contains(grown(rect, centeredGrowth(rect, minSize)), x, y)
+    ? nearest
+    : -1;
 }
 
 /** Sets `HIT_INSET_PROPERTIES` on `element`. */
@@ -295,6 +299,10 @@ export const INTERACTIVE_SELECTOR = [
   '[role="slider"]',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
+
+const FIELD_FRAME_SELECTOR = ['text-input', 'number-input', 'selector']
+  .map(name => `.${stableClassName(name)}`)
+  .join(',');
 
 const TOUCH_QUERY = '(pointer: coarse)';
 
@@ -351,7 +359,7 @@ interface Watch {
     toLayout: (rect: HitRect) => HitRect,
   ) => HitInsets;
   readonly checkAtPress: boolean;
-  readonly onInsets: (insets: HitInsets) => void;
+  readonly onInsets: (insets: HitInsets, readSettling?: SettlingRead) => void;
   isVisible: boolean;
   last: HitInsets;
   /** The ancestor animations the watch waits out before a pass reads it. */
@@ -415,12 +423,16 @@ function sameInsets(a: HitInsets, b: HitInsets): boolean {
   );
 }
 
-function deliver(watch: Watch, insets: HitInsets): void {
+function deliver(
+  watch: Watch,
+  insets: HitInsets,
+  readSettling: SettlingRead,
+): void {
   if (sameInsets(watch.last, insets)) {
     return;
   }
   watch.last = insets;
-  watch.onInsets(insets);
+  watch.onInsets(insets, readSettling);
 }
 
 /** Whether `candidate` is the control itself, or part of it. */
@@ -709,10 +721,17 @@ function ungroup(element: Element): void {
 
 /** The page's interactive elements and their rects: one read. */
 function readCandidates(doc: Document): Candidate[] {
-  return interactiveElements(doc).map(element => ({
-    element,
-    rect: plainRect(element),
-  }));
+  const targets = interactiveElements(doc);
+  const elements = new Set(targets);
+  // Keep inner targets: their shared frame cannot separate their hit areas.
+  // Resolve frames on each read so cached targets follow their current frame.
+  for (const element of targets) {
+    const frame = element.closest(FIELD_FRAME_SELECTOR);
+    if (frame != null) {
+      elements.add(watchedOwner(frame) ?? frame);
+    }
+  }
+  return [...elements].map(element => ({element, rect: plainRect(element)}));
 }
 
 /**
@@ -821,6 +840,27 @@ export function settlingAnimations(root: Element | Document): Animation[] {
   });
 }
 
+/** Reads `settlingAnimations` of a root. */
+export type SettlingRead = (root: Element) => Animation[];
+
+/**
+ * A `settlingAnimations` read for one loop of writes, which reads each root
+ * once. Each read recalculates the styles that the loop's earlier writes
+ * changed, so one read per root also prevents those recalculations. A write
+ * of hit insets starts no animation, so a root's list stays true for the loop.
+ */
+function readOncePerRoot(): SettlingRead {
+  const reads = new Map<Element, Animation[]>();
+  return root => {
+    let animations = reads.get(root);
+    if (animations === undefined) {
+      animations = settlingAnimations(root);
+      reads.set(root, animations);
+    }
+    return animations;
+  };
+}
+
 /** The properties whose animation moves or resizes a box on screen. */
 const BOX_MOTION =
   /^(transform|translate|scale|rotate|offset[A-Z]\w*|inset\w*|top|right|bottom|left|(min|max)?(Width|Height|width|height|BlockSize|InlineSize)|blockSize|inlineSize|margin\w*|padding\w*)$/;
@@ -925,8 +965,9 @@ function measure(): void {
     results.push({watch, insets: measureOne(watch, candidates).insets});
   }
   // Writes.
+  const readSettling = readOncePerRoot();
   for (const {watch, insets} of results) {
-    deliver(watch, insets);
+    deliver(watch, insets, readSettling);
   }
   if (pending.size > 0) {
     requestFrame();
@@ -1366,8 +1407,9 @@ function onPointerChange(): void {
     return;
   }
   stopObserving();
+  const readSettling = readOncePerRoot();
   for (const entry of watched.values()) {
-    entry.watches.forEach(watch => deliver(watch, NO_HIT_INSETS));
+    entry.watches.forEach(watch => deliver(watch, NO_HIT_INSETS, readSettling));
   }
 }
 
@@ -1423,6 +1465,7 @@ export function resetHitAreaForTests(): void {
 /**
  * Keeps `element`'s hit insets live until the returned function runs:
  * `onInsets` hears each change (typically `writeHitInsets` on the control).
+ * A pass also gives it a read of settling animations that its writes share.
  * Where the primary pointer is not coarse, the insets are 0, and only the
  * pointer query is listened to. Where it is, the shared per-frame pass
  * measures the element while it is on screen. It measures again on a resize
@@ -1432,7 +1475,7 @@ export function resetHitAreaForTests(): void {
  */
 export function watchHitArea(
   element: Element,
-  onInsets: (insets: HitInsets) => void,
+  onInsets: (insets: HitInsets, readSettling?: SettlingRead) => void,
   {
     minSize = MIN_TOUCH_TARGET,
     ownsDescendantTouches = false,

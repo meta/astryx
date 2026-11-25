@@ -3,7 +3,8 @@
 /**
  * @file ButtonGroupCornersA11y.stories.tsx
  * @input ButtonGroup, Button, DropdownMenu, Tooltip, InputGroup and TextInput,
- *   with layer pieces (popovers, templates, dialogs) placed after members
+ *   with layer pieces (popovers, templates, dialogs), tooltip descriptions
+ *   (hidden copies) and a caller's own hidden elements placed after members
  * @output Browser fixtures for ButtonGroup FR3: one group per member shape,
  *   each member marked with `data-corner-case`, so a browser spec reads which
  *   members round their trailing corners
@@ -125,6 +126,15 @@ export const Shapes: Story = {
           data-trailing="round"
         />
       </Shape>
+      <Shape name="caller-hidden-description-follows">
+        {member('caller-hidden-description-follows', 'square', 'Save')}
+        {member('caller-hidden-description-follows', 'square', 'More')}
+        {/* A caller's own hidden element still counts as a member, even with
+            an id like a tooltip description's. */}
+        <span hidden id="note-description">
+          Saved to drafts
+        </span>
+      </Shape>
       <Shape name="dropdown-trailing">
         {member('dropdown-trailing', 'square', 'Allow once')}
         <DropdownMenu
@@ -155,6 +165,43 @@ export const Shapes: Story = {
             data-corner-case="input-group-addon"
             data-trailing="round"
           />
+        </InputGroup>
+      </div>
+      <div data-corner-shape="input-group-tooltip-addon" style={{padding: 8}}>
+        <InputGroup label="Visibility">
+          <TextInput
+            label="Audience"
+            isLabelHidden
+            value="Members"
+            onChange={() => {}}
+          />
+          <Button
+            label="Save"
+            tooltip="Saves the audience"
+            data-corner-case="input-group-tooltip-addon"
+            data-trailing="round"
+          />
+        </InputGroup>
+      </div>
+      <div
+        data-corner-shape="input-group-caller-hidden-description"
+        style={{padding: 8}}>
+        <InputGroup label="Visibility">
+          <TextInput
+            label="Audience"
+            isLabelHidden
+            value="Members"
+            onChange={() => {}}
+          />
+          <Button
+            label="Save"
+            data-corner-case="input-group-caller-hidden-description"
+            data-trailing="square"
+          />
+          {/* A caller's own hidden element still follows the addon. */}
+          <span hidden id="audience-description">
+            Who sees it
+          </span>
         </InputGroup>
       </div>
       <div

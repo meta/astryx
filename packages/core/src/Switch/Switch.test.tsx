@@ -44,6 +44,7 @@ import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
 import {installPressFeedback} from '../utils/pressFeedback';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 afterEach(() => {
   __resetLiveRegionsForTest();
@@ -715,14 +716,21 @@ describe('Switch', () => {
           disabledMessage="Notifications are turned off org-wide"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent(
         'Notifications are turned off org-wide',
       );
       fireEvent.mouseEnter(getRow());
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      fireEvent.pointerMove(getRow());
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
       fireEvent.mouseLeave(getRow());
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        ),
+      );
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
@@ -736,10 +744,11 @@ describe('Switch', () => {
           disabledMessage="Notifications are turned off org-wide"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('switch', h)).toHaveFocus();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -792,7 +801,7 @@ describe('Switch', () => {
         />,
       );
       const control = screen.getByRole('switch', h);
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(control.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -1109,7 +1118,9 @@ describe('Switch', () => {
         </>,
       );
       const control = screen.getByRole('switch');
-      const description = screen.getByText('Sends a daily digest');
+      const description = screen.getByText(
+        'Sends a daily digest',
+      ).parentElement!;
       expect(control.getAttribute('aria-describedby')?.split(' ')).toEqual([
         'external-hint',
         description.id,

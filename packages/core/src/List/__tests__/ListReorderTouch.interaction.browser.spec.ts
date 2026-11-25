@@ -704,6 +704,50 @@ test('a flush row keeps its handle inside the list', async ({page}) => {
   );
 });
 
+for (const [story, edge] of [
+  ['core-list--reorderable', 'padded'],
+  ['core-list--reorder-flush', 'flush'],
+] as const) {
+  test(`a ${edge} row's handle keeps a finger's 44 px target across its centre, inside the list`, async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), story);
+    test.skip(
+      !(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)),
+      'the 44 px target applies under (pointer: coarse)',
+    );
+    const handle = page.getByRole('button', {name: 'Reorder Inbox'});
+    await expect(handle).toBeVisible();
+    // The hit area's observers settle its reach after layout.
+    await page.waitForTimeout(300);
+    // The span across the handle's centre that lands on it, a half pixel at
+    // a time, up to past the list's end edge.
+    const span = await handle.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      const list = element.closest('ul, ol')?.getBoundingClientRect();
+      const y = box.top + box.height / 2;
+      const to = Math.min(innerWidth, (list?.right ?? innerWidth) + 10);
+      let first = Number.NaN;
+      let last = Number.NaN;
+      for (let x = box.left - 40; x < to; x += 0.5) {
+        const hit = document
+          .elementFromPoint(x, y)
+          ?.closest('button[data-astryx-list-reorder]');
+        if (hit === element) {
+          if (Number.isNaN(first)) {
+            first = x;
+          }
+          last = x;
+        }
+      }
+      return {first, last, listRight: list?.right ?? innerWidth};
+    });
+    const detail = JSON.stringify(span);
+    expect(span.last - span.first + 0.5, detail).toBeGreaterThanOrEqual(44);
+    expect(span.last, detail).toBeLessThanOrEqual(span.listRight + 0.5);
+  });
+}
+
 /** The dragged row's preview, which follows the finger. */
 const PREVIEW = '[data-astryx-reorder-preview]';
 
@@ -940,7 +984,7 @@ test.describe('the preview, the drop and the handle under a finger', () => {
     expect(ring.right).toBeGreaterThanOrEqual(-0.5);
   });
 
-  test("the handle keeps a small control's size; a finger's target grows toward 44 pt and meets the next handle's halfway, its ring clears its lines, and its row is no taller for it", async ({
+  test("the handle keeps a small control's size; a finger's target grows toward 44 pt and meets the next handle's halfway, its ring clears its grip, and its row is no taller for it", async ({
     page,
   }) => {
     const handle = page.getByRole('button', {name: 'Reorder Inbox'});
@@ -994,17 +1038,10 @@ test.describe('the preview, the drop and the handle under a finger', () => {
         box.left + box.width / 2,
         box.top - (box.top - hit.top) / 2,
       );
-      // The lines are the handle's ::before: one bar centred in it, and a
-      // shadow of it on each side.
-      const lines = getComputedStyle(element, '::before');
-      const bar = parseFloat(lines.height);
-      const shadows = Array.from(
-        lines.boxShadow.matchAll(/(-?[\d.]+)px\s+(-?[\d.]+)px/g),
-        ([, , y]) => Math.abs(parseFloat(y)),
-      );
-      const reach = Math.max(0, ...shadows) + bar / 2;
-      const centre = box.top + box.height / 2;
-      const glyph = {top: centre - reach, bottom: centre + reach};
+      // The grip is the handle's drag icon, centred in it.
+      const glyph = (
+        element.firstElementChild ?? element
+      ).getBoundingClientRect();
       const withHandle = row.getBoundingClientRect().height;
       // The same row without its handle.
       element.style.display = 'none';
@@ -1041,12 +1078,12 @@ test.describe('the preview, the drop and the handle under a finger', () => {
       expect(geometry.gapToNext).toBeLessThanOrEqual(0.5);
     }
     expect(geometry.probeHits).toBe(true);
-    // The ring clears the lines above and below. It shows, so the band
+    // The ring clears the grip above and below. It shows, so the band
     // judged is the ring's.
     expect(geometry.ring).not.toBe('none');
     expect(geometry.above).toBeGreaterThan(0);
     expect(geometry.below).toBeGreaterThan(0);
-    // The handle takes only its lines' height in the row's layout.
+    // The handle takes only its grip's height in the row's layout.
     expect(geometry.withHandle).toBeCloseTo(geometry.withoutHandle, 1);
   });
 });

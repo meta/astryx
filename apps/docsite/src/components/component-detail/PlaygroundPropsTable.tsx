@@ -22,9 +22,13 @@ import {Badge} from '@astryxdesign/core/Badge';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {Minus, Plus} from 'lucide-react';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
-import {allSyntaxPresets} from '@astryxdesign/core/theme/syntax';
 import {themeObjectsFull} from '../../generated/themeRegistry';
 import {coerceEnumOption, type PropControlDescriptor} from './parsePropType';
+import {
+  selectedSyntaxTheme,
+  syntaxThemeChoices,
+  syntaxThemeFor,
+} from './syntaxThemeChoices';
 import {resolveTypeRefs, TypeRefText} from './TypeRefText';
 import type {KnobProp} from './InteractivePreview';
 import {resolveElementDescriptor} from './resolveElements';
@@ -166,15 +170,6 @@ const themeOptions = Object.entries(themeObjectsFull).map(
   }),
 );
 
-const syntaxThemeOptions = allSyntaxPresets.map(theme => ({
-  value: theme.name,
-  label: theme.name
-    .split('-')
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' '),
-  theme,
-}));
-
 function ThemeControl({
   value,
   onChange,
@@ -217,36 +212,20 @@ function ThemeControl({
 
 function SyntaxThemeControl({
   value,
+  isRequired,
   onChange,
 }: {
   value: unknown;
+  isRequired: boolean;
   onChange: (next: unknown) => void;
 }) {
-  const selected =
-    syntaxThemeOptions.find(
-      option =>
-        option.theme === value ||
-        (value != null &&
-          typeof value === 'object' &&
-          'name' in value &&
-          option.theme.name === value.name),
-    )?.value ?? syntaxThemeOptions[0].value;
-
   return (
     <Selector
       label="Syntax theme"
       isLabelHidden
-      value={selected}
-      options={syntaxThemeOptions.map(({value: optionValue, label}) => ({
-        value: optionValue,
-        label,
-      }))}
-      onChange={next => {
-        const match = syntaxThemeOptions.find(option => option.value === next);
-        if (match) {
-          onChange(match.theme);
-        }
-      }}
+      value={selectedSyntaxTheme(value, isRequired)}
+      options={syntaxThemeChoices(isRequired)}
+      onChange={next => onChange(syntaxThemeFor(next))}
     />
   );
 }
@@ -475,7 +454,13 @@ function InlineControl({
     case 'theme':
       return <ThemeControl value={value} onChange={onChange} />;
     case 'syntax-theme':
-      return <SyntaxThemeControl value={value} onChange={onChange} />;
+      return (
+        <SyntaxThemeControl
+          value={value}
+          isRequired={!!prop.required}
+          onChange={onChange}
+        />
+      );
     case 'string':
       return (
         <TextInput

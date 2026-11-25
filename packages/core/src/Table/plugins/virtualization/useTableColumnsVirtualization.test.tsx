@@ -6,7 +6,7 @@
  * @output Seed range, spacer structure, column positions, pinned runs and fallback tests
  * @position Colocated Table column virtualization runtime coverage
  */
-import {useEffect, useState} from 'react';
+import {Profiler, useEffect, useState} from 'react';
 import {afterEach, describe, it, expect, vi} from 'vitest';
 import {act, cleanup, render, renderHook, screen} from '@testing-library/react';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -728,7 +728,7 @@ describe('column range changes', () => {
     expect(built).toHaveLength(entering.length * ROW_COUNT);
   });
 
-  it('renders the column window once for a scroll inside the mounted range', async () => {
+  it('does not render the column window for a scroll inside the mounted range', async () => {
     const viewport = controlledViewport();
     let renders = 0;
     // The header row's transform runs once each time the column window
@@ -747,7 +747,29 @@ describe('column range changes', () => {
     // 90px more stays inside the same columns: none enters or leaves.
     await viewport.scrollTo(295);
     expect(mountedKeys(container)).toEqual(before);
-    expect(renders).toBe(1);
+    expect(renders).toBe(0);
+  });
+
+  it('commits nothing for a scroll inside the mounted range', async () => {
+    const viewport = controlledViewport();
+    let commits = 0;
+    const {container} = render(
+      <Profiler id="table" onRender={() => commits++}>
+        <Fixture />
+      </Profiler>,
+    );
+    await settle();
+    await viewport.scrollTo(205);
+    const before = mountedKeys(container);
+    commits = 0;
+    // 90px more stays inside the same columns: none enters or leaves.
+    await viewport.scrollTo(295);
+    expect(mountedKeys(container)).toEqual(before);
+    expect(commits).toBe(0);
+    // A scroll that brings a column in still commits.
+    await viewport.scrollTo(900);
+    expect(mountedKeys(container)).not.toEqual(before);
+    expect(commits).toBeGreaterThan(0);
   });
 });
 
@@ -1052,6 +1074,11 @@ describe('rows and columns windowing together', () => {
     expect(cell).not.toBeNull();
     act(() => cell?.focus());
     await viewport.scrollBoth(2000, 2400);
+    // CI once read the first window here with the focused row still mounted,
+    // and the failure did not reproduce locally. A second scroll report
+    // publishes the scroll position again, and two more frames let it land,
+    // before the rows are read.
+    await viewport.landWrites();
     const rows = mountedRows(container);
     // Row 1 stays as the island before the window from row 47.
     expect(rows[0]).toHaveAttribute('aria-rowindex', '2');
@@ -1061,6 +1088,7 @@ describe('rows and columns windowing together', () => {
     expect(document.activeElement).toBe(cell);
     expect(rows[1].querySelector('[aria-colindex="2"]')).not.toBeNull();
     await viewport.scrollBoth(0, 0);
+    await viewport.landWrites();
     expect(document.activeElement).toBe(cell);
     expect(mountedRows(container)[0]).toHaveAttribute('aria-rowindex', '2');
   });
