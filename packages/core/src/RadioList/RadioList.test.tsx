@@ -27,6 +27,7 @@ import {RadioListItem} from './RadioListItem';
 import {FormLayout} from '../FormLayout/FormLayout';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 const itemTestStyles = stylex.create({
   custom: {marginBlockStart: 4},
@@ -546,26 +547,31 @@ describe('RadioList', () => {
 
     it('shows the reason tooltip on hover when the group is disabled with a reason', async () => {
       renderGroup();
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('Upgrade your account to change plans');
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent(
+        'Upgrade your account to change plans',
+      );
       const group = screen.getByRole('radiogroup');
       fireEvent.mouseEnter(group);
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      fireEvent.pointerMove(group);
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(group);
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(tooltip()).not.toHaveAttribute('popover-open'),
+      );
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderGroup();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       await user.tab();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
     });
 
     it('describes each radio with the reason, as well as the radiogroup', () => {
       renderGroup();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       for (const name of ['Free', 'Pro']) {
         const radio = screen.getByRole('radio', {name});
         expect(radio.getAttribute('aria-describedby')?.split(' ')).toContain(
@@ -598,7 +604,7 @@ describe('RadioList', () => {
           />
         </RadioList>,
       );
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       const radio = screen.getByRole('radio', {name: 'Free'});
       const ids = radio.getAttribute('aria-describedby')!.split(' ');
       expect(ids).toHaveLength(2);
@@ -625,7 +631,7 @@ describe('RadioList', () => {
       __resetInteractionModalityForTest();
       const onChange = vi.fn();
       renderGroup({onChange});
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       const pro = screen.getByRole('radio', {name: 'Pro'});
       // A tap, in the order a browser dispatches it.
       fireEvent.pointerEnter(pro, {pointerType: 'touch'});
@@ -633,7 +639,7 @@ describe('RadioList', () => {
       fireEvent.pointerUp(pro, {pointerType: 'touch'});
       fireEvent.mouseEnter(pro);
       fireEvent.click(pro);
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       expect(onChange).not.toHaveBeenCalled();
       expect(pro).not.toBeChecked();
     });

@@ -427,7 +427,7 @@ export function LineClamp({
   ref,
   onBlur,
   onFocus,
-  onPointerEnter,
+  onPointerMove,
   onPointerLeave,
   onPointerDown,
   ...props
@@ -496,7 +496,11 @@ export function LineClamp({
     hasTruncateTooltip && maxLines > 0 && truncation.isTruncated;
   // The tooltip mounts on the first hover, completed tap or focus, as Text's
   // does, so a page of clamped content mounts no tooltip layers at load.
-  const tooltipInterest = useTruncationTooltipInterest(tooltipEnabled);
+  const tooltipInterest = useTruncationTooltipInterest(
+    tooltipEnabled,
+    undefined,
+    elementRef,
+  );
 
   // Line clamping clips paint only. A link on a clipped line stays in the Tab
   // order, so mark it inert. This runs on every render; the observers above
@@ -535,9 +539,9 @@ export function LineClamp({
         // `tabIndex` wins.
         tabIndex={tooltipEnabled ? 0 : undefined}
         {...{[ROOT_ATTRIBUTE]: ''}}
-        onPointerEnter={composeEventHandlers(
-          tooltipInterest.onPointerEnter,
-          onPointerEnter,
+        onPointerMove={composeEventHandlers(
+          tooltipInterest.onPointerMove,
+          onPointerMove,
         )}
         onPointerLeave={composeEventHandlers(
           tooltipInterest.onPointerLeave,

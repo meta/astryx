@@ -37,6 +37,7 @@ import userEvent from '@testing-library/user-event';
 import {IconButton} from '../IconButton/IconButton';
 import {Toolbar} from '../Toolbar/Toolbar';
 import {TestIcon} from '../__tests__/TestIcon';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
@@ -99,9 +100,7 @@ describe('Tooltip', () => {
         <button type="button">Trigger</button>
       </Tooltip>,
     );
-    expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
-      'Tooltip text',
-    );
+    expect(getTooltip()).toHaveTextContent('Tooltip text');
   });
 
   it('calls onOpenChange(true) when shown via hover', async () => {
@@ -114,6 +113,7 @@ describe('Tooltip', () => {
 
     const trigger = screen.getByRole('button', {name: 'Trigger'});
     fireEvent.mouseEnter(trigger);
+    fireEvent.pointerMove(trigger);
 
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(true);
@@ -234,7 +234,7 @@ describe('Tooltip', () => {
 
       // The icon is still the trigger the ARIA tooltip pattern is wired to.
       expect(screen.getByTestId('icon').getAttribute('aria-describedby')).toBe(
-        screen.getByRole('tooltip', {hidden: true}).id,
+        `${screen.getByRole('tooltip', {hidden: true}).id}-description`,
       );
     });
   });
@@ -272,6 +272,7 @@ describe('Tooltip', () => {
 
       const trigger = screen.getByRole('button', {name: 'Trigger'});
       fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
@@ -292,6 +293,7 @@ describe('Tooltip', () => {
 
       const trigger = screen.getByRole('button', {name: 'Trigger'});
       fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
@@ -313,6 +315,7 @@ describe('Tooltip', () => {
 
       const trigger = screen.getByRole('button', {name: 'Trigger'});
       fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
@@ -323,6 +326,7 @@ describe('Tooltip', () => {
       fireEvent.mouseLeave(trigger);
       const layer = screen.getByRole('tooltip', {hidden: true});
       fireEvent.mouseEnter(layer);
+      fireEvent.pointerMove(layer);
 
       await new Promise(r => setTimeout(r, 150));
       expect(onOpenChange).not.toHaveBeenCalledWith(false);
@@ -340,6 +344,7 @@ describe('Tooltip', () => {
 
       const trigger = screen.getByRole('button', {name: 'Trigger'});
       fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
@@ -379,8 +384,8 @@ describe('Tooltip', () => {
     /** Whether the tooltip's layer is open. */
     const isShown = () =>
       screen
-        .getByRole('tooltip', {hidden: true})
-        .closest<HTMLElement>('[popover]')
+        .queryByRole('tooltip', {hidden: true})
+        ?.closest<HTMLElement>('[popover]')
         ?.matches(':popover-open') ?? false;
 
     it('reports keyboard-focus intent once while held closed, and shows nothing', async () => {
@@ -712,6 +717,7 @@ describe('Tooltip', () => {
       const trigger = screen.getByText('Abbreviation');
       fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
       fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
       expect(onOpenChange).not.toHaveBeenCalled();
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
@@ -850,6 +856,7 @@ describe('Tooltip', () => {
       // A hybrid device: the same trigger, now under a mouse.
       fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
       fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
 
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
@@ -870,6 +877,7 @@ describe('Tooltip', () => {
       // bail out of the hover path and leave the user no tooltip at all.
       fireEvent.pointerEnter(trigger, {pointerType: 'pen', buttons: 0});
       fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
 
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
@@ -1007,6 +1015,311 @@ describe('Tooltip', () => {
   });
 });
 
+/** A tooltip that a new `generation` mounts afresh. */
+function SaveField({generation}: {generation: number}) {
+  return (
+    <Tooltip key={generation} content="Save changes" delay={0}>
+      <button type="button">Save</button>
+    </Tooltip>
+  );
+}
+
+describe('Tooltip layer mounts at its first show', () => {
+  // A tooltip's layer is not in the page until the tooltip first opens, so a
+  // table with a tooltip on every row mounts no closed layers.
+  const layers = () =>
+    Array.from(document.querySelectorAll('[data-layer-anchored]'));
+
+  function describedBy(trigger: HTMLElement) {
+    const id = trigger.getAttribute('aria-describedby');
+    return id == null ? null : document.getElementById(id);
+  }
+
+  it('mounts no layer for a hundred closed tooltips, and each trigger names its hidden description', () => {
+    render(
+      <>
+        {Array.from({length: 100}, (_, index) => (
+          <Tooltip key={index} content={`Row ${index}`}>
+            <button type="button">{`Action ${index}`}</button>
+          </Tooltip>
+        ))}
+      </>,
+    );
+    expect(layers()).toHaveLength(0);
+    const trigger = screen.getByRole('button', {name: 'Action 42'});
+    const description = describedBy(trigger);
+    expect(description).toHaveTextContent('Row 42');
+    // A hidden sibling after the trigger, not inside it.
+    expect(description).toHaveAttribute('hidden');
+    expect(trigger).not.toContainElement(description);
+    expect(trigger).toHaveAccessibleDescription('Row 42');
+    // One tooltip per trigger: the hidden copy is not a tooltip.
+    expect(screen.queryAllByRole('tooltip', {hidden: true})).toHaveLength(0);
+  });
+
+  it('describes the trigger with the text of content a component renders', () => {
+    function Reactions() {
+      return <span>Ada and Grace reacted</span>;
+    }
+    render(
+      <Tooltip content={<Reactions />}>
+        <button type="button">Thanks</button>
+      </Tooltip>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Thanks'}),
+    ).toHaveAccessibleDescription('Ada and Grace reacted');
+    expect(layers()).toHaveLength(0);
+  });
+
+  it('mounts the layer at the first hover, after the delay, and never shows two tooltips', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <Tooltip content="Save changes" delay={200}>
+          <button type="button">Save</button>
+        </Tooltip>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Save'});
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
+      act(() => {
+        vi.advanceTimersByTime(199);
+      });
+      expect(layers()).toHaveLength(0);
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      const tooltips = screen.getAllByRole('tooltip', {hidden: true});
+      expect(tooltips).toHaveLength(1);
+      expect(tooltips[0]).toHaveTextContent('Save changes');
+      expect(popoverOpenState.get(tooltips[0])).toBe(true);
+      // The mounted layer's content is now the description, and the hidden
+      // copy is gone, so the text renders once and reads once.
+      expect(describedBy(trigger)).toBe(tooltips[0].firstElementChild);
+      expect(tooltips[0].firstElementChild).not.toHaveAttribute('aria-hidden');
+      expect(document.querySelector('span[hidden][id$="-description"]')).toBe(
+        null,
+      );
+      expect(trigger).toHaveAccessibleDescription('Save changes');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('describes the trigger, before the first show, with the content read as it renders', () => {
+    render(
+      <>
+        <Tooltip
+          content={
+            <>
+              un<b>like</b>ly
+            </>
+          }>
+          <button type="button">Odds</button>
+        </Tooltip>
+        <Tooltip
+          content={
+            <>
+              <strong>March 1</strong>.
+            </>
+          }>
+          <button type="button">Due</button>
+        </Tooltip>
+      </>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Odds'}),
+    ).toHaveAccessibleDescription('unlikely');
+    expect(
+      screen.getByRole('button', {name: 'Due'}),
+    ).toHaveAccessibleDescription('March 1.');
+  });
+
+  it('renders the text once before the first show, while shown, after it hides, and again from a fresh mount', () => {
+    vi.useFakeTimers();
+    // The elements whose own text is the tooltip text.
+    const holders = (text: string) =>
+      Array.from(document.body.querySelectorAll<HTMLElement>('*')).filter(
+        element =>
+          Array.from(element.childNodes).some(
+            node =>
+              node.nodeType === Node.TEXT_NODE && node.textContent === text,
+          ),
+      );
+    try {
+      const {rerender} = render(<SaveField generation={0} />);
+      const trigger = () => screen.getByRole('button', {name: 'Save'});
+      // Before the first show: the hidden copy alone describes the trigger.
+      expect(holders('Save changes')).toHaveLength(1);
+      expect(describedBy(trigger())).toBe(holders('Save changes')[0]);
+      expect(describedBy(trigger())).toHaveAttribute('hidden');
+      expect(trigger()).toHaveAccessibleDescription('Save changes');
+
+      // Shown: the layer's content alone holds the text and describes it.
+      fireEvent.mouseEnter(trigger());
+      fireEvent.pointerMove(trigger());
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
+      expect(holders('Save changes')).toHaveLength(1);
+      expect(describedBy(trigger())).toBe(holders('Save changes')[0]);
+      expect(describedBy(trigger())?.closest('[role="tooltip"]')).not.toBe(
+        null,
+      );
+      expect(trigger()).toHaveAccessibleDescription('Save changes');
+
+      // Hidden again: the layer stays mounted, so no copy comes back.
+      fireEvent.mouseLeave(trigger());
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(holders('Save changes')).toHaveLength(1);
+      expect(describedBy(trigger())?.closest('[role="tooltip"]')).not.toBe(
+        null,
+      );
+      expect(trigger()).toHaveAccessibleDescription('Save changes');
+
+      // A fresh mount has no layer yet, so the copy describes it again.
+      rerender(<SaveField generation={1} />);
+      expect(holders('Save changes')).toHaveLength(1);
+      expect(describedBy(trigger())).toHaveAttribute('hidden');
+      expect(trigger()).toHaveAccessibleDescription('Save changes');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('opens on the first keyboard focus, in that focus', () => {
+    render(
+      <Tooltip content="Save changes">
+        <button type="button">Save</button>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Save'});
+    vi.spyOn(trigger, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible'
+        ? true
+        : originalMatches.call(trigger, selector),
+    );
+    fireEvent.focusIn(trigger);
+    const tooltips = screen.getAllByRole('tooltip', {hidden: true});
+    expect(tooltips).toHaveLength(1);
+    expect(popoverOpenState.get(tooltips[0])).toBe(true);
+    expect(trigger).toHaveAccessibleDescription('Save changes');
+  });
+
+  it('keeps the trigger described while a show waits for its trigger to get a box, and after that show is cancelled', () => {
+    // A real layout engine with a trigger that has no box yet: the show
+    // waits, and nothing mounts until the box appears.
+    const originalGetAnimations = document.getAnimations;
+    const originalResizeObserver = globalThis.ResizeObserver;
+    document.getAnimations = () => [];
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+    try {
+      const {rerender} = render(
+        <Tooltip content="Save changes" isOpen>
+          <button type="button">Save</button>
+        </Tooltip>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Save'});
+      expect(describedBy(trigger)).toHaveTextContent('Save changes');
+      rerender(
+        <Tooltip content="Save changes" isOpen={false}>
+          <button type="button">Save</button>
+        </Tooltip>,
+      );
+      expect(describedBy(trigger)).toHaveTextContent('Save changes');
+      expect(trigger).toHaveAccessibleDescription('Save changes');
+    } finally {
+      document.getAnimations = originalGetAnimations;
+      globalThis.ResizeObserver = originalResizeObserver;
+    }
+  });
+
+  it("keeps the hidden copy in a shadow root whose host moved into another window's document", async () => {
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const frameDocument = iframe.contentDocument as Document;
+    const host = document.createElement('div');
+    const shadowRoot = host.attachShadow({mode: 'open'});
+    const container = document.createElement('div');
+    shadowRoot.appendChild(container);
+    frameDocument.body.appendChild(frameDocument.adoptNode(host));
+    try {
+      render(
+        <Tooltip content="Save changes">
+          <button type="button">Save</button>
+        </Tooltip>,
+        {container},
+      );
+      const trigger = container.querySelector('button') as HTMLButtonElement;
+      await waitFor(() => {
+        const id = trigger.getAttribute('aria-describedby') ?? '';
+        expect(shadowRoot.getElementById(id)).toHaveTextContent('Save changes');
+      });
+    } finally {
+      iframe.remove();
+    }
+  });
+
+  it("keeps the hidden copy in a shadow root trigger's own root", async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const shadowRoot = host.attachShadow({mode: 'open'});
+    const container = document.createElement('div');
+    shadowRoot.appendChild(container);
+    try {
+      render(
+        <Tooltip content="Save changes">
+          <button type="button">Save</button>
+        </Tooltip>,
+        {container},
+      );
+      const trigger = container.querySelector('button') as HTMLButtonElement;
+      await waitFor(() => {
+        const id = trigger.getAttribute('aria-describedby') ?? '';
+        expect(shadowRoot.getElementById(id)).toHaveTextContent('Save changes');
+      });
+    } finally {
+      host.remove();
+    }
+  });
+
+  it('keeps its layer after it hides, so the next show opens the same layer', async () => {
+    render(
+      <Tooltip content="Save changes" delay={0}>
+        <button type="button">Save</button>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Save'});
+    fireEvent.mouseEnter(trigger);
+    fireEvent.pointerMove(trigger);
+    await waitFor(() => {
+      expect(layers()).toHaveLength(1);
+    });
+    const layer = layers()[0] as HTMLElement;
+    await waitFor(() => {
+      expect(popoverOpenState.get(layer)).toBe(true);
+    });
+    fireEvent.mouseLeave(trigger);
+    await waitFor(() => {
+      expect(popoverOpenState.get(layer)).toBe(false);
+    });
+    expect(layers()).toEqual([layer]);
+    expect(describedBy(trigger)).toHaveTextContent('Save changes');
+    fireEvent.mouseEnter(trigger);
+    fireEvent.pointerMove(trigger);
+    await waitFor(() => {
+      expect(popoverOpenState.get(layer)).toBe(true);
+    });
+  });
+});
+
 describe('Tooltip sibling mode (anchorRef)', () => {
   // SideNavItem's collapsed rail tooltip renders the Tooltip inside the very
   // element anchorRef points at. React attaches an ancestor's ref after its
@@ -1037,12 +1350,13 @@ describe('Tooltip sibling mode (anchorRef)', () => {
     await waitFor(() => {
       expect(anchor.getAttribute('aria-describedby')).not.toBe('');
     });
-    const layer = screen.getByRole('tooltip', {hidden: true});
+    const layer = getTooltip();
     expect(anchor.getAttribute('aria-describedby')).toBe(layer.id);
 
     // Hovering the anchor opens the tooltip: the interaction listeners were
     // attached to the late anchor too.
     fireEvent.mouseEnter(anchor);
+    fireEvent.pointerMove(anchor);
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(true);
     });
@@ -1156,9 +1470,10 @@ describe('Tooltip in a roving Toolbar (focusTrigger="auto")', () => {
     expect(filter).toHaveFocus();
     const describedBy = filter.getAttribute('aria-describedby') ?? '';
     await waitFor(() => {
+      // The description names the layer: the same id without `-description`.
       const layer = describedBy
         .split(' ')
-        .map(id => document.getElementById(id))
+        .map(id => document.getElementById(id.replace(/-description$/, '')))
         .find(element => element?.textContent === 'Filter (F)');
       expect(layer).toBeDefined();
       expect(layer?.matches(':popover-open')).toBe(true);
@@ -1319,6 +1634,7 @@ describe('Tooltip on every input (component:Tooltip FR5)', () => {
       const {trigger, opened} = setup();
       fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
       fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
       await waitFor(() => expect(opened()).toBe(true));
     });
 

@@ -3217,6 +3217,21 @@ describe('toast announcements via singleton live regions', () => {
     expect(assertiveRegion()).toHaveTextContent('');
   });
 
+  it('announces a plain-text body by its words as they read', async () => {
+    renderViewport(
+      <ShowToastButton
+        options={{body: [42, '% uploaded']}}
+        triggerLabel="Show"
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+    await waitFor(() => {
+      expect(announceSpy).toHaveBeenCalledWith('42% uploaded', 'polite');
+    });
+  });
+
   it('announces an error toast assertively', async () => {
     renderViewport(
       <ShowToastButton options={ERROR_TOAST} triggerLabel="Show" />,

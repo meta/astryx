@@ -56,6 +56,7 @@ import {
 import type {SearchSource, SearchableItem} from './types';
 import {InternationalizationProvider} from '../i18n';
 import {InputGroup} from '../InputGroup';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
@@ -2720,17 +2721,18 @@ describe('Typeahead disabledMessage', () => {
     const container = document.querySelector(
       '.astryx-typeahead',
     ) as HTMLElement;
-    const tooltip = screen.getByRole('tooltip', h);
-    expect(tooltip).toHaveTextContent('You need the Editor role');
+    const tooltip = () => getTooltip();
+    expect(tooltip()).toHaveTextContent('You need the Editor role');
 
     fireEvent.mouseEnter(container);
+    fireEvent.pointerMove(container);
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(tooltip()).toHaveAttribute('popover-open');
     });
 
     fireEvent.mouseLeave(container);
     await waitFor(() => {
-      expect(tooltip).not.toHaveAttribute('popover-open');
+      expect(tooltip()).not.toHaveAttribute('popover-open');
     });
   });
 
@@ -2747,11 +2749,11 @@ describe('Typeahead disabledMessage', () => {
       />,
     );
 
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = () => getTooltip();
     await user.tab();
     expect(screen.getByRole('combobox')).toHaveFocus();
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(tooltip()).toHaveAttribute('popover-open');
     });
   });
 
@@ -2810,7 +2812,7 @@ describe('Typeahead disabledMessage', () => {
       />,
     );
     const input = screen.getByRole('combobox');
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 
@@ -3645,5 +3647,152 @@ describe('Typeahead caller aria-labelledby', () => {
     expect(
       screen.getByRole('combobox', {name: 'Contact Fruit Billing'}),
     ).toBeInTheDocument();
+  });
+});
+
+describe('BaseTypeahead Enter before the typed text is searched', () => {
+  const fruits = ['Apple', 'Apricot', 'Banana'].map(label => ({
+    id: label,
+    label,
+  }));
+  const fruitSource: SearchSource<SearchableItem> = {
+    search: query =>
+      fruits.filter(item =>
+        item.label.toLowerCase().includes(query.toLowerCase()),
+      ),
+    bootstrap: () => fruits,
+  };
+  const wait = async (ms: number) => {
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, ms));
+    });
+  };
+
+  it('picks nothing from the list of an earlier query, and picks from the typed text own list once it shows', async () => {
+    const onChange = vi.fn();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        hasEntriesOnFocus
+        value={null}
+        onChange={onChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      input.focus();
+      fireEvent.click(input);
+    });
+    await wait(50);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+
+    // The focus list still shows while "Banana" waits for its debounce.
+    fireEvent.change(input, {target: {value: 'Banana'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).not.toHaveBeenCalled();
+
+    await wait(300);
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toMatchObject({label: 'Banana'});
+  });
+
+  it('picks nothing from the focus list when text matching the last search is typed again', async () => {
+    const onChange = vi.fn();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        hasEntriesOnFocus
+        value={null}
+        onChange={onChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      input.focus();
+      fireEvent.click(input);
+    });
+    fireEvent.change(input, {target: {value: 'Banana'}});
+    await wait(300);
+    // Clearing brings the focus list back.
+    fireEvent.change(input, {target: {value: ''}});
+    await wait(300);
+
+    // "Banana" again: the focus list still shows while it waits.
+    fireEvent.change(input, {target: {value: 'Banana'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).not.toHaveBeenCalled();
+
+    await wait(300);
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toMatchObject({label: 'Banana'});
+  });
+
+  it('picks nothing from the earlier text list when the field is cleared and Enter is pressed at once', async () => {
+    const onChange = vi.fn();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        hasEntriesOnFocus
+        value={null}
+        onChange={onChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      input.focus();
+      fireEvent.click(input);
+    });
+    fireEvent.change(input, {target: {value: 'Banana'}});
+    await wait(300);
+
+    // The "Banana" rows still show while the focus list waits.
+    fireEvent.change(input, {target: {value: ''}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).not.toHaveBeenCalled();
+
+    await wait(300);
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toMatchObject({label: 'Apple'});
+  });
+
+  it('keeps Enter on the list of the current query while that query still loads', async () => {
+    const onChange = vi.fn();
+    let finish: (items: SearchableItem[]) => void = () => {};
+    const slowSource: SearchSource<SearchableItem> = {
+      search: async (query, context) => {
+        context?.update?.(
+          fruits.filter(item => item.label.startsWith(query.slice(0, 1))),
+        );
+        return new Promise(resolve => {
+          finish = resolve;
+        });
+      },
+      bootstrap: () => [],
+    };
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={slowSource}
+        debounceMs={0}
+        value={null}
+        onChange={onChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      input.focus();
+      fireEvent.change(input, {target: {value: 'Ap'}});
+    });
+    await wait(20);
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toMatchObject({label: 'Apple'});
+    await act(async () => finish([]));
   });
 });
