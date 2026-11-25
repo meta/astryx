@@ -475,6 +475,7 @@ describe('PowerSearch date zone', () => {
         },
         'America/Los_Angeles',
       );
+      expect(tokenText('Win')).toBe('Win: inMar 9 – 10, 2024');
       act(() => {
         fireEvent.click(tokenFor('Win'));
       });
@@ -546,6 +547,7 @@ describe('PowerSearch date zone', () => {
         },
         undefined,
       );
+      expect(tokenText('Win')).toBe('Win: inMar 9 – 10, 2024');
       act(() => {
         fireEvent.click(tokenFor('Win'));
       });

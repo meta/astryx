@@ -5325,7 +5325,8 @@ describe('PowerSearch sheet value text', () => {
     openSheet();
     expect(
       within(sheet()).getByRole('button', {
-        name: 'Window is between date range',
+        // A date range's text has a thin space around its dash.
+        name: /^Window is between Jan 1\s–\s2, 1970$/,
       }),
     ).toBeTruthy();
     // A nested filter's row (a button with a trailing remove action, FR12)
@@ -5642,8 +5643,12 @@ describe('PowerSearch sheet value text', () => {
         },
       },
     ];
-    const popover = popoverTokenValues(filters);
-    expect(popover).toEqual(['a, b', '7', 'date range']);
+    // The rows below read with their spaces collapsed; a date range's text
+    // has a thin space around its dash.
+    const popover = popoverTokenValues(filters).map(text =>
+      text.replace(/\s+/g, ' '),
+    );
+    expect(popover).toEqual(['a, b', '7', 'Jan 1 – 2, 1970']);
     setup({config: valueTypesConfig, filters});
     openSheet();
     const rows = within(sheet()).getAllByRole('button', {

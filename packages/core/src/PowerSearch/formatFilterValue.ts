@@ -10,11 +10,17 @@
  * - /packages/core/src/PowerSearch/index.ts
  */
 
-import type {OperatorValue, FilterValue, EnumItem} from './types';
+import type {
+  OperatorValue,
+  FilterValue,
+  EnumItem,
+  DateTimeRange,
+} from './types';
 import type {InternalConfig} from './useInternalConfig';
 import type {Locale, TranslatorFn} from '../i18n';
 import {
   formatCalendarInstant,
+  formatCalendarInstantRange,
   type CalendarSystem,
 } from '../utils/calendarSystem';
 import {truncateCharacters} from '../utils/characters';
@@ -22,6 +28,7 @@ import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/PowerSearch/formatFilterValue.generated';
 import {resolveDateZone} from './powerSearchDateZone';
 import {relativeDateLabel} from './relativeDateOptions';
+import {resolveDateTimeRangePart} from './resolveDateTimeRangePart';
 import {createListFormatter} from '../i18n/listFormat';
 
 registerEnglishFallback(english);
@@ -93,11 +100,30 @@ export function formatDateAbsolute(
   );
 }
 
-function formatDateRange(
-  _value: {start: unknown; end: unknown},
-  t: TranslatorFn,
+/**
+ * The one reading of a `date_range` value: each part's calendar day in the
+ * zone `resolveDateZone` names, as the range editor reads it. A `NOW` or
+ * `RELATIVE` part resolves to an instant first. The locale writes the fields
+ * both days share once, and one day alone when both parts fall on it.
+ */
+export function formatDateRange(
+  range: DateTimeRange,
+  locale: Locale,
+  timezoneID: string | undefined,
+  calendar: CalendarSystem = 'gregory',
 ): string {
-  return t('@astryx.powersearch.valueEditor.dateRange');
+  const nowSeconds = Date.now() / 1000;
+  const [start, end] = [range.start, range.end].map(
+    part => new Date(resolveDateTimeRangePart(part, nowSeconds) * 1000),
+  );
+  return formatCalendarInstantRange(
+    calendar,
+    start,
+    end,
+    {year: 'numeric', month: 'short', day: 'numeric'},
+    locale,
+    resolveDateZone(timezoneID, true),
+  );
 }
 
 /**
@@ -227,7 +253,10 @@ export function formatFilterValue(
         : filterValue.value;
 
     case 'date_range':
-      return formatDateRange(filterValue.value, t);
+      return truncate(
+        formatDateRange(filterValue.value, locale, timezoneID, calendar),
+        maxLength,
+      );
 
     case 'custom':
       if (operatorValue.type === 'custom') {

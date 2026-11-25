@@ -19,7 +19,11 @@ import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {Locale, TranslatorFn} from '../i18n';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {truncateCharacters} from '../utils/characters';
-import {formatDateAbsolute, formatSharedNumber} from './formatFilterValue';
+import {
+  formatDateAbsolute,
+  formatDateRange,
+  formatSharedNumber,
+} from './formatFilterValue';
 import {createListFormatter} from '../i18n/listFormat';
 import {relativeDateLabel} from './relativeDateOptions';
 import {registerEnglishFallback} from '../i18n/englishFallback';
@@ -231,7 +235,10 @@ export function formatTokenValueText(
       );
 
     case 'date_range':
-      return t('@astryx.powersearch.valueEditor.dateRange');
+      return truncateString(
+        formatDateRange(filterValue.value, locale, timezoneID, calendar),
+        maxLength,
+      );
 
     case 'custom':
       if (operatorValue.type === 'custom') {
