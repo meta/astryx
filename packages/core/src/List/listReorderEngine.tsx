@@ -312,6 +312,43 @@ function boundsOf(movable: ReadonlyArray<boolean>): boolean[] {
 const MOVING_OPACITY = '0.6';
 
 /**
+ * The own inline stacking and background of each dropped row that rides
+ * above its neighbours until its glide rests.
+ */
+const raisedRows = new WeakMap<
+  HTMLElement,
+  {readonly zIndex: string; readonly backgroundColor: string}
+>();
+
+/**
+ * Raises a dropped row above the rows it passes, with the preview's
+ * background, for the length of its glide.
+ */
+function raiseRow(row: HTMLElement, background: string | null): void {
+  if (!raisedRows.has(row)) {
+    raisedRows.set(row, {
+      zIndex: row.style.zIndex,
+      backgroundColor: row.style.backgroundColor,
+    });
+  }
+  row.style.zIndex = '2';
+  if (background != null) {
+    row.style.backgroundColor = background;
+  }
+}
+
+/** Gives a raised row its own stacking and background back. */
+function lowerRow(row: HTMLElement): void {
+  const own = raisedRows.get(row);
+  if (own == null) {
+    return;
+  }
+  raisedRows.delete(row);
+  row.style.zIndex = own.zIndex;
+  row.style.backgroundColor = own.backgroundColor;
+}
+
+/**
  * An element the drag draws over the list: no row to the list's order or
  * its layout updates (`markLeaving`), inert and hidden from assistive
  * technology.
@@ -545,6 +582,8 @@ interface DragSession {
   readonly restore: RowRestore;
   /** The copy of the dragged row that follows the pointer. */
   readonly preview: HTMLElement;
+  /** The preview's background, or none where the row paints its own. */
+  readonly background: string | null;
   /** The preview's offset from its row's place, as last written. */
   previewOffset: number;
   /**
@@ -594,6 +633,8 @@ interface PendingDrop {
    */
   readonly velocity: number;
   readonly restore: RowRestore;
+  /** The preview's background: the dragged row glides on it. */
+  readonly background: string | null;
 }
 
 /** A reorder mode move, reported and waiting for its commit. */
@@ -1456,7 +1497,9 @@ export class ListReorderController implements ListReorderSession {
     // first offset changes how it paints in the middle of the drag, with a
     // layout and a paint. With one in place, neither a move nor a slide lays
     // out or paints. `will-change` would make each slide's start repaint its
-    // row. The dragged row goes above its neighbours.
+    // row. A row picked up again during its drop's glide is not raised while
+    // it is dragged, and its own stacking is the one to restore.
+    lowerRow(row);
     const restore: RowRestore = {
       zIndex: row.style.zIndex,
       backgroundColor: row.style.backgroundColor,
@@ -1521,6 +1564,7 @@ export class ListReorderController implements ListReorderSession {
       step: 0,
       restore,
       preview,
+      background,
       previewOffset: 0,
       scrollStale: false,
       ownScroll: false,
@@ -1824,6 +1868,7 @@ export class ListReorderController implements ListReorderSession {
       droppedTop,
       velocity,
       restore: session.restore,
+      background: session.background,
     };
     options.onReorder({key, to: position});
     // A consumer that does not apply the move by the end of the task gets
@@ -1932,6 +1977,7 @@ export class ListReorderController implements ListReorderSession {
         void running.handle.finished.then(settle);
         return;
       }
+      raisedRows.delete(element);
       element.style.zIndex = restore.zIndex;
       element.style.backgroundColor = restore.backgroundColor;
       // Identity offsets go; a row still moving keeps its own.
@@ -2106,7 +2152,9 @@ export class ListReorderController implements ListReorderSession {
       }
       if (spring != null && index === pending.dragged) {
         // The dragged row glides from where its preview was dropped into its
-        // new layout place, starting at the release's velocity.
+        // new layout place, starting at the release's velocity. It rides
+        // above the rows it passes until it rests, as its preview did.
+        raiseRow(element, pending.background);
         touchMotion.glide(element, shift, spring, at, pending.velocity);
       } else if (spring != null) {
         // Every other row's place after the drop is its new layout place. So
