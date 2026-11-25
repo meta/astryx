@@ -390,11 +390,17 @@ test.describe('a finger on the reorder handle', () => {
     const handle = page.locator(HANDLE).first();
     await handle.waitFor();
     if (isClipped) {
-      // A host that clips at the list's edges and publishes no padding.
+      // The element right around the ListInput becomes a host that clips at
+      // the list's edges and publishes no padding.
       await page.evaluate(() => {
-        const root = document.getElementById('storybook-root');
-        root?.style.setProperty('padding', '0');
-        root?.style.setProperty('overflow', 'clip');
+        const host = document
+          .querySelector('[data-list-input-row]')
+          ?.closest('ol')?.parentElement?.parentElement;
+        if (host == null) {
+          throw new Error('no element around the ListInput');
+        }
+        host.style.setProperty('padding', '0');
+        host.style.setProperty('overflow', 'clip');
       });
     }
     // The hit area's observers settle its reach after layout.
