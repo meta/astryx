@@ -13,10 +13,11 @@
  */
 
 import {createRef} from 'react';
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import type * as HitAreaModule from '../utils/hitArea';
 import type {HitInsets} from '../utils/hitArea';
+import {loadTouchHitArea} from '../utils/touchHitArea';
 
 const watches = vi.hoisted(
   () =>
@@ -48,6 +49,10 @@ import {List} from './List';
 import {ListItem} from './ListItem';
 
 describe('ListItem touch hit area', () => {
+  beforeAll(async () => {
+    await loadTouchHitArea();
+  });
+
   afterEach(() => {
     watches.length = 0;
   });

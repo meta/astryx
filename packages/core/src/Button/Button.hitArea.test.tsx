@@ -11,10 +11,11 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {describe, it, expect, vi} from 'vitest';
+import {beforeAll, describe, it, expect, vi} from 'vitest';
 import {act, render, screen} from '@testing-library/react';
 import type * as HitAreaModule from '../utils/hitArea';
 import type {HitInsets} from '../utils/hitArea';
+import {loadTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {ButtonGroup} from '../ButtonGroup/ButtonGroup';
 import {PressGroupBandContext} from '../hooks/pressGroupContext';
@@ -64,6 +65,10 @@ const callerStyles = stylex.create({
 });
 
 describe('Button touch target (AST-094 FR42)', () => {
+  beforeAll(async () => {
+    await loadTouchHitArea();
+  });
+
   it('grows a standalone button toward 44 px as far as the shared hit area allows', () => {
     render(<Button label="Save" />);
     const button = screen.getByRole('button', {name: 'Save'});

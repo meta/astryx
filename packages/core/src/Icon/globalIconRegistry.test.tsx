@@ -5,6 +5,7 @@ import {
   it,
   expect,
   expectTypeOf,
+  beforeAll,
   beforeEach,
   afterEach,
   vi,
@@ -21,6 +22,7 @@ import {
   getIconRegistry,
   getIcon,
   getExtendedIcon,
+  loadDefaultIcons,
   resetIcons,
   resolveIcon,
   type IconEntry,
@@ -42,6 +44,10 @@ declare module './index' {
 }
 
 describe('iconRegistry (global, RSC-compatible)', () => {
+  beforeAll(async () => {
+    await loadDefaultIcons();
+  });
+
   beforeEach(() => {
     resetIcons();
     resetThemes();

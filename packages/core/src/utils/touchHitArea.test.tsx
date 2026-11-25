@@ -14,7 +14,7 @@
 
 import {useCallback} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import type * as HitAreaModule from './hitArea';
 import {HIT_INSET_PROPERTIES, type HitInsets, type HitRect} from './hitArea';
@@ -53,7 +53,7 @@ vi.mock('./hitArea', async importOriginal => {
   };
 });
 
-import {useTouchHitArea} from './touchHitArea';
+import {loadTouchHitArea, useTouchHitArea} from './touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 
 function Host({
@@ -135,6 +135,10 @@ function stubCoarse(): void {
 }
 
 describe('useTouchHitArea', () => {
+  beforeAll(async () => {
+    await loadTouchHitArea();
+  });
+
   afterEach(() => {
     watches.length = 0;
     vi.unstubAllGlobals();
@@ -349,6 +353,38 @@ describe('useTouchHitArea across re-renders', () => {
     await Promise.resolve();
     expect(watches[0].stop).toHaveBeenCalledTimes(1);
     expect(element.style.getPropertyValue(HIT_INSET_PROPERTIES.top)).toBe('');
+  });
+});
+
+describe('useTouchHitArea deferred load', () => {
+  afterEach(() => {
+    watches.length = 0;
+    vi.restoreAllMocks();
+  });
+
+  it('defers loading hitArea until after first paint and cancels detached refs before load', async () => {
+    vi.resetModules();
+    const {hasLoadedTouchHitArea, useTouchHitArea: useFreshTouchHitArea} =
+      await import('./touchHitArea');
+    expect(hasLoadedTouchHitArea()).toBe(false);
+
+    function FreshHost({label}: {label: string}) {
+      const ref = useFreshTouchHitArea(true);
+      return <span data-testid={label} ref={ref} />;
+    }
+
+    const first = render(<FreshHost label="unmounted-before-load" />);
+    const second = render(<FreshHost label="kept" />);
+    expect(watches).toHaveLength(0);
+    expect(hasLoadedTouchHitArea()).toBe(false);
+
+    first.unmount();
+    await vi.waitFor(() => {
+      expect(hasLoadedTouchHitArea()).toBe(true);
+      expect(watches).toHaveLength(1);
+    });
+    expect(watches[0].element).toBe(screen.getByTestId('kept'));
+    second.unmount();
   });
 });
 

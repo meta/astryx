@@ -10,11 +10,19 @@
  *   utils/hitArea.ts
  */
 
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import {act, render} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {HIT_INSET_PROPERTIES, resetHitAreaForTests} from './hitArea';
-import {useTouchHitArea} from './touchHitArea';
+import {loadTouchHitArea, useTouchHitArea} from './touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 
 const ROW_SIZE = 24;
@@ -100,6 +108,10 @@ function writtenLefts(container: HTMLElement): string[] {
 }
 
 describe('the shared pass with touch hit areas', () => {
+  beforeAll(async () => {
+    await loadTouchHitArea();
+  });
+
   beforeEach(() => {
     frames = [];
     vi.stubGlobal('matchMedia', (media: string) => ({

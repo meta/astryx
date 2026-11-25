@@ -18,16 +18,40 @@
  */
 
 import {useCallback, type RefCallback} from 'react';
-import {
-  MIN_TOUCH_TARGET,
-  NO_HIT_INSETS,
-  settlingAnimations,
-  watchHitArea,
-  whenSettled,
-  writeHitInsets,
-  type HitInsets,
-  type HitRect,
-} from './hitArea';
+import {createModuleLoader} from './moduleLoader';
+import type * as HitAreaModule from './hitArea';
+import type {HitInsets, HitRect} from './hitArea';
+
+const MIN_TOUCH_TARGET = 44;
+const NO_HIT_INSETS: HitInsets = {top: 0, right: 0, bottom: 0, left: 0};
+
+// Defers utils/hitArea out of the first-load bundle; loads once after the
+// browser paints (mirroring cutTextOnKeyboardFocus).
+const hitAreaModule = createModuleLoader<typeof HitAreaModule>(async () => {
+  await new Promise<void>(resolve => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        setTimeout(resolve, 0);
+      });
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+  return import('./hitArea');
+});
+
+/**
+ * Loads the shared hit-area runtime on demand.
+ * @internal
+ */
+export async function loadTouchHitArea(): Promise<boolean> {
+  return hitAreaModule.tryLoad();
+}
+
+/** @internal */
+export function hasLoadedTouchHitArea(): boolean {
+  return hitAreaModule.loaded() !== null;
+}
 
 /** How an owner's element grows, for an owner with its own rule. */
 export interface TouchHitAreaOptions {
@@ -78,10 +102,13 @@ const NO_OPTIONS: TouchHitAreaOptions = {};
  * of a compositor-only motion lays out or paints for them.
  */
 function watchAtRest(
+  hitArea: typeof HitAreaModule,
   element: HTMLElement,
   minSize: number,
   {growth, checkAtPress, ownsDescendantTouches = true}: TouchHitAreaOptions,
 ): () => void {
+  const {settlingAnimations, watchHitArea, whenSettled, writeHitInsets} =
+    hitArea;
   let stopWatch = (): void => {};
   let isStopped = false;
   let isWaiting = false;
@@ -144,8 +171,9 @@ function watchAtRest(
 
 /** The watch on an element, and how many attached refs hold it. */
 interface HeldWatch {
-  readonly stop: () => void;
+  stop: () => void;
   holders: number;
+  cancelled: boolean;
 }
 
 const heldWatches = new WeakMap<HTMLElement, HeldWatch>();
@@ -162,11 +190,27 @@ function holdWatch(
 ): () => void {
   let held = heldWatches.get(element);
   if (held == null) {
-    held = {
-      stop: watchAtRest(element, MIN_TOUCH_TARGET, options),
+    const entry: HeldWatch = {
+      stop: () => {},
       holders: 0,
+      cancelled: false,
     };
-    heldWatches.set(element, held);
+    held = entry;
+    heldWatches.set(element, entry);
+    const loaded = hitAreaModule.loaded();
+    if (loaded != null) {
+      entry.stop = watchAtRest(loaded, element, MIN_TOUCH_TARGET, options);
+    } else {
+      void hitAreaModule.tryLoad().then(ok => {
+        if (!ok || entry.cancelled || heldWatches.get(element) !== entry) {
+          return;
+        }
+        const mod = hitAreaModule.loaded();
+        if (mod != null) {
+          entry.stop = watchAtRest(mod, element, MIN_TOUCH_TARGET, options);
+        }
+      });
+    }
   }
   held.holders += 1;
   const entry = held;
@@ -179,6 +223,7 @@ function holdWatch(
     entry.holders -= 1;
     queueMicrotask(() => {
       if (entry.holders === 0 && heldWatches.get(element) === entry) {
+        entry.cancelled = true;
         heldWatches.delete(element);
         entry.stop();
       }

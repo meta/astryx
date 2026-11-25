@@ -11,7 +11,7 @@
  */
 
 import {createRef, memo} from 'react';
-import {describe, it, expect, vi} from 'vitest';
+import {beforeAll, describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {CheckCircleIcon} from '@heroicons/react/24/outline';
@@ -23,6 +23,7 @@ import {resetThemes} from '../theme/themeRegistry';
 import {Icon} from './Icon';
 import {IconDefaultSizeProvider} from './IconDefaultSizeContext';
 import {
+  loadDefaultIcons,
   registerIcons,
   resetIcons,
   type IconRequest,
@@ -43,6 +44,10 @@ function varsRead(value: string): string[] {
 }
 
 describe('Icon', () => {
+  beforeAll(async () => {
+    await loadDefaultIcons();
+  });
+
   it('renders the icon component', () => {
     render(<Icon icon={TestIcon} data-testid="icon" />);
     expect(screen.getByTestId('icon')).toBeInTheDocument();
@@ -1184,5 +1189,28 @@ describe('Icon given its glyph as name', () => {
     expect(screen.getByTestId('both').querySelector('svg')).not.toBeNull();
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe('Icon deferred defaultIcons loading', () => {
+  it('does not load defaultIcons when registerIcons provides the icon, and loads on miss', async () => {
+    vi.resetModules();
+    const registry = await import('./globalIconRegistry');
+    const {Icon: FreshIcon} = await import('./Icon');
+    registry.resetIcons();
+
+    expect(registry.hasLoadedDefaultIcons()).toBe(false);
+    registry.registerIcons({check: <svg data-testid="custom-check" />});
+    const registered = render(
+      <FreshIcon icon="check" data-testid="reg-icon" />,
+    );
+    expect(screen.getByTestId('custom-check')).toBeInTheDocument();
+    expect(registry.hasLoadedDefaultIcons()).toBe(false);
+    registered.unmount();
+
+    render(<FreshIcon icon="close" data-testid="fallback-icon" />);
+    const loaded = await screen.findByTestId('fallback-icon');
+    expect(loaded.querySelector('svg')).not.toBeNull();
+    expect(registry.hasLoadedDefaultIcons()).toBe(true);
   });
 });

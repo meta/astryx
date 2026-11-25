@@ -12,6 +12,7 @@
 
 import {
   afterEach,
+  beforeAll,
   beforeEach,
   describe,
   expect,
@@ -29,6 +30,7 @@ import {ComponentIcon} from './ComponentIcon';
 import {
   getIcon,
   getIconRegistry,
+  loadDefaultIcons,
   resolveComponentIcon,
   type ComponentIconFallback,
 } from './globalIconRegistry';
@@ -75,6 +77,10 @@ function resolveCopy(
 }
 
 describe('component icon slot resolution', () => {
+  beforeAll(async () => {
+    await loadDefaultIcons();
+  });
+
   let warn: {mock: {calls: unknown[][]}};
   const warnings = () =>
     warn.mock.calls

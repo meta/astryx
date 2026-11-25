@@ -30,12 +30,23 @@
  * - /packages/cli/assets/templates/blocks/components/Icon/ (showcase blocks)
  */
 
-import React, {useCallback, type ComponentType, type SVGProps} from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useSyncExternalStore,
+  type ComponentType,
+  type SVGProps,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import {useThemeDefinition} from '../theme/useTheme';
-import {resolveIcon} from './globalIconRegistry';
+import {
+  hasLoadedDefaultIcons,
+  loadDefaultIcons,
+  resolveIcon,
+  subscribeDefaultIcons,
+} from './globalIconRegistry';
 import type {IconName, NamespacedIconName} from './globalIconRegistry';
 import type {IconVariant} from './index';
 import {mergeProps} from '../utils/mergeProps';
@@ -425,6 +436,8 @@ function isGlyphSource(value: unknown): boolean {
  * icon prop is a string. A function entry receives the resolved size and the
  * requested variant when the entry can receive it.
  */
+const readNoDefaults = (): boolean => false;
+
 function IconFromRegistry({
   name,
   color,
@@ -449,7 +462,20 @@ function IconFromRegistry({
   spanProps?: Omit<SVGProps<SVGSVGElement>, 'ref' | 'color'>;
 }) {
   const theme = useThemeDefinition();
+  const defaultIconsLoaded = useSyncExternalStore(
+    subscribeDefaultIcons,
+    hasLoadedDefaultIcons,
+    readNoDefaults,
+  );
   const resolvedIcon = resolveIcon(name, theme, {size, variant});
+  // Load default fallback SVGs only when no theme or global registration
+  // supplies the requested name.
+  useEffect(() => {
+    if (resolvedIcon !== undefined || defaultIconsLoaded) {
+      return;
+    }
+    void loadDefaultIcons();
+  }, [resolvedIcon, defaultIconsLoaded]);
   // The glyph can change while the span stays. Attach the ref again when it
   // does.
   const attachSvgRef = useCallback(
@@ -458,7 +484,7 @@ function IconFromRegistry({
         ? undefined
         : mergeRefs(svgRef)(span?.querySelector('svg') ?? null),
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- resolveIcon's inputs: a new glyph gets a new attach, and a function entry's new element each render does not.
-    [svgRef, name, theme, size, variant],
+    [svgRef, name, theme, size, variant, defaultIconsLoaded],
   );
 
   if (resolvedIcon == null) {

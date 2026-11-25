@@ -27,7 +27,7 @@
  */
 
 import type {ReactNode} from 'react';
-import {defaultIcons} from './defaultIcons';
+import type * as DefaultIconsModule from './defaultIcons';
 import type {IconSize} from './IconSize.stylex';
 import type {
   ComponentIconRequest,
@@ -38,6 +38,7 @@ import type {
 import type {DefinedTheme} from '../theme/defineTheme';
 import {getRegisteredTheme} from '../theme/themeRegistry';
 import {warnOnce} from '../utils/devWarning';
+import {createModuleLoader} from '../utils/moduleLoader';
 import {sharedForReact} from '../utils/sharedForReact';
 
 declare const process: {readonly env: {readonly NODE_ENV?: string}};
@@ -164,6 +165,67 @@ type StoredIconEntry = IconEntry<never>;
 
 export type IconRegistrySource = DefinedTheme | string | null | undefined;
 
+/** The built-in semantic icon names, kept in sync with IconName by typecheck. */
+const BUILTIN_ICON_NAME_MAP: Record<IconName, true> = {
+  close: true,
+  chevronDown: true,
+  chevronLeft: true,
+  chevronRight: true,
+  chevronsLeft: true,
+  chevronsRight: true,
+  check: true,
+  success: true,
+  error: true,
+  warning: true,
+  info: true,
+  calendar: true,
+  clock: true,
+  externalLink: true,
+  menu: true,
+  moreHorizontal: true,
+  search: true,
+  upload: true,
+  arrowUp: true,
+  arrowDown: true,
+  arrowsUpDown: true,
+  funnel: true,
+  eyeSlash: true,
+  viewColumns: true,
+  copy: true,
+  checkDouble: true,
+  wrench: true,
+  stop: true,
+  microphone: true,
+  drag: true,
+};
+
+const BUILTIN_ICON_NAMES: ReadonlyArray<string> = Object.keys(
+  BUILTIN_ICON_NAME_MAP,
+);
+
+const defaultIconsLoader = createModuleLoader<typeof DefaultIconsModule>(
+  async () => import('./defaultIcons'),
+);
+
+/**
+ * Loads the built-in fallback SVGs on demand when no theme or global
+ * registration provides a requested icon name.
+ * @internal
+ */
+export async function loadDefaultIcons(): Promise<boolean> {
+  return defaultIconsLoader.tryLoad();
+}
+
+/** @internal */
+export function hasLoadedDefaultIcons(): boolean {
+  return defaultIconsLoader.loaded() !== null;
+}
+
+/** @internal */
+export function subscribeDefaultIcons(listener: () => void): () => void {
+  return defaultIconsLoader.subscribe(listener);
+}
+
 /** The request every public, one-argument read uses. */
 const PUBLIC_READ_REQUEST: IconRequest<never> = {size: 'md'};
 
@@ -250,7 +312,8 @@ function selectIconEntry(
   if (globalEntry != null) {
     return {entry: globalEntry, variantLists: [activeVariants]};
   }
-  return {entry: defaultIcons[name as IconName] ?? fallback, variantLists: []};
+  const defaults = defaultIconsLoader.loaded()?.defaultIcons;
+  return {entry: defaults?.[name as IconName] ?? fallback, variantLists: []};
 }
 
 /**
@@ -349,7 +412,7 @@ export function getIconRegistry(
   // contributed by a library or shipped as a component's own default, are
   // resolved via getIcon/getExtendedIcon and intentionally kept out of the
   // typed IconRegistry snapshot.
-  const names = new Set(Object.keys(defaultIcons));
+  const names = new Set<string>(BUILTIN_ICON_NAMES);
   for (const name of Object.keys(getThemeIconEntries(getTheme(source)) ?? {})) {
     names.add(name);
   }
@@ -458,7 +521,7 @@ function isIconName(value: unknown): value is IconName {
   return (
     typeof value === 'string' &&
     !isNamespacedKey(value) &&
-    Object.hasOwn(defaultIcons, value)
+    Object.hasOwn(BUILTIN_ICON_NAME_MAP, value)
   );
 }
 
