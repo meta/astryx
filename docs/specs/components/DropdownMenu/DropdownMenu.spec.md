@@ -203,7 +203,9 @@ visibility helper.
 - **AR1 — A custom trigger still names the menu.** With `renderTrigger`, the
   menu carries `aria-labelledby` pointing at the control's `id` (the Button path
   keeps `aria-label`), and the control carries `aria-haspopup="menu"`,
-  `aria-expanded` and `aria-controls`.
+  `aria-expanded` and `aria-controls`. When the control names itself by
+  `aria-labelledby`, the open menu points at the same ids, because a name
+  reference does not follow a second reference.
 - **AR2 — A row that navigates is a link element.** A row with an `href` is
   the anchor itself: in the pointer menu it keeps `role="menuitem"` so the menu
   stays one menu, while a modified click or Enter keeps the browser's link
