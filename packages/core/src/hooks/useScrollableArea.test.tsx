@@ -330,8 +330,6 @@ describe('useScrollableArea', () => {
     const viewport = screen.getByTestId('viewport');
     makeMeasurable(viewport);
     flushFrame();
-    // The content's own first report asks for one more measurement.
-    flushFrame();
     const calls: [boolean, boolean][] = [];
     const stop = subscribeScrollGeometry(viewport, (isContent, isLayout) =>
       calls.push([isContent, isLayout]),
@@ -384,6 +382,32 @@ describe('useScrollableArea', () => {
     expect(window.getComputedStyle).toHaveBeenCalledWith(viewport);
     expect(state().inline.isScrollable).toBe(true);
     expect(viewport).toHaveAttribute('tabindex', '0');
+  });
+
+  it('measures once at mount, though the viewport and the content both send a first notification', async () => {
+    mockOwnedComputedStyle();
+    render(<Fixture />);
+    makeMeasurable(screen.getByTestId('viewport'));
+
+    await act(async () => notifyFirstLayout());
+    expect(window.getComputedStyle).toHaveBeenCalled();
+    expect(frames).toHaveLength(0);
+
+    // A later content resize still measures.
+    const content = screen.getByTestId('content');
+    await act(async () => {
+      for (const callback of resizeObservers) {
+        callback(
+          [
+            {
+              target: content,
+            } as Partial<ResizeObserverEntry> as ResizeObserverEntry,
+          ],
+          {} as ResizeObserver,
+        );
+      }
+    });
+    expect(frames).toHaveLength(1);
   });
 
   it('lets no other signal read layout before the first resize notification', async () => {
@@ -451,8 +475,6 @@ describe('useScrollableArea', () => {
     render(<Fixture />);
     const viewport = screen.getByTestId('viewport');
     makeMeasurable(viewport);
-    flushFrame();
-    // The content's own first report asks for one more measurement.
     flushFrame();
     expect(state().inline.isScrollable).toBe(false);
 
@@ -806,8 +828,6 @@ describe('useScrollableArea', () => {
     setGeometry(viewport, {scrollWidth: 300});
     void act(() => viewport.dispatchEvent(new Event('scroll')));
     flushFrame();
-    // The content's own first report asks for one more measurement.
-    flushFrame();
     expect(state().inline.isScrollable).toBe(true);
 
     const styleReads = vi.mocked(window.getComputedStyle).mock.calls.length;
@@ -902,8 +922,6 @@ describe('useScrollableArea', () => {
     setGeometry(viewport, {scrollWidth: 300});
     void act(() => viewport.dispatchEvent(new Event('scroll')));
     flushFrame();
-    // The content's own first report asks for one more measurement.
-    flushFrame();
     expect(state().inline).toEqual({
       isScrollable: true,
       atStart: true,
@@ -931,8 +949,6 @@ describe('useScrollableArea', () => {
     viewport.style.writingMode = 'vertical-rl';
     setGeometry(viewport, {scrollWidth: 220});
     void act(() => viewport.dispatchEvent(new Event('transitionend')));
-    flushFrame();
-    // The content's own first report asks for one more measurement.
     flushFrame();
     expect(state().block).toEqual({
       isScrollable: true,
@@ -1792,8 +1808,6 @@ describe('useScrollableArea', () => {
     render(<Fixture />);
     const viewport = screen.getByTestId('viewport');
     makeMeasurable(viewport);
-    flushFrame();
-    // The content's own first report asks for one more measurement.
     flushFrame();
     setGeometry(viewport, {scrollWidth: 180});
 
