@@ -18,6 +18,7 @@
 import {useState, useCallback, useEffect, useRef} from 'react';
 import {flushSync} from 'react-dom';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
+import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 
 /**
  * Where the content is shown while something other than scrolling moves it:
@@ -59,10 +60,41 @@ function isRendered(el: HTMLElement): boolean {
   return typeof el.checkVisibility !== 'function' || el.checkVisibility();
 }
 
+const NO_CLASS_NAMES: ReadonlyArray<string> = [];
+
+function classTokens(value: string | null): Set<string> {
+  return new Set(value?.split(/\s+/).filter(Boolean));
+}
+
+/**
+ * Whether a class write only added or removed classes in `own`.
+ */
+function isOwnClassWrite(
+  before: string | null,
+  after: string | null,
+  own: ReadonlySet<string>,
+): boolean {
+  const from = classTokens(before);
+  const to = classTokens(after);
+  for (const token of from) {
+    if (!to.has(token) && !own.has(token)) {
+      return false;
+    }
+  }
+  for (const token of to) {
+    if (!from.has(token) && !own.has(token)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Observes what changes `el`'s overflow besides its scroll: its own size,
  * each child's size, the children added or removed, and its class or style.
- * Returns the teardown, which ends every observation.
+ * Returns the teardown, which ends every observation, and `settle`, which
+ * drops the class writes still waiting to be observed that only add or remove
+ * the caller's own classes, given by `getOwnClassNames`.
  *
  * The container attaches in React's commit, where a read forces a style and
  * layout pass before the browser's own. So the first measurement waits for
@@ -79,7 +111,8 @@ function observeContent(
   el: HTMLElement,
   measure: () => void,
   measureFirst: () => void,
-): () => void {
+  getOwnClassNames: () => ReadonlySet<string>,
+): {readonly stop: () => void; readonly settle: () => void} {
   let isActive = true;
   let isLaidOut = false;
   // While the first measurement waits for its microtask, the other reports
@@ -140,8 +173,9 @@ function observeContent(
     childList: true,
     attributes: true,
     attributeFilter: ['class', 'style'],
+    attributeOldValue: true,
   });
-  return () => {
+  const stop = () => {
     isActive = false;
     mutations?.disconnect();
     for (const unobserve of unobserveChildren.values()) {
@@ -149,6 +183,47 @@ function observeContent(
     }
     unobserveChildren.clear();
     unobserveContainer?.();
+  };
+  return {
+    stop,
+    // Called in a layout effect, after a commit changed the edges. A caller
+    // that styles the container from those edges (a fade mask, by class) has
+    // written them by now, and measuring that write reads layout again for
+    // edges this hook just measured. Only a class write that adds or removes
+    // the caller's own classes is dropped. Any other class or style write, and
+    // children added or removed, are measured as usual.
+    settle: () => {
+      const records = mutations?.takeRecords() ?? [];
+      if (records.length === 0) {
+        return;
+      }
+      const own = getOwnClassNames();
+      let changed = false;
+      let childrenChanged = false;
+      records.forEach((record, index) => {
+        if (record.type === 'childList') {
+          childrenChanged = true;
+          changed = true;
+        } else if (record.attributeName === 'class') {
+          // The class after this write is what the next class write found.
+          const next = records
+            .slice(index + 1)
+            .find(r => r.attributeName === 'class');
+          const after = next ? next.oldValue : el.getAttribute('class');
+          if (!isOwnClassWrite(record.oldValue, after, own)) {
+            changed = true;
+          }
+        } else {
+          changed = true;
+        }
+      });
+      if (childrenChanged) {
+        followChildren();
+      }
+      if (changed) {
+        measure();
+      }
+    },
   };
 }
 
@@ -182,9 +257,23 @@ export function useScrollOverflow() {
  * current. `isFirstMeasurement` is true while the edges are the ones the
  * first measurement set. Internal: not exported from the hooks entry.
  */
-export function useShownScrollOverflow() {
+export function useShownScrollOverflow(
+  options: {
+    /**
+     * The classes the caller sets on the container from the edges this hook
+     * reports. A write that only adds or removes them is not measured again.
+     */
+    readonly ownClassNames?: ReadonlyArray<string>;
+  } = {},
+) {
+  const ownClassNames = options.ownClassNames ?? NO_CLASS_NAMES;
+  const ownSetRef = useRef<ReadonlySet<string>>(new Set(ownClassNames));
+  useIsomorphicLayoutEffect(() => {
+    ownSetRef.current = new Set(ownClassNames);
+  }, [ownClassNames]);
   const elRef = useRef<HTMLElement | null>(null);
   const unobserveRef = useRef<(() => void) | null>(null);
+  const settleRef = useRef<(() => void) | null>(null);
   const shownRef = useRef<ShownPosition | null>(null);
   const releaseFrameRef = useRef(0);
 
@@ -293,11 +382,20 @@ export function useShownScrollOverflow() {
     [measure, measureNow],
   );
 
+  // A commit that changed the edges is also the commit that restyles the
+  // container from them. A class write that only sets the caller's own
+  // classes is this hook's own result, so it is not observed as a change to
+  // the content.
+  useIsomorphicLayoutEffect(() => {
+    settleRef.current?.();
+  }, [state]);
+
   const scrollRef = useCallback(
     (el: HTMLElement | null) => {
       if (elRef.current) {
         unobserveRef.current?.();
         unobserveRef.current = null;
+        settleRef.current = null;
         elRef.current.removeEventListener('scroll', measureOnScroll);
         cancelAnimationFrame(releaseFrameRef.current);
         shownRef.current = null;
@@ -307,7 +405,14 @@ export function useShownScrollOverflow() {
 
       if (el) {
         el.addEventListener('scroll', measureOnScroll, {passive: true});
-        unobserveRef.current = observeContent(el, measure, measureFirst);
+        const observation = observeContent(
+          el,
+          measure,
+          measureFirst,
+          () => ownSetRef.current,
+        );
+        unobserveRef.current = observation.stop;
+        settleRef.current = observation.settle;
       }
     },
     [measure, measureFirst, measureOnScroll],
@@ -319,6 +424,7 @@ export function useShownScrollOverflow() {
       if (elRef.current) {
         unobserveRef.current?.();
         unobserveRef.current = null;
+        settleRef.current = null;
         elRef.current.removeEventListener('scroll', measureOnScroll);
       }
     };
