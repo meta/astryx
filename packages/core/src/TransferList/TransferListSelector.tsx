@@ -128,8 +128,6 @@ type TransferListContentProp =
 
 export type TransferListSelectorCommitBehavior = 'immediate' | 'staged';
 
-// Base props, `container*` and `control*` reach the selector's field as they
-// do on ComplexSelector: the trigger, the Field box and the control box.
 export type TransferListSelectorProps<T extends string = string> = Omit<
   FieldInputBaseProps,
   'children' | 'onChange'
@@ -251,8 +249,6 @@ export function TransferListSelector<T extends string = string>({
   ...selectorProps
 }: TransferListSelectorProps<T>): ReactNode {
   const t = useComponentTranslator();
-  // Resolved here as well as in ComplexSelector, so a warning names this
-  // component, and ComplexSelector gets no container* it would warn about.
   const {rest: shellProps, container} = useFieldInputStyling(
     'TransferListSelector',
     selectorProps,

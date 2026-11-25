@@ -60,7 +60,7 @@ async function touch(
   });
 }
 
-const GRIP = '[data-transfer-list-row] button[data-astryx-list-reorder]';
+const GRIP = '[data-astryx-transfer-row] button[data-astryx-list-reorder]';
 // Core List's handle claims a still finger after 150 ms.
 const HOLD_MS = 250;
 
@@ -78,8 +78,8 @@ test('a row dragged past the end of its list stays inside it, clear of the next 
         Array.from(document.querySelectorAll(selector)).map(
           element =>
             element
-              .closest('[data-transfer-list-row]')
-              ?.getAttribute('data-transfer-list-row') ?? '',
+              .closest('[data-astryx-transfer-row]')
+              ?.getAttribute('data-astryx-transfer-row') ?? '',
         ),
       GRIP,
     );
@@ -178,7 +178,7 @@ async function selectedRows(
       return Number.NaN;
     };
     const rows = Array.from(
-      document.querySelectorAll('[data-transfer-list-row]'),
+      document.querySelectorAll('[data-astryx-transfer-row]'),
     )
       .map(row => row.closest('li') as HTMLElement)
       .filter(row =>
@@ -297,8 +297,8 @@ test.describe('with a mouse', () => {
           Array.from(document.querySelectorAll(selector)).map(
             element =>
               element
-                .closest('[data-transfer-list-row]')
-                ?.getAttribute('data-transfer-list-row') ?? '',
+                .closest('[data-astryx-transfer-row]')
+                ?.getAttribute('data-astryx-transfer-row') ?? '',
           ),
         GRIP,
       );
@@ -347,7 +347,7 @@ test.describe('a disabled list', () => {
         `${storybook.origin}/iframe.html?id=a11y-transferlist--disabled&viewMode=story&args=handlePlacement:${placement}`,
       );
       await page.getByRole('switch', {name: 'Disable the list'}).click();
-      const row = page.locator('[data-transfer-list-row="owner"]');
+      const row = page.locator('[data-astryx-transfer-row="owner"]');
       const handle = 'button[data-astryx-list-reorder]';
       await expect(row.locator(handle)).toHaveAttribute(
         'aria-disabled',
@@ -363,7 +363,7 @@ test.describe('a disabled list', () => {
             let opacity = 1;
             for (
               let node: Element | null = element;
-              node != null && !node.matches('[data-transfer-list-row]');
+              node != null && !node.matches('[data-astryx-transfer-row]');
               node = node.parentElement
             ) {
               opacity *= Number(getComputedStyle(node).opacity);
@@ -372,7 +372,7 @@ test.describe('a disabled list', () => {
           });
       await expect.poll(async () => seen('text=Owner')).toBe(0.5);
       await expect
-        .poll(async () => seen('[data-transfer-list-action="selected"]'))
+        .poll(async () => seen('[data-astryx-transfer-action="selected"]'))
         .toBe(0.5);
       await expect.poll(async () => seen(handle)).toBe(0.5);
     });
@@ -392,8 +392,8 @@ test.describe('a disabled list', () => {
           Array.from(document.querySelectorAll(selector)).map(
             element =>
               element
-                .closest('[data-transfer-list-row]')
-                ?.getAttribute('data-transfer-list-row') ?? '',
+                .closest('[data-astryx-transfer-row]')
+                ?.getAttribute('data-astryx-transfer-row') ?? '',
           ),
         GRIP,
       );

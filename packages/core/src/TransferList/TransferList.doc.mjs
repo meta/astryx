@@ -174,7 +174,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "With no `reorderable`, TransferList no longer reorders; pass `reorderable={createReorderable(…)}`. Migrating from isReorderable: pass reorderable={createReorderable({onReorder, isReorderable})} instead. The isReorderable prop and each option's isReorderDisabled are gone; return false from the object's isReorderable(value) for an option that stays put.",
+          "Without `reorderable`, the selected rows keep their order. Pass `reorderable={createReorderable({onReorder, isReorderable})}` to let people reorder them, and return false from the object's isReorderable(value) for a value that keeps its place.",
       },
       {
         guidance: true,
@@ -256,17 +256,8 @@ export const docs = {
   },
   examples: [
     {
-      label: 'Migrating from isReorderable to reorderable',
-      code: `// BEFORE: isReorderable turned reordering on, and an option opted out.
-<TransferList
-  options={[{value: 'name', label: 'Name', isReorderDisabled: true}, ...rest]}
-  isReorderable
-  value={fields}
-  onChange={setFields}
-/>;
-
-// AFTER: reordering is opt-in through the object createReorderable makes.
-const reorderable = useMemo(
+      label: 'Reorderable selected rows',
+      code: `const reorderable = useMemo(
   () =>
     createReorderable<string>({
       onReorder: ({key, to}) => setFields(fields => moveTo(fields, key, to)),
@@ -276,7 +267,8 @@ const reorderable = useMemo(
 );
 
 <TransferList
-  options={[{value: 'name', label: 'Name'}, ...rest]}
+  label="Report fields"
+  options={fieldOptions}
   reorderable={reorderable}
   value={fields}
   onChange={setFields}
@@ -297,33 +289,19 @@ const activeSavedView =
       columns.every((column, index) => column === draft[index]),
   )?.[0] ?? 'custom';
 
-function ResetDraftOnOpen({isOpen, value, onReset}) {
-  const wasOpenRef = useRef(false);
-
-  // Syncs the draft with the applied value each time the popover opens.
-  useEffect(() => {
-    if (isOpen && !wasOpenRef.current) {
-      onReset([...value]);
-    }
-    wasOpenRef.current = isOpen;
-  }, [isOpen, onReset, value]);
-
-  return null;
-}
-
 <ComplexSelector
   label="View options"
   isLabelHidden
   triggerLabel="View options"
   value={applied}
-  onChange={setApplied}>
-  {(_appliedValue, commit, close, state) => (
+  onChange={setApplied}
+  onOpenChange={isOpen => {
+    if (isOpen) {
+      setDraft(applied);
+    }
+  }}>
+  {(_appliedValue, commit, close) => (
     <>
-      <ResetDraftOnOpen
-        isOpen={state.isOpen}
-        value={applied}
-        onReset={setDraft}
-      />
       <Selector
         label="Saved view"
         options={savedViewOptions}

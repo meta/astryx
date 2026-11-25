@@ -250,14 +250,8 @@ describe('TransferList', () => {
       expect(panels[0]?.parentElement).toBe(panels[1]?.parentElement);
 
       expect(screen.queryByText('2 items')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', {name: 'Clear'})).toHaveAttribute(
-        'data-transfer-list-header-action',
-        'true',
-      );
-      expect(screen.getByRole('button', {name: 'Add all'})).toHaveAttribute(
-        'data-transfer-list-header-action',
-        'true',
-      );
+      expect(screen.getByRole('button', {name: 'Clear'})).toBeInTheDocument();
+      expect(screen.getByRole('button', {name: 'Add all'})).toBeInTheDocument();
       const addButton = screen.getByRole('button', {name: 'Add Owner'});
       const removeButton = screen.getByRole('button', {name: 'Remove Name'});
       // Glyphs render through the shared Icon primitive rather than a raw
@@ -1214,7 +1208,7 @@ describe("the owner's reorderable object", () => {
     );
     const rowOf = (value: string) =>
       container.querySelector<HTMLElement>(
-        `[data-transfer-list-row="${value}"]`,
+        `[data-astryx-transfer-row="${value}"]`,
       );
     expect(rowOf('name')).toHaveAttribute('data-reorder', 'fixed');
     expect(rowOf('name')).toHaveAttribute('data-state', 'enabled');

@@ -50,6 +50,14 @@ import {reorderHandle} from '../internal/reorderHandle.stylex';
 import {Item} from '../Item/Item';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
+import {
+  transferActionProps,
+  transferActionsIn,
+} from '../privateAttributes/transferAction.stylex';
+import {
+  transferRowProps,
+  transferRowTogglesIn,
+} from '../privateAttributes/transferRow.stylex';
 import type {Reorderable, ReorderMove} from '../reorderable/createReorderable';
 import {Text} from '../Text/Text';
 import {TextInput} from '../TextInput/TextInput';
@@ -430,13 +438,9 @@ function DisabledHandleTooltip({
   const anchorRef = useMemo(
     () => ({
       get current() {
-        const toggles = rootRef.current?.querySelectorAll<HTMLElement>(
-          `[data-transfer-list-row="${CSS.escape(value)}"] button[aria-pressed]`,
-        );
-        if (toggles == null || toggles.length === 0) {
-          return null;
-        }
-        return isAtStart ? toggles[0] : toggles[toggles.length - 1];
+        const root = rootRef.current;
+        const toggles = root == null ? [] : transferRowTogglesIn(root, value);
+        return (isAtStart ? toggles[0] : toggles.at(-1)) ?? null;
       },
     }),
     [rootRef, value, isAtStart],
@@ -592,10 +596,8 @@ export function TransferList<T extends string = string>({
           side === 'selected'
             ? selectedPanelRef.current
             : availablePanelRef.current;
-        const actions = Array.from(
-          panel?.querySelectorAll<HTMLButtonElement>(
-            `[data-transfer-list-action="${side}"]:not([disabled])`,
-          ) ?? [],
+        const actions = (
+          panel == null ? [] : transferActionsIn(panel, side)
         ).filter(
           action =>
             action.getAttribute('aria-disabled') !== 'true' ||
@@ -783,8 +785,6 @@ export function TransferList<T extends string = string>({
         const count = options.filter(option =>
           matchesQuery(option, normalized),
         ).length;
-        // The panels' message speaks for a search that matches nothing. A
-        // count here would speak twice, in words the panels do not show.
         if (count > 0) {
           announce(t('@astryx.transferList.announceSearchResults', {count}));
         }
@@ -793,8 +793,6 @@ export function TransferList<T extends string = string>({
     [announce, options, t],
   );
 
-  // The message is read off the rendered element, so a caller's element is
-  // announced as the panels show it.
   const isSearchEmpty =
     normalizedQuery !== '' &&
     selectedOptions.length === 0 &&
@@ -821,7 +819,7 @@ export function TransferList<T extends string = string>({
           aria-disabled={isBusy || undefined}
           aria-busy={(isBusy && !isTransferDisabled) || undefined}
           tooltip={isTransferDisabled ? disabledReason : undefined}
-          data-transfer-list-action="available"
+          {...transferActionProps('available')}
           onClick={() => addOption(option, index)}
         />
       );
@@ -836,7 +834,7 @@ export function TransferList<T extends string = string>({
         aria-disabled={isBusy || undefined}
         aria-busy={(isBusy && !isTransferDisabled) || undefined}
         tooltip={isTransferDisabled ? disabledReason : undefined}
-        data-transfer-list-action="selected"
+        {...transferActionProps('selected')}
         onClick={() => removeOption(option, index)}
         // A row that keeps its place has no handle: its Remove keeps the
         // movable rows' column, clear of where their handles sit. While a
@@ -911,8 +909,7 @@ export function TransferList<T extends string = string>({
             (!isOrdering || !canMove(option.value)) && startRoomWithoutHandle,
             isDisabled && styles.disabledItem,
           ]}
-          data-transfer-list-row={option.value}
-          data-transfer-list-index={String(value.indexOf(option.value))}
+          {...transferRowProps(option.value)}
           {...theme}
         />
       );
@@ -1011,7 +1008,6 @@ export function TransferList<T extends string = string>({
                 size="sm"
                 variant="ghost"
                 xstyle={styles.headerAction}
-                data-transfer-list-header-action="true"
                 isDisabled={!canClear}
                 aria-disabled={isBusy || undefined}
                 aria-busy={(isBusy && canClear) || undefined}
@@ -1019,9 +1015,7 @@ export function TransferList<T extends string = string>({
               />
             )}
           </div>
-          <div
-            data-transfer-list-panel-body="selected"
-            {...stylex.props(styles.panelBody)}>
+          <div {...stylex.props(styles.panelBody)}>
             {selectedOptions.length > 0 ? (
               <List
                 density="compact"
@@ -1032,10 +1026,7 @@ export function TransferList<T extends string = string>({
                 )}
               </List>
             ) : (
-              <div
-                ref={emptySearchRef}
-                data-transfer-list-empty="selected"
-                {...stylex.props(styles.empty)}>
+              <div ref={emptySearchRef} {...stylex.props(styles.empty)}>
                 <Text type="supporting" color="secondary">
                   {normalizedQuery === '' ? selectedEmptyText : emptySearchText}
                 </Text>
@@ -1067,7 +1058,6 @@ export function TransferList<T extends string = string>({
                 size="sm"
                 variant="ghost"
                 xstyle={styles.headerAction}
-                data-transfer-list-header-action="true"
                 isDisabled={!canAddAll}
                 aria-disabled={isBusy || undefined}
                 aria-busy={(isBusy && canAddAll) || undefined}
@@ -1075,9 +1065,7 @@ export function TransferList<T extends string = string>({
               />
             )}
           </div>
-          <div
-            data-transfer-list-panel-body="available"
-            {...stylex.props(styles.panelBody)}>
+          <div {...stylex.props(styles.panelBody)}>
             {availableOptions.length > 0 ? (
               <List
                 density="compact"
@@ -1104,9 +1092,7 @@ export function TransferList<T extends string = string>({
                 ))}
               </List>
             ) : (
-              <div
-                data-transfer-list-empty="available"
-                {...stylex.props(styles.empty)}>
+              <div {...stylex.props(styles.empty)}>
                 <Text type="supporting" color="secondary">
                   {normalizedQuery === ''
                     ? availableEmptyText

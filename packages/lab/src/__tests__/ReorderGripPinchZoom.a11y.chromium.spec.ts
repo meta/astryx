@@ -76,8 +76,8 @@ const SURFACES: Surface[] = [
   {
     name: 'TransferList',
     story: 'core-transferlist--default',
-    grip: '[data-transfer-list-row] button[data-astryx-list-reorder]',
-    rowAttribute: 'data-transfer-list-row',
+    grip: '[data-astryx-transfer-row] button[data-astryx-list-reorder]',
+    rowAttribute: 'data-astryx-transfer-row',
     // Core List's handle claims a still finger after 150 ms, as UIKit's
     // reorder control does.
     holdMs: 250,
