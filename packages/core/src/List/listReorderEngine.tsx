@@ -789,7 +789,7 @@ export class ListReorderController implements ListReorderSession {
   private session: DragSession | null = null;
   private pending: PendingDrop | null = null;
   /** A re-grab or the rest step ends the mark that the drop started. */
-  private readonly travelEnds = new WeakMap<HTMLElement, () => void>();
+  private readonly travelEnds = new Map<HTMLElement, () => void>();
   private fallback: ReturnType<typeof setTimeout> | null = null;
   /** The row whose handle keeps focus across a reorder mode move's commit. */
   private focusRow: HTMLElement | null = null;
@@ -1255,12 +1255,15 @@ export class ListReorderController implements ListReorderSession {
     if (list == null) {
       return () => {};
     }
-    const onPointerDown = (event: PointerEvent) => {
-      if (!this.dragsAtOnce(event.pointerType) || event.button !== 0) {
-        return;
-      }
-      const handle = this.handleOf(event.target);
-      if (handle == null) {
+    const onPointerDown = (
+      event: PointerEvent,
+      handle = this.handleOf(event.target),
+    ) => {
+      if (
+        !this.dragsAtOnce(event.pointerType) ||
+        event.button !== 0 ||
+        handle == null
+      ) {
         return;
       }
       this.endMouse?.();
@@ -1329,9 +1332,39 @@ export class ListReorderController implements ListReorderSession {
       handle.setPointerCapture?.(pointerId);
       this.endMouse = end;
     };
+    // A travelling row takes no hits (travel), so a press inside it would
+    // reach the row beneath. The list gives the press to the travelling row
+    // instead: on its handle the press takes the row back, and any other
+    // press, with its click, does nothing until the row rests.
+    let swallowsClick = false;
+    const onPressCapture = (event: PointerEvent) => {
+      swallowsClick = false;
+      const travelling = this.travellingAt(event.clientX, event.clientY);
+      if (travelling == null) {
+        return;
+      }
+      event.stopPropagation();
+      swallowsClick = true;
+      if (travelling.handle == null) {
+        event.preventDefault();
+        return;
+      }
+      onPointerDown(event, travelling.handle);
+    };
+    const onClickCapture = (event: MouseEvent) => {
+      if (swallowsClick) {
+        swallowsClick = false;
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    list.addEventListener('pointerdown', onPressCapture, {capture: true});
+    list.addEventListener('click', onClickCapture, {capture: true});
     list.addEventListener('pointerdown', onPointerDown);
     return () => {
       this.endMouse?.();
+      list.removeEventListener('pointerdown', onPressCapture, {capture: true});
+      list.removeEventListener('click', onClickCapture, {capture: true});
       list.removeEventListener('pointerdown', onPointerDown);
     };
   }
@@ -1353,8 +1386,12 @@ export class ListReorderController implements ListReorderSession {
     return attachTouchHold(
       list,
       isCoarsePointer ? ['touch', 'pen'] : ['touch'],
-      target => {
-        const handle = this.handleOf(target);
+      (target, point) => {
+        // A travelling row takes no hits, so a touch inside it finds its
+        // handle by place, and nothing else there.
+        const travelling = this.travellingAt(point.x, point.y);
+        const handle =
+          travelling == null ? this.handleOf(target) : travelling.handle;
         if (handle != null) {
           held = handle;
         }
@@ -1945,7 +1982,44 @@ export class ListReorderController implements ListReorderSession {
    */
   private travel(row: HTMLElement, backdrop: string | null): void {
     setTravellingBackdrop(row, backdrop);
-    this.travelEnds.set(row, markTravelling(row));
+    const unmark = markTravelling(row);
+    // The row glides away from a still pointer, and the browser moves hover
+    // only when it hit-tests that pointer again. A row that takes no hits
+    // leaves hover on the row beneath it. The list gives the presses inside
+    // the row to the row itself (travellingAt).
+    const pointerEvents = row.style.pointerEvents;
+    row.style.pointerEvents = 'none';
+    this.travelEnds.set(row, () => {
+      unmark();
+      row.style.pointerEvents = pointerEvents;
+    });
+  }
+
+  /**
+   * The travelling row whose box, where its glide has it now, holds the point,
+   * with its handle when the point is on that handle.
+   */
+  private travellingAt(
+    x: number,
+    y: number,
+  ): {row: HTMLElement; handle: HTMLElement | null} | null {
+    const holds = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+    };
+    for (const row of this.travelEnds.keys()) {
+      if (holds(row)) {
+        const handle = reorderHandlesIn(row).find(
+          element =>
+            element instanceof HTMLElement &&
+            this.keys.has(element) &&
+            element.getAttribute('aria-disabled') !== 'true' &&
+            holds(element),
+        );
+        return {row, handle: (handle as HTMLElement | undefined) ?? null};
+      }
+    }
+    return null;
   }
 
   private endTravel(row: HTMLElement): void {

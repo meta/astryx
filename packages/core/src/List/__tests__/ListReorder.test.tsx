@@ -158,6 +158,23 @@ function layOut(list: HTMLElement, onRead?: () => void) {
 
 const MOUSE = {pointerType: 'mouse', pointerId: 1, button: 0, clientX: 280};
 
+/** Where `element` is drawn on the screen, as its glide has it now. */
+function placeAt(
+  element: Element,
+  box: {left: number; top: number; width: number; height: number},
+) {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      ...box,
+      x: box.left,
+      y: box.top,
+      right: box.left + box.width,
+      bottom: box.top + box.height,
+    }),
+  });
+}
+
 /** A mouse presses `handle` at `from`, moves past the slop, then to `to`. */
 function mouseDrag(handle: Element, from: number, to: number) {
   fireEvent.pointerDown(handle, {...MOUSE, clientY: from});
@@ -1873,6 +1890,78 @@ describe('List reorderable', () => {
     }
   });
 
+  it('gives a press inside a travelling row to that row, never to the row beneath, until it rests', async () => {
+    const start = performance.now();
+    let clock = start;
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    try {
+      stubPrimaryPointer(false);
+      render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+      const list = screen.getByRole('list');
+      layOut(list);
+      const handle = handleOf('A');
+      const row = handle.closest('li')!;
+      mouseDrag(handle, 322, 322 + 70);
+      act(() => {
+        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+      });
+      // It takes no hits, so hover passes to the row beneath the pointer.
+      expect(row.style.pointerEvents).toBe('none');
+      // Its glide draws it over B's row: its box spans 100 to 140 px, and its
+      // handle the first 40 px of that.
+      placeAt(row, {left: 0, top: 100, width: 400, height: 40});
+      placeAt(handle, {left: 0, top: 100, width: 40, height: 40});
+      const beneath = handleOf('B').closest('li')!;
+      const pressed = vi.fn();
+      const clicked = vi.fn();
+      beneath.addEventListener('pointerdown', pressed);
+      beneath.addEventListener('click', clicked);
+      // Inside it, off its handle: nothing beneath acts.
+      fireEvent.pointerDown(beneath, {...MOUSE, clientX: 200, clientY: 120});
+      fireEvent.pointerUp(beneath, {...MOUSE, clientX: 200, clientY: 120});
+      fireEvent.click(beneath, {clientX: 200, clientY: 120});
+      expect(pressed).not.toHaveBeenCalled();
+      expect(clicked).not.toHaveBeenCalled();
+      // Beside it: the press reaches the row beneath.
+      fireEvent.pointerDown(beneath, {...MOUSE, clientX: 200, clientY: 160});
+      fireEvent.pointerUp(beneath, {...MOUSE, clientX: 200, clientY: 160});
+      fireEvent.click(beneath, {clientX: 200, clientY: 160});
+      expect(pressed).toHaveBeenCalledTimes(1);
+      expect(clicked).toHaveBeenCalledTimes(1);
+      // On its handle: the press takes the travelling row back.
+      fireEvent.pointerDown(beneath, {...MOUSE, clientX: 20, clientY: 120});
+      fireEvent.pointerMove(beneath, {
+        ...MOUSE,
+        clientX: 20,
+        clientY: 120 + MOUSE_DRAG_SLOP,
+      });
+      expect(pressed).toHaveBeenCalledTimes(1);
+      expect(row).toHaveAttribute('data-astryx-reorder-source');
+      expect(row.style.pointerEvents).toBe('');
+      act(() => {
+        fireEvent.pointerUp(beneath, {
+          ...MOUSE,
+          clientX: 20,
+          clientY: 120 + MOUSE_DRAG_SLOP,
+        });
+      });
+      // Once it rests, a press where it was reaches the row beneath again.
+      clock = start + 5000;
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      });
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+      expect(row.style.pointerEvents).toBe('');
+      fireEvent.pointerDown(beneath, {...MOUSE, clientX: 200, clientY: 120});
+      fireEvent.pointerUp(beneath, {...MOUSE, clientX: 200, clientY: 120});
+      fireEvent.click(beneath, {clientX: 200, clientY: 120});
+      expect(pressed).toHaveBeenCalledTimes(2);
+      expect(clicked).toHaveBeenCalledTimes(2);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it.each([
     ['a fine', false],
     ['a coarse', true],
@@ -1985,11 +2074,15 @@ describe('List reorderable', () => {
     expect(targets.filter(target => rows.includes(target as Element))).toEqual(
       [],
     );
-    expect(
-      add.mock.calls.filter(
-        (_, index) => targets[index] === list && _[0] === 'pointerdown',
-      ),
-    ).toHaveLength(1);
+    // One for a drag, and one in the capture phase that gives a press inside
+    // a travelling row to that row.
+    const pointerDowns = add.mock.calls.filter(
+      (_, index) => targets[index] === list && _[0] === 'pointerdown',
+    );
+    expect(pointerDowns.map(([, , options]) => options ?? null)).toEqual([
+      {capture: true},
+      null,
+    ]);
     add.mockRestore();
   });
 

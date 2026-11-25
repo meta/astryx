@@ -62,7 +62,7 @@ import {lockSelection, locksSelectionFor} from '../utils/selectionLock';
 export function attachTouchHold(
   list: HTMLElement,
   pointerTypes: ReadonlyArray<PointerKind>,
-  receives: (target: unknown) => boolean,
+  receives: (target: unknown, point: {x: number; y: number}) => boolean,
   onGesture: (recognizer: LongPressGestureRecognizer) => void,
   isOnHandle: (target: unknown) => boolean,
 ): () => void {
@@ -74,7 +74,7 @@ export function attachTouchHold(
     allowedPointerTypes: pointerTypes,
     // Only the touches that begin on a handle: the rest of the list's
     // touches never reach the hold.
-    shouldReceiveTouch: (_recognizer, touch) => receives(touch.target),
+    shouldReceiveTouch: (_recognizer, touch) => receives(touch.target, touch),
     // Only a lone finger: two are the browser's pinch, wherever the second
     // one landed (the gesture host counts every finger on the screen).
     shouldBegin: () => host.fingersDown() <= 1,
