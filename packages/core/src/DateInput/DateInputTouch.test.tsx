@@ -523,6 +523,25 @@ describe('DateInput — surface selection', () => {
 // ---------------------------------------------------------------------------
 
 describe('DateInput — field parity', () => {
+  it.each([
+    ['en-US', 'ltr'],
+    ['he', 'rtl'],
+  ])('reads a %s date in dir %s on a right-to-left page', (locale, dir) => {
+    render(
+      <div dir="rtl">
+        <InternationalizationProvider locale={locale}>
+          <DateInput
+            nativePicker="never"
+            label="Ship date"
+            value="2026-03-21"
+            onChange={() => {}}
+          />
+        </InternationalizationProvider>
+      </div>,
+    );
+    expect(field()).toHaveAttribute('dir', dir);
+  });
+
   it('shows a placeholder until a date is chosen, then the formatted value', () => {
     const {rerender} = render(
       <DateInput nativePicker="never" label="Ship date" onChange={() => {}} />,

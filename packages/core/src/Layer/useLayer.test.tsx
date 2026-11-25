@@ -832,6 +832,89 @@ describe('useLayer', () => {
       }
     });
 
+    it('carries the copied direction as `dir`, so `:dir()` inside the layer agrees with its layout', async () => {
+      const getComputedStyleSpy = vi
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation(element =>
+          mockCSSStyleDeclaration({
+            getPropertyValue: () => '',
+            // The marker sits in a right-to-left paragraph inside a
+            // left-to-right host.
+            direction:
+              element.tagName.toLowerCase() === 'template' ? 'rtl' : 'ltr',
+            writingMode: 'horizontal-tb',
+          }),
+        );
+      const atShow: (string | null)[] = [];
+      HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+        atShow.push(this.getAttribute('dir'));
+      });
+      const user = userEvent.setup();
+      try {
+        const {container, getByRole} = render(<EagerContextHostingHarness />);
+
+        await user.click(getByRole('button', {name: 'Trigger'}));
+
+        // Present when the popover opened, and kept by the render after it.
+        expect(atShow).toEqual(['rtl']);
+        const layer = container.querySelector('[popover]') as HTMLElement;
+        expect(layer).toHaveAttribute('dir', 'rtl');
+      } finally {
+        getComputedStyleSpy.mockRestore();
+      }
+    });
+
+    it("sets no `dir` when the host already has the marker's direction", async () => {
+      const getComputedStyleSpy = vi
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation(() =>
+          mockCSSStyleDeclaration({
+            getPropertyValue: () => '',
+            direction: 'rtl',
+            writingMode: 'horizontal-tb',
+          }),
+        );
+      HTMLElement.prototype.showPopover = vi.fn();
+      const user = userEvent.setup();
+      try {
+        const {container, getByRole} = render(<EagerContextHostingHarness />);
+
+        await user.click(getByRole('button', {name: 'Trigger'}));
+
+        const layer = container.querySelector('[popover]') as HTMLElement;
+        expect(layer).not.toHaveAttribute('dir');
+      } finally {
+        getComputedStyleSpy.mockRestore();
+      }
+    });
+
+    it("sets no `dir` over the caller's own direction", async () => {
+      const getComputedStyleSpy = vi
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation(element =>
+          mockCSSStyleDeclaration({
+            getPropertyValue: () => '',
+            direction:
+              element.tagName.toLowerCase() === 'template' ? 'rtl' : 'ltr',
+            writingMode: 'horizontal-tb',
+          }),
+        );
+      HTMLElement.prototype.showPopover = vi.fn();
+      const user = userEvent.setup();
+      try {
+        const {container, getByRole} = render(
+          <EagerContextHostingHarness layerStyle={{direction: 'ltr'}} />,
+        );
+
+        await user.click(getByRole('button', {name: 'Trigger'}));
+
+        const layer = container.querySelector('[popover]') as HTMLElement;
+        expect(layer).not.toHaveAttribute('dir');
+      } finally {
+        getComputedStyleSpy.mockRestore();
+      }
+    });
+
     it("keeps the caller's own direction over a deferred writing context", async () => {
       const getComputedStyleSpy = vi
         .spyOn(window, 'getComputedStyle')

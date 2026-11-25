@@ -14,6 +14,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {getComponent, resolveValue} from './resolveElements';
+import {formatElementCode} from './formatElementCode';
 import {syntaxPresetName} from './syntaxThemeChoices';
 import {AppShellMobileContext} from '@astryxdesign/core/AppShell';
 import {Button} from '@astryxdesign/core/Button';
@@ -144,31 +145,7 @@ function formatValue(
     return String(value);
   }
   if (isValidElement(value)) {
-    const el = value as React.ReactElement<Record<string, unknown>>;
-    const type =
-      typeof el.type === 'string'
-        ? el.type
-        : ((el.type as {displayName?: string}).displayName ??
-          el.type.name ??
-          'Component');
-    const props = el.props;
-    if (!props || Object.keys(props).length === 0) {
-      return `<${type} />`;
-    }
-    const propStr = Object.entries(props)
-      .filter(([k]) => k !== 'children')
-      .map(([k, v]) => {
-        if (typeof v === 'string') {
-          return `${k}="${v}"`;
-        }
-        try {
-          return `${k}={${JSON.stringify(v)}}`;
-        } catch {
-          return `${k}={/* ... */}`;
-        }
-      })
-      .join(' ');
-    return `<${type} ${propStr} />`;
+    return formatElementCode(value);
   }
   try {
     return JSON.stringify(value);

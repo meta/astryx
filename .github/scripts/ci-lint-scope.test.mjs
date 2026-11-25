@@ -199,6 +199,18 @@ describe('required lint routing', () => {
     });
   });
 
+  it('gives the full ESLint pass a 6 GB heap, and the baseline check the same', () => {
+    // The type-aware pass outgrew 4 GB on main; 6 GB stays well inside the
+    // 16 GB runner.
+    const eslint = steps.find(step => step.name === 'Run ESLint');
+    expect(lint.jobs.lint['runs-on']).toBe('ubuntu-24.04-arm');
+    expect(eslint.env.NODE_OPTIONS).toMatch(/^--max-old-space-size=6144( |$)/);
+    expect(
+      steps.find(step => step.name === 'Check the comment-provenance baseline')
+        .env.NODE_OPTIONS,
+    ).toBe(eslint.env.NODE_OPTIONS);
+  });
+
   it('checks the comment-provenance baseline in full lint, and a baseline-only change runs it', () => {
     const check = steps.find(
       step => step.name === 'Check the comment-provenance baseline',

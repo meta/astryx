@@ -715,6 +715,7 @@ describe('the interaction leg count job in ci.yml', () => {
     );
     expect(counter.env).toEqual(ci.jobs['pr-interaction-webkit'].env);
     expect(counter.outputs).toEqual({
+      firefox: '${{ steps.scope-firefox.outputs.applies }}',
       chromium: '${{ steps.matrix.outputs.chromium }}',
       webkit: '${{ steps.matrix.outputs.webkit }}',
       chromium_specs: '${{ steps.select-chromium.outputs.specs }}',

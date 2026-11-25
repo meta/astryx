@@ -173,13 +173,15 @@ describe('palette recipes', () => {
   });
 
   it('v1 and v2 draw byte for byte what they first shipped with, across seeds, vibrancies and kinds', () => {
-    // Digests of every family's ramps over this grid, as the release that
-    // first shipped v2 drew them: a recipe never changes once released.
+    // Digests of every family's colors over this grid, as the release that
+    // first shipped v2 drew them: a recipe never changes once released. The
+    // ramps' diagnostics are left out: their floating-point values differ in
+    // the last digits between Node versions.
     const SHIPPED = {
       'astryx-oklch-v1':
-        'd645a0206c23f9960d286f016e69f3c0f97158ac0173c43c57d5b8b7f5c00c07',
+        '5a71ee23d8ac508c0a31a230ccfe9c5ae6d415fb29f4882fc2c206bcf384ae00',
       'astryx-oklch-v2':
-        '9efea037c72aa3a2b41307f2ab707c72446aee42241b4b47ae840982505c9697',
+        '302da8fa9633aacc4ebaa908f2f3507e7c4dbfa4f00c2d1b6106c29e8a1dfeb8',
     };
     const seeds = [
       '#5f7891',
@@ -207,7 +209,13 @@ describe('palette recipes', () => {
                     {id: 'f', seed, ...(kind ? {kind} : {})},
                     {id: 'g', seed: '#0074e2'},
                   ],
-                }).families,
+                }).families.map(family => ({
+                  id: family.id,
+                  name: family.name,
+                  seed: family.seed,
+                  light: family.light.colors,
+                  dark: family.dark.colors,
+                })),
               ),
             );
       expect(h.digest('hex'), recipe).toBe(want);

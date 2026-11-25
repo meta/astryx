@@ -741,7 +741,7 @@ describe('BaseTable', () => {
         />,
       );
       expect(screen.getByText('Name')).toHaveAttribute('dir', 'ltr');
-      expect(screen.getByText('אימייל')).not.toHaveAttribute('dir');
+      expect(screen.getByText('אימייל')).toHaveAttribute('dir', 'rtl');
     });
 
     it('gives a truncating plain-text label beside an overlay alone its own direction', () => {
@@ -764,7 +764,7 @@ describe('BaseTable', () => {
         />,
       );
       expect(screen.getByText('Name')).toHaveAttribute('dir', 'ltr');
-      expect(screen.getByText('אימייל')).not.toHaveAttribute('dir');
+      expect(screen.getByText('אימייל')).toHaveAttribute('dir', 'rtl');
       expect(screen.getByRole('columnheader', {name: 'Name'})).toBeTruthy();
       unmount();
       render(

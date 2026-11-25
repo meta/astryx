@@ -104,7 +104,9 @@ export function killAllAgents() {
 
 /**
  * The agent starts its own tools and can leave a server running, so the
- * runner kills its whole process group when it exits or times out.
+ * runner kills its whole process group when it exits or times out. With
+ * `tempDir`, the agent's TMPDIR is that folder, so tools that honor TMPDIR do
+ * not share files with the agents that run at the same time.
  * @returns {Promise<{exitCode: number | null, timedOut: boolean, spawnError: string | null, lines: string[], initModel: string | null, result: ReturnType<typeof parseResult>, instructionsFile: string | null}>}
  */
 export function runClaudeCode({
@@ -114,13 +116,16 @@ export function runClaudeCode({
   maxBudgetUsd,
   timeoutMs,
   transcriptPath,
+  tempDir,
   bin = process.env.VIBE_EVAL_AGENT_BIN || 'claude',
 }) {
   const instructions = projectInstructions(workspace);
   const args = buildArgs({prompt, model, maxBudgetUsd, instructions: instructions?.text});
   fs.mkdirSync(path.dirname(transcriptPath), {recursive: true});
+  if (tempDir) fs.mkdirSync(tempDir, {recursive: true});
+  const env = tempDir ? {...process.env, TMPDIR: tempDir, TMP: tempDir, TEMP: tempDir} : process.env;
   return new Promise(resolve => {
-    const child = spawn(bin, args, {cwd: workspace, stdio: ['ignore', 'pipe', 'pipe'], detached: true});
+    const child = spawn(bin, args, {cwd: workspace, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true});
     liveGroups.add(child);
     let buffered = '';
     const lines = [];

@@ -571,6 +571,31 @@ export interface FixedLayerReturn {
 }
 
 /**
+ * Context-mode render props a core component may pass through
+ * `useLayerInternal`; they are not part of `useLayer`'s public API.
+ */
+interface InternalContextRenderProps extends ContextRenderProps {
+  /**
+   * Rendered where the layer is written while no layer is mounted, and
+   * removed in the commit that mounts the layer: content that stands in for
+   * the layer until then, such as a tooltip's description before its first
+   * show.
+   */
+  whileUnmounted?: ReactNode;
+}
+
+/** What `useLayerInternal` returns in context mode. */
+interface InternalContextLayerReturn extends Omit<
+  ContextLayerReturn,
+  'render'
+> {
+  render: (
+    children: ReactNode,
+    props?: InternalContextRenderProps,
+  ) => ReactNode;
+}
+
+/**
  * Context-mode options a core component may pass through `useLayerInternal`;
  * not part of the public `useLayer` options.
  */
@@ -1170,10 +1195,12 @@ function ContextLayerSlot({
   mountStore,
   renderLayer,
   sentinelRef,
+  whileUnmounted,
 }: {
   readonly mountStore: ContextLayerMountStore;
   readonly renderLayer: (mount: ContextLayerMount) => ReactNode;
   readonly sentinelRef: RefCallback<HTMLTemplateElement>;
+  readonly whileUnmounted?: ReactNode;
 }) {
   const mount = useSyncExternalStore(
     mountStore.subscribe,
@@ -1184,14 +1211,17 @@ function ContextLayerSlot({
   // us the real JSX parent on first show, this lets its ref report when a
   // persistent hook's render call moves to a different host.
   const sentinel = <template ref={sentinelRef} />;
-  if (mount === null) {
-    return <>{sentinel}</>;
-  }
-  const layer = renderLayer(mount);
+  // The stand-in and the layer share this render, so the commit that mounts
+  // the layer also removes the stand-in, and the reverse. Each child keeps
+  // its own position, so the marker never remounts.
+  const layer = mount === null ? null : renderLayer(mount);
   return (
     <>
+      {mount === null ? whileUnmounted : null}
       {sentinel}
-      {mount.portalTarget ? createPortal(layer, mount.portalTarget) : layer}
+      {mount !== null && mount.portalTarget
+        ? createPortal(layer, mount.portalTarget)
+        : layer}
     </>
   );
 }
@@ -1222,6 +1252,22 @@ function readPortalWritingContext(
         sourceStyle.writingMode as React.CSSProperties['writingMode'],
     }),
   };
+}
+
+/**
+ * The `dir` for a portalled layer whose writing context copies a direction the
+ * host lacks. A direction set in the caller's own `style` wins. The layer then
+ * gets no `dir`.
+ */
+function portalDir(
+  portalStyle: React.CSSProperties | null,
+  callerStyle: React.CSSProperties | undefined,
+): 'ltr' | 'rtl' | undefined {
+  const direction = portalStyle?.direction;
+  if (callerStyle?.direction != null) {
+    return undefined;
+  }
+  return direction === 'ltr' || direction === 'rtl' ? direction : undefined;
 }
 
 /**
@@ -1681,6 +1727,7 @@ function useLayerImplementation(
       );
       if (portalStyle.direction != null && popover.style.direction === '') {
         popover.style.direction = portalStyle.direction;
+        popover.setAttribute('dir', portalStyle.direction);
       }
       if (portalStyle.writingMode != null && popover.style.writingMode === '') {
         popover.style.writingMode = portalStyle.writingMode;
@@ -2651,7 +2698,7 @@ function useLayerImplementation(
 
   // Render function for context mode
   const renderContext = useCallback(
-    (children: ReactNode, props?: ContextRenderProps) => {
+    (children: ReactNode, props?: InternalContextRenderProps) => {
       const {
         placement = 'above',
         alignment = 'center',
@@ -2665,6 +2712,7 @@ function useLayerImplementation(
         as: Container = 'div',
         onMouseEnter,
         onMouseLeave,
+        whileUnmounted,
       } = props || {};
 
       // CSS anchor positioning (dynamic, not in StyleX)
@@ -2756,6 +2804,9 @@ function useLayerImplementation(
             : {})}
           role={role}
           aria-label={ariaLabel}
+          // A copied direction also goes on `dir`, so `:dir()` inside the
+          // layer agrees with the direction its layout uses.
+          dir={portalDir(mount.portalStyle, extraStyle)}
           popover={lightDismiss ? 'auto' : 'manual'}
           className={combinedClassName}
           style={{
@@ -2787,6 +2838,7 @@ function useLayerImplementation(
           mountStore={mountStore}
           renderLayer={renderLayer}
           sentinelRef={sentinelRefCallback}
+          whileUnmounted={whileUnmounted}
         />
       );
     },
@@ -2896,10 +2948,10 @@ export function useLayer(
  */
 export function useLayerInternal(
   options: InternalContextLayerOptions,
-): ContextLayerReturn;
+): InternalContextLayerReturn;
 export function useLayerInternal(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayerInternal(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): ContextLayerReturn | FixedLayerReturn {
+): InternalContextLayerReturn | FixedLayerReturn {
   return useLayerImplementation(options);
 }

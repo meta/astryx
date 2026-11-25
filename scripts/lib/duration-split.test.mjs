@@ -130,7 +130,7 @@ describe('splitting test files by recorded time', () => {
       /import \{[^}]*costOf[^}]*splitByDuration[^}]*\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
     );
     expect(read('.github/scripts/a11y-pr-contracts.mjs')).toMatch(
-      /import \{[^}]*costOf[^}]*splitByDuration[^}]*\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
+      /import \{[^}]*costOf[^}]*fitLegsToBudget[^}]*\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
     );
     for (const file of [
       'scripts/vitest-shard-sequencer.mjs',
@@ -175,6 +175,19 @@ describe('fitting legs to a budget', () => {
     });
     expect(plan.count).toBe(2);
     expect(plan.longest).toBe(1000);
+  });
+
+  it('at maxLegs, keeps an even split when it is shorter than a leg of its own for a long item', () => {
+    // A leg of its own for the long item leaves the rest 13 minutes in one leg;
+    // two even legs hold 12 minutes each.
+    const seconds = {long: 660, a: 360, b: 360, c: 60};
+    const plan = fitLegsToBudget(Object.keys(seconds), cost(seconds), {
+      budget: 600,
+      maxLegs: 2,
+    });
+    expect(plan.count).toBe(2);
+    expect(plan.longest).toBe(720);
+    expect(plan.shares.flat().sort()).toEqual(Object.keys(seconds).sort());
   });
 
   it('starts from the count it is given', () => {

@@ -46,7 +46,7 @@ import {
   withLogicalPositionWidths,
 } from './tableColumnAdmission';
 import {cutHeadingStyles} from './table.stylex';
-import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
+import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
 import {isRenderable} from '../utils/isRenderable';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import * as stylex from '@stylexjs/stylex';
@@ -970,7 +970,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
 
       // The label cuts its own text before the "after" controls, so a
       // plain-text label takes its text's direction.
-      const labelDirection = textDirectionProps(resolvedContent);
+      const labelDirection = cutTextDirection(resolvedContent);
       const labelRow = isRenderable(after) ? (
         <div {...stylex.props(styles.headerLabelRow)}>
           <span

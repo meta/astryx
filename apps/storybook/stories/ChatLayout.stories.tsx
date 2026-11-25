@@ -210,6 +210,8 @@ export const FullAIChat: StoryObj = {
       {
         character: '@',
         searchSource: createStaticSource(CONTACTS),
+        deserialize: value =>
+          mentionTokens.find(token => token.value === value) ?? null,
         onSelect: item => ({
           value: `@${item.id}`,
           label: `@${item.label}`,
@@ -640,6 +642,8 @@ export const PanelView: StoryObj = {
       {
         character: '@',
         searchSource: createStaticSource(CONTACTS),
+        deserialize: value =>
+          mentionTokens.find(token => token.value === value) ?? null,
         onSelect: item => ({
           value: `@${item.id}`,
           label: `@${item.label}`,

@@ -223,6 +223,17 @@ function itSplitsCorrectly(get: () => Built) {
     expect(product).toContain('.717s');
   });
 
+  // `stylex.when.ancestor` prints a relation onto a bare `*`. Chromium then
+  // restyles the whole subtree of an element whose hover changes, for every
+  // such rule in the document. The build keys it to the rule's class.
+  it("keys each relation to its rule's own class", () => {
+    const {css} = get();
+    expect(layerBlock(css, 'product')).toMatch(
+      /:hover :where\(\.x[a-z0-9]{5,}\)\)/,
+    );
+    expect(css).not.toMatch(/[\s>+~]\*\s*\)/);
+  });
+
   it('leaves no StyleX rule outside the two layers', () => {
     const {css} = get();
     const outside = css

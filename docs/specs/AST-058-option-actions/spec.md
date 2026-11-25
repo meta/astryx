@@ -44,7 +44,7 @@ review_triggers: [public-api, accessibility, behavior]
 | Builder impact          | One optional key on the option object holding the caller's own control — an `IconButton`, a `Button`, a menu trigger, anything with an accessible name. No new type, no render prop, no guard code for rows without one. Nothing changes for a caller who declares none.                                                                                                                                                                                                                                                |
 | Compatibility/readiness | Additive. Every current picker renders exactly as before; the grid exists only when a caller declares an action (DEC-5). Authority: `draft`, `approved_by` `null`. No owner questions are open.                                                                                                                                                                                                                                                                                                                         |
 | Review checks           | Reject a control rendered inside `role="option"`; a `role="none"` or `role="group"` wrapper standing between a listbox and a control; a host that inspects, clones, or wraps the `action` node; a host-owned type or component for an action; an array-typed `action`; a popup whose role follows the filtered view rather than the declared options; a row with any number of cells other than two; an action reachable only by pointer; a Tab stop added inside the popup; a hover-revealed or swipe-revealed action. |
-| Governing rules         | [`spec:AST-002`](../AST-002/spec.md) FR1, FR4, FR15, FR16, `DEC-1`, `DEC-6`; [`architecture:public-component-api`](../../architecture/public-component-api.md) INV1, INV2, INV3, INV9; [`architecture:interaction-modality`](../../architecture/interaction-modality.md) INV4, INV7; [`spec:AST-056`](../AST-056/spec.md) AR1 for the empty state's announcement; `component:DropdownMenu` for the item-data vocabulary this record reuses.                                                                             |
+| Governing rules         | [`spec:AST-002`](../AST-002/spec.md) FR1, FR4, FR15, FR16, `DEC-1`, `DEC-6`; [`architecture:public-component-api`](../../architecture/public-component-api.md) INV1, INV2, INV3, INV9; [`architecture:interaction-modality`](../../architecture/interaction-modality.md) INV4, INV7; [`spec:AST-056`](../AST-056-search-prop-shape/spec.md) AR1 for the empty state's announcement; `component:DropdownMenu` for the item-data vocabulary this record reuses.                                                           |
 
 This table is a review projection; the body below is authoritative.
 
@@ -101,7 +101,7 @@ second surface, and no caller writes guard code for rows that have none.
   `component:Tokenizer` are `draft` and render from `SearchableItem`, a
   second vocabulary. One rule binding two vocabularies across five components
   is a system fact, not a component fact.
-- [`spec:AST-056`](../AST-056/spec.md) is `current` and owns the vocabulary
+- [`spec:AST-056`](../AST-056-search-prop-shape/spec.md) is `current` and owns the vocabulary
   of a typed query's states. It governs the same panels and is read here —
   the empty state's announcement (AR1) and the create row (DEC-3) share the
   panel — but a secondary control is not a search state, and a `current`

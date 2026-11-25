@@ -562,7 +562,11 @@ describe('RichTextEditor', () => {
     const statusButton = screen.getByRole('button', {
       name: /error details/i,
     });
-    const tooltip = screen.getByRole('tooltip', h);
+    // The status tooltip's layer mounts at its first show; until then a
+    // hidden copy of its text describes the field.
+    const tooltip = document.getElementById(
+      statusButton.getAttribute('aria-describedby') ?? '',
+    ) as HTMLElement;
     const textbox = screen.getByRole('textbox');
     expect(statusButton).toHaveAttribute('type', 'button');
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
@@ -1488,6 +1492,58 @@ describe('RichTextEditorToolbar', () => {
       />,
     );
     expect(screen.getByRole('button', {name: 'Custom'})).toBeInTheDocument();
+  });
+
+  async function renderToolbarWithText(text: string) {
+    let editor!: LexicalEditor;
+    render(
+      <RichTextEditor
+        label="Notes"
+        toolbar={<RichTextEditorToolbar />}
+        plugins={<CaptureEditor onReady={e => (editor = e)} />}
+      />,
+    );
+    await waitFor(() => expect(editor).toBeDefined());
+    act(() => {
+      editor.update(
+        () => {
+          const paragraph = $createParagraphNode();
+          paragraph.append($createTextNode(text));
+          $getRoot().clear().append(paragraph);
+          paragraph.select(0, text.length);
+        },
+        {discrete: true},
+      );
+    });
+    return editor;
+  }
+
+  it('bolds the selected text and shows Bold pressed', async () => {
+    const user = userEvent.setup();
+    const editor = await renderToolbarWithText('Ship the notes');
+    const bold = screen.getByRole('button', {name: 'Bold'});
+    await user.click(bold);
+    expect(
+      editor.read(() =>
+        $getRoot()
+          .getAllTextNodes()
+          .every(node => node.hasFormat('bold')),
+      ),
+    ).toBe(true);
+    await waitFor(() => expect(bold).toHaveAttribute('aria-pressed', 'true'));
+  });
+
+  it('makes the selected block a heading from the block-format selector', async () => {
+    const user = userEvent.setup();
+    const editor = await renderToolbarWithText('Release notes');
+    await user.click(screen.getByRole('combobox', {name: 'Block format'}));
+    await user.click(screen.getByRole('option', {name: 'Heading 1', ...h}));
+    expect(
+      editor.read(() => {
+        const block = $getRoot().getFirstChild();
+        return block instanceof HeadingNode ? block.getTag() : block?.getType();
+      }),
+    ).toBe('h1');
   });
 
   it('keeps every formatting action directly available in the scroll row', () => {
