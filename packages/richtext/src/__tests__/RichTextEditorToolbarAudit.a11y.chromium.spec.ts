@@ -61,8 +61,14 @@ let server: StaticServer;
 let checkoutSha: string;
 let storybookSha: string;
 
+// A case with motion on records the page as a person who allows motion
+// sees it, so it does not hold motion still.
+let holdsMotion = true;
+
 async function settle(page: Page) {
-  await holdMotionStill(page);
+  if (holdsMotion) {
+    await holdMotionStill(page);
+  }
   await page.evaluate(async () => document.fonts.ready);
   await page.evaluate(
     async () =>
@@ -494,6 +500,7 @@ test.afterAll(async () => {
 
 async function runCase(page: Page, item: AuditCase) {
   await page.setViewportSize(item.viewport);
+  holdsMotion = (item.motion ?? 'reduce') === 'reduce';
   await page.emulateMedia({
     colorScheme: item.mode,
     reducedMotion: item.motion ?? 'reduce',
