@@ -141,7 +141,7 @@ export function formatDateRange(
  * its provider resolves.
  */
 export function formatFilterValue(
-  config: InternalConfig,
+  _config: InternalConfig,
   operatorValue: OperatorValue,
   filterValue: FilterValue,
   maxLength: number,
@@ -151,7 +151,7 @@ export function formatFilterValue(
   calendar: CalendarSystem = 'gregory',
 ): string {
   return formatFilterValueForRender(
-    config,
+    _config,
     operatorValue,
     filterValue,
     maxLength,
