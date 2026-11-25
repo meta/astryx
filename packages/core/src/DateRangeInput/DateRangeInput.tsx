@@ -730,8 +730,49 @@ export function DateRangeInput({
 
   // An open asked for before Calendar loads opens once it loads, and a
   // failed load drops it. The popover never shows without Calendar.
+  // While the open is held, the trigger still reads as closed, so another
+  // press is another open intent and keeps the hold. A press outside the
+  // field, focus leaving it, or Escape drops the hold.
   const isOpenHeldRef = useRef(false);
+  const stopHoldWatchRef = useRef<(() => void) | null>(null);
+  const fieldRef = useRef<HTMLDivElement | null>(null);
   const showPopoverRef = useCommittedRef(popover.show);
+  const isDisabledRef = useCommittedRef(isEffectivelyDisabled);
+  const dropHeldOpen = useCallback(() => {
+    isOpenHeldRef.current = false;
+    stopHoldWatchRef.current?.();
+    stopHoldWatchRef.current = null;
+  }, []);
+  const holdOpenUntilLoaded = useCallback(() => {
+    if (isOpenHeldRef.current) {
+      return;
+    }
+    isOpenHeldRef.current = true;
+    const doc = fieldRef.current?.ownerDocument ?? document;
+    const handleOutsidePress = (event: PointerEvent) => {
+      const field = fieldRef.current;
+      if (!(event.target instanceof Node && field?.contains(event.target))) {
+        dropHeldOpen();
+      }
+    };
+    doc.addEventListener('pointerdown', handleOutsidePress, true);
+    stopHoldWatchRef.current = () =>
+      doc.removeEventListener('pointerdown', handleOutsidePress, true);
+    void loadDateRangeCalendar().then(isLoaded => {
+      if (!isOpenHeldRef.current) {
+        return;
+      }
+      dropHeldOpen();
+      // An unmounted or now disabled field opens nothing.
+      if (
+        isLoaded &&
+        !isDisabledRef.current &&
+        fieldRef.current?.isConnected === true
+      ) {
+        showPopoverRef.current();
+      }
+    });
+  }, [dropHeldOpen, isDisabledRef, showPopoverRef]);
   const handleToggle = useCallback(() => {
     if (isEffectivelyDisabled) {
       return;
@@ -740,20 +781,30 @@ export function DateRangeInput({
       popover.hide();
     } else if (isDateRangeCalendarLoaded()) {
       popover.show();
-    } else if (isOpenHeldRef.current) {
-      isOpenHeldRef.current = false;
     } else {
-      isOpenHeldRef.current = true;
-      void loadDateRangeCalendar().then(isLoaded => {
-        if (isOpenHeldRef.current) {
-          isOpenHeldRef.current = false;
-          if (isLoaded) {
-            showPopoverRef.current();
-          }
-        }
-      });
+      holdOpenUntilLoaded();
     }
-  }, [isEffectivelyDisabled, popover, showPopoverRef]);
+  }, [holdOpenUntilLoaded, isEffectivelyDisabled, popover]);
+  const handleFieldBlur = useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      const next = event.relatedTarget;
+      if (
+        isOpenHeldRef.current &&
+        !(next instanceof Node && event.currentTarget.contains(next))
+      ) {
+        dropHeldOpen();
+      }
+    },
+    [dropHeldOpen],
+  );
+  const handleFieldKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Escape' && isOpenHeldRef.current) {
+        dropHeldOpen();
+      }
+    },
+    [dropHeldOpen],
+  );
   // The trigger's intent (a mouse or pen entry, a focus or a press) starts
   // loading Calendar, so an open that follows finds it loaded.
   const preloadCalendar = useCallback(() => {
@@ -830,6 +881,7 @@ export function DateRangeInput({
       width={width}>
       <div
         ref={el => {
+          fieldRef.current = el;
           popover.triggerRef(el);
           // Anchor + hover/focus listeners for the disabled-message tooltip.
           // Handlers are gated internally by isEnabled, and anchor names
@@ -839,6 +891,8 @@ export function DateRangeInput({
         onPointerEnter={preloadCalendarOnPointerEnter}
         onPointerDown={preloadCalendar}
         onFocus={preloadCalendar}
+        onBlur={handleFieldBlur}
+        onKeyDown={handleFieldKeyDown}
         {...mergeProps(
           themeProps('date-range-input', {
             size,
