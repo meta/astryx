@@ -21,7 +21,13 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {useEffect, useRef, type HTMLAttributes, type RefObject} from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type HTMLAttributes,
+  type RefObject,
+} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import type {AnnounceRenderedTextOptions} from './useAnnounceRenderedText';
@@ -77,6 +83,7 @@ const {Spinner} = await import('../Spinner');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
 const {InfoTip} = await import('../InfoTip/InfoTip');
 const {ToastSurface} = await import('../Toast/Toast');
+const {Tour} = await import('../Tour/Tour');
 // Tokenizer and PowerSearch load their sheets on demand. This file loads
 // both sheet modules before any test runs, so the sheet cases' waits and
 // time limits cover the open, not the module's load.
@@ -140,6 +147,35 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
       />,
     );
     await expectDelegated('Upload complete');
+  },
+  'Tour/Tour.tsx': async () => {
+    function Page() {
+      const anchorRef = useRef<HTMLButtonElement>(null);
+      const [activeId, setActiveId] = useState<string | null>(null);
+      return (
+        <>
+          <button type="button" onClick={() => setActiveId('save')}>
+            Start
+          </button>
+          <button type="button" ref={anchorRef}>
+            Save
+          </button>
+          <Tour
+            steps={[{id: 'save', anchorRef, title: 'Save your work'}]}
+            activeId={activeId}
+            onActiveIdChange={setActiveId}
+            onEnd={() => setActiveId(null)}
+          />
+        </>
+      );
+    }
+    render(<Page />);
+    // Focus that the person placed outside the tour stays there, so the step
+    // is announced.
+    const start = screen.getByRole('button', {name: 'Start'});
+    start.focus();
+    fireEvent.click(start);
+    await expectDelegated('Save your work');
   },
   'Spinner/Spinner.tsx': async () => {
     const {rerender} = render(<Spinner />);

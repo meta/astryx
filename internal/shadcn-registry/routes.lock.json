@@ -778,16 +778,6 @@
       "aliases": []
     },
     {
-      "name": "component-lab-tour",
-      "path": "components/lab/tour",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-tour-step",
-      "path": "components/lab/tour-step",
-      "aliases": []
-    },
-    {
       "name": "component-lab-transfer-list",
       "path": "components/lab/transfer-list",
       "aliases": []
@@ -1270,6 +1260,11 @@
     {
       "name": "component-top-nav-menu",
       "path": "components/top-nav-menu",
+      "aliases": []
+    },
+    {
+      "name": "component-tour",
+      "path": "components/tour",
       "aliases": []
     },
     {
@@ -3762,6 +3757,11 @@
       "aliases": []
     },
     {
+      "name": "example-tour-backdrop",
+      "path": "examples/tour/backdrop",
+      "aliases": []
+    },
+    {
       "name": "example-tree-list-file-tree-with-icons",
       "path": "examples/tree-list/file-tree-with-icons",
       "aliases": []
@@ -5539,6 +5539,11 @@
     {
       "name": "showcase-top-nav-default",
       "path": "showcases/top-nav/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-tour-default",
+      "path": "showcases/tour/default",
       "aliases": []
     },
     {

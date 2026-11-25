@@ -735,6 +735,8 @@
     "/templates/TopNavMultipleDropdowns/",
     "/templates/TopNavShowcase/",
     "/templates/TopNavWithLogo/",
+    "/templates/TourBackdrop/",
+    "/templates/TourShowcase/",
     "/templates/TreeListFileTreeWithIcons/",
     "/templates/TreeListInteractiveSettings/",
     "/templates/TreeListMailboxTree/",

@@ -111,17 +111,6 @@ export {
   type DialogHeroHeaderMediaMode,
 } from './DialogHeroHeader';
 
-// Tour — guided product-tour / NUX walkthrough (meta/astryx#4239)
-export {
-  Tour,
-  type TourProps,
-  TourStep,
-  type TourStepProps,
-  useTour,
-  type UseTourReturn,
-  type TourDismissSource,
-} from './Tour';
-
 // Stat — experimental KPI/metric display
 export {
   Stat,

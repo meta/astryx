@@ -70,5 +70,9 @@
     "readySelector": "dialog[open]"
   },
   "ListItem": {"components": ["List", "ListItem"]},
-  "MetadataListItem": {"components": ["MetadataList", "MetadataListItem"]}
+  "MetadataListItem": {"components": ["MetadataList", "MetadataListItem"]},
+  "Tour": {
+    "stories": ["core-tour--open"],
+    "readySelector": "[role=\"dialog\"]"
+  }
 }

@@ -151,6 +151,9 @@ export * from './HoverCard';
 // Tooltip component and hook
 export * from './Tooltip';
 
+// Tour component
+export * from './Tour';
+
 // Skeleton loading placeholder
 export * from './Skeleton';
 

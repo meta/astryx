@@ -340,7 +340,10 @@ outside-press watch does the same.
 FR12 gap: when another layer opened from the same trigger or anchor closes
 while a `'pageOrder'` popover is open (a menu the anchor opens, a hover card
 on the trigger), the popover's controls leave the Tab order until the
-popover opens again.
+popover opens again. A `'pageOrder'` popover that moves to another anchor
+while open keeps its place in the focus order after the anchor it opened on.
+In WebKit, the first Tab after a pointer press on the anchor moves on in DOM
+order and does not enter the popover.
 FR16 gap: a sheet returns focus through BottomSheet's own return, not through
 FR17–FR21.
 FR18 gap: a Dialog's close notification runs while the page outside the
