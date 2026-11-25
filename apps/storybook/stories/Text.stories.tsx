@@ -410,7 +410,7 @@ export const WordBreakVariants: Story = {
     <div style={{display: 'flex', gap: '16px', maxWidth: '600px'}}>
       <div style={{flex: 1}}>
         <Text type="label" display="block">
-          break-word (default for multi-line):
+          break-word (default for truncation):
         </Text>
         <div style={{width: '150px', border: '1px solid #ccc', padding: '8px'}}>
           <Text type="body" maxLines={2} wordBreak="break-word">
@@ -420,7 +420,7 @@ export const WordBreakVariants: Story = {
       </div>
       <div style={{flex: 1}}>
         <Text type="label" display="block">
-          break-all (default for single-line):
+          break-all (explicit opt-in):
         </Text>
         <div style={{width: '150px', border: '1px solid #ccc', padding: '8px'}}>
           <Text type="body" maxLines={2} wordBreak="break-all">

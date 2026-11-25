@@ -322,7 +322,7 @@ describe('Heading long unbroken tokens', () => {
     expect(wrapOf(screen.getByText(token))).toBe(DEFAULT_WRAP);
   });
 
-  it('leaves single-line truncation clipping on one line', () => {
+  it('keeps single-line truncation on one line by default', () => {
     render(
       <Heading level={1} maxLines={1}>
         {token}
@@ -331,7 +331,20 @@ describe('Heading long unbroken tokens', () => {
     const style = getComputedStyle(screen.getByText(token));
     expect(style.whiteSpace).toBe('nowrap');
     expect(style.textOverflow).toBe('ellipsis');
-    expect(style.overflowWrap).not.toBe('break-word');
+    expect(style.wordBreak).toBe('normal');
+    expect(style.overflowWrap).toBe('break-word');
+  });
+
+  it('preserves word boundaries when a caller allows the line to wrap', () => {
+    render(
+      <Heading level={1} maxLines={1} style={{whiteSpace: 'normal'}}>
+        {token}
+      </Heading>,
+    );
+    const style = getComputedStyle(screen.getByText(token));
+    expect(style.whiteSpace).toBe('normal');
+    expect(style.wordBreak).toBe('normal');
+    expect(style.overflowWrap).toBe('break-word');
   });
 });
 

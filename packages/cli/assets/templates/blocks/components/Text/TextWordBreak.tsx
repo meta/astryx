@@ -15,7 +15,7 @@ export default function TextWordBreak() {
       }}>
       <div>
         <Text type="label" display="block">
-          Break-word (default for multi-line)
+          Break-word (default for all truncation)
         </Text>
         <div
           style={{
@@ -30,7 +30,7 @@ export default function TextWordBreak() {
       </div>
       <div>
         <Text type="label" display="block">
-          Break-all (default for single-line)
+          Break-all (explicit opt-in)
         </Text>
         <div
           style={{
