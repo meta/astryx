@@ -64,7 +64,7 @@ async function settle() {
 }
 
 describe('DropdownMenu bottom sheet whose module fails to load', () => {
-  it('keeps the page, closes the open, and shows the sheet with its actions on the next open', async () => {
+  it('keeps the page and closes the open; a later open asks the loader again', async () => {
     render(
       <PageBoundary>
         <DropdownMenu

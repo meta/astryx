@@ -150,7 +150,9 @@ one pending load per module, caches a success, and resets after a failure.
   the trigger and the page stay mounted and operable, the held intent is
   dropped, and any native behavior the trigger suppressed returns (the
   browser's own context menu). Development builds warn once. A later intent
-  asks the loader again. A surface that renders before its module loads reads
+  asks the loader again. A browser that keeps a failed module keeps the
+  surface unavailable until the page reloads. A surface that renders before
+  its module loads reads
   it through `useSurfaceModule`, which never suspends, so a failed load
   reaches no error boundary.
 - **INV7 — Opt-in capabilities are reachable only through their own

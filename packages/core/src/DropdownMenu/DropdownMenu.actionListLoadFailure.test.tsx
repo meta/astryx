@@ -65,7 +65,7 @@ async function settle() {
 }
 
 describe('DropdownMenu bottom sheet whose rows fail to load', () => {
-  it('closes the open instead of an empty menu, and shows the actions on the next open', async () => {
+  it('closes the open instead of an empty menu; a later open asks the loader again', async () => {
     render(
       <PageBoundary>
         <DropdownMenu

@@ -69,7 +69,7 @@ async function settle() {
 }
 
 describe('Popover bottom sheet whose module fails to load', () => {
-  it('keeps the page, closes the open, and loads the sheet on the next open', async () => {
+  it('keeps the page and closes the open; a later open asks the loader again', async () => {
     render(
       <PageBoundary>
         <Popover
