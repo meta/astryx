@@ -13,7 +13,7 @@
  *   the open, and the next open asks the loader again.
  */
 
-import {useEffect, useSyncExternalStore} from 'react';
+import {useEffect, useRef, useSyncExternalStore} from 'react';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import type {ModuleLoader} from './moduleLoader';
@@ -21,7 +21,7 @@ import type {ModuleLoader} from './moduleLoader';
 const readNoModule = (): null => null;
 
 interface SurfaceModuleOptions {
-  /** Whether the surface is open. Each open asks again after a failed load. */
+  /** Whether the surface is open. An open asks again after a failed load. */
   readonly isOpen?: boolean;
   /** Called when a load this surface asked for fails. */
   readonly onLoadFailure?: () => void;
@@ -29,8 +29,9 @@ interface SurfaceModuleOptions {
 
 /**
  * The module of a surface that loads on demand. The surface asks for its
- * module when it renders without it, and again on each open after a failed
- * load. It never suspends, so a failed load reaches no error boundary.
+ * module when it first renders without it, and again when it opens after a
+ * failed load; a close asks for nothing. It never suspends, so a failed load
+ * reaches no error boundary.
  *
  * @param loader - The shared loader of the surface's module
  * @param options - Whether the surface is open, and what a failed load does
@@ -47,12 +48,14 @@ export function useSurfaceModule<T>(
   );
   const isHydrating = useIsHydrating();
   const onLoadFailureRef = useCommittedRef(onLoadFailure);
+  const hasAskedRef = useRef(false);
   // Syncs the surface with its module loader: the module loads in the
   // background, never during render.
   useEffect(() => {
-    if (isHydrating || module != null) {
+    if (isHydrating || module != null || (hasAskedRef.current && !isOpen)) {
       return;
     }
+    hasAskedRef.current = true;
     let isCurrent = true;
     void loader.tryLoad().then(isLoaded => {
       if (!isLoaded && isCurrent) {

@@ -19,9 +19,9 @@
  * The action list preloads at rest, and the preload's result says whether it
  * loaded. A failed load is not kept, so the next preload or open asks the
  * module loader again (a loader that retries then loads it; a browser does not
- * fetch a native module again once its import failed). A sheet whose module
- * fails to load closes, so the trigger works again; rows that fail to load
- * leave the sheet without rows until its next open.
+ * fetch a native module again once its import failed). A sheet whose module,
+ * or whose rows' module, fails to load closes, so the trigger works again,
+ * and its next open asks for both again.
  *
  * No wrapper renders on the server or in the render that hydrates server
  * HTML (spec:AST-013 FR9): a module that has not loaded yet would leave server
@@ -79,13 +79,10 @@ const importSheet = async () => import('./MenuBottomSheet');
 
 // A sheet that shows the action list waits for the rows' module too. A press
 // right after mount then shows the sheet and its actions together. A failed
-// row load does not hold the sheet.
+// row load fails the sheet's load, so no menu opens without its actions.
 const sheetWithActionList = createModuleLoader<typeof SheetModule>(
   async () => {
-    const [module] = await Promise.all([
-      importSheet(),
-      loadActionList().catch(() => undefined),
-    ]);
+    const [module] = await Promise.all([importSheet(), loadActionList()]);
     return module;
   },
   {onLoadFailure: warnLoadFailure},
