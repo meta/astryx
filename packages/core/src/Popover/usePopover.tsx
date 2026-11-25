@@ -17,6 +17,8 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Popover/index.ts
+ * - The controls that read the press factor this hook writes: Button,
+ *   Selector, MultiSelector and ComplexSelector
  */
 
 import React, {
@@ -58,6 +60,7 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {surfaceEdgeStyles} from './surfaceEdge.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {isFocusDetached} from '../utils/isFocusDetached';
+import {sharedWeakMap} from '../utils/sharedRealm';
 import {themeProps} from '../utils/themeProps';
 import {paddingStyles} from '../Layout/paddingStyles.stylex';
 import type {SpacingStep} from '../utils/types';
@@ -115,6 +118,50 @@ function surfaceEdgeProps(...styles: unknown[]) {
     surfaceEdgeStyles.edgeWithFocusRing,
     ...(styles as never[]),
   );
+}
+
+/**
+ * The factor a control scales by on a press. Button and the selector
+ * triggers fall back to their own scale. Each sets it to `initial` on
+ * itself, so a value on a control around it does not reach it.
+ */
+const PRESS_SCALE_PROPERTY = '--_astryx-press-scale';
+
+const anchorHolds = sharedWeakMap<HTMLElement, number>(
+  'popover/use-popover/anchor-holds',
+  1,
+);
+
+/**
+ * Chromium and WebKit place an anchored layer from its anchor's box after
+ * transforms. A press that scales the anchor then moves the layer. Until the
+ * release runs, a press does not scale the control that is the anchor or
+ * holds it. More than one popover can hold the same control.
+ */
+function holdAnchorAtRest(anchor: Element): () => void {
+  const control = anchor.closest<HTMLElement>('[data-astryx-pressable]');
+  if (control == null) {
+    return () => {};
+  }
+  const count = anchorHolds.get(control) ?? 0;
+  anchorHolds.set(control, count + 1);
+  if (count === 0) {
+    control.style.setProperty(PRESS_SCALE_PROPERTY, '1');
+  }
+  let isHeld = true;
+  return () => {
+    if (!isHeld) {
+      return;
+    }
+    isHeld = false;
+    const left = (anchorHolds.get(control) ?? 1) - 1;
+    if (left > 0) {
+      anchorHolds.set(control, left);
+      return;
+    }
+    anchorHolds.delete(control);
+    control.style.removeProperty(PRESS_SCALE_PROPERTY);
+  };
 }
 
 const styles = stylex.create({
@@ -183,6 +230,8 @@ export interface UsePopoverOptions {
    * External ref to use as the popover anchor. When provided, the popover
    * sits on this element instead of the trigger. The trigger keeps its toggle
    * and ARIA attributes; the anchor gets neither, and it is never a trigger.
+   * While the popover is open, a press does not scale a Button or a selector
+   * trigger that is the anchor or holds it, so the popover does not move.
    *
    * Any element with a CSS box works (an HTML element or an `<svg>` element;
    * a shape inside an `<svg>` warns in development). The ref is read when the
@@ -844,26 +893,39 @@ function usePopoverImplementation(
     }
   }, [anchorOptionRef, layerRef]);
 
+  const anchorHoldRef = useRef<{
+    anchor: Element;
+    release: () => void;
+  } | null>(null);
+  const isLayerOpen = layer.isOpen;
   // Syncs the layer's CSS anchor with the element the caller's `anchorRef`
-  // holds. The ref changes with no event here, so this reads it after every
-  // commit.
+  // holds. While the popover is open, it also holds that element's control
+  // at rest. The ref changes with no event here, so this reads it after
+  // every commit.
   useIsomorphicLayoutEffect(() => {
     if (anchorRef != null) {
       bindAnchor();
-      return;
-    }
-    if (boundAnchorRef.current !== undefined) {
+    } else if (boundAnchorRef.current !== undefined) {
       // The caller dropped its anchor: the trigger anchors again.
       boundAnchorRef.current = undefined;
       setIsAnchorMissing(false);
       layerRef(triggerElementRef.current);
     }
+    const anchor = isLayerOpen ? (boundAnchorRef.current ?? null) : null;
+    const hold = anchorHoldRef.current;
+    if ((hold?.anchor ?? null) !== anchor) {
+      hold?.release();
+      anchorHoldRef.current =
+        anchor == null ? null : {anchor, release: holdAnchorAtRest(anchor)};
+    }
   });
   // React detaches a trigger's ref when the popover unmounts. The anchor is
-  // the caller's element, so this hook takes its anchor name off. Effects
-  // that run again bind the anchor again.
+  // the caller's element, so this hook takes its anchor name and its hold
+  // off. Effects that run again bind and hold the anchor again.
   useIsomorphicLayoutEffect(
     () => () => {
+      anchorHoldRef.current?.release();
+      anchorHoldRef.current = null;
       if (boundAnchorRef.current !== undefined) {
         layerRef(null);
         boundAnchorRef.current = undefined;

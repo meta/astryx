@@ -5,7 +5,7 @@
  * @input The home hero reel's slides and the lists of fonts and photos that
  *   the reel loads ahead of time
  * @output Proof that each slide names its own three photos and the fonts of
- *   its own theme, and that the slides together name the full lists
+ *   its own cards, and that the slides together name the full lists
  * @position Docsite unit tests. hero-reel-warm-up.test.tsx proves when the
  *   reel loads them, and hero-reel-photos.test.tsx that a slide's photos have
  *   the sources that its cards render.
@@ -34,8 +34,22 @@ vi.mock('@/generated/themeRegistry', () => ({
 vi.mock('@/themes/astryx', () => ({astryxTheme: {name: 'astryx'}}));
 vi.mock('@/constants', () => ({BRAND_BLUE: 'blue'}));
 
-const specifiers = (...families: string[]) =>
-  families.flatMap(family => [`400 1rem "${family}"`, `600 1rem "${family}"`]);
+const specifiers = (family: string, ...weights: number[]) =>
+  weights.map(weight => `${weight} 1rem "${family}"`);
+
+// The fonts that the cards of each slide draw, with each weight that their
+// text asks for. No slide has the display font of its theme: Sarina,
+// Manufacturing Consent or Crimson Text.
+const FONTS_OF_SLIDES = [
+  specifiers('Figtree', 400, 500, 600),
+  [
+    ...specifiers('DM Sans', 400, 500, 600),
+    ...specifiers('Playwrite US Trad', 600),
+  ],
+  specifiers('Outfit', 400, 500, 600, 700),
+  specifiers('Fustat', 400, 500, 600, 700),
+  specifiers('Poppins', 400, 500, 600),
+];
 
 /** The file in `public` that a photo's sources load through the optimizer. */
 const fileOf = (image: {src: string}) =>
@@ -53,19 +67,7 @@ describe('the hero reel', () => {
   });
 
   it('names the fonts of every slide, in slide order', () => {
-    expect(REEL_FONT_SPECIFIERS).toEqual(
-      specifiers(
-        'Figtree',
-        'DM Sans',
-        'Playwrite US Trad',
-        'Outfit',
-        'Sarina',
-        'Fustat',
-        'Manufacturing Consent',
-        'Poppins',
-        'Crimson Text',
-      ),
-    );
+    expect(REEL_FONT_SPECIFIERS).toEqual(FONTS_OF_SLIDES.flat());
   });
 
   it('names the three photos of every slide once, in slide order', () => {
@@ -89,13 +91,7 @@ describe('the hero reel', () => {
 describe('slideAssets', () => {
   it('names the fonts of the slide and no font of another slide', () => {
     const fonts = HERO_THEME_SLIDES.map(slide => slideAssets(slide).fonts);
-    expect(fonts).toEqual([
-      specifiers('Figtree'),
-      specifiers('DM Sans', 'Playwrite US Trad'),
-      specifiers('Outfit', 'Sarina'),
-      specifiers('Fustat', 'Manufacturing Consent'),
-      specifiers('Poppins', 'Crimson Text'),
-    ]);
+    expect(fonts).toEqual(FONTS_OF_SLIDES);
   });
 
   it('names the photos of the three cards of the slide', () => {

@@ -2142,7 +2142,7 @@ function hasAdaptationIntent(themeDef) {
 /**
  * The default viewport-width tier start points, in CSS px. A theme whose
  * effective map is exactly this asked for nothing.
- * SYNC: packages/core/src/theme/themeAdaptations.ts (DEFAULT_WIDTH_BREAKPOINTS)
+ * SYNC: packages/core/src/theme/breakpoints.ts (DEFAULT_WIDTH_BREAKPOINTS)
  */
 const DEFAULT_WIDTH_BREAKPOINTS = Object.freeze({
   sm: 640,

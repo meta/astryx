@@ -17,7 +17,7 @@
 
 import {useState, useCallback, useEffect, useRef} from 'react';
 import {flushSync} from 'react-dom';
-import {observeResize} from '../utils/sharedResizeObserver';
+import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 
 /**
  * Where the content is shown while something other than scrolling moves it:
@@ -38,6 +38,14 @@ export interface ScrollOverflowState {
 }
 
 /**
+ * The edges, plus whether the first measurement set them. Those edges replace
+ * none that a frame showed, so a caller applies them without a transition.
+ */
+interface ShownScrollOverflowState extends ScrollOverflowState {
+  isFirstMeasurement: boolean;
+}
+
+/**
  * Whether the browser is rendering `el`, so a layout read on it answers for a
  * real box. `checkVisibility()` is false under a `display: none` ancestor and
  * inside a `content-visibility: hidden` subtree, and it answers without
@@ -54,9 +62,45 @@ function isRendered(el: HTMLElement): boolean {
  * Observes what changes `el`'s overflow besides its scroll: its own size,
  * each child's size, the children added or removed, and its class or style.
  * Returns the teardown, which ends every observation.
+ *
+ * The container attaches in React's commit, where a read forces a style and
+ * layout pass before the browser's own. So the first measurement waits for
+ * the first resize notification, which comes after the browser lays the
+ * container out. Where no ResizeObserver exists, the container is measured
+ * at once.
+ *
+ * `measureFirst` runs in a microtask after that notification's delivery. The
+ * microtask still precedes the paint. It follows every callback of the
+ * delivery, so it reads the offset that a scroll made there leaves, such as
+ * TabList's reveal of its selected tab.
  */
-function observeContent(el: HTMLElement, measure: () => void): () => void {
-  const unobserveContainer = observeResize(el, measure);
+function observeContent(
+  el: HTMLElement,
+  measure: () => void,
+  measureFirst: () => void,
+): () => void {
+  let isActive = true;
+  let isLaidOut = false;
+  // While the first measurement waits for its microtask, the other reports
+  // of that delivery measure nothing.
+  let isFirstPending = false;
+  const unobserveContainer = observeResizeAfterLayout(el, () => {
+    if (isLaidOut) {
+      measure();
+      return;
+    }
+    if (isFirstPending) {
+      return;
+    }
+    isFirstPending = true;
+    queueMicrotask(() => {
+      isFirstPending = false;
+      if (isActive) {
+        isLaidOut = true;
+        measureFirst();
+      }
+    });
+  });
   const unobserveChildren = new Map<Element, () => void>();
   const followChildren = () => {
     const children = new Set(el.children);
@@ -68,11 +112,22 @@ function observeContent(el: HTMLElement, measure: () => void): () => void {
     }
     for (const child of children) {
       if (!unobserveChildren.has(child)) {
-        unobserveChildren.set(child, observeResize(child, measure));
+        // A child that another observer already watches sends no first
+        // notification; the container's own registration covers that.
+        const unobserve = observeResizeAfterLayout(child, entry => {
+          if (entry != null && !isFirstPending) {
+            measure();
+          }
+        });
+        unobserveChildren.set(child, unobserve ?? (() => {}));
       }
     }
   };
   followChildren();
+  if (unobserveContainer == null) {
+    isLaidOut = true;
+    measure();
+  }
   const mutations =
     typeof MutationObserver === 'function'
       ? new MutationObserver(() => {
@@ -86,12 +141,13 @@ function observeContent(el: HTMLElement, measure: () => void): () => void {
     attributeFilter: ['class', 'style'],
   });
   return () => {
+    isActive = false;
     mutations?.disconnect();
     for (const unobserve of unobserveChildren.values()) {
       unobserve();
     }
     unobserveChildren.clear();
-    unobserveContainer();
+    unobserveContainer?.();
   };
 }
 
@@ -122,7 +178,8 @@ export function useScrollOverflow() {
  * call into the paging raises passes `isLive` false. That call can run inside
  * React's commit, so the report takes React's scheduling. Null measures the
  * scroll offset again from the next frame, when the handed-back offset is
- * current. Internal: not exported from the hooks entry.
+ * current. `isFirstMeasurement` is true while the edges are the ones the
+ * first measurement set. Internal: not exported from the hooks entry.
  */
 export function useShownScrollOverflow() {
   const elRef = useRef<HTMLElement | null>(null);
@@ -130,54 +187,73 @@ export function useShownScrollOverflow() {
   const shownRef = useRef<ShownPosition | null>(null);
   const releaseFrameRef = useRef(0);
 
-  const [state, setState] = useState<ScrollOverflowState>({
+  const [state, setState] = useState<ShownScrollOverflowState>({
     overflowStart: false,
     overflowEnd: false,
     hasOverflow: false,
+    isFirstMeasurement: false,
   });
   // The edges last set, so a measure that changes no edge renders nothing.
   const edgesRef = useRef(state);
 
-  const measureNow = useCallback((el: HTMLElement, isLive = false) => {
-    const tolerance = 1;
-    const shown = shownRef.current;
-    const offset = shown?.offset ?? Math.abs(el.scrollLeft);
-    const maxScroll = shown?.travel ?? el.scrollWidth - el.clientWidth;
+  const measureNow = useCallback(
+    (el: HTMLElement, isLive = false, isFirst = false) => {
+      const tolerance = 1;
+      const shown = shownRef.current;
+      const offset = shown?.offset ?? Math.abs(el.scrollLeft);
+      const maxScroll = shown?.travel ?? el.scrollWidth - el.clientWidth;
 
-    const overflowStart = offset > tolerance;
-    const overflowEnd = offset < maxScroll - tolerance;
-    const hasOverflow = maxScroll > tolerance;
+      const overflowStart = offset > tolerance;
+      const overflowEnd = offset < maxScroll - tolerance;
+      const hasOverflow = maxScroll > tolerance;
 
-    const prev = edgesRef.current;
-    if (
-      prev.overflowStart === overflowStart &&
-      prev.overflowEnd === overflowEnd &&
-      prev.hasOverflow === hasOverflow
-    ) {
-      return;
-    }
-    const next = {overflowStart, overflowEnd, hasOverflow};
-    edgesRef.current = next;
-    if (isLive) {
-      // A live report comes from the paging's frame or event. An edge change
-      // commits there, before the paging can hand the row back.
-      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the buttons must change in the frame the row leaves its edge
-      flushSync(() => setState(next));
-    } else {
-      setState(next);
-    }
-  }, []);
+      const prev = edgesRef.current;
+      if (
+        prev.overflowStart === overflowStart &&
+        prev.overflowEnd === overflowEnd &&
+        prev.hasOverflow === hasOverflow
+      ) {
+        return;
+      }
+      const next = {
+        overflowStart,
+        overflowEnd,
+        hasOverflow,
+        isFirstMeasurement: isFirst,
+      };
+      edgesRef.current = next;
+      if (isLive) {
+        // A live report comes from the paging's frame or event, or it is the
+        // first measurement. An edge change commits there: before the paging
+        // can hand the row back, or before the first frame paints.
+        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- an edge change must show in the frame its report belongs to
+        flushSync(() => setState(next));
+      } else {
+        setState(next);
+      }
+    },
+    [],
+  );
 
-  // Only a rendered container is measured at registration and on a resize or
-  // content change. A layout read on a hidden one makes the browser render
-  // its hidden subtree. The resize observation after the reveal measures
-  // again.
+  // Only a rendered container is measured on a resize or content change. A
+  // layout read on a hidden one makes the browser render its hidden subtree.
+  // The resize observation after the reveal measures again.
   const measure = useCallback(() => {
     const el = elRef.current;
     // A held row's edges come from where it is shown, which reads no layout.
     // So the paging's own style writes force no layout here.
     if (el && (shownRef.current != null || isRendered(el))) {
       measureNow(el);
+    }
+  }, [measureNow]);
+
+  // The first measurement commits at once, so the first frame shows the
+  // edges. Only the content observer's own measure, after the edge class
+  // changes, reads after that write.
+  const measureFirst = useCallback(() => {
+    const el = elRef.current;
+    if (el && (shownRef.current != null || isRendered(el))) {
+      measureNow(el, true, true);
     }
   }, [measureNow]);
 
@@ -230,10 +306,10 @@ export function useShownScrollOverflow() {
 
       if (el) {
         el.addEventListener('scroll', measureOnScroll, {passive: true});
-        unobserveRef.current = observeContent(el, measure);
+        unobserveRef.current = observeContent(el, measure, measureFirst);
       }
     },
-    [measure, measureOnScroll],
+    [measure, measureFirst, measureOnScroll],
   );
 
   useEffect(() => {

@@ -9,6 +9,9 @@
  * overrides on the same element, so the built stylesheet answers which layer
  * wins rather than only which rules were emitted.
  *
+ * `productHoverLabel` reads its ancestor's hover. StyleX prints that relation
+ * onto a bare `*`, and the build keys it to the rule's own class.
+ *
  * The `data-*` swatches use the public StyleX data variables. Importing that
  * group emits the canonical defaults in `astryx-base`; the fixture then asks
  * whether a theme override wins and whether a nested theme inherits it.
@@ -41,6 +44,12 @@ const styles = stylex.create({
   themedButton: {
     backgroundColor: 'rgb(255, 140, 0)',
   },
+  productHoverLabel: {
+    color: {
+      default: null,
+      [stylex.when.ancestor(':hover')]: 'rgb(9, 8, 7)',
+    },
+  },
 });
 
 export function App() {
@@ -53,6 +62,11 @@ export function App() {
         variant="destructive"
         xstyle={styles.themedButton}
       />
+      <div {...stylex.props(stylex.defaultMarker())}>
+        <span id="product-hover" {...stylex.props(styles.productHoverLabel)}>
+          hover
+        </span>
+      </div>
       <span
         id="data-default"
         style={{color: dataVars['--color-data-categorical-orange']}}>

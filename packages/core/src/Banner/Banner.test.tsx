@@ -226,8 +226,10 @@ describe('Banner', () => {
                 )
               : screen
                   .getAllByRole('tooltip', {hidden: true})
-                  .find(
-                    el => el.textContent === button.getAttribute('aria-label'),
+                  .find(el =>
+                    (button.getAttribute('aria-label') ?? '').includes(
+                      el.textContent ?? '',
+                    ),
                   );
           expect(shown).toHaveAttribute('role', 'tooltip');
           return shown as HTMLElement;
@@ -239,6 +241,18 @@ describe('Banner', () => {
       }
     },
   );
+
+  it('names the dismiss button "Dismiss {title}" once: its "Dismiss" tooltip shows but adds no description', async () => {
+    render(
+      <Banner status="info" title="Project A was archived" isDismissable />,
+    );
+    const button = screen.getByRole('button', {
+      name: 'Dismiss Project A was archived',
+    });
+    expect(button).toHaveAccessibleDescription('');
+    expect(getTooltipDescriptions()).toHaveLength(0);
+    expect(await tooltipTextOnHover(button)).toBe('Dismiss');
+  });
 
   it('renders dismiss button when isDismissable', () => {
     render(<Banner status="info" title="Dismissable" isDismissable />);
@@ -958,7 +972,7 @@ describe('Banner', () => {
   });
 
   describe('dismiss control naming', () => {
-    it('names stacked string-title banners distinctly', () => {
+    it('names stacked string-title banners distinctly', async () => {
       render(
         <>
           <Banner status="error" title="Upload invoice failed" isDismissable />
@@ -970,8 +984,13 @@ describe('Banner', () => {
         'Dismiss Upload invoice failed',
         'Dismiss Delete report failed',
       ]);
+      // Each name already contains the "Dismiss" tooltip, so the tooltip
+      // shows but adds no description.
+      expect(getTooltipDescriptions()).toHaveLength(0);
       for (const button of buttons) {
-        expect(button).toHaveAccessibleDescription('Dismiss');
+        expect(button).toHaveAccessibleDescription('');
+        expect(await tooltipTextOnHover(button)).toBe('Dismiss');
+        expect(button).toHaveAccessibleDescription('');
       }
     });
 
@@ -1004,7 +1023,7 @@ describe('Banner', () => {
       );
     });
 
-    it('keeps a translated verb when the titled message falls back to English', () => {
+    it('keeps a translated verb when the titled message falls back to English', async () => {
       render(
         <InternationalizationProvider
           locale="de-DE"
@@ -1017,7 +1036,8 @@ describe('Banner', () => {
       const button = screen.getByRole('button', {
         name: 'Schließen Wartungshinweis',
       });
-      expect(button).toHaveAccessibleDescription('Schließen');
+      expect(button).toHaveAccessibleDescription('');
+      expect(await tooltipTextOnHover(button)).toBe('Schließen');
     });
   });
 });

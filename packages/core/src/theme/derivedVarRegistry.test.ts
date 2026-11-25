@@ -343,6 +343,10 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // `break-word` fallback. scripts/text-overflow-wrap-anywhere.test.mjs
   // keeps every such container setting it.
   '--_astryx-text-overflow-wrap',
+  // Button FR19: an open popover sets it on the control that holds its
+  // separate anchor, and the control reads it as the factor a press scales
+  // it by. Popover/PopoverAnchor.test.tsx keeps every such control reading it.
+  '--_astryx-press-scale',
   // List FR5 and the container-padding record's corner geometry: a bleeding
   // List passes its first and last rows the container corner they take.
   '--_list-corner-start-start',

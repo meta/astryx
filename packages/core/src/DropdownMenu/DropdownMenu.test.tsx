@@ -33,7 +33,6 @@ import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
 import {DropdownMenuSubMenu} from './DropdownMenuSubMenu';
 import {Divider} from '../Divider';
 import {Tooltip} from '../Tooltip/Tooltip';
-import {rtlStyles} from '../utils';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {spacingVars} from '../theme/tokens.stylex';
@@ -411,6 +410,46 @@ describe('DropdownMenu', () => {
     ).toBeInTheDocument();
   });
 
+  it.each([
+    {pageDir: 'rtl', menuDir: 'ltr', isFlipped: false},
+    {pageDir: 'ltr', menuDir: 'rtl', isFlipped: true},
+  ] as const)(
+    'points the sheet chevrons by the menu direction, not the page (page $pageDir, menu $menuDir)',
+    async ({pageDir, menuDir, isFlipped}) => {
+      const user = userEvent.setup();
+      render(
+        <div dir={pageDir}>
+          <div dir={menuDir}>
+            <DropdownMenu
+              button={{label: 'Project actions'}}
+              presentation="bottom-sheet"
+              items={[
+                {label: 'Move to project', items: [{label: 'Apollo launch'}]},
+              ]}
+            />
+          </div>
+        </div>,
+      );
+
+      await user.click(screen.getByRole('button', {name: /Project actions/}));
+      const row = screen.getByRole('button', {name: /Move to project/});
+      const rowChevron = row
+        .closest('li')
+        ?.querySelector<HTMLElement>('.astryx-icon:last-of-type');
+      expect(rowChevron).not.toBeNull();
+      const flipped = (element: Element) =>
+        getComputedStyle(element).transform === 'scaleX(-1)';
+      expect(flipped(rowChevron as HTMLElement)).toBe(isFlipped);
+
+      await user.click(row);
+      const backIcon = screen
+        .getByRole('button', {name: 'Back'})
+        .querySelector('.astryx-icon');
+      expect(backIcon).not.toBeNull();
+      expect(flipped(backIcon as Element)).toBe(isFlipped);
+    },
+  );
+
   it('names the sheet after the node-label submenu that opened, also across sections', async () => {
     const user = userEvent.setup();
 
@@ -546,9 +585,8 @@ describe('DropdownMenu', () => {
 
   it('mirrors bottom-sheet drill-in affordances under RTL', async () => {
     const user = userEvent.setup();
-    const {className: mirrorClassName} = stylex.props(rtlStyles.mirror);
-    const mirrorClasses = mirrorClassName?.split(' ') ?? [];
-    expect(mirrorClasses.length).toBeGreaterThan(0);
+    const flipped = (element: Element) =>
+      getComputedStyle(element).transform === 'scaleX(-1)';
 
     render(
       <div dir="rtl">
@@ -573,17 +611,13 @@ describe('DropdownMenu', () => {
       .closest('li')
       ?.querySelector('.astryx-icon');
     expect(forwardIcon).not.toBeNull();
-    for (const className of mirrorClasses) {
-      expect(forwardIcon).toHaveClass(className);
-    }
+    expect(flipped(forwardIcon as Element)).toBe(true);
 
     await user.click(submenuButton);
     const backButton = screen.getByRole('button', {name: 'Back'});
     const backIcon = backButton.querySelector('.astryx-icon');
     expect(backIcon).not.toBeNull();
-    for (const className of mirrorClasses) {
-      expect(backIcon).toHaveClass(className);
-    }
+    expect(flipped(backIcon as Element)).toBe(true);
   });
 
   it('uses the BottomSheet for adaptive presentation on compact touch', async () => {
