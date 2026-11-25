@@ -998,7 +998,7 @@ export function ListInput<T>({
       return;
     }
     const doc = ownerDocumentOf(groupRef.current);
-    // A change never takes focus from where the user moved it.
+    // Focus that the user moved elsewhere in the list's document stays there.
     if (
       doc.activeElement !== latestApplied.focusedBefore &&
       !isFocusDetached(doc)
