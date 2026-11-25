@@ -20,7 +20,7 @@ import {pressBelongsToControl} from '../hooks/useClickableContainer';
 import {elementAtMenuPoint, useMenuPressInternal} from '../hooks/useMenuPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
-import {rtlStyles} from '../utils/rtlStyles';
+import {menuDirectionMirror} from './menuDirectionMirror.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import type {DropdownMenuItemData, DropdownMenuOption} from './DropdownMenu';
 import {isModifiedClick} from './menuItemRoles';
@@ -217,7 +217,7 @@ export function MenuBottomSheetActionList({
               icon="chevronRight"
               size="sm"
               color="secondary"
-              xstyle={rtlStyles.mirror}
+              xstyle={menuDirectionMirror.mirror}
             />
           ) : (
             item.endContent
