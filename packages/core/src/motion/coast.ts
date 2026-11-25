@@ -44,7 +44,7 @@ export interface CoastOptions {
    */
   bounce?: SpringDescription;
   /**
-   * The release time on the document timeline (ms, `performance.now()`
+   * The release time on the document timeline (ms, the `motionNow`
    * clock); now by default. Pass the same `at` to `decay`.
    */
   at?: number;

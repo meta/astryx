@@ -68,7 +68,8 @@ export function playCompositorSettle({
     // The animator's own rest threshold for a length.
     Math.max(0, curve.settleTime(SETTLE_THRESHOLD.x) * 1000),
   );
-  const started = motionNow();
+  const doc = parts[0]?.element.ownerDocument;
+  const started = motionNow(doc);
   let stopped = false;
   let passed = onPass == null;
 
@@ -128,7 +129,7 @@ export function playCompositorSettle({
           });
 
   const elapsedSeconds = () =>
-    Math.min(durationMs, Math.max(0, motionNow() - started)) / 1000;
+    Math.min(durationMs, Math.max(0, motionNow(doc) - started)) / 1000;
   const presented = () => curve.value(elapsedSeconds());
   const stop = () => {
     const value = presented();

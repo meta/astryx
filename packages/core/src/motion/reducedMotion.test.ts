@@ -155,6 +155,33 @@ describe('playReducedMotionDip', () => {
     expect(stalled[1].options).toMatchObject({fill: 'backwards'});
   });
 
+  it('starts the fade-in on the timeline the fade-out ran on, while DevTools slows it', async () => {
+    // The timeline reads 1100 ms. At a quarter speed, real time is far ahead.
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(4400);
+    class RealSpeed {
+      get currentTime() {
+        return 4400;
+      }
+    }
+    const {animate, animations} = fakeAnimate();
+    const element = {
+      animate,
+      ownerDocument: {
+        timeline: {currentTime: 1100},
+        defaultView: {DocumentTimeline: RealSpeed, performance},
+      },
+    } as unknown as Element;
+    try {
+      playReducedMotionDip(element, fade, () => {});
+      animations[0].animation.startTime = 1000;
+      animations[0].finish();
+      await Promise.resolve();
+      expect(animations[1].animation.startTime).toBe(1100);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('leaves a fade-in to start on its own when the fade-out has no start time', async () => {
     const {animations} = startDip();
     animations[0].finish();

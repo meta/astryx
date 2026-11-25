@@ -3452,6 +3452,115 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
   }
 });
 
+// The module dates a change and reads its glides on the clock that draws
+// them. DevTools' animation speed slows the document timeline that runs the
+// glides, while performance.now() keeps real time. A glide still starts at its
+// change, and its hit test follows it where it is drawn. The speed is set
+// through the Chrome DevTools Protocol, as DevTools sets it.
+for (const rate of [1, 0.25]) {
+  test(`at ${rate}x timeline speed, a glide starts at its change and its hit test follows it`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      rate !== 1 && browserName !== 'chromium',
+      'The timeline speed is set through the Chrome DevTools Protocol.',
+    );
+    await open(
+      page,
+      `<div id="area" class="area"><div id="grow" class="grow"></div>
+        <div id="a" class="row"></div></div>`,
+    );
+    if (rate !== 1) {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Animation.enable');
+      await cdp.send('Animation.setPlaybackRate', {playbackRate: rate});
+    }
+    // Frames at that speed before the change: a slowed timeline falls behind
+    // real time.
+    await page.evaluate(async () => {
+      for (let i = 0; i < 30; i++) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      }
+    });
+    const result = await page.evaluate(async () => {
+      // The change's frame time, read in the task that makes the change.
+      const changedAt = Number(document.timeline.currentTime);
+      await window.change({
+        changed: '#grow',
+        mutate: `document.querySelector('#grow').classList.add('open')`,
+      });
+      const row = document.getElementById('a') as HTMLElement;
+      const [glide] = row.getAnimations();
+      // A glide from rest holds until the first frame after its task, and
+      // that frame dates its start.
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const start = Number(glide.startTime);
+      const duration = Number(glide.effect?.getTiming().duration);
+      const reference = new DocumentTimeline();
+      // Read within 1 ms of a frame, once the timeline is `fraction` into the
+      // glide. There the frame's drawn offset and the glide 1 ms on differ by
+      // well under 0.5 px.
+      const read = async (fraction: number) =>
+        new Promise<{at: number; late: number; drawn: number; hit: number}>(
+          resolve => {
+            let tries = 0;
+            const step = () => {
+              const at = Number(document.timeline.currentTime);
+              const late = performance.now() - Number(reference.currentTime);
+              if (
+                (at - start < fraction * duration || late > 1) &&
+                tries < 240
+              ) {
+                tries += 1;
+                requestAnimationFrame(step);
+                return;
+              }
+              resolve({
+                at,
+                late,
+                drawn: window.glideOffsetAt(glide, Number(glide.currentTime)).y,
+                hit: window.AnimatedLayout.presentedOffsetOf(row).y,
+              });
+            };
+            requestAnimationFrame(step);
+          },
+        );
+      const first = await read(0.3);
+      const second = await read(0.5);
+      return {
+        changedAt,
+        start,
+        duration,
+        first,
+        second,
+        slowedBy:
+          Number(reference.currentTime) - Number(document.timeline.currentTime),
+      };
+    });
+    test.info().annotations.push({
+      type: `glide at ${rate}x`,
+      description: JSON.stringify(result),
+    });
+    expect(result.slowedBy > 100).toBe(rate < 1);
+    expect(result.first.late).toBeLessThanOrEqual(1);
+    expect(result.second.late).toBeLessThanOrEqual(1);
+    // It starts at its change, on the timeline that draws it. Firefox keeps
+    // an animation's start time to a coarser step than its timeline's time.
+    expect(result.start).toBeGreaterThanOrEqual(result.changedAt - 1);
+    expect(result.start - result.changedAt).toBeLessThanOrEqual(LATE_START_MS);
+    expect(result.second.drawn - result.first.drawn).toBeGreaterThan(0.5);
+    // The hit test moves with what is drawn.
+    expect(
+      Math.abs(
+        result.second.hit -
+          result.first.hit -
+          (result.second.drawn - result.first.drawn),
+      ),
+    ).toBeLessThanOrEqual(0.5);
+  });
+}
+
 test.describe('spec:AST-105 FR5 and FR4 under a fine pointer', () => {
   test.use({
     isMobile: false,

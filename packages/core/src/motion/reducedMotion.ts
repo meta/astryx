@@ -46,6 +46,7 @@
  */
 
 import {defaultIsCoarsePointer} from './animator';
+import {motionNow} from './frameBlock';
 import {resolveMotion} from './resolveMotion';
 import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {
@@ -160,7 +161,10 @@ export function playReducedMotionDip(
       // work. After a long stall, half of the fade-in still plays.
       const fadeOutEnd = endTime(fadeOut, half);
       if (fadeOutEnd != null) {
-        fadeIn.startTime = Math.max(fadeOutEnd, performance.now() - half / 2);
+        fadeIn.startTime = Math.max(
+          fadeOutEnd,
+          motionNow(element.ownerDocument) - half / 2,
+        );
       }
       // The fade-in now holds the opacity, so the held 0 can go.
       fadeOut.cancel();

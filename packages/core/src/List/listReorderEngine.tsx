@@ -1445,7 +1445,7 @@ export class ListReorderController implements ListReorderSession {
     if (dragged < 0 || !movable[dragged]) {
       return false;
     }
-    const at = motionNow();
+    const at = motionNow(list.ownerDocument);
     const tops = rows.map(element => layoutTop(element, list));
     const insets = rows.map(element => this.handleInset(element));
     const heights = rows.map(element => element.offsetHeight);
@@ -1531,7 +1531,6 @@ export class ListReorderController implements ListReorderSession {
         // longer stall is skipped. Engines fire a 20 ms interval every 20 to
         // 25 ms.
         catchUp: true,
-        now: motionNow,
         step: () => this.edgeStep(session),
         apply: delta => this.scrollBy(session, delta),
       }),
@@ -1811,7 +1810,8 @@ export class ListReorderController implements ListReorderSession {
     // Where the preview is now: on the commit the dragged row glides from
     // there into its new place, and the rows it passed to theirs.
     const droppedTop =
-      geometry.rows[dragged].top + shownY(session.preview, motionNow());
+      geometry.rows[dragged].top +
+      shownY(session.preview, motionNow(list.ownerDocument));
     this.clearOverlays(session);
     const dropped = this.messages?.dropped(position + 1, rows.length) ?? '';
     const key = this.keyOf(element);
@@ -1897,7 +1897,7 @@ export class ListReorderController implements ListReorderSession {
     dragged: number,
     restore: RowRestore,
   ): void {
-    const at = motionNow();
+    const at = motionNow(list.ownerDocument);
     const away = rows.filter(
       element =>
         Math.abs(shownY(element, at)) >= MIN_MOVE_PX || isMoving(element),
@@ -2071,7 +2071,7 @@ export class ListReorderController implements ListReorderSession {
    */
   private slideCommitted(move: PendingMove): () => void {
     const {list} = move;
-    const at = motionNow();
+    const at = motionNow(list.ownerDocument);
     const shifts = move.rows.map((element, index) =>
       this.rows.holds(element, list)
         ? move.tops[index] - layoutTop(element, list)
@@ -2096,7 +2096,7 @@ export class ListReorderController implements ListReorderSession {
 
   private rebase(pending: PendingDrop): void {
     const {list} = pending;
-    const at = motionNow();
+    const at = motionNow(list.ownerDocument);
     // Every read comes before the first write, so the drop lays out once.
     const rows = pending.rows.map((element, index) => {
       if (!this.rows.holds(element, list)) {

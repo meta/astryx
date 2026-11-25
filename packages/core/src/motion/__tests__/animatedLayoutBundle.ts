@@ -2,8 +2,9 @@
 
 /**
  * @file animatedLayoutBundle.ts
- * @input The animated-layout module the browser proofs drive
- * @output Re-exports it as one entry point
+ * @input The animated-layout module the browser proofs drive, and the
+ *   hit-test registry its glides report to
+ * @output Re-exports them as one entry point
  * @position The esbuild entry `animatedLayout.interaction.browser.spec.ts`
  *   bundles into its page (global `AnimatedLayout`)
  */
@@ -23,3 +24,4 @@ export {
   reportLayoutChange,
   reportLayoutEdge,
 } from '../animatedLayout';
+export {presentedOffsetOf} from '../presentation';

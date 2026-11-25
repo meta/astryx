@@ -1512,9 +1512,630 @@ test('a dialog\u2019s ::backdrop plays the curve and holds its end state', async
   expect(result.held).toBeCloseTo(1, 6);
 });
 
+// The animator reads its curves on the clock that draws them. DevTools'
+// animation speed slows the document timeline that runs the curves, while
+// performance.now() keeps real time. `get` and `stop` still give the value on
+// screen, so a stop freezes the element where it is drawn. At full speed the
+// two clocks agree. The speed is set through the Chrome DevTools Protocol, as
+// DevTools sets it.
+for (const rate of [1, 0.25]) {
+  test(`at ${rate}x timeline speed, get and stop give the value on screen`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      rate !== 1 && browserName !== 'chromium',
+      'The timeline speed is set through the Chrome DevTools Protocol.',
+    );
+    await open(page);
+    if (rate !== 1) {
+      await setTimelineSpeed(page, rate);
+    }
+    const result = await page.evaluate(
+      async ({spring, travel}) => {
+        const box = document.getElementById('box') as HTMLElement;
+        const x = () =>
+          Number.parseFloat(getComputedStyle(box).translate.split(' ')[0]) || 0;
+        // A timeline at real speed. In a frame callback it reads the frame's
+        // time, so it shows how late the callback runs after its frame.
+        const reference = new DocumentTimeline();
+        const frame = async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          });
+        window.animator.animate({x: travel}, {spring});
+        for (let i = 0; i < 40; i++) {
+          await frame();
+        }
+        // A callback within 1 ms of its frame: there the frame's drawn value
+        // and the curve 1 ms on differ by well under 0.5 px.
+        return new Promise<Record<string, number>>(resolve => {
+          let tries = 0;
+          const step = () => {
+            const late = performance.now() - Number(reference.currentTime);
+            if (late > 1 && tries < 120) {
+              tries += 1;
+              requestAnimationFrame(step);
+              return;
+            }
+            const drawn = x();
+            const got = window.animator.get('x');
+            window.animator.stop();
+            resolve({
+              late,
+              tries,
+              drawn,
+              got,
+              committed: x(),
+              slowedBy:
+                Number(reference.currentTime) -
+                Number(document.timeline.currentTime),
+            });
+          };
+          requestAnimationFrame(step);
+        });
+      },
+      {spring: SLOW, travel: TRAVEL},
+    );
+    test.info().annotations.push({
+      type: `stop at ${rate}x`,
+      description: JSON.stringify(result),
+    });
+    // The case holds: the spring is mid-flight, on a timeline at the speed
+    // asked for.
+    expect(result.late).toBeLessThanOrEqual(1);
+    expect(result.slowedBy > 100).toBe(rate < 1);
+    expect(result.drawn).toBeGreaterThan(1);
+    expect(result.drawn).toBeLessThan(TRAVEL - 1);
+    expect(Math.abs(result.got - result.drawn)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(result.committed - result.drawn)).toBeLessThanOrEqual(0.5);
+  });
+}
+
+// A new target mid-flight starts from the value and the velocity on screen.
+// After a slowed stretch too, the move plays on from where the element is
+// drawn.
+for (const rate of [1, 0.25]) {
+  test(`at ${rate}x timeline speed, a new target mid-flight starts from the value and velocity on screen`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      rate !== 1 && browserName !== 'chromium',
+      'The timeline speed is set through the Chrome DevTools Protocol.',
+    );
+    await open(page);
+    if (rate !== 1) {
+      await setTimelineSpeed(page, rate);
+    }
+    const result = await page.evaluate(
+      async ({spring, travel}) => {
+        const box = document.getElementById('box') as HTMLElement;
+        const x = () =>
+          Number.parseFloat(getComputedStyle(box).translate.split(' ')[0]) || 0;
+        const reference = new DocumentTimeline();
+        const frame = async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          });
+        window.animator.animate({x: travel}, {spring});
+        for (let i = 0; i < 12; i++) {
+          await frame();
+        }
+        // Two frames in a row give the velocity on screen. The new target is
+        // set in the second, within 1 ms of its frame. The two frames are at
+        // most 20 ms apart in real time. Over a longer gap, such as a dropped
+        // frame, the spring's own acceleration skews the speed they give.
+        return new Promise<Record<string, number>>(resolve => {
+          let previous: {at: number; real: number; drawn: number} | null = null;
+          let tries = 0;
+          const step = () => {
+            const at = Number(document.timeline.currentTime);
+            const real = Number(reference.currentTime);
+            const drawn = x();
+            const late = performance.now() - real;
+            if (
+              previous == null ||
+              ((late > 1 || real - previous.real > 20) && tries < 120)
+            ) {
+              tries += 1;
+              previous = {at, real, drawn};
+              requestAnimationFrame(step);
+              return;
+            }
+            const gap = real - previous.real;
+            const onScreen =
+              ((drawn - previous.drawn) / (at - previous.at)) * 1000;
+            window.animator.animate({x: 0}, {spring});
+            const from = window.animator.get('x');
+            const velocity = window.animator.getVelocity('x');
+            // The call runs a little after its frame; the element moves on
+            // meanwhile, at the timeline's speed.
+            const sinceFrame =
+              performance.now() - Number(reference.currentTime);
+            // The speed drawn over the next 16 ms of the timeline: one frame
+            // at full speed. A slowed frame moves too little to measure alone.
+            const after = () => {
+              const nextAt = Number(document.timeline.currentTime);
+              if (nextAt - at < 16) {
+                requestAnimationFrame(after);
+                return;
+              }
+              resolve({
+                late,
+                tries,
+                gap,
+                drawn,
+                onScreen,
+                from,
+                velocity,
+                sinceFrame,
+                next: ((x() - drawn) / (nextAt - at)) * 1000,
+                slowedBy:
+                  Number(reference.currentTime) -
+                  Number(document.timeline.currentTime),
+              });
+            };
+            requestAnimationFrame(after);
+          };
+          requestAnimationFrame(step);
+        });
+      },
+      {spring: SLOW, travel: TRAVEL},
+    );
+    test.info().annotations.push({
+      type: `new target at ${rate}x`,
+      description: JSON.stringify(result),
+    });
+    expect(result.late).toBeLessThanOrEqual(1);
+    expect(result.gap).toBeLessThanOrEqual(20);
+    expect(result.slowedBy > 100).toBe(rate < 1);
+    expect(result.drawn).toBeGreaterThan(1);
+    expect(result.onScreen).toBeGreaterThan(50);
+    // The new curve starts where the element is drawn, at the speed it is
+    // drawn moving, and the element goes on at that speed.
+    const movedSinceFrame =
+      (Math.abs(result.onScreen) * rate * result.sinceFrame) / 1000;
+    expect(Math.abs(result.from - result.drawn)).toBeLessThanOrEqual(
+      0.5 + movedSinceFrame,
+    );
+    expect(Math.abs(result.velocity / result.onScreen - 1)).toBeLessThan(0.1);
+    expect(Math.abs(result.next / result.onScreen - 1)).toBeLessThan(0.15);
+  });
+}
+
+// The clock measures the timeline's speed again on each new frame. So when
+// full speed comes back mid-flight, the reads go on from the value drawn. A
+// read between two frames stays between their two drawn values.
+test('restoring full timeline speed mid-flight, get and stop stay on screen', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'The timeline speed is set through the Chrome DevTools Protocol.',
+  );
+  await open(page);
+  const cdp = await setTimelineSpeed(page, 0.25);
+  await page.evaluate(
+    ({spring, travel}) => {
+      const box = document.getElementById('box') as HTMLElement;
+      const x = () =>
+        Number.parseFloat(getComputedStyle(box).translate.split(' ')[0]) || 0;
+      const reference = new DocumentTimeline();
+      const run: Window['restoreRun'] = {frames: [], polls: [], x, reference};
+      window.restoreRun = run;
+      window.animator.animate({x: travel}, {spring});
+      const record = () => {
+        run.frames.push({
+          drawn: x(),
+          got: window.animator.get('x'),
+          late: performance.now() - Number(reference.currentTime),
+        });
+        requestAnimationFrame(record);
+      };
+      requestAnimationFrame(record);
+      const poll = () => {
+        run.polls.push({
+          frame: run.frames.length,
+          got: window.animator.get('x'),
+        });
+        setTimeout(poll, 3);
+      };
+      setTimeout(poll, 3);
+    },
+    {spring: SLOW, travel: TRAVEL},
+  );
+  await page.waitForTimeout(1000);
+  await cdp.send('Animation.setPlaybackRate', {playbackRate: 1});
+  const result = await page.evaluate(async () => {
+    const {frames, polls, x, reference} = window.restoreRun;
+    const restoredBy = frames.length;
+    const frame = async () =>
+      new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+    for (let i = 0; i < 20; i++) {
+      await frame();
+    }
+    // A stop within 1 ms of its frame.
+    return new Promise<{
+      frames: typeof frames;
+      polls: typeof polls;
+      restoredBy: number;
+      drawn: number;
+      committed: number;
+    }>(resolve => {
+      let tries = 0;
+      const step = () => {
+        const late = performance.now() - Number(reference.currentTime);
+        if (late > 1 && tries < 120) {
+          tries += 1;
+          requestAnimationFrame(step);
+          return;
+        }
+        const drawn = x();
+        window.animator.stop();
+        resolve({
+          frames: [...frames],
+          polls: [...polls],
+          restoredBy,
+          drawn,
+          committed: x(),
+        });
+      };
+      requestAnimationFrame(step);
+    });
+  });
+  const onTime = result.frames.filter(frame => frame.late <= 1);
+  const off = onTime.filter(frame => Math.abs(frame.got - frame.drawn) > 0.5);
+  const outside = result.polls.filter(({frame, got}) => {
+    const before = result.frames[frame - 1];
+    const after = result.frames[frame];
+    return (
+      before != null &&
+      after != null &&
+      (got < before.drawn - 0.5 || got > after.drawn + 0.5)
+    );
+  });
+  test.info().annotations.push({
+    type: 'full speed restored',
+    description: JSON.stringify({
+      frames: result.frames.length,
+      onTime: onTime.length,
+      restoredBy: result.restoredBy,
+      polls: result.polls.length,
+      off: off.slice(0, 3),
+      outside: outside.slice(0, 3),
+      drawn: result.drawn,
+      committed: result.committed,
+    }),
+  });
+  // Frames on both sides of the change, read on time, and still mid-flight.
+  expect(
+    result.frames.slice(0, result.restoredBy).filter(frame => frame.late <= 1)
+      .length,
+  ).toBeGreaterThan(5);
+  expect(result.frames.length - result.restoredBy).toBeGreaterThanOrEqual(20);
+  expect(result.drawn).toBeLessThan(TRAVEL - 1);
+  expect(off).toEqual([]);
+  expect(outside).toEqual([]);
+  expect(Math.abs(result.committed - result.drawn)).toBeLessThanOrEqual(0.5);
+});
+
+// In another document, such as an iframe made after the page loaded, the
+// clock is that document's own: its timeline, on its own time origin. An
+// engine made without its element reads the document it is attached in.
+for (const [rate, made] of [
+  [1, 'with its element'],
+  [0.25, 'with its element'],
+  [1, 'without one, then attached'],
+  [0.25, 'without one, then attached'],
+] as const) {
+  test(`in an iframe made after the page, an engine made ${made}, at ${rate}x timeline speed, get and stop give the value on screen`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      rate !== 1 && browserName !== 'chromium',
+      'The timeline speed is set through the Chrome DevTools Protocol.',
+    );
+    await open(page);
+    await page.waitForTimeout(1000);
+    if (rate !== 1) {
+      await setTimelineSpeed(page, rate);
+    }
+    const result = await page.evaluate(
+      async ({spring, travel, attachedLater}) => {
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText =
+          'position: absolute; top: 120px; left: 0; width: 400px; height: 200px; border: 0';
+        iframe.srcdoc = `<!doctype html><style>
+          html, body { margin: 0; }
+          #box { position: absolute; top: 40px; left: 0; width: 48px; height: 48px; background: #36c; }
+        </style><div id="box"></div>`;
+        const loaded = new Promise(resolve => {
+          iframe.addEventListener('load', resolve, {once: true});
+        });
+        document.body.append(iframe);
+        await loaded;
+        const view = iframe.contentWindow as Window & typeof globalThis;
+        const box = view.document.getElementById('box') as HTMLElement;
+        // An engine made without its element, as `useAnimator` makes one,
+        // and attached to it later.
+        const animator = Motion.createMotionEngine(attachedLater ? null : box);
+        if (attachedLater) {
+          animator.attach(box);
+        }
+        const x = () =>
+          Number.parseFloat(
+            view.getComputedStyle(box).translate.split(' ')[0],
+          ) || 0;
+        const reference = new view.DocumentTimeline();
+        const frame = async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          });
+        animator.animate({x: travel}, {spring});
+        for (let i = 0; i < 40; i++) {
+          await frame();
+        }
+        return new Promise<Record<string, number>>(resolve => {
+          let tries = 0;
+          const step = () => {
+            const late = view.performance.now() - Number(reference.currentTime);
+            if (late > 1 && tries < 120) {
+              tries += 1;
+              requestAnimationFrame(step);
+              return;
+            }
+            const drawn = x();
+            const got = animator.get('x');
+            animator.stop();
+            resolve({
+              originGap: view.performance.timeOrigin - performance.timeOrigin,
+              late,
+              tries,
+              drawn,
+              got,
+              committed: x(),
+              slowedBy:
+                Number(reference.currentTime) -
+                Number(view.document.timeline.currentTime),
+            });
+          };
+          requestAnimationFrame(step);
+        });
+      },
+      {
+        spring: SLOW,
+        travel: TRAVEL,
+        attachedLater: made !== 'with its element',
+      },
+    );
+    test.info().annotations.push({
+      type: `iframe, an engine made ${made}, at ${rate}x`,
+      description: JSON.stringify(result),
+    });
+    expect(result.originGap).toBeGreaterThan(500);
+    expect(result.late).toBeLessThanOrEqual(1);
+    expect(result.slowedBy > 100).toBe(rate < 1);
+    expect(result.drawn).toBeGreaterThan(1);
+    expect(result.drawn).toBeLessThan(TRAVEL - 1);
+    expect(Math.abs(result.got - result.drawn)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(result.committed - result.drawn)).toBeLessThanOrEqual(0.5);
+  });
+}
+
+// An engine made without its element keeps the clock of the document it
+// last moved in: its unmount settles the motion there, as interrupted.
+test('in an iframe made after the page, an engine made without its element and detached mid-flight settles its motion as interrupted at once', async ({
+  page,
+}) => {
+  await open(page);
+  await page.waitForTimeout(1000);
+  const result = await page.evaluate(async () => {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText =
+      'position: absolute; top: 120px; left: 0; width: 400px; height: 200px; border: 0';
+    iframe.srcdoc = `<!doctype html><style>
+      html, body { margin: 0; }
+      #box { position: absolute; top: 40px; left: 0; width: 48px; height: 48px; background: #36c; }
+    </style><div id="box"></div>`;
+    const loaded = new Promise(resolve => {
+      iframe.addEventListener('load', resolve, {once: true});
+    });
+    document.body.append(iframe);
+    await loaded;
+    const view = iframe.contentWindow as Window & typeof globalThis;
+    const box = view.document.getElementById('box') as HTMLElement;
+    const animator = Motion.createMotionEngine(null);
+    animator.attach(box);
+    const handle = animator.animate(
+      {x: 300},
+      {spring: {response: 0.25, dampingRatio: 1}},
+    );
+    for (let i = 0; i < 6; i++) {
+      await new Promise(resolve => {
+        requestAnimationFrame(resolve);
+      });
+    }
+    const detachedAt = performance.now();
+    animator.attach(null);
+    const settled = await Promise.race([
+      handle.finished.then(finished => ({
+        finished,
+        after: performance.now() - detachedAt,
+      })),
+      new Promise<{finished: null; after: number}>(resolve => {
+        setTimeout(() => resolve({finished: null, after: 1000}), 1000);
+      }),
+    ]);
+    return {
+      originGap: view.performance.timeOrigin - performance.timeOrigin,
+      ...settled,
+    };
+  });
+  test.info().annotations.push({
+    type: 'iframe detach',
+    description: JSON.stringify(result),
+  });
+  expect(result.originGap).toBeGreaterThan(500);
+  expect(result.finished).toBe(false);
+  expect(result.after).toBeLessThan(50);
+});
+
+// Engines in two documents can move in one task. Each reads its own
+// document's clock, whichever moves first. Both start at the frame that
+// commits them, and a retarget goes on from the value on screen.
+for (const first of ['the page', 'the iframe'] as const) {
+  test(`an engine in the page and one in an iframe made after it move in one task, ${first} first, each on its own clock`, async ({
+    page,
+  }) => {
+    await open(page);
+    await page.waitForTimeout(1000);
+    const result = await page.evaluate(
+      async ({spring, travel, iframeFirst}) => {
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText =
+          'position: absolute; top: 120px; left: 0; width: 400px; height: 200px; border: 0';
+        iframe.srcdoc = `<!doctype html><style>
+          html, body { margin: 0; }
+          #box { position: absolute; top: 40px; left: 0; width: 48px; height: 48px; background: #36c; }
+        </style><div id="box"></div>`;
+        const loaded = new Promise(resolve => {
+          iframe.addEventListener('load', resolve, {once: true});
+        });
+        document.body.append(iframe);
+        await loaded;
+        const view = iframe.contentWindow as Window & typeof globalThis;
+        const frameBox = view.document.getElementById('box') as HTMLElement;
+        const engines = [
+          {
+            animator: window.animator,
+            box: document.getElementById('box') as HTMLElement,
+            view: window,
+          },
+          {animator: Motion.createMotionEngine(frameBox), box: frameBox, view},
+        ];
+        const ordered = iframeFirst ? [engines[1], engines[0]] : engines;
+        const x = (engine: (typeof engines)[number]) =>
+          Number.parseFloat(
+            engine.view.getComputedStyle(engine.box).translate.split(' ')[0],
+          ) || 0;
+        const reference = new DocumentTimeline();
+        // A timeline at real speed in each document, for how long after its
+        // own frame a read there runs.
+        const references = engines.map(
+          engine => new engine.view.DocumentTimeline(),
+        );
+        const frame = async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          });
+        // From rest, in one task.
+        for (const engine of ordered) {
+          engine.animator.animate({x: travel}, {spring});
+        }
+        for (let i = 0; i < 10; i++) {
+          await frame();
+        }
+        return new Promise<{
+          originGap: number;
+          late: number;
+          drawn: number[];
+          got: number[];
+          since: number[];
+          speed: number[];
+          next: number[];
+        }>(resolve => {
+          let tries = 0;
+          let previous: {at: number; drawn: number[]} | null = null;
+          const step = () => {
+            const at = Number(document.timeline.currentTime);
+            const drawn = engines.map(x);
+            const late = performance.now() - Number(reference.currentTime);
+            if (previous == null || (late > 1 && tries < 120)) {
+              tries += 1;
+              previous = {at, drawn};
+              requestAnimationFrame(step);
+              return;
+            }
+            const before = previous;
+            const got = engines.map(engine => engine.animator.get('x'));
+            const since = engines.map(
+              (engine, index) =>
+                engine.view.performance.now() -
+                Number(references[index].currentTime),
+            );
+            // A retarget of both in one callback, in the same order.
+            for (const engine of ordered) {
+              engine.animator.animate({x: 0}, {spring});
+            }
+            requestAnimationFrame(() => {
+              resolve({
+                originGap: view.performance.timeOrigin - performance.timeOrigin,
+                late,
+                drawn,
+                got,
+                since,
+                speed: drawn.map(
+                  (value, index) =>
+                    ((value - before.drawn[index]) / (at - before.at)) * 1000,
+                ),
+                next: engines.map(x),
+              });
+            });
+          };
+          requestAnimationFrame(step);
+        });
+      },
+      {spring: SLOW, travel: TRAVEL, iframeFirst: first === 'the iframe'},
+    );
+    test.info().annotations.push({
+      type: `two documents, ${first} first`,
+      description: JSON.stringify(result),
+    });
+    expect(result.originGap).toBeGreaterThan(500);
+    expect(result.late).toBeLessThanOrEqual(1);
+    const [pageDrawn, frameDrawn] = result.drawn;
+    // Both started at the frame that committed them, so one spring is drawn
+    // at one place in both documents.
+    expect(pageDrawn).toBeGreaterThan(1);
+    expect(pageDrawn).toBeLessThan(TRAVEL / 2);
+    expect(Math.abs(pageDrawn - frameDrawn)).toBeLessThanOrEqual(5);
+    for (const [index, drawn] of result.drawn.entries()) {
+      // A read runs a little after its frame. The element moves on
+      // meanwhile, at the speed it is drawn moving.
+      const sinceFrame =
+        (Math.abs(result.speed[index]) * Math.max(0, result.since[index])) /
+        1000;
+      expect(Math.abs(result.got[index] - drawn)).toBeLessThanOrEqual(
+        0.5 + sinceFrame,
+      );
+      // The retarget goes on from the value on screen.
+      expect(Math.abs(result.next[index] - drawn)).toBeLessThanOrEqual(10);
+    }
+  });
+}
+
+/** Sets the page's animation speed as DevTools does, through its protocol. */
+async function setTimelineSpeed(page: Page, rate: number) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Animation.enable');
+  await cdp.send('Animation.setPlaybackRate', {playbackRate: rate});
+  return cdp;
+}
+
 declare global {
   interface Window {
     animator: Animator;
+    restoreRun: {
+      frames: {drawn: number; got: number; late: number}[];
+      polls: {frame: number; got: number}[];
+      x: () => number;
+      reference: AnimationTimeline;
+    };
   }
   const Motion: typeof MotionBundle;
 }
