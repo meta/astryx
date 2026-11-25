@@ -11,7 +11,8 @@
  *   dims, a preview follows and an insertion line marks the drop position. A
  *   flick on a handle scrolls and moves nothing. A cancelled drag puts the
  *   row back. With Reduce Motion the drop takes its place without travel,
- *   and its cross-fade ends within 200 ms of the lift. A
+ *   and its cross-fade ends within 200 ms of the lift; a release that
+ *   reaches the page late lands the rows at once, never blank. A
  *   flush row's handle stays inside the list. A finger held on a handle
  *   refuses text selection on the list until it lifts. A drag that crosses
  *   rows forces no style or layout pass, and neither does the pick-up. A
@@ -612,6 +613,81 @@ test.describe('under a finger', () => {
     // The page handles the lift a little after its own listeners do, so the
     // bound is exact; half a millisecond covers the timeline's rounding.
     expect(lastEnd - liftedAt, detail).toBeLessThanOrEqual(200.5);
+  });
+
+  test('with Reduce Motion a drop whose release reaches the page late lands the rows at once, never blank', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const before = await settledTops(page);
+    const {at, rowHeight} = await handleOf(page, 'Inbox');
+    // A mouse drag whose release is stamped 300 ms before the page handles
+    // it, as when a busy main thread runs the release late.
+    const cdp = await page.context().newCDPSession(page);
+    const mouse = async (
+      type: 'mousePressed' | 'mouseMoved' | 'mouseReleased',
+      y: number,
+      timestamp?: number,
+    ) =>
+      cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x: at.x,
+        y,
+        button: 'left',
+        buttons: type === 'mouseReleased' ? 0 : 1,
+        clickCount: 1,
+        ...(timestamp == null ? {} : {timestamp}),
+      });
+    await mouse('mousePressed', at.y);
+    for (let step = 1; step <= 12; step += 1) {
+      await mouse('mouseMoved', at.y + (rowHeight * 2 * step) / 12);
+    }
+    // Every row's lowest opacity in each frame from here on.
+    await page.evaluate(() => {
+      const record = window as unknown as {lowest: number[]; mark: number};
+      record.lowest = [];
+      record.mark = -1;
+      const sample = () => {
+        const rows = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            '#storybook-root li:not([data-astryx-reorder-preview])',
+          ),
+        );
+        record.lowest.push(
+          Math.min(...rows.map(row => Number(getComputedStyle(row).opacity))),
+        );
+        if (record.lowest.length < 40) {
+          requestAnimationFrame(sample);
+        }
+      };
+      requestAnimationFrame(sample);
+    });
+    await mouse('mouseReleased', at.y + rowHeight * 2, Date.now() / 1000 - 0.3);
+    // The page has handled the release: the frames from here on follow it.
+    await page.evaluate(() => {
+      const record = window as unknown as {lowest: number[]; mark: number};
+      record.mark = record.lowest.length;
+    });
+    await page.waitForTimeout(800);
+    expect(await labels(page)).toEqual([
+      'Sent',
+      'Drafts',
+      'Inbox',
+      'Archive',
+      'Spam',
+      'Trash',
+    ]);
+    expect((await settledTops(page)).Inbox).toBe(before.Drafts);
+    const {lowest, mark} = await page.evaluate(() => {
+      const record = window as unknown as {lowest: number[]; mark: number};
+      return {lowest: record.lowest, mark: record.mark};
+    });
+    // Before the release the dragged row is dimmed in its place. From the
+    // release on, no row is ever faded out.
+    const afterRelease = lowest.slice(mark);
+    const detail = JSON.stringify({mark, lowest});
+    expect(afterRelease.length, detail).toBeGreaterThan(10);
+    expect(Math.min(...afterRelease), detail).toBeGreaterThanOrEqual(0.95);
   });
 });
 

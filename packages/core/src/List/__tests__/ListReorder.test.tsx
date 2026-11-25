@@ -1947,6 +1947,53 @@ describe('List reorderable', () => {
     },
   );
 
+  it.each([
+    ['a fine', false],
+    ['a coarse', true],
+  ])(
+    'under Reduce Motion with %s primary pointer, a commit later than half the fade lands the rows at once',
+    (_, coarse) => {
+      stubPrimaryPointer(coarse);
+      document.body.setAttribute('data-astryx-reduced-motion', '');
+      // The pointer stamped its release at 1000 ms, and the page commits the
+      // move 150 ms later, past the fade's first half.
+      let clock = 1000;
+      const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      const glide = vi.spyOn(touchMotion, 'glide');
+      const follow = vi.spyOn(touchMotion, 'follow');
+      try {
+        render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+        const list = screen.getByRole('list');
+        layOut(list);
+        const handle = handleOf('A');
+        const row = handle.closest('li')!;
+        mouseDrag(handle, 322, 322 + 70);
+        const up = new PointerEvent('pointerup', {
+          ...MOUSE,
+          clientY: 322 + 70,
+          bubbles: true,
+        });
+        Object.defineProperty(up, 'timeStamp', {value: 1000});
+        clock = 1150;
+        act(() => {
+          handle.dispatchEvent(up);
+        });
+        expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+        expect(glide).not.toHaveBeenCalled();
+        expect(follow).not.toHaveBeenCalled();
+        expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+        for (const element of Array.from(list.children) as HTMLElement[]) {
+          expect(element.getAnimations?.() ?? []).toEqual([]);
+        }
+      } finally {
+        glide.mockRestore();
+        follow.mockRestore();
+        now.mockRestore();
+        document.body.removeAttribute('data-astryx-reduced-motion');
+      }
+    },
+  );
+
   it("reads a key move's glide spring once, however many rows slide", async () => {
     stubPrimaryPointer(true);
     const follow = vi.spyOn(touchMotion, 'follow');

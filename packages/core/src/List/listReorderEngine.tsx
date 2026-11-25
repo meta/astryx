@@ -98,6 +98,7 @@ import type {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecog
 import {VelocityTracker} from '../gestures/VelocityTracker';
 import {inertClone, paintedBackground} from '../motion/inertClone';
 import {reorder} from '../motion/uikit/reorder';
+import {reducedMotionCrossFade} from '../motion/uikit/timing';
 import {
   animatorFor,
   isMoving,
@@ -2111,10 +2112,15 @@ export class ListReorderController implements ListReorderSession {
     // Under Reduce Motion the fade starts at the release. A late commit then
     // shortens the fade but never extends it past 200 ms. Nothing travels
     // there, so the rows read the same at the release as now.
-    const at =
-      pending.releasedAt != null && reducesMotion(list)
-        ? Math.min(pending.releasedAt, motionNow())
-        : motionNow();
+    const now = motionNow();
+    const releasedAt = reducesMotion(list) ? pending.releasedAt : undefined;
+    const isReduced = releasedAt != null;
+    const at = releasedAt == null ? now : Math.min(releasedAt, now);
+    // A commit that comes after the fade's first half has passed would show
+    // the rows faded out where they were. They land at once instead, which
+    // also ends the change within the fade's time from the release.
+    const landsAtOnce =
+      isReduced && now - at >= reducedMotionCrossFade.durationMs / 2;
     // Every read comes before the first write, so the drop lays out once.
     const rows = pending.rows.map((element, index) => {
       if (!this.rows.holds(element, list)) {
@@ -2145,9 +2151,10 @@ export class ListReorderController implements ListReorderSession {
       !settles(row) && Math.abs(row.shift) >= MIN_MOVE_PX;
     // A drop glides under every pointer: the gesture's settle plays its
     // spring from the release's velocity, as a finger's drop does.
-    const spring = rows.some(row => row != null && glides(row))
-      ? touchMotion.glideBase(list)
-      : null;
+    const spring =
+      !landsAtOnce && rows.some(row => row != null && glides(row))
+        ? touchMotion.glideBase(list)
+        : null;
     for (const row of rows) {
       if (row == null) {
         continue;
