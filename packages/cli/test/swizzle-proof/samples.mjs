@@ -225,6 +225,15 @@ export const samples = {
       isSelected: false,
       onChange: noop,
     }),
+  core__SelectableCardGroup: ({C, React, mod, Pkg}) => {
+    const Card = mod.SelectableCard ?? Pkg.SelectableCard;
+    return React.createElement(
+      C,
+      {label: 'Plan', value: 'pro', onChange: noop},
+      React.createElement(Card, {value: 'basic', label: 'Basic'}),
+      React.createElement(Card, {value: 'pro', label: 'Pro'}),
+    );
+  },
   core__Toast: ({C, React}) =>
     React.createElement(C, {body: 'Changes saved', onDismiss: noop}),
   core__Toolbar: ({C, React, Core}) =>
@@ -770,16 +779,6 @@ export const samples = {
       C,
       {maxLines: 2},
       'A long paragraph that runs past two lines, so the clamp cuts it short and shows the rest only when it is expanded by the reader.',
-    ),
-  lab__SelectableCardGroup: ({C, React, Core}) =>
-    React.createElement(
-      C,
-      {label: 'Plan', value: 'pro', onChange: noop},
-      React.createElement(Core.SelectableCard, {
-        value: 'basic',
-        label: 'Basic',
-      }),
-      React.createElement(Core.SelectableCard, {value: 'pro', label: 'Pro'}),
     ),
   lab__Stat: ({C, React}) =>
     React.createElement(C, {label: 'Revenue', value: '$12.4k'}),

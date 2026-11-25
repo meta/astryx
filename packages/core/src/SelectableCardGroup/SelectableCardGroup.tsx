@@ -4,30 +4,35 @@
 
 /**
  * @file SelectableCardGroup.tsx
- * @input Uses Core's internal SelectableCardGroupContext (read by each core
- *   SelectableCard with a `value`), Field (the group label and description),
- *   useFieldInputStyling, useId, StyleX and the spacing tokens
+ * @input Uses SelectableCardGroupContext (read by each SelectableCard with a
+ *   `value`), Field (the group label and description), useFieldInputStyling,
+ *   useId, StyleX and the spacing tokens
  * @output Exports SelectableCardGroup and its props
- * @position Lab: a set of selectable cards with the semantics of its selection
+ * @position A set of selectable cards with the semantics of its selection
  *
  * SYNC: When modified, update these files to stay in sync:
  * - ./SelectableCardGroup.doc.mjs (props, usage)
  * - ./index.ts (exports)
  * - /apps/storybook/stories/SelectableCardGroup.stories.tsx (stories)
+ * - /packages/cli/assets/templates/blocks/components/SelectableCardGroup/ (blocks)
  */
 
 import {useId, useMemo, type ReactNode, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import type {BaseProps} from '@astryxdesign/core';
-import {Field, type FieldContainerStyleProps} from '@astryxdesign/core/Field';
+import type {BaseProps} from '../BaseProps';
+import {Field} from '../Field/Field';
+import {
+  useFieldInputStyling,
+  type FieldPartStyleProps,
+} from '../Field/fieldParts';
 import {
   SelectableCardGroupContext,
-  joinAriaIDs,
-  useFieldInputStyling,
   type SelectableCardGroupMembership,
-} from '@astryxdesign/core/internal/selectable-card';
-import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
-import {mergeProps, themeProps} from '@astryxdesign/core/utils';
+} from '../SelectableCard/selectableCardGroupContext';
+import {spacingVars} from '../theme/tokens.stylex';
+import {joinAriaIDs} from '../utils/inputAria';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
 
 const styles = stylex.create({
   group: {
@@ -67,13 +72,13 @@ interface MultipleSelection {
   onChange: (value: string[]) => void;
 }
 
-// It composes Field: root styling goes to the Field box through `container*`
-// (the input-fields family), not onto the group.
+// It composes Field, so it takes no root styling: `container*` styles the
+// Field box and `control*` the group element (the input-fields family).
 export type SelectableCardGroupProps = Omit<
   BaseProps,
   'onChange' | 'xstyle' | 'className' | 'style'
 > &
-  FieldContainerStyleProps &
+  FieldPartStyleProps &
   (SingleSelection | MultipleSelection) & {
     /** Ref forwarded to the group element (role radiogroup or group). */
     ref?: Ref<HTMLDivElement>;
@@ -131,11 +136,15 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
     containerXstyle,
     containerClassName,
     containerStyle,
+    controlXstyle,
+    controlClassName,
+    controlStyle,
     type: _type,
     value: _value,
     onChange: _onChange,
     ...rest
   } = props;
+  const {type, value, onChange} = props;
   const labelID = useId();
   const inputID = useId();
   const descriptionID = useId();
@@ -150,20 +159,16 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
     'aria-labelledby': callerLabelledBy,
     'aria-describedby': callerDescribedBy,
     ...otherGroupProps
-  } = groupProps as typeof groupProps & {
-    'aria-labelledby'?: string;
-    'aria-describedby'?: string;
-  };
+  } = groupProps;
   const labelledBy = joinAriaIDs(labelID, callerLabelledBy);
   const describedBy = joinAriaIDs(
     description ? descriptionID : undefined,
     callerDescribedBy,
   );
-  const isMultiple = props.type === 'multiple';
+  const isMultiple = type === 'multiple';
 
   const membership = useMemo<SelectableCardGroupMembership>(() => {
-    if (props.type === 'multiple') {
-      const {value, onChange} = props;
+    if (type === 'multiple') {
       return {
         inputType: 'checkbox',
         inputName: submitName,
@@ -178,7 +183,6 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
           ),
       };
     }
-    const {value, onChange} = props;
     // The radios leave the form, so a page-unique name keeps each group
     // apart, even from another form's group with the same `htmlName`.
     return {
@@ -193,14 +197,7 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
         }
       },
     };
-  }, [
-    props.type,
-    props.value,
-    props.onChange,
-    generatedName,
-    submitName,
-    isDisabled,
-  ]);
+  }, [type, value, onChange, generatedName, submitName, isDisabled]);
 
   return (
     <Field
@@ -228,7 +225,10 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
           stylex.props(
             styles.group,
             orientation === 'vertical' && styles.vertical,
+            controlXstyle,
           ),
+          controlClassName,
+          controlStyle,
         )}>
         <SelectableCardGroupContext value={membership}>
           {children}

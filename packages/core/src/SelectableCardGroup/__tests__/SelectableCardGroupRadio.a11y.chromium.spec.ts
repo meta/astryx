@@ -27,7 +27,7 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-const STORY = 'lab-selectablecardgroup--single-choice';
+const STORY = 'core-selectablecardgroup--single-choice';
 
 async function open(page: Page): Promise<void> {
   await page.goto(
@@ -84,6 +84,24 @@ test.describe('SelectableCardGroup, single choice', () => {
     expect(await checkedName(page)).toBe('Team');
   });
 
+  test('with none chosen, Tab lands on the first card and checks nothing', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-selectablecardgroup--vertical&viewMode=story`,
+      {waitUntil: 'load'},
+    );
+    await page.getByRole('radiogroup', {name: 'Plan'}).waitFor();
+    const checked = page.locator('#storybook-root input[type="radio"]:checked');
+    await expect(checked).toHaveCount(0);
+    await page.keyboard.press('Tab');
+    expect(await focusedName(page)).toBe('Basic');
+    await expect(checked).toHaveCount(0);
+    await page.keyboard.press('ArrowDown');
+    expect(await focusedName(page)).toBe('Pro');
+    expect(await checkedName(page)).toBe('Pro');
+  });
+
   test('Space selects the focused card; a click on the chosen card keeps it', async ({
     page,
   }) => {
@@ -102,7 +120,7 @@ test('two groups that share an htmlName in separate forms stay separate', async 
   page,
 }) => {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-selectablecardgroup--two-forms-shared-name&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-selectablecardgroup--two-forms-shared-name&viewMode=story`,
     {waitUntil: 'load'},
   );
   await page.getByRole('radiogroup', {name: 'Second plan'}).waitFor();
@@ -116,7 +134,7 @@ test('two groups that share an htmlName in separate forms stay separate', async 
   const submitted = await page.evaluate(() =>
     Array.from(document.querySelectorAll('form')).map(form =>
       Array.from(new FormData(form).entries()).map(
-        ([k, v]) => `${k}=${String(v)}`,
+        ([k, v]) => `${k}=${typeof v === 'string' ? v : v.name}`,
       ),
     ),
   );

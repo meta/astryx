@@ -20,8 +20,8 @@ verified_by:
     .github/visual-baseline/manifest.json,
     packages/core/src/SelectableCard/SelectableCard.test.tsx,
     packages/core/src/SelectableCard/SelectableCardRadio.test.tsx,
-    packages/lab/src/SelectableCardGroup/SelectableCardGroup.test.tsx,
-    packages/lab/src/SelectableCardGroup/__tests__/SelectableCardGroupRadio.a11y.chromium.spec.ts,
+    packages/core/src/SelectableCardGroup/SelectableCardGroup.test.tsx,
+    packages/core/src/SelectableCardGroup/__tests__/SelectableCardGroupRadio.a11y.chromium.spec.ts,
     packages/core/src/theme/themingTargets.test.ts,
     apps/storybook/stories/SelectableCard.stories.tsx,
     scripts/check-knowledge.mjs,
@@ -62,7 +62,7 @@ SelectableCard turns a Card into one selectable option. On its own or in a
 multiple-choice `SelectableCardGroup`, it is a checkbox; in a single-choice
 group, it is a radio. It owns the hidden input's semantics, whole-surface
 toggling, and the selection ring. The caller owns a standalone card's
-selection; the group owns a member's.
+selection; `component:SelectableCardGroup` owns a member's.
 
 ## Compatibility and migration
 
@@ -133,16 +133,15 @@ Consumer migration instructions belong in consumer docs and release notes.
   selection, input type (`radio` in a `type="single"` group, `checkbox` in a
   `type="multiple"` group), input name, and disabled default from the group,
   and sending the group its selection requests. The group provides them
-  through a private context, which Lab's SelectableCardGroup reaches through
-  Core's `internal/selectable-card` entry; no public context is exported.
+  through a private context; no context is exported.
 
 **Does not own / non-goals**
 
 - Card surface paint, padding, radius, elevation, and sizing — owned by
   `component:Card`.
 - Group semantics, the group label, and which options are selected — owned by
-  SelectableCardGroup for members and by the product callsite for standalone
-  cards.
+  `component:SelectableCardGroup` for members and by the product callsite for
+  standalone cards.
 - Navigation and one-shot actions — owned by `component:ClickableCard`.
 
 ## Public concepts
@@ -251,8 +250,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - `architecture:component-theming-surface` sets the rules the
   `selectable-card` target follows and requires a safe baseline for the
   extensible `variant`, which `--selectable-card-ring-color` satisfies.
-- SelectableCardGroup owns group semantics and selection for members
-  identified by `value`.
+- `component:SelectableCardGroup` owns group semantics and selection for
+  members identified by `value`.
 - `spec:AST-038` FR8 stops group membership at a layer boundary: a card with a
   `value` in a layer opened inside a group is not a member.
 

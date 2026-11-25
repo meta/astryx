@@ -554,6 +554,11 @@
       "types": "./dist/SelectableCard/index.d.ts",
       "default": "./dist/SelectableCard/index.js"
     },
+    "./SelectableCardGroup": {
+      "source": "./src/SelectableCardGroup/index.ts",
+      "types": "./dist/SelectableCardGroup/index.d.ts",
+      "default": "./dist/SelectableCardGroup/index.js"
+    },
     "./Selector": {
       "source": "./src/Selector/index.ts",
       "types": "./dist/Selector/index.d.ts",
