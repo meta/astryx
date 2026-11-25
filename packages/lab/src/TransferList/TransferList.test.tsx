@@ -217,9 +217,7 @@ describe('TransferList', () => {
       const wrapper = container.querySelector(
         '.astryx-transfer-list-panel',
       )?.parentElement;
-      expect(wrapper).not.toBeNull();
-      // The wrapper only lays out the panels and paints nothing, so a theme
-      // has nothing to style on it.
+      expect(wrapper).toBeInstanceOf(HTMLElement);
       expect(
         Array.from(wrapper?.classList ?? []).filter(name =>
           name.startsWith('astryx-'),
