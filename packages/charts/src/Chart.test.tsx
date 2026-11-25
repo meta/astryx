@@ -16,6 +16,8 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {render, screen, act, within, fireEvent} from '@testing-library/react';
 import {Chart} from './Chart';
 import {bar, dot, line} from './marks';
+import {heatmapGL} from './marks/heatmapGL';
+import {streamGL} from './marks/streamGL';
 import {computeLayout} from './layout';
 import {InternationalizationProvider} from '@astryxdesign/core';
 
@@ -271,6 +273,81 @@ describe('Chart data table fallback', () => {
     reportWidth(600);
 
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  describe('series without a value key', () => {
+    const canvasProto = HTMLCanvasElement.prototype;
+    let originalGetContext: typeof canvasProto.getContext;
+    const svgProto = SVGElement.prototype as unknown as {
+      getScreenCTM?: () => unknown;
+    };
+    let hadGetScreenCTM: boolean;
+
+    beforeEach(() => {
+      originalGetContext = canvasProto.getContext;
+      canvasProto.getContext = vi.fn(
+        () => null,
+      ) as unknown as typeof canvasProto.getContext;
+      hadGetScreenCTM = 'getScreenCTM' in svgProto;
+      if (!hadGetScreenCTM) {
+        svgProto.getScreenCTM = () => null;
+      }
+    });
+
+    afterEach(() => {
+      canvasProto.getContext = originalGetContext;
+      if (!hadGetScreenCTM) {
+        delete svgProto.getScreenCTM;
+      }
+    });
+
+    const heatmap = () =>
+      heatmapGL({
+        xKey: 'month',
+        yKey: 'month',
+        valueKey: 'profit',
+        colorRange: ['#ffffff', '#000000'],
+      });
+    const stream = () => streamGL({color: '#00ff00'});
+
+    it.each([
+      ['heatmapGL', heatmap],
+      ['streamGL', stream],
+    ])('omits the table for a %s-only chart', (_name, makeKeyless) => {
+      render(<Chart data={data} xKey="month" series={[makeKeyless()]} />);
+      reportWidth(600);
+
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ['heatmapGL', heatmap],
+      ['streamGL', stream],
+    ])(
+      'keeps %s out of the table columns when rendered beside a bar series',
+      (_name, makeKeyless) => {
+        render(
+          <Chart
+            data={data}
+            xKey="month"
+            series={[bar('revenue'), makeKeyless()]}
+          />,
+        );
+        reportWidth(600);
+
+        const table = screen.getByRole('table');
+        expect(
+          within(table)
+            .getAllByRole('columnheader')
+            .map(el => el.textContent),
+        ).toEqual(['month', 'revenue']);
+        expect(
+          within(table)
+            .getAllByRole('cell')
+            .map(el => el.textContent),
+        ).toEqual(['100', '200', '150']);
+      },
+    );
   });
 });
 
