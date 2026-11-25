@@ -23,6 +23,7 @@ import {NumberInput} from './NumberInput';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
 const RING = stylex
@@ -472,7 +473,7 @@ describe('NumberInput', () => {
       expect(input).toHaveAttribute('aria-valuetext', '$4,200');
     });
 
-    it('shows the raw numeric value while focused and restores formatting on blur', () => {
+    it('shows the plain number while focused and restores formatting on blur', () => {
       render(
         <NumberInput
           label="Revenue"
@@ -1837,17 +1838,18 @@ describe('NumberInput', () => {
 
       const input = screen.getByRole('spinbutton');
       const container = input.parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('You need the Editor role');
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(tooltip()).not.toHaveAttribute('popover-open');
       });
     });
 
@@ -1863,11 +1865,11 @@ describe('NumberInput', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(screen.getByRole('spinbutton')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
     });
 
@@ -1922,7 +1924,7 @@ describe('NumberInput', () => {
         />,
       );
       const input = screen.getByRole('spinbutton');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -2154,6 +2156,29 @@ describe('NumberInput stepping', () => {
     );
     fireEvent.keyDown(screen.getByRole('spinbutton'), {key: 'ArrowDown'});
     expect(onChange).toHaveBeenLastCalledWith(8);
+  });
+
+  it('steps an emptied draft from empty, not from the committed value', () => {
+    const onChange = vi.fn();
+    const {rerender} = render(
+      <NumberInput label="Amount" value={5} onChange={onChange} min={2} />,
+    );
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, {target: {value: ''}});
+    fireEvent.keyDown(input, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith(2);
+
+    rerender(
+      <NumberInput label="Amount" value={5} onChange={onChange} max={8} />,
+    );
+    fireEvent.change(input, {target: {value: ''}});
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(onChange).toHaveBeenLastCalledWith(8);
+
+    rerender(<NumberInput label="Amount" value={5} onChange={onChange} />);
+    fireEvent.change(input, {target: {value: ''}});
+    fireEvent.keyDown(input, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith(0);
   });
 
   it('keeps generated values integral when isIntegerOnly is set', () => {

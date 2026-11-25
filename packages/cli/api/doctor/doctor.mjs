@@ -115,6 +115,7 @@ import {
   keptFileCheck,
   THEME_WIRING_CODEC,
   CORE_PROPS_CODEC,
+  BUTTON_ACTIONS_CODEC,
   alignCommand,
   addCliCommandFor,
   dependencyInstallFor,
@@ -227,7 +228,7 @@ import {
  *   Each file in the project's own source with icon imports that do not
  *   match its icon sets, read only when the placeholders are; null otherwise.
  *   Experimental: may change or be removed in a patch release.
- * @property {{found: import('./_adapter.mjs').UnknownCoreProp[], uses: number, skipped: string | null}|null} [coreProps]
+ * @property {{found: import('../../foundation/discovery/unknown-core-props.mjs').UnknownCoreProp[], uses: number, skipped: string | null}|null} [coreProps]
  *   The props the project's own source gives Core components that they do
  *   not take, with how many props it read, or why it checked none; null when
  *   the project reads no Core or the scan failed.
@@ -1680,7 +1681,7 @@ export function checkIconSets(ctx) {
       status: 'fail',
       message:
         declared.length === 0
-          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no variants: it draws one look.`
+          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no variants, so it has none to pick.`
           : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no such variant. Its variants: ${declared.join(', ')}.`,
       fix:
         declared.length === 0
@@ -1729,15 +1730,15 @@ export function checkIconSets(ctx) {
       id,
       label,
       status: 'warn',
-      message: `${renamed.join(' | ')}. Each entry maps the definition that replaced it.`,
-      fix: 'In the package that ships the set, rename each map key to the definition that replaced it (any `astryx experimental icon map` run there writes it), or install a release of the package that has.',
+      message: `${renamed.join(' | ')}. Each entry maps the meaning that replaced it.`,
+      fix: 'In the package that ships the set, rename each map key to the meaning that replaced it (any `astryx experimental icon map` run there writes it), or install a release of the package that has.',
     };
   }
   return {
     id,
     label,
     status: 'pass',
-    message: `${sets.length} icon set${sets.length === 1 ? '' : 's'} installed. ${choice.reason}${choice.variant ? ` Each icon draws its "${choice.variant}" look where its set has one.` : ''}`,
+    message: `${sets.length} icon set${sets.length === 1 ? '' : 's'} installed. ${choice.reason}${choice.variant ? ` Each icon draws its "${choice.variant}" variant where its set has one.` : ''}`,
   };
 }
 
@@ -1811,7 +1812,7 @@ export function checkIconPlaceholders(ctx) {
     label,
     status: 'warn',
     message: `${uses} placeholder icon${uses === 1 ? '' : 's'} in copied code: no set in your list has ${meanings.length > 0 ? `"${meanings.join('", "')}"` : 'these icons'}. ${where}.`,
-    fix: `Add a backup set that has each meaning (\`astryx discover --type icon-set\` lists sets and the definitions they map): \`${backupFix}\`; or, if you author your main set, map it there: \`${mapFix}\`. Then copy the template again, or replace each use of the placeholder (\`${found[0].local}\`) with the icon \`astryx experimental icon <meaning>\` prints, and delete its declaration. A built-in meaning (\`astryx experimental icon --definitions\` marks them) also renders from the theme by name: \`<Icon icon="<name>" />\`. Otherwise, use your own icon component (\`astryx docs icons custom-icons\`).`,
+    fix: `Add a backup set that has each meaning (\`astryx discover --type icon-set\` lists sets and the meanings they map): \`${backupFix}\`; or, if you author your main set, map it there: \`${mapFix}\`. Then copy the template again, or replace each use of the placeholder (\`${found[0].local}\`) with the icon \`astryx experimental icon <meaning>\` prints, and delete its declaration. A built-in meaning (\`astryx experimental icon --definitions\` marks them) also renders from the theme by name: \`<Icon icon="<name>" />\`. Otherwise, use your own icon component (\`astryx docs icons custom-icons\`).`,
   };
 }
 
@@ -2705,6 +2706,13 @@ export function checkInstallGuidance(ctx) {
  *   the integrations installed beside the running CLI
  * @property {string[]} [loadedComputerIntegrations] the names of those that
  *   loaded outside a project
+ * @property {Array<{package: string, severity: string, message: string}>} [computerIntegrationIssues]
+ *   the issues in the contributions of those that loaded
+ * @property {((name: string) => string | null) | null} [integrationUpdate]
+ *   the command that updates one of them, beside a CLI installed for the
+ *   computer
+ * @property {boolean} [integrationsUpdateWithTool] they sit in a tool's
+ *   package set, which updates them
  * @property {string[]} [folderIntegrations] the names of the integrations the
  *   folder loads itself, whose copies win over the computer's
  */
@@ -3035,7 +3043,9 @@ export function checkComputerAgentText(ctx) {
 /**
  * The integrations installed for the computer (spec AST-081 FR12). Outside a
  * project: each one that loads, and a warning for each that is skipped
- * because its peer ranges exclude the answering release, or fails to load.
+ * because its peer ranges exclude the answering release, fails to load, or
+ * has issues in its contributions. The everyday commands print one line for
+ * such issues that points here.
  * @param {ComputerContext} ctx
  * @returns {DoctorCheck}
  */
@@ -3062,10 +3072,23 @@ export function checkComputerIntegrations(ctx) {
   const used = rest.filter(c => !c.incompatible && loaded.has(c.name));
   const skipped = rest.filter(c => c.incompatible);
   const failed = rest.filter(c => !c.incompatible && !loaded.has(c.name));
+  /** @type {Map<string, string[]>} the issue messages of each package */
+  const issuesOf = new Map();
+  for (const issue of ctx.computerIntegrationIssues ?? []) {
+    issuesOf.set(issue.package, [
+      ...(issuesOf.get(issue.package) ?? []),
+      issue.message,
+    ]);
+  }
+  const withIssues = used.filter(c => issuesOf.has(c.name));
   const notes = [
     used.length > 0
       ? `Used outside a project: ${used.map(label).join(', ')}.`
       : '',
+    ...withIssues.map(c => {
+      const messages = issuesOf.get(c.name) ?? [];
+      return `${label(c)} has ${messages.length} integration issue${messages.length === 1 ? '' : 's'}: ${messages.join(' ')}`;
+    }),
     ...shadowed.map(
       c =>
         `${label(c)} is not used here: this folder loads its own copy of ${c.name}.`,
@@ -3082,11 +3105,28 @@ export function checkComputerIntegrations(ctx) {
         `run \`${formatCliCommand(`astryx doctor integration validate ${c.name}`, ctx.cwd)}\``,
     ),
   ];
+  // The issues are in the package's own files: its maintainer fixes them, so
+  // anyone else needs a newer release.
+  const advice = withIssues.map(c => {
+    const one = (issuesOf.get(c.name) ?? []).length === 1;
+    const command = ctx.integrationUpdate?.(c.name) ?? null;
+    const how = command
+      ? ` To get one, run \`${command}\`.`
+      : ctx.integrationsUpdateWithTool
+        ? ' It updates with the tool that runs this CLI.'
+        : '';
+    return `If you maintain ${c.name}, the ${one ? 'fix in the issue is' : 'fixes in the issues are'} yours. Otherwise, a newer release of ${c.name} needs to fix ${one ? 'it' : 'them'}.${how}`;
+  });
+  const fix = [
+    ...(fixes.length > 0 ? [`To fix: ${fixes.join('; ')}.`] : []),
+    ...advice,
+  ].join(' ');
   return {
     ...base,
-    status: skipped.length + failed.length > 0 ? 'warn' : 'pass',
+    status:
+      withIssues.length + skipped.length + failed.length > 0 ? 'warn' : 'pass',
     message: notes.join(' '),
-    ...(fixes.length > 0 ? {fix: `To fix: ${fixes.join('; ')}.`} : {}),
+    ...(fix ? {fix} : {}),
   };
 }
 
@@ -3194,7 +3234,7 @@ export function checkGatherCache(ctx) {
     label: 'Kept catalog cache',
     status: 'info',
     brief: `${entries} (${size}) in ${summary.dir}. \`${formatCliCommand('doctor --json', ctx.cwd)}\` lists every kept item and the size limits. To clear the caches, run: ${removeFolderCommand(kept)}.`,
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, what template reads from a template's source to name the components it uses, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, doctor's docs checks and theme-wiring scan, and what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used) in ${summary.dir} (${entries}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first; the transpile cache in ${summary.transpiledDir} keeps its copies in ${SUBFOLDERS} subfolders, each holding at most 1/${SUBFOLDERS} of that, and drops the copies made longest ago first.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, what template reads from a template's source to name the components it uses, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, doctor's docs checks and theme-wiring scan, what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used, and what doctor's Core-button check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the installed packages and Node.js version it used) in ${summary.dir} (${entries}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first; the transpile cache in ${summary.transpiledDir} keeps its copies in ${SUBFOLDERS} subfolders, each holding at most 1/${SUBFOLDERS} of that, and drops the copies made longest ago first.`,
   };
 }
 
@@ -3551,10 +3591,17 @@ export async function runChecks(options = {}) {
     }
   }
 
-  // A project on Core scans its own source for buttons that do nothing.
+  // A project on Core scans its own source for buttons that do nothing. The
+  // scan reads only files and folders and runs nothing, so it is kept like
+  // the docs checks.
   if (readsCore) {
     try {
-      ctx.buttonActions = findButtonsWithoutAction(findPackageRoot(cwd) ?? cwd);
+      const projectDir = findPackageRoot(cwd) ?? cwd;
+      ctx.buttonActions = await keptFileCheck(
+        {name: 'button-actions', ...where},
+        async () => findButtonsWithoutAction(projectDir),
+        BUTTON_ACTIONS_CODEC,
+      );
     } catch {
       // A scan that fails leaves the check out.
       ctx.buttonActions = null;

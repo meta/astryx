@@ -41,6 +41,7 @@ import {
   projectFiles,
   refusal,
 } from '../../test-utils/theme-edit-fixture.mjs';
+import {UNASSIGNABLE_PID} from '../../test-utils/unassignable-pid.mjs';
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
 vi.mock('./_preview.mjs', async importOriginal =>
@@ -213,12 +214,12 @@ describe('undo', () => {
 });
 
 describe('set', () => {
-  it('refuses a color on text, naming the text color token', async () => {
+  it('refuses a color on text that is no color', async () => {
     const r = await refusal(() =>
-      themeEditSet('h', 'color', '#ff0000', {cwd, on: 'text'}),
+      themeEditSet('h', 'color', '12px', {cwd, on: 'text'}),
     );
-    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/--color-text-primary '#ff0000' --on text$/);
+    expect(r.code).toBe('ERR_THEME_BAD_VALUE');
+    expect(r.run.join('\n')).not.toContain('12px');
   });
 
   it('refuses blank scope flags', async () => {
@@ -331,7 +332,7 @@ describe('builds that stay the same', () => {
     fs.mkdirSync(lock, {recursive: true});
     fs.writeFileSync(
       path.join(lock, 'owner.json'),
-      JSON.stringify({pid: 3999999, host: os.hostname(), at: 1}),
+      JSON.stringify({pid: UNASSIGNABLE_PID, host: os.hostname(), at: 1}),
     );
     expect(tryLock(lock)).toBe(true);
     // The second finds a live holder (this process), not the stale one.

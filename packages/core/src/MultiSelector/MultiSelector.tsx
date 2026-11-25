@@ -31,6 +31,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {isolatedText, withTextDirection} from '../utils/textDirection';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
@@ -74,7 +75,7 @@ import {
   normalizeOption,
   getSelectableOptions,
 } from '../Selector/utils';
-import {useMultiCombobox} from './hooks';
+import {useMultiComboboxInternal} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
@@ -121,6 +122,9 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MultiSelector/MultiSelector.generated';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {useListPartsFormatter} from '../i18n/useListFormatter';
+import {useLocale} from '../i18n/useLocale';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -266,15 +270,20 @@ const styles = stylex.create({
       // The press scale goes at once as the list opens.
       [LAYER_OPEN]: 'background-image, background-color, color, opacity',
     },
+    // An open layer that names this trigger as an anchor apart from its
+    // own trigger sets the factor to 1 on the box (Popover/usePopover.tsx).
+    // `initial` here keeps the factor of a control around the box out.
+    '--_astryx-press-scale': 'initial',
     transform: {
       default: 'scale(1)',
       // A mouse press; under a coarse pointer the touch press model writes
       // `data-astryx-press` instead (see interactionOverlay.stylex.ts).
       [`:active:not(${LAYER_OPEN})`]: {
-        default: 'scale(0.98)',
+        default: 'scale(var(--_astryx-press-scale, 0.98))',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]:
+        'scale(var(--_astryx-press-scale, 0.98))',
     },
   },
   // Keep the input-family width contract while reusing ghost's borderless paint
@@ -296,13 +305,15 @@ const styles = stylex.create({
       // The press scale goes at once as the list opens.
       [LAYER_OPEN]: 'background-image, background-color, color, opacity',
     },
+    '--_astryx-press-scale': 'initial',
     transform: {
       default: 'scale(1)',
       [`:active:not(${LAYER_OPEN})`]: {
-        default: 'scale(0.98)',
+        default: 'scale(var(--_astryx-press-scale, 0.98))',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]:
+        'scale(var(--_astryx-press-scale, 0.98))',
     },
   },
   triggerGhostDisabled: {
@@ -1210,6 +1221,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         controlStyle != null),
   );
   const t = useComponentTranslator();
+  const formatListParts = useListPartsFormatter();
+  const localeDirection = getLocaleDirection(useLocale());
   const pressable = usePressFeedback();
   const {
     isRequired: isEffectivelyRequired,
@@ -1230,6 +1243,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       ? 'detached'
       : statusVariant;
   const isEffectivelyReadOnly = isReadOnly && !isDisabled;
+  // Only a selector that can open its list loads the bottom sheet on intent.
+  const canOpenSurface = !isDisabled && !isEffectivelyReadOnly;
 
   const generatedTriggerId = useId();
   // A caller's `id` lands on the trigger, so the label and listbox wiring
@@ -1517,6 +1532,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    listboxRef,
     triggerModality,
     isFocusReturnAlways: hasExternalTrigger,
     popoverOptions: {
@@ -1891,10 +1907,11 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onKeyDown: onComboboxKeyDown,
     onItemMouseEnter: onComboboxItemMouseEnter,
     setHighlightedIndex,
-  } = useMultiCombobox({
+  } = useMultiComboboxInternal({
     selectableItems: sortedItems,
     isDisabled: isDisabled || isEffectivelyReadOnly,
     isOpen: surface.isOpen,
+    isListShown: surface.isListShown,
     hasSearch,
     onOpen: useCallback(() => surface.show(), [surface]),
     onClose: surface.hide,
@@ -1990,13 +2007,35 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       case 'labels': {
         const displayed = selectedLabels.slice(0, 3);
         const remaining = selectedLabels.length - displayed.length;
-        const text =
+        // The count is the list's last item, so the locale's conjunction goes
+        // before it and not between the shown labels. Each item is isolated,
+        // so labels in another direction do not reorder their neighbours. A
+        // label takes its own direction; the count takes the locale's
+        // direction, so it keeps its catalog form.
+        const countIndex = remaining > 0 ? displayed.length : -1;
+        let elementIndex = -1;
+        const parts = formatListParts(
           remaining > 0
-            ? `${displayed.join(', ')}, +${remaining}`
-            : displayed.join(', ');
+            ? [
+                ...displayed,
+                t('@astryx.multiSelector.overflowCount', {count: remaining}),
+              ]
+            : displayed,
+        );
         return (
           <span {...stylex.props(styles.triggerText)}>
-            {formatValue?.(selectedItems) ?? text}
+            {formatValue?.(selectedItems) ??
+              parts.map((part, index) => {
+                if (part.type !== 'element') {
+                  return part.value;
+                }
+                elementIndex += 1;
+                return isolatedText(
+                  part.value,
+                  index,
+                  elementIndex === countIndex ? localeDirection : undefined,
+                );
+              })}
           </span>
         );
       }
@@ -2011,7 +2050,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             ))}
             {remaining > 0 && (
               <span {...stylex.props(styles.triggerOverflow)}>
-                +{remaining}
+                {t('@astryx.multiSelector.overflowCount', {count: remaining})}
               </span>
             )}
           </span>
@@ -2027,6 +2066,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     formatValue,
     maxBadges,
     t,
+    formatListParts,
+    localeDirection,
   ]);
 
   // Render search input
@@ -2474,6 +2515,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // the listbox itself owns the keyboard.
   const listboxOwnsKeyboard =
     surface.activePresentation === 'bottom-sheet' || hasExternalTrigger;
+  // A bottom sheet is a modal layer, so Chromium cannot reliably compute the
+  // listbox's name from the trigger outside that layer.
+  const panelListboxLabelProps =
+    surface.activePresentation === 'bottom-sheet'
+      ? {'aria-label': label}
+      : listboxLabelProps;
 
   const panelContent = hasSearch ? (
     <div {...stylex.props(styles.searchPanel)}>
@@ -2481,11 +2528,11 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       <Divider />
       <div {...stylex.props(styles.dropdown)}>
         <div
-          ref={listboxRef}
+          ref={surface.attachListbox}
           id={listboxId}
           role={isGrid ? 'grid' : 'listbox'}
           aria-multiselectable="true"
-          {...listboxLabelProps}
+          {...panelListboxLabelProps}
           {...stylex.props(styles.listbox)}>
           {renderOptions()}
         </div>
@@ -2494,18 +2541,11 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   ) : (
     <div {...stylex.props(styles.dropdown)}>
       <div
-        ref={listboxRef}
+        ref={surface.attachListbox}
         id={listboxId}
         role={isGrid ? 'grid' : 'listbox'}
         aria-multiselectable="true"
-        // The bottom sheet is rendered in a modal layer, so Chromium cannot
-        // reliably compute this listbox's name from the trigger outside that
-        // layer. Name only this no-search sheet directly from the component's
-        // existing label; searchable sheets and popovers retain their current
-        // trigger relationship.
-        {...(surface.activePresentation === 'bottom-sheet'
-          ? {'aria-label': label}
-          : listboxLabelProps)}
+        {...panelListboxLabelProps}
         aria-activedescendant={activeDescendantId}
         tabIndex={listboxOwnsKeyboard ? 0 : undefined}
         onKeyDown={listboxOwnsKeyboard ? onKeyDown : undefined}
@@ -2576,6 +2616,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onFocus: event => {
       onFocus?.(event);
       surface.onTriggerFocus(event);
+      if (canOpenSurface) {
+        surface.preloadSheet();
+      }
     },
     onClick: isDisabled
       ? event => {
@@ -2590,7 +2633,26 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ),
   };
 
+  const isListboxReferable = !isEffectivelyReadOnly && surface.isListboxNamed;
+  const isExpanded = !isEffectivelyReadOnly && surface.isListShown;
+
   if (renderTrigger != null) {
+    // A caller's control gets no pointer props. These listeners start the
+    // sheet's load on a pointer down, or when a mouse or pen enters the control.
+    const loadSheetOnIntent = (element: HTMLElement | null) => {
+      if (element == null || !canOpenSurface) {
+        return;
+      }
+      const {preloadSheet, preloadSheetOnPointerEnter} = surface;
+      element.addEventListener('pointerdown', preloadSheet, {capture: true});
+      element.addEventListener('pointerenter', preloadSheetOnPointerEnter);
+      return () => {
+        element.removeEventListener('pointerdown', preloadSheet, {
+          capture: true,
+        });
+        element.removeEventListener('pointerenter', preloadSheetOnPointerEnter);
+      };
+    };
     // Anchor-only mode: the caller renders the opener and spreads these props
     // on it. No Field, no status, no clear button — the caller owns the
     // control; the selector owns the panel, its anchor, and focus return.
@@ -2632,6 +2694,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         },
         triggerModality.ref,
         ref,
+        loadSheetOnIntent,
       ),
       id: triggerId,
       onClick: isEffectivelyReadOnly
@@ -2644,6 +2707,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       onFocus: event => {
         onFocus?.(event);
         surface.onTriggerFocus(event);
+        if (canOpenSurface) {
+          surface.preloadSheet();
+        }
       },
       // A read-only selector has no selection surface to open, so it must
       // not advertise one: `spec:AST-011` FR4. Telling a screen-reader user
@@ -2658,8 +2724,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           : isGrid
             ? 'grid'
             : 'listbox',
-      'aria-expanded': isEffectivelyReadOnly ? false : surface.isOpen,
-      'aria-controls': isEffectivelyReadOnly ? undefined : listboxId,
+      'aria-expanded': isExpanded,
+      'aria-controls': isListboxReferable ? listboxId : undefined,
       'aria-busy': isBusy || undefined,
       'aria-disabled': isDisabled || callerProps['aria-disabled'],
       'aria-readonly': isEffectivelyReadOnly || undefined,
@@ -2693,6 +2759,10 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           disabledMessageTooltip.ref(el);
         }}
         onClick={handleControlBoxClick}
+        onPointerDownCapture={canOpenSurface ? surface.preloadSheet : undefined}
+        onPointerEnter={
+          canOpenSurface ? surface.preloadSheetOnPointerEnter : undefined
+        }
         {...pressable}
         {...(inputGroup ? inputGroupItemProps : undefined)}
         {...mergeProps(
@@ -2772,11 +2842,11 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
                   ? 'grid'
                   : 'listbox'
           }
-          aria-expanded={isEffectivelyReadOnly ? false : surface.isOpen}
-          aria-controls={isEffectivelyReadOnly ? undefined : listboxId}
+          aria-expanded={isExpanded}
+          aria-controls={isListboxReferable ? listboxId : undefined}
           aria-readonly={isEffectivelyReadOnly || undefined}
           aria-activedescendant={
-            !isEffectivelyReadOnly && !hasSearch
+            !isEffectivelyReadOnly && !hasSearch && isExpanded
               ? activeDescendantId
               : undefined
           }
@@ -2817,7 +2887,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
               ref={statusTooltip.ref}
               type="button"
               aria-label={t(STATUS_BUTTON_LABEL_KEY[status.type])}
-              aria-describedby={statusTooltip.describedBy}
+              aria-describedby={statusTooltip.describedBy || undefined}
               {...keepOpenProps}
               onClick={e => e.stopPropagation()}
               {...stylex.props(
@@ -2850,7 +2920,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             xstyle={[
               styles.triggerIcon,
               styles.triggerIconRotation,
-              surface.isOpen && styles.triggerIconOpen,
+              isExpanded && styles.triggerIconOpen,
             ]}
             // Stable theme target on the chevron glyph itself, so a theme can
             // restyle just this icon (color, size, hover) — and its
@@ -2858,7 +2928,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             // @layer astryx-theme win over the icon's own base color/size,
             // which a button-level target could not reach.
             {...themeProps('multi-selector-indicator-icon', {
-              state: surface.isOpen ? 'expanded' : 'collapsed',
+              state: isExpanded ? 'expanded' : 'collapsed',
             })}
           />
         ) : null}
@@ -2866,7 +2936,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
 
       {selectionSurface}
 
-      {showStatusTooltip && statusTooltip.renderTooltip(status?.message ?? '')}
+      {showStatusTooltip &&
+        statusTooltip.renderTooltip(withTextDirection(status?.message ?? ''))}
 
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}

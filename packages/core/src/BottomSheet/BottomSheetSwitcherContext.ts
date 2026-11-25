@@ -17,6 +17,7 @@
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
   SyntheticEvent,
 } from 'react';
 
@@ -93,6 +94,11 @@ export interface BottomSheetSwitcherContextValue {
    */
   onBeforeSheetPresent: (sheetId: string) => void;
   /**
+   * Called by a sheet host just before it shows its dialog without the scrim,
+   * so the switcher can remember the page element that opened the flow.
+   */
+  onBeforeSheetShow: () => void;
+  /**
    * Whether a modal sheet dialog that is already open sits beneath another
    * open sheet dialog in the top layer, so it must re-present to become the
    * topmost layer again.
@@ -113,6 +119,15 @@ export interface BottomSheetSwitcherContextValue {
   onDialogCancel: (event: SyntheticEvent<HTMLDialogElement>) => void;
   onDialogClick: (event: ReactMouseEvent<HTMLDialogElement>) => void;
   onDialogKeyDown: (event: ReactKeyboardEvent<HTMLDialogElement>) => void;
+  onDialogPointerDownCapture: (
+    event: ReactPointerEvent<HTMLDialogElement>,
+  ) => void;
+  onDialogPointerUpCapture: (
+    event: ReactPointerEvent<HTMLDialogElement>,
+  ) => void;
+  onDialogPointerCancelCapture: (
+    event: ReactPointerEvent<HTMLDialogElement>,
+  ) => void;
 }
 
 export const BottomSheetSwitcherContext =

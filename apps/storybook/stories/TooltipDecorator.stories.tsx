@@ -204,10 +204,14 @@ async function verifyDecoratorUnmount(
   const id = control.getAttribute('aria-describedby');
   await waitFor(() => expect(id && document.getElementById(id)).toBeTruthy());
   await userEvent.hover(control);
+  // Once shown, the described element is the content inside the open layer.
   await waitFor(() =>
-    expect(document.getElementById(id ?? '')?.matches(':popover-open')).toBe(
-      true,
-    ),
+    expect(
+      document
+        .getElementById(id ?? '')
+        ?.closest('[role="tooltip"]')
+        ?.matches(':popover-open'),
+    ).toBe(true),
   );
   await userEvent.click(
     isReadOnly

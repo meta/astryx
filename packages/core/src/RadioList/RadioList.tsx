@@ -53,10 +53,10 @@ export interface RadioListContextValue {
   onChange: (value: string) => void;
   isDisabled: boolean;
   /**
-   * True when the whole group is disabled *and* a `disabledMessage` is set. In
-   * that mode radios stay focusable via `aria-disabled` (instead of the native
-   * `disabled` attribute) so the disabled-reason tooltip is keyboard- and
-   * AT-discoverable; selection is still blocked in the item's onChange guard.
+   * True when the whole group is disabled *and* a `disabledMessage` is set, so
+   * the group shows its disabled-reason tooltip. The radios of a disabled
+   * group stay focusable via `aria-disabled` either way; selection is blocked
+   * in the item's onChange guard.
    */
   hasDisabledMessage: boolean;
   isRequired: boolean;
@@ -119,7 +119,9 @@ export interface RadioListProps extends Omit<
    */
   orientation?: 'vertical' | 'horizontal';
   /**
-   * Whether all radio items are disabled.
+   * Whether all radio items are disabled. The radios stay focusable (via
+   * `aria-disabled`), so keyboard users can still reach the group; selection
+   * stays blocked.
    * @default false
    */
   isDisabled?: boolean;
@@ -134,8 +136,7 @@ export interface RadioListProps extends Omit<
    * Explains why the radio group is disabled. Applies to the whole-group
    * disabled state (`isDisabled`), not individual items. When set together with
    * `isDisabled`, the group shows a tooltip with this text on hover and keyboard
-   * focus, and its radios stay focusable (via `aria-disabled`) so the reason is
-   * discoverable by keyboard and assistive technology. Selection stays blocked.
+   * focus, and each radio is described by it.
    *
    * Use this instead of wrapping a disabled group in `Tooltip` — disabled
    * controls don't emit the pointer events an external tooltip needs.
@@ -174,7 +175,7 @@ export interface RadioListProps extends Omit<
    */
   labelTooltip?: string;
   /**
-   * Test ID for the outer container.
+   * Test ID for the `role="radiogroup"` element.
    */
   'data-testid'?: string;
   /**
@@ -248,12 +249,8 @@ export function RadioList({
   // on browser validation for the group.
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
 
-  // Disabled-reason tooltip. Applies to the whole-group disabled state. Disabled
-  // controls swallow pointer events, so the tooltip listeners attach to the
-  // radiogroup container and the radios stay perceivable via aria-disabled
-  // instead of the disabled attribute. Selection is blocked in the item's
-  // onChange guard. The reason describes the radiogroup and each radio (see
-  // RadioListReasonContext).
+  // The reason tooltip listens on the radiogroup. Focus and hover from any
+  // radio reach it.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',

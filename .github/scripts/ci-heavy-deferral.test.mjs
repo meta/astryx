@@ -208,6 +208,8 @@ describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => 
     vi.useFakeTimers();
     const job = ci.jobs['heavy-ci'];
     expect(job.permissions.statuses).toBe('read');
+    // The review reads when the head was pushed from its check suites.
+    expect(job.permissions.checks).toBe('read');
     const gate = job.steps.find(item => item.id === 'gate');
     expect(gate.env.HEAD_SHA).toBe('${{ github.event.pull_request.head.sha }}');
     expect(job.steps.find(item => item.id === 'decide').env.REVIEW_PASSES).toBe(
@@ -248,7 +250,12 @@ describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => 
                   return state == null ? null : {state};
                 },
                 ownerHandles: text => [String(text)],
-                reviewPasses: async ({pull, engOwners, reviewApp}) => {
+                // The heavy turn reads its own predicate (DEC-32), never
+                // the merge gate's.
+                reviewPasses: async () => {
+                  throw new Error('the heavy turn read reviewPasses');
+                },
+                heavyReviewPasses: async ({pull, engOwners, reviewApp}) => {
                   expect(pull).toEqual({number: 7, head: {sha: 'h1'}});
                   expect(engOwners).toEqual(['@owner1']);
                   expect(reviewApp).toBe('astracat-bot[bot]');
@@ -265,10 +272,13 @@ describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => 
     expect(await passes([null, 'pending', 'success'])).toEqual(['true', 3]);
     // The gate passed at the author's own push, with no review: defer.
     expect(await passes(['success'], false)).toEqual(['false', 1]);
-    // A failing gate defers at once; a gate still pending after three
-    // minutes defers.
-    expect(await passes(['failure'])).toEqual(['false', 1]);
-    expect(await passes(['pending'])).toEqual(['false', 12]);
+    // The heavy turn reads the gate's halves itself: a failing gate defers
+    // when the heavy turn does not pass. A gate still pending after three
+    // minutes (a fork's code half waits for an engineering owner) leaves the
+    // decision to the heavy turn; no gate at all defers.
+    expect(await passes(['failure'], false)).toEqual(['false', 1]);
+    expect(await passes(['pending'])).toEqual(['true', 12]);
+    expect(await passes([null])).toEqual(['false', 12]);
     vi.useRealTimers();
   });
 
@@ -716,6 +726,22 @@ describe('the PR report on a deferred push', () => {
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
+  });
+
+  it('tells the author when the review-pass run starts on its own, and what to do once the run is more than six hours old', () => {
+    const decide = ci.jobs['heavy-ci'].steps.find(step => step.id === 'decide');
+    const notice = /::notice title=Heavy CI deferred::([^"]*)"/.exec(
+      decide.run,
+    )[1];
+    expect(notice).toContain(
+      'It starts on its own once the review app or an engineering owner approves this exact head and the spec gate passes, while this run is at most six hours old.',
+    );
+    // An older run merges the head with an older main: re-running it would
+    // test a different tree, so the notice names the fresh-run paths instead.
+    expect(notice).toContain(
+      'After that, mark the pull request draft, then ready, for a fresh run on the current main (a fork head needs its ci:run label first); a push or a main merge also works.',
+    );
+    expect(notice).not.toMatch(/re-run all jobs/i);
   });
 
   it('says the heavy CI was deferred', () => {

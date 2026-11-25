@@ -6,11 +6,15 @@
  * @file tooltipPresentInterest.ts
  * @input createSharedContext
  * @output Exports `TooltipPresentInterestContext` and its value types: the
- *   interaction on a tooltip's anchor that mounted the tooltip
+ *   interaction on a tooltip's anchor that mounted the tooltip; and
+ *   `TooltipDescribesContext`: whether the tooltip describes its anchor; and
+ *   `TooltipDescriptionIdContext`: the id that description takes; and
+ *   `tooltipIdOf`, which reads those ids
  * @position Internal to Core, not exported from the Tooltip entry. A
  *   truncated Text or Heading mounts its tooltip on the first hover, tap or
  *   focus, and provides that interaction here, so the tooltip answers it when
- *   its trigger attaches, as its own listeners would have.
+ *   its trigger attaches, as its own listeners would have. A tooltip whose
+ *   text is its anchor's own content (a cut label) describes nothing.
  */
 
 import type {RefObject} from 'react';
@@ -41,3 +45,46 @@ export const TooltipPresentInterestContext =
     null,
   );
 TooltipPresentInterestContext.displayName = 'TooltipPresentInterestContext';
+
+/**
+ * Whether the tooltip describes its anchor. The anchor's `aria-describedby`
+ * names a hidden copy of its text until the layer first mounts, then the
+ * layer's content. Core components set it `false` for a
+ * tooltip whose text is already the anchor's own content or name. It is not
+ * exported from the package entry.
+ */
+export const TooltipDescribesContext = createSharedContext<boolean>(
+  'TooltipDescribesContext',
+  1,
+  true,
+);
+TooltipDescribesContext.displayName = 'TooltipDescribesContext';
+
+/**
+ * The id a describing tooltip gives its description, when a Core component
+ * names that id in its own control's `aria-describedby` (a disabled
+ * checkbox's reason). Without it the tooltip derives the id from its layer.
+ * It is not exported from the package entry.
+ */
+export const TooltipDescriptionIdContext = createSharedContext<string | null>(
+  'TooltipDescriptionIdContext',
+  1,
+  null,
+);
+TooltipDescriptionIdContext.displayName = 'TooltipDescriptionIdContext';
+
+/** The suffix a tooltip's description id adds to its layer's id. */
+export const DESCRIPTION_SUFFIX = '-description';
+
+/**
+ * The tooltip element's id for a `describedBy` id: the element the layer
+ * mounts at its first show. For Core components only; it is not exported
+ * from the package entry. It lives here, beside the other internal trigger
+ * contracts, so a component that reads it does not import the tooltip
+ * runtime.
+ */
+export function tooltipIdOf(describedBy: string): string {
+  return describedBy.endsWith(DESCRIPTION_SUFFIX)
+    ? describedBy.slice(0, -DESCRIPTION_SUFFIX.length)
+    : describedBy;
+}

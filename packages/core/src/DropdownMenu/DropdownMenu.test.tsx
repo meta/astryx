@@ -17,6 +17,7 @@ import {
   beforeAll,
   beforeEach,
   afterEach,
+  onTestFinished,
 } from 'vitest';
 import {readFileSync} from 'node:fs';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
@@ -32,17 +33,20 @@ import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
 import {DropdownMenuSubMenu} from './DropdownMenuSubMenu';
 import {Divider} from '../Divider';
 import {Tooltip} from '../Tooltip/Tooltip';
-import {rtlStyles} from '../utils';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
 import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
-import {isInHeldLayer} from '../Layer/inputHold';
+import {holdInput, isInHeldLayer} from '../Layer/inputHold';
 import {runPopoverOperation} from '../Layer/popoverOperations';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+
+// Spied, so a case about the press model alone can stub the presentation's
+// input hold: jsdom never ends a presentation.
+vi.mock('../Layer/inputHold', {spy: true});
 
 // Mock showPopover and hidePopover methods since they're not implemented in jsdom
 beforeEach(() => {
@@ -406,6 +410,46 @@ describe('DropdownMenu', () => {
     ).toBeInTheDocument();
   });
 
+  it.each([
+    {pageDir: 'rtl', menuDir: 'ltr', isFlipped: false},
+    {pageDir: 'ltr', menuDir: 'rtl', isFlipped: true},
+  ] as const)(
+    'points the sheet chevrons by the menu direction, not the page (page $pageDir, menu $menuDir)',
+    async ({pageDir, menuDir, isFlipped}) => {
+      const user = userEvent.setup();
+      render(
+        <div dir={pageDir}>
+          <div dir={menuDir}>
+            <DropdownMenu
+              button={{label: 'Project actions'}}
+              presentation="bottom-sheet"
+              items={[
+                {label: 'Move to project', items: [{label: 'Apollo launch'}]},
+              ]}
+            />
+          </div>
+        </div>,
+      );
+
+      await user.click(screen.getByRole('button', {name: /Project actions/}));
+      const row = screen.getByRole('button', {name: /Move to project/});
+      const rowChevron = row
+        .closest('li')
+        ?.querySelector<HTMLElement>('.astryx-icon:last-of-type');
+      expect(rowChevron).not.toBeNull();
+      const flipped = (element: Element) =>
+        getComputedStyle(element).transform === 'scaleX(-1)';
+      expect(flipped(rowChevron as HTMLElement)).toBe(isFlipped);
+
+      await user.click(row);
+      const backIcon = screen
+        .getByRole('button', {name: 'Back'})
+        .querySelector('.astryx-icon');
+      expect(backIcon).not.toBeNull();
+      expect(flipped(backIcon as Element)).toBe(isFlipped);
+    },
+  );
+
   it('names the sheet after the node-label submenu that opened, also across sections', async () => {
     const user = userEvent.setup();
 
@@ -541,9 +585,8 @@ describe('DropdownMenu', () => {
 
   it('mirrors bottom-sheet drill-in affordances under RTL', async () => {
     const user = userEvent.setup();
-    const {className: mirrorClassName} = stylex.props(rtlStyles.mirror);
-    const mirrorClasses = mirrorClassName?.split(' ') ?? [];
-    expect(mirrorClasses.length).toBeGreaterThan(0);
+    const flipped = (element: Element) =>
+      getComputedStyle(element).transform === 'scaleX(-1)';
 
     render(
       <div dir="rtl">
@@ -568,17 +611,13 @@ describe('DropdownMenu', () => {
       .closest('li')
       ?.querySelector('.astryx-icon');
     expect(forwardIcon).not.toBeNull();
-    for (const className of mirrorClasses) {
-      expect(forwardIcon).toHaveClass(className);
-    }
+    expect(flipped(forwardIcon as Element)).toBe(true);
 
     await user.click(submenuButton);
     const backButton = screen.getByRole('button', {name: 'Back'});
     const backIcon = backButton.querySelector('.astryx-icon');
     expect(backIcon).not.toBeNull();
-    for (const className of mirrorClasses) {
-      expect(backIcon).toHaveClass(className);
-    }
+    expect(flipped(backIcon as Element)).toBe(true);
   });
 
   it('uses the BottomSheet for adaptive presentation on compact touch', async () => {
@@ -1034,6 +1073,26 @@ describe('DropdownMenu', () => {
       'aria-expanded',
       'false',
     );
+  });
+
+  it('notifies onOpenChange once when closing an open menu by clicking the trigger', async () => {
+    const user = userEvent.setup();
+    const handleOpenChange = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        items={[{label: 'Edit'}, {label: 'Delete'}]}
+        onOpenChange={handleOpenChange}
+      />,
+    );
+
+    const trigger = screen.getByRole('button', {name: /Actions/});
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(handleOpenChange.mock.calls).toEqual([[true]]);
+
+    await user.click(trigger);
+    expect(handleOpenChange.mock.calls).toEqual([[true], [false]]);
   });
 
   it('restores focus to the trigger after keyboard dismissal', async () => {
@@ -3680,6 +3739,10 @@ describe('DropdownMenu press model', () => {
 
   it('under a coarse pointer a finger opens the menu as it presses the trigger (no scroll view), and a slide picks', () => {
     stubCoarsePointer();
+    // The press model alone: jsdom never ends the grow, so its input hold
+    // would hold this gesture to its end.
+    vi.mocked(holdInput).mockImplementation(() => () => {});
+    onTestFinished(() => vi.mocked(holdInput).mockRestore());
     vi.useFakeTimers();
     try {
       const onPick = vi.fn();
@@ -4116,6 +4179,10 @@ describe('DropdownMenu press model', () => {
 
     it('coarse primary pointer: a finger opens the menu once, as it presses, and it closes once at a pick (module AR5)', () => {
       stubCoarsePointer();
+      // The press model alone: jsdom never ends the grow, so its input hold
+      // would hold this gesture to its end.
+      vi.mocked(holdInput).mockImplementation(() => () => {});
+      onTestFinished(() => vi.mocked(holdInput).mockRestore());
       const {trigger, onOpenChange, onPick} = renderCountingMenu();
       fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
       fireEvent.pointerUp(trigger, {...touch, clientX: 0, clientY: 0});
@@ -4212,6 +4279,57 @@ describe('DropdownMenu custom trigger', () => {
     await waitFor(() =>
       expect(trigger).toHaveAttribute('aria-expanded', 'false'),
     );
+  });
+
+  it('a custom trigger named by aria-labelledby names the open menu by the same ids (FR9, AR1)', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <h2 id="project-heading">Project actions</h2>
+        <DropdownMenu
+          renderTrigger={props => (
+            <button type="button" {...props} aria-labelledby="project-heading">
+              <span aria-hidden="true">⋯</span>
+            </button>
+          )}>
+          <DropdownMenuItem label="Rename" onClick={() => {}} />
+        </DropdownMenu>
+      </>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Project actions'});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    const menu = screen.getByRole('menu', {
+      name: 'Project actions',
+      hidden: true,
+    });
+    expect(menu).toHaveAttribute('aria-labelledby', 'project-heading');
+  });
+
+  it('a custom trigger whose aria-labelledby resolves to nothing still names the menu by its own text', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        renderTrigger={props => (
+          <button type="button" {...props} aria-labelledby="missing">
+            Project actions
+          </button>
+        )}>
+        <DropdownMenuItem label="Rename" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Project actions'});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    const menu = screen.getByRole('menu', {
+      name: 'Project actions',
+      hidden: true,
+    });
+    expect(menu).toHaveAttribute('aria-labelledby', trigger.id);
   });
 
   it('a disabled custom trigger never opens the bottom sheet', async () => {
@@ -4506,17 +4624,20 @@ describe('DropdownMenu focus return after a pointer pick', () => {
       expect(focus.mock.calls.at(-1)).toEqual([{preventScroll: true}]);
     });
 
-    it('clears a ring the browser already drew before refocusing after a pointer pick', async () => {
+    it('returns focus without a ring after a pointer pick, before the browser can draw one', async () => {
       const user = userEvent.setup();
       const trigger = renderCustomMenu();
       await user.click(trigger);
-      // WebKit's own popover focus restoration can focus the trigger, with a
-      // ring, before the menu moves focus, and focusing the focused element
-      // changes nothing.
+      // The browser's own popover focus restoration focuses the trigger, with
+      // a ring, while focus is still inside the closing popover. The menu
+      // returns focus as it starts to close, so that restore has nothing to do.
       const hidePopover = HTMLElement.prototype.hidePopover;
       HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+        const hadFocus = this.contains(document.activeElement);
         hidePopover.call(this);
-        trigger.focus();
+        if (hadFocus) {
+          trigger.focus();
+        }
       });
       const matches = HTMLElement.prototype.matches;
       vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
@@ -4524,19 +4645,16 @@ describe('DropdownMenu focus return after a pointer pick', () => {
         selector: string,
       ) {
         return selector === ':focus-visible'
-          ? this === trigger
+          ? this === trigger && document.activeElement === trigger
           : matches.call(this, selector);
       });
       const blur = vi.spyOn(trigger, 'blur');
       const focus = vi.spyOn(trigger, 'focus');
       await user.click(item('Edit'));
-      expect(blur).toHaveBeenCalledTimes(1);
+      expect(blur).not.toHaveBeenCalled();
       expect(focus.mock.calls.at(-1)).toEqual([
         {preventScroll: true, focusVisible: false},
       ]);
-      expect(blur.mock.invocationCallOrder[0]).toBeLessThan(
-        focus.mock.invocationCallOrder.at(-1) ?? 0,
-      );
       expect(trigger).toHaveFocus();
     });
   });

@@ -19,7 +19,7 @@ import {radiusVars} from '../theme/tokens.stylex';
 import {
   DEFAULT_WIDTH_BREAKPOINTS,
   type WidthBreakpointName,
-} from '../theme/themeAdaptations';
+} from '../theme/breakpoints';
 
 /**
  * The standard width point below which a shell that has not read the window

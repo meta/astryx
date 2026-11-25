@@ -75,6 +75,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Carousel/Carousel.generated';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 /**
@@ -261,6 +262,16 @@ const styles = stylex.create({
     opacity: 0,
     pointerEvents: 'none' as const,
   },
+  // The first measurement's edges replace none that a frame showed. A pill
+  // takes them at once: a fade would paint the first frame without it.
+  buttonPillUnfaded: {
+    transitionProperty: 'none',
+  },
+  // Its button leaves the disabled state at once too. A hover and a press
+  // keep their transitions.
+  buttonUnfaded: {
+    transitionProperty: 'background-image, background-color, color, transform',
+  },
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/consistent-type-assertions -- CSS custom property requires type widening for StyleX
   buttonRadiusOverride: {
     '--_button-radius': radiusVars['--radius-full'],
@@ -420,8 +431,14 @@ export function Carousel({
   // transition it is allowed to act on.
   const focusedNavRef = useRef<'start' | 'end' | null>(null);
   const prevCanScrollRef = useRef<{start: boolean; end: boolean} | null>(null);
-  const {scrollRef, followShown, overflowStart, overflowEnd, hasOverflow} =
-    useShownScrollOverflow();
+  const {
+    scrollRef,
+    followShown,
+    overflowStart,
+    overflowEnd,
+    hasOverflow,
+    isFirstMeasurement,
+  } = useShownScrollOverflow();
 
   // Children.toArray drops null/undefined/boolean children and assigns
   // stable keys, so slide numbering ("Slide N of M") matches what actually
@@ -535,14 +552,10 @@ export function Carousel({
       ) {
         return;
       }
-      // Respect the user's reduced-motion preference — mirrors the CSS
-      // scroll-behavior override so button-driven scrolling doesn't animate
-      // for users who opted out of motion.
-      const prefersReducedMotion =
-        typeof window !== 'undefined' &&
-        typeof window.matchMedia === 'function' &&
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const behavior = prefersReducedMotion ? 'auto' : 'smooth';
+      // Under reduced motion (the person's setting, or a theme's
+      // reducedMotion: 'always') button-driven scrolling does not animate,
+      // as the CSS scroll-behavior override does.
+      const behavior = reducesMotion(el) ? 'auto' : 'smooth';
       // Under RTL the scroll axis is inverted (start is scrollLeft 0, the end
       // is negative), so flip the physical delta sign.
       const rtlSign = isRtlElement(el) ? -1 : 1;
@@ -596,10 +609,7 @@ export function Carousel({
     }
     const clamped = Math.max(0, Math.min(index, items.length - 1));
     const target = items[clamped] as HTMLElement;
-    const prefersReducedMotion =
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isReducedMotion = reducesMotion(target);
     // Bring the item to the start edge by scrolling the container by the
     // measured gap between the item and the container edge. Using scrollBy
     // (not scrollIntoView) keeps the scroll contained to the carousel and
@@ -626,7 +636,7 @@ export function Carousel({
     }
     el.scrollBy({
       left: delta,
-      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      behavior: isReducedMotion ? 'auto' : 'smooth',
     });
   }, []);
 
@@ -807,6 +817,7 @@ export function Carousel({
               {...stylex.props(
                 styles.buttonPill,
                 styles.buttonPillStart,
+                isFirstMeasurement && styles.buttonPillUnfaded,
                 !canScrollStart && styles.buttonHidden,
               )}>
               <Button
@@ -839,7 +850,10 @@ export function Carousel({
                   }
                 }}
                 onClick={() => scrollBy(-1)}
-                xstyle={styles.buttonRadiusOverride}
+                xstyle={[
+                  styles.buttonRadiusOverride,
+                  isFirstMeasurement && styles.buttonUnfaded,
+                ]}
               />
             </div>
             <div
@@ -849,6 +863,7 @@ export function Carousel({
               {...stylex.props(
                 styles.buttonPill,
                 styles.buttonPillEnd,
+                isFirstMeasurement && styles.buttonPillUnfaded,
                 !canScrollEnd && styles.buttonHidden,
               )}>
               <Button
@@ -879,7 +894,10 @@ export function Carousel({
                   }
                 }}
                 onClick={() => scrollBy(1)}
-                xstyle={styles.buttonRadiusOverride}
+                xstyle={[
+                  styles.buttonRadiusOverride,
+                  isFirstMeasurement && styles.buttonUnfaded,
+                ]}
               />
             </div>
           </>,

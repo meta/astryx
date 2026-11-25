@@ -35,7 +35,7 @@ interface HeadingLayout {
 
 async function readHeadings(
   page: Page,
-  mode: 'wrap' | 'sortable' | 'truncate',
+  mode: 'wrap' | 'sortable' | 'truncate' | 'resizable',
 ): Promise<HeadingLayout[]> {
   return page
     .locator(`[data-heading-overflow="${mode}"] th`)
@@ -128,4 +128,34 @@ test('at 1280 px, fitting headings keep one line in both modes', async ({
   const truncated = await readHeadings(page, 'truncate');
   expect(wrapped.map(h => h.isCut)).toEqual(wrapped.map(() => false));
   expect(wrapped.map(h => h.height)).toEqual(truncated.map(h => h.height));
+});
+
+async function mountResizable(page: Page, width: number) {
+  await page.setViewportSize({width, height: 900});
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-table--heading-overflow-resizable&viewMode=story`,
+  );
+  await expect(page.locator('.astryx-table-scroll-wrapper')).toHaveCount(1);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
+}
+
+// A resizable column's cell lets its resize boundary reach past its edge, so
+// the heading's own box cuts it.
+test('on a 390 px phone, a resizable column cuts its truncating heading in its own column', async ({
+  page,
+}) => {
+  await mountResizable(page, 390);
+  const resizable = await readHeadings(page, 'resizable');
+  expect(resizable.find(h => h.text === 'Apple Notes')?.isCut).toBe(true);
+  for (const heading of resizable) {
+    expect(heading.whiteSpace, heading.text).toBe('nowrap');
+  }
+});
+
+test('at 1280 px, fitting resizable headings are not cut', async ({page}) => {
+  await mountResizable(page, 1280);
+  const resizable = await readHeadings(page, 'resizable');
+  expect(resizable.map(h => h.isCut)).toEqual(resizable.map(() => false));
 });

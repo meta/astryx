@@ -31,6 +31,7 @@ import {
 import type {InputStatusType} from '../Field/types';
 import {useEntryAnimation} from '../hooks/useEntryAnimation';
 import {themeProps} from '../utils/themeProps';
+import {withTextDirection} from '../utils/textDirection';
 import {Icon} from '../Icon/Icon';
 import type {IconName} from '../Icon';
 import type {FieldStatusVariantMap} from './index';
@@ -217,6 +218,10 @@ export function FieldStatus({
   // when a status appears (and whole forms can mount with a server-side
   // validation error already present), and both cases must be heard.
   useFieldStatusAnnouncement(message, type);
+  // Plain text with no right-to-left letter keeps its written order on a
+  // right-to-left page. The direction goes on an inner span, so the box and
+  // the glyph still follow the page.
+  const messageText = withTextDirection(message);
 
   return (
     <div
@@ -251,10 +256,10 @@ export function FieldStatus({
               {...themeProps('field-status-icon', {type})}
             />
           </span>
-          <span>{message}</span>
+          <span>{messageText}</span>
         </span>
       ) : (
-        message
+        messageText
       )}
     </div>
   );

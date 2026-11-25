@@ -140,6 +140,11 @@
         "code": "icon_builtin_definition_missing",
         "severity": "error",
         "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
       }
     ],
     "docTypes": {
@@ -304,6 +309,15 @@
           },
           {
             "name": "arrowRight",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "article",
             "description": "<text>",
             "words": [
               "<text>",
@@ -671,16 +685,6 @@
             "name": "download",
             "description": "<text>",
             "words": [
-              "<text>",
-              "<text>",
-              "<text>"
-            ]
-          },
-          {
-            "name": "drag",
-            "description": "<text>",
-            "words": [
-              "<text>",
               "<text>",
               "<text>",
               "<text>"
@@ -1763,7 +1767,7 @@
             },
             {
               "definition": "<text>",
-              "templates": 16
+              "templates": 17
             },
             {
               "definition": "<text>",
@@ -1779,11 +1783,19 @@
             },
             {
               "definition": "<text>",
-              "templates": 12
+              "templates": 13
             },
             {
               "definition": "<text>",
-              "templates": 12
+              "templates": 13
+            },
+            {
+              "definition": "<text>",
+              "templates": 11
+            },
+            {
+              "definition": "<text>",
+              "templates": 11
             },
             {
               "definition": "<text>",
@@ -1819,11 +1831,11 @@
             },
             {
               "definition": "<text>",
-              "templates": 10
+              "templates": 9
             },
             {
               "definition": "<text>",
-              "templates": 10
+              "templates": 9
             },
             {
               "definition": "<text>",
@@ -1843,11 +1855,7 @@
             },
             {
               "definition": "<text>",
-              "templates": 7
-            },
-            {
-              "definition": "<text>",
-              "templates": 7
+              "templates": 8
             },
             {
               "definition": "<text>",
@@ -1947,10 +1955,6 @@
             },
             {
               "definition": "<text>",
-              "templates": 5
-            },
-            {
-              "definition": "<text>",
               "templates": 4
             },
             {
@@ -1987,7 +1991,11 @@
             },
             {
               "definition": "<text>",
-              "templates": 3
+              "templates": 4
+            },
+            {
+              "definition": "<text>",
+              "templates": 4
             },
             {
               "definition": "<text>",
@@ -2051,10 +2059,6 @@
             },
             {
               "definition": "<text>",
-              "templates": 3
-            },
-            {
-              "definition": "<text>",
               "templates": 2
             },
             {
@@ -2163,7 +2167,11 @@
             },
             {
               "definition": "<text>",
-              "templates": 1
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
             },
             {
               "definition": "<text>",

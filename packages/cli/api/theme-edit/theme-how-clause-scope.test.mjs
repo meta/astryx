@@ -205,7 +205,9 @@ const PART = [
         "background-color '#2563eb' --on button --when variant:primary",
         "background-color '#2563eb' --on button --when variant:secondary",
         "background-color '#2563eb' --on button --when variant:ghost",
-        "color '#ffffff' --on button",
+        "color '#ffffff' --on button --when variant:primary",
+        "color '#ffffff' --on button --when variant:secondary",
+        "color '#ffffff' --on button --when variant:ghost",
       ],
     },
   ],
@@ -421,7 +423,8 @@ const LATER_ASKS = [
     "the part's text in its with-list",
     {
       q: 'badges with a subtle colored background and dark text',
-      lead: "color '#111827' --on badge",
+      // (The badges' text, in every mode, as main writes it.)
+      has: ["color '#111827' --on badge"],
       never: /^--color-text-primary/,
     },
   ],

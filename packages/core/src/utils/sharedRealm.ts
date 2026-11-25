@@ -86,6 +86,33 @@ export interface SharedStore<T> {
 }
 
 /**
+ * A value and its listeners for one owner, such as one component instance.
+ * A `set` of an equal value (`Object.is`) notifies nothing.
+ */
+export function createStore<T>(initial: T): SharedStore<T> {
+  let value = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => value,
+    set: next => {
+      if (Object.is(next, value)) {
+        return;
+      }
+      value = next;
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    },
+    subscribe: listener => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+/**
  * A value and its listeners shared by every copy of Core. A `set` from one
  * copy reaches the listeners of every copy.
  */
@@ -94,28 +121,7 @@ export function sharedStore<T>(
   version: number,
   initial: T,
 ): SharedStore<T> {
-  return sharedState(name, version, () => {
-    let value = initial;
-    const listeners = new Set<() => void>();
-    return {
-      get: () => value,
-      set: next => {
-        if (Object.is(next, value)) {
-          return;
-        }
-        value = next;
-        for (const listener of [...listeners]) {
-          listener();
-        }
-      },
-      subscribe: listener => {
-        listeners.add(listener);
-        return () => {
-          listeners.delete(listener);
-        };
-      },
-    };
-  });
+  return sharedState(name, version, () => createStore(initial));
 }
 
 /**

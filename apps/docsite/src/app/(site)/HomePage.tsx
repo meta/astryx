@@ -148,6 +148,8 @@ const styles = stylex.create({
     paddingBlockStart: 'var(--astryx-marketing-section-gap)',
     // Smaller than the section gap — the footer adds its own top spacing.
     paddingBlockEnd: spacingVars['--spacing-12'],
+    // SYNC: the cover sizes in _landing/BlogShowcase.tsx state the width of
+    // a blog cover with these two gutters.
     paddingInline: spacingVars['--spacing-6'],
     gap: 'var(--astryx-marketing-section-gap)',
   },

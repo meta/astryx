@@ -9,11 +9,11 @@
  *   selection lock (utils/selectionLock.ts)
  * @output The List reorder's touch layer. `attachTouchHold` is the list's one
  *   hold, which picks up a row from its handle under a finger. `touchMotion`
- *   moves the rows under a finger. It plays the shared settle role, the
- *   drop's glide at the release's velocity, the way home, and the
- *   continuation across the commit
- * @position Imported by List/listReorderEngine.tsx alone: what the reorder
- *   runs only under a finger sits behind this one import
+ *   is UIKit's row motion on the shared settle role: the drop's glide at the
+ *   release's velocity under every pointer, and, under a finger's
+ *   presentation, the way home and the continuation across the commit
+ * @position Imported by List/listReorderEngine.tsx alone: the finger's hold
+ *   and UIKit's row motion sit behind this one import
  *
  * UIKit's reorder control (iOS 26.2, measured): a finger held still on it for
  * the scroll view's content-touch delay (150 ms) claims the drag. A flick that
