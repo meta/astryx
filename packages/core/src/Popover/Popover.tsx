@@ -78,6 +78,7 @@ import {InteractiveRoleContext} from '../InteractiveRoleContext/InteractiveRoleC
 import type {SpacingStep} from '../utils/types';
 import {BottomSheetEscapeContext} from '../BottomSheet/bottomSheetEscape';
 import {
+  loadPopoverBottomSheet,
   PopoverBottomSheet,
   preloadPopoverBottomSheet,
 } from './lazyPopoverBottomSheet';
@@ -765,6 +766,18 @@ export function Popover({
         setIsSheetOpenState(next);
       }
       onOpenChangeRef.current?.(next);
+      if (next) {
+        // A sheet whose module fails to load closes, so the trigger works
+        // again.
+        void loadPopoverBottomSheet().then(isLoaded => {
+          if (!isLoaded) {
+            if (!isControlled) {
+              setIsSheetOpenState(false);
+            }
+            onOpenChangeRef.current?.(false);
+          }
+        });
+      }
     },
     [isControlled, onOpenChangeRef],
   );

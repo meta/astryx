@@ -14,9 +14,9 @@
  * popovers stay anchored, as DropdownMenu's sheet does
  * (DropdownMenu/lazyMenuBottomSheet.ts). It renders nothing until the module
  * loads, and nothing on the server or in the render that hydrates server HTML
- * (spec:AST-013 FR9); the closed sheet has no visible markup. A failed load
- * closes the open sheet, so the trigger works again, and the next open asks
- * the module loader again.
+ * (spec:AST-013 FR9); the closed sheet has no visible markup. The Popover's
+ * open asks for the module with `loadPopoverBottomSheet` and closes the sheet
+ * when the load fails, so the trigger works again.
  */
 
 import {createElement, type ComponentProps, type ReactElement} from 'react';
@@ -45,17 +45,17 @@ export function preloadPopoverBottomSheet(): void {
   void sheetModule.tryLoad();
 }
 
+/**
+ * Asks for the sheet's module and resolves whether it loaded. The Popover's
+ * open calls it and closes the sheet when it resolves false.
+ */
+export async function loadPopoverBottomSheet(): Promise<boolean> {
+  return sheetModule.tryLoad();
+}
+
 export function PopoverBottomSheet(
   props: ComponentProps<typeof EagerBottomSheet>,
 ): ReactElement | null {
-  const {isOpen, onOpenChange} = props;
-  const module = useSurfaceModule(sheetModule, {
-    isOpen,
-    onLoadFailure: () => {
-      if (isOpen === true) {
-        onOpenChange?.(false);
-      }
-    },
-  });
+  const module = useSurfaceModule(sheetModule);
   return module == null ? null : createElement(module.BottomSheet, props);
 }

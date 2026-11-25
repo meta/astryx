@@ -105,6 +105,7 @@ import {
 import {
   MenuBottomSheet,
   MenuBottomSheetActionList,
+  loadMenuBottomSheet,
   preloadMenuBottomSheetActionList,
 } from './lazyMenuBottomSheet';
 import {menuBottomSheetStyles} from './menuBottomSheet.stylex';
@@ -682,6 +683,16 @@ function DropdownMenuBottomSheet({
         prepareFocusReturn();
       } else {
         resetFocusReturn();
+        // A sheet whose module or rows fail to load closes, so the trigger
+        // works again.
+        void loadMenuBottomSheet().then(isLoaded => {
+          if (!isLoaded) {
+            onOpenChange?.(false);
+            if (!isControlled) {
+              setInternalIsOpen(false);
+            }
+          }
+        });
       }
       onOpenChange?.(nextIsOpen);
       if (!isControlled) {

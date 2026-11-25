@@ -14,9 +14,10 @@ import {Component, type ReactNode} from 'react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 
 // The load at rest fails, then the load for the first open.
-const sheetImport = vi.hoisted(() => ({failures: 2}));
+const sheetImport = vi.hoisted(() => ({failures: 2, calls: 0}));
 
 vi.mock('./MenuBottomSheet', async importOriginal => {
+  sheetImport.calls += 1;
   if (sheetImport.failures > 0) {
     sheetImport.failures -= 1;
     throw new TypeError('Failed to fetch dynamically imported module');
@@ -76,10 +77,14 @@ describe('DropdownMenu bottom sheet whose module fails to load', () => {
     );
     const trigger = () => screen.getByRole('button', {name: 'Actions'});
     await settle();
+    const callsBeforeOpen = sheetImport.calls;
     await act(async () => {
       fireEvent.click(trigger());
     });
     await settle();
+    // The open asked for the module once; the close that followed asked for
+    // nothing.
+    expect(sheetImport.calls).toBe(callsBeforeOpen + 1);
     expect(screen.queryByText('The page failed')).toBeNull();
     expect(trigger()).toHaveAttribute('aria-expanded', 'false');
 

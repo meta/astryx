@@ -62,6 +62,8 @@ import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {
   MenuBottomSheet,
   MenuBottomSheetActionList,
+  loadMenuBottomSheet,
+  loadMenuBottomSheetWithoutActionList,
   MenuBottomSheetWithoutActionList,
   preloadMenuBottomSheetActionList,
 } from '../DropdownMenu/lazyMenuBottomSheet';
@@ -452,11 +454,23 @@ export function ContextMenu({
       if (!nextIsOpen) {
         setSubmenuPath([]);
         setSubmenuTitles([]);
+      } else if (usesBottomSheet) {
+        // A sheet whose module (or rows) fails to load closes, so the
+        // trigger works again.
+        const load = usesSheetActionList
+          ? loadMenuBottomSheet
+          : loadMenuBottomSheetWithoutActionList;
+        void load().then(isLoaded => {
+          if (!isLoaded) {
+            setIsOpen(false);
+            onOpenChange?.(false);
+          }
+        });
       }
       setIsOpen(nextIsOpen);
       onOpenChange?.(nextIsOpen);
     },
-    [onOpenChange],
+    [onOpenChange, usesBottomSheet, usesSheetActionList],
   );
 
   const layer = useLayerInternal({

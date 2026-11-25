@@ -19,9 +19,9 @@
  * The action list preloads at rest, and the preload's result says whether it
  * loaded. A failed load is not kept, so the next preload or open asks the
  * module loader again (a loader that retries then loads it; a browser does not
- * fetch a native module again once its import failed). A sheet whose module,
- * or whose rows' module, fails to load closes, so the trigger works again,
- * and its next open asks for both again.
+ * fetch a native module again once its import failed). A menu's open asks for
+ * the sheet's module, with its rows, through `loadMenuBottomSheet`, and closes
+ * the sheet when either fails to load, so the trigger works again.
  *
  * No wrapper renders on the server or in the render that hydrates server
  * HTML (spec:AST-013 FR9): a module that has not loaded yet would leave server
@@ -95,19 +95,25 @@ const sheetWithoutActionList = createModuleLoader<typeof SheetModule>(
   {onLoadFailure: warnLoadFailure},
 );
 
+/**
+ * Asks for the menu sheet's module, with its rows, and resolves whether both
+ * loaded. A sheet menu's open calls it and closes the sheet when it resolves
+ * false.
+ */
+export async function loadMenuBottomSheet(): Promise<boolean> {
+  return sheetWithActionList.tryLoad();
+}
+
+/** As `loadMenuBottomSheet`, for a sheet with caller content and no rows. */
+export async function loadMenuBottomSheetWithoutActionList(): Promise<boolean> {
+  return sheetWithoutActionList.tryLoad();
+}
+
 function useMenuSheet(
   loader: typeof sheetWithActionList,
   props: ComponentProps<typeof EagerMenuBottomSheet>,
 ): ReactElement | null {
-  const {isOpen, onOpenChange} = props;
-  const module = useSurfaceModule(loader, {
-    isOpen,
-    onLoadFailure: () => {
-      if (isOpen) {
-        onOpenChange(false);
-      }
-    },
-  });
+  const module = useSurfaceModule(loader);
   return module == null ? null : createElement(module.MenuBottomSheet, props);
 }
 
