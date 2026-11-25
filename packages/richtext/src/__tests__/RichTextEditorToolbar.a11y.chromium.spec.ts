@@ -5,7 +5,10 @@
  * @file RichTextEditorToolbar.a11y.chromium.spec.ts
  * @input The built Storybook's "With toolbar" and "With links" RichTextEditor
  *   stories.
- * @output Real-browser proof that the toolbar's action row scrolls at phone
+ * @output Real-browser proof that every toolbar separator, the one before
+ *   endContent too, spans the controls. That the link popover opens above the
+ *   toolbar, below it with no room above, and at phone width fits the screen
+ *   on one row. That the toolbar's action row scrolls at phone
  *   widths instead of squeezing a control: the block-format selector keeps its
  *   whole label, no control overlaps its neighbour, and every control keeps a
  *   24px target. And that the Link button's popover keeps the editor's
@@ -19,7 +22,12 @@
  */
 
 import AxeBuilder from '@axe-core/playwright';
-import {expect, test} from '@astryxdesign/a11y-spec/playwright';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -29,6 +37,8 @@ import {
 const STORYBOOK_DIR = process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR;
 const STORY = 'richtext-richtexteditor--with-toolbar';
 const LINK_STORY = 'richtext-richtexteditor--with-links';
+const NO_ROOM_STORY = 'richtext-richtexteditor--with-links-no-room-above';
+const PLAYGROUND_STORY = 'richtext-richtexteditor--playground';
 
 let storybook: StaticServer;
 
@@ -173,4 +183,94 @@ test('the link popover keeps the selection through the keyboard', async ({
   ).toHaveAttribute('href', 'https://example.com/launch');
   await expect(editor.locator('p')).toHaveCount(1);
   await expect(editor).toHaveText('Ship the launch notes today.');
+});
+
+test('every separator spans the controls, the one before endContent too', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1240, height: 900});
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=${PLAYGROUND_STORY}&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
+    {waitUntil: 'load'},
+  );
+  const toolbar = page.getByRole('toolbar', {name: 'Text formatting'});
+  await expect(toolbar.getByRole('button', {name: 'Table'})).toBeVisible();
+  const heights = await toolbar.evaluate(root =>
+    [...root.querySelectorAll('[role="separator"]')].map(
+      separator => separator.getBoundingClientRect().height,
+    ),
+  );
+  expect(heights.length, 'history, format and endContent separators').toBe(3);
+  for (const height of heights) {
+    expect(height, `separator heights ${heights.join(', ')}`).toBe(heights[0]);
+  }
+  expect(heights[0]).toBeGreaterThanOrEqual(16);
+});
+
+async function openLinkPopover(page: Page, story: string, width: number) {
+  await page.setViewportSize({width, height: 700});
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=${story}&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
+    {waitUntil: 'load'},
+  );
+  const editor = page.getByRole('textbox', {name: 'Notes'});
+  await editor.click();
+  await page.keyboard.type('Ship the notes.');
+  await page.keyboard.press('Shift+Home');
+  await page.keyboard.press('ControlOrMeta+k');
+  const popover = page.getByRole('dialog', {name: 'Insert link'});
+  await expect(popover).toBeVisible();
+  const box = async (locator: Locator) => {
+    const rect = await locator.boundingBox();
+    if (rect == null) {
+      throw new Error('the element has no rendered box');
+    }
+    return rect;
+  };
+  return {
+    popover: await box(popover),
+    toolbar: await box(page.getByRole('toolbar', {name: 'Text formatting'})),
+    linkButton: await box(
+      page.getByRole('button', {name: 'Link', exact: true}),
+    ),
+    field: await box(popover.getByRole('textbox', {name: 'URL'})),
+    buttons: await Promise.all(
+      (await popover.getByRole('button').all()).map(box),
+    ),
+  };
+}
+
+test('the link popover opens above the toolbar when there is room', async ({
+  page,
+}) => {
+  const {popover, toolbar} = await openLinkPopover(page, LINK_STORY, 900);
+  expect(popover.y + popover.height).toBeLessThanOrEqual(toolbar.y + 1);
+});
+
+test('the link popover flips below the Link button with no room above', async ({
+  page,
+}) => {
+  const {popover, linkButton} = await openLinkPopover(page, NO_ROOM_STORY, 900);
+  expect(popover.y).toBeGreaterThanOrEqual(
+    linkButton.y + linkButton.height - 1,
+  );
+});
+
+test('at phone width the link popover fits the screen on one row', async ({
+  page,
+}) => {
+  const {popover, field, buttons} = await openLinkPopover(
+    page,
+    LINK_STORY,
+    390,
+  );
+  expect(popover.width).toBeLessThanOrEqual(320.5);
+  expect(popover.x).toBeGreaterThanOrEqual(0);
+  expect(popover.x + popover.width).toBeLessThanOrEqual(390);
+  const center = (rect: {y: number; height: number}) =>
+    rect.y + rect.height / 2;
+  expect(buttons.length).toBeGreaterThan(0);
+  for (const button of buttons) {
+    expect(Math.abs(center(button) - center(field))).toBeLessThanOrEqual(4);
+  }
 });
