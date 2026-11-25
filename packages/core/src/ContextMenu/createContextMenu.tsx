@@ -43,6 +43,7 @@ import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {LayerContext, type LayerContextValue} from '../Layer/LayerContext';
 import {LayerDepthContext} from '../Layer/LayerDepthContext';
 import {dataAttr} from '../naming';
+import {sharedWeakMap} from '../utils/sharedRealm';
 import {
   ContextMenuAttached,
   type ContextMenuAttachedHandle,
@@ -119,7 +120,10 @@ interface RowsContextEntry {
   readonly listeners: Set<() => void>;
 }
 
-const rowsContexts = new WeakMap<HTMLElement, RowsContextEntry>();
+const rowsContexts = sharedWeakMap<HTMLElement, RowsContextEntry>(
+  'context-menu/create-context-menu/rows-contexts',
+  1,
+);
 
 function publishRowsContext(
   container: HTMLElement,
@@ -162,10 +166,10 @@ interface ContextMenuWrapperAccess {
   destroyFromReact(): void;
 }
 
-const wrapperAccess = new WeakMap<
+const wrapperAccess = sharedWeakMap<
   ContextMenuController,
   ContextMenuWrapperAccess
->();
+>('context-menu/create-context-menu/wrapper-access', 1);
 
 /**
  * @internal Passes later options to a menu createContextMenu attached
