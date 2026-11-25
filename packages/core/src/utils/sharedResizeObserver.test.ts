@@ -378,4 +378,17 @@ describe('sharedResizeObserver', () => {
     expect(onFirst).toHaveBeenCalledTimes(1);
     expect(onLater).toHaveBeenCalledTimes(2);
   });
+
+  it('reaches later notifications when the first measurement throws', async () => {
+    const {splitFirstResizeDelivery} = await import('./sharedResizeObserver');
+    const onLater = vi.fn();
+    const onResize = splitFirstResizeDelivery(() => {
+      throw new Error('measure failed');
+    }, onLater);
+
+    expect(onResize).toThrow('measure failed');
+    await Promise.resolve();
+    onResize();
+    expect(onLater).toHaveBeenCalledTimes(1);
+  });
 });

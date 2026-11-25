@@ -173,10 +173,10 @@ export function splitFirstResizeDelivery(
       return;
     }
     phase = 'first';
-    onFirst();
     queueMicrotask(() => {
       phase = 'later';
     });
+    onFirst();
   };
 }
 
