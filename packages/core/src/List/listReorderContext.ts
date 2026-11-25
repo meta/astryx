@@ -182,7 +182,10 @@ export interface ListReorderSession {
   readonly Handle: ComponentType<ListReorderHandleProps>;
   /** Names a row without a handle for the announcements; renders nothing. */
   readonly RowName: ComponentType<ListReorderRowNameProps>;
-  /** A row with a handle: its focus ring stays off for the handle's own. */
+  /**
+   * A row with a handle: its focus ring stays off for the handle's own, and
+   * it rides above the rows it passes while its drop glides.
+   */
   readonly rowStyle: StyleXStyles;
   /** The list itself: its insertion line, a pseudo-element. */
   readonly listStyle: typeof reorderListStyle;

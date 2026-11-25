@@ -74,6 +74,7 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import type {StyleXStyles} from '@stylexjs/stylex';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
@@ -123,6 +124,11 @@ import {
 } from '../privateAttributes/reorderSource.stylex';
 import {markReorderPreview} from '../privateAttributes/reorderPreview.stylex';
 import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {
+  markTravelling,
+  setTravellingBackdrop,
+  travellingStyles,
+} from '../privateAttributes/travelling.stylex';
 import {
   hideReorderLine,
   showReorderLine,
@@ -546,6 +552,8 @@ interface DragSession {
   readonly restore: RowRestore;
   /** The copy of the dragged row that follows the pointer. */
   readonly preview: HTMLElement;
+  /** The preview's backdrop: the surface behind the list, or none. */
+  readonly background: string | null;
   /** The preview's offset from its row's place, as last written. */
   previewOffset: number;
   /**
@@ -597,6 +605,8 @@ interface PendingDrop {
   readonly restore: RowRestore;
   /** The release's time, when the gesture reported one. */
   readonly releasedAt: number | undefined;
+  /** The preview's backdrop: the dropped row travels on it. */
+  readonly background: string | null;
 }
 
 /** A reorder mode move, reported and waiting for its commit. */
@@ -716,7 +726,8 @@ export class ListReorderController implements ListReorderSession {
   readonly Host = ListReorderHost;
   readonly Handle = ListReorderHandle;
   readonly RowName = ListReorderRowName;
-  readonly rowStyle = reorderRowStyle;
+  // A row that is not a ListItem travels with the same styles as one.
+  readonly rowStyle = [reorderRowStyle, travellingStyles.row] as StyleXStyles;
   readonly listStyle = reorderListStyle;
   readonly rowLayout = reorderRowLayout;
   readonly listLayout = reorderListLayout;
@@ -781,6 +792,8 @@ export class ListReorderController implements ListReorderSession {
   private claimFocusUntil = 0;
   private session: DragSession | null = null;
   private pending: PendingDrop | null = null;
+  /** A re-grab or the rest step ends the mark that the drop started. */
+  private readonly travelEnds = new WeakMap<HTMLElement, () => void>();
   private fallback: ReturnType<typeof setTimeout> | null = null;
   /** The row whose handle keeps focus across a reorder mode move's commit. */
   private focusRow: HTMLElement | null = null;
@@ -1459,6 +1472,9 @@ export class ListReorderController implements ListReorderSession {
     const shown = shownY(row, at);
     const origin = row.getBoundingClientRect().top - shown - tops[dragged];
     const scroller = scrollerOf(list);
+    // A row grabbed again mid-glide still travels. Its preview rides above
+    // the rows now, so the mark ends.
+    this.endTravel(row);
     // Every row gets an identity offset for the session. Otherwise a row's
     // first offset changes how it paints in the middle of the drag, with a
     // layout and a paint. With one in place, neither a move nor a slide lays
@@ -1528,6 +1544,7 @@ export class ListReorderController implements ListReorderSession {
       step: 0,
       restore,
       preview,
+      background,
       previewOffset: 0,
       scrollStale: false,
       ownScroll: false,
@@ -1832,6 +1849,7 @@ export class ListReorderController implements ListReorderSession {
       velocity,
       restore: session.restore,
       releasedAt,
+      background: session.background,
     };
     options.onReorder({key, to: position});
     // A consumer that does not apply the move by the end of the task gets
@@ -1928,6 +1946,24 @@ export class ListReorderController implements ListReorderSession {
     );
   }
 
+  /**
+   * Marks a dropped row as travelling for the length of its glide: it rides
+   * above the rows it passes, on its preview's backdrop.
+   */
+  private travel(row: HTMLElement, backdrop: string | null): void {
+    setTravellingBackdrop(row, backdrop);
+    this.travelEnds.set(row, markTravelling(row));
+  }
+
+  private endTravel(row: HTMLElement): void {
+    const end = this.travelEnds.get(row);
+    if (end != null) {
+      this.travelEnds.delete(row);
+      end();
+      setTravellingBackdrop(row, null);
+    }
+  }
+
   /** Clears the dragged row's stacking once its motion has come to rest. */
   private restWhenDone(element: HTMLElement, restore: RowRestore): void {
     const settle = () => {
@@ -1940,6 +1976,7 @@ export class ListReorderController implements ListReorderSession {
         void running.handle.finished.then(settle);
         return;
       }
+      this.endTravel(element);
       element.style.zIndex = restore.zIndex;
       element.style.backgroundColor = restore.backgroundColor;
       // Identity offsets go; a row still moving keeps its own.
@@ -2120,7 +2157,13 @@ export class ListReorderController implements ListReorderSession {
       }
       if (spring != null && index === pending.dragged) {
         // The dragged row glides from where its preview was dropped into its
-        // new layout place, starting at the release's velocity.
+        // new layout place, starting at the release's velocity. It rides
+        // above the rows it passes until it rests, as its preview did, on
+        // the preview's backdrop. A row with its own background keeps it.
+        // Under Reduce Motion the drop does not travel, so nothing rides.
+        if (!reducesMotion(list)) {
+          this.travel(element, pending.background ?? 'transparent');
+        }
         touchMotion.glide(element, shift, spring, at, pending.velocity);
       } else if (spring != null) {
         // Every other row's place after the drop is its new layout place. So
