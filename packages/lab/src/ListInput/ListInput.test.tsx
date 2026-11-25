@@ -30,6 +30,7 @@ import {
   within,
 } from '@testing-library/react';
 import {useAnnounce, useContainerReveal} from '@astryxdesign/core/hooks';
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {
   ListInput,
@@ -400,6 +401,36 @@ describe('ListInput', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Add a guest to get started.')).toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Add guest'})).toBeEnabled();
+  });
+
+  it('names records with the translated catalog noun when itemName is absent', () => {
+    const {unmount} = renderListInput({itemName: undefined});
+    expect(screen.getByRole('button', {name: 'Add item'})).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: 'Remove item 1'}),
+    ).toBeInTheDocument();
+    unmount();
+
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.listInput.defaultItemName': 'élément'}}}>
+        <ListInput<Guest>
+          label="Invités"
+          value={guests}
+          onChange={() => {}}
+          getItemKey={guest => guest.id}
+          createItem={() => createdGuest}
+          columns={columns}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Add élément'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: 'Remove élément 2'}),
+    ).toBeInTheDocument();
   });
 
   it('emits add and remove changes with the affected item and index', () => {
