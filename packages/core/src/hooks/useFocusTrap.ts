@@ -6,8 +6,8 @@
  * @file useFocusTrap.ts
  * @input Uses React useCallback, useEffect, useRef
  * @output Exports useFocusTrap, the internal focus-region Tab containment it
- *   composes, the deprecated Escape-state shim, and an
- *   internal compatibility-signal hook
+ *   composes (with focusRegionAround and precedes), the deprecated
+ *   Escape-state shim, and an internal compatibility-signal hook
  * @position Core hook; used by dialogs, modals, date pickers
  *
  * Based on WAI-ARIA dialog pattern:
@@ -29,7 +29,7 @@ import {
 import {isHTMLElement, isModalDialog} from '../utils/nodeType';
 import {sharedState} from '../utils/sharedRealm';
 import {useCommittedRef} from './useCommittedRef';
-import {getFocusableElements} from './focusableSelector';
+import {getFocusableElements, inTabOrder} from './focusableSelector';
 
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 
@@ -146,9 +146,10 @@ function trapDocument(container: HTMLElement | null): Document {
 }
 
 /**
- * Whether node `a` comes before node `b` in document order.
+ * Whether node `a` comes before node `b` in document order. Internal: not
+ * re-exported from `hooks`.
  */
-function precedes(a: Node, b: Node): boolean {
+export function precedes(a: Node, b: Node): boolean {
   return (
     (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
   );
@@ -167,13 +168,16 @@ function attemptFocus(element: HTMLElement): boolean {
 }
 
 /**
- * Wrap focus to `target` for a Tab press, and cancel the press only when the
- * target took focus. A target the browser refuses (inert behind a modal
- * layered over this region) leaves the press to the browser instead of
- * stranding focus where it was.
+ * Wrap focus to `target` for a Tab press, and cancel the press only when
+ * focus moved. A target the browser refuses (inert behind a modal layered
+ * over this region) leaves the press to the browser instead of stranding
+ * focus where it was. A target can hand focus on to another element in its
+ * own focus handler. That also counts as a move.
  */
 function wrapFocus(event: KeyboardEvent, target: HTMLElement): void {
-  if (attemptFocus(target)) {
+  const doc = target.ownerDocument;
+  const before = doc.activeElement;
+  if (attemptFocus(target) || doc.activeElement !== before) {
     event.preventDefault();
   }
 }
@@ -215,6 +219,24 @@ const activeRegionContainers = sharedState(
   () => new Set<HTMLElement>(),
 );
 
+/**
+ * The innermost active focus region that contains `element`, or `null`. A
+ * layer that renders inside the region around its anchor stays in reach of
+ * that region's Tab containment. Internal: not re-exported from `hooks`.
+ */
+export function focusRegionAround(element: Element): HTMLElement | null {
+  let innermost: HTMLElement | null = null;
+  for (const container of activeRegionContainers) {
+    if (
+      container.contains(element) &&
+      (innermost == null || innermost.contains(container))
+    ) {
+      innermost = container;
+    }
+  }
+  return innermost;
+}
+
 function hasInnerRegionHolding(
   container: HTMLElement,
   active: Element,
@@ -254,16 +276,34 @@ export function useFocusRegionContainment(
   // Track if focus change was triggered by keyboard (Tab key)
   const isKeyboardNavigationRef = useRef(false);
 
+  // Syncs the shared registry of region containers. It runs after each
+  // render. A layer that moves to another host mounts its container again
+  // while the region is active. The new element then replaces the old one.
+  const registeredRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    const container = containerRef.current;
-    if (!isActive || container == null) {
+    const container = isActive ? containerRef.current : null;
+    const registered = registeredRef.current;
+    if (container === registered) {
       return;
     }
-    activeRegionContainers.add(container);
-    return () => {
-      activeRegionContainers.delete(container);
-    };
-  }, [containerRef, isActive]);
+    if (registered != null) {
+      activeRegionContainers.delete(registered);
+    }
+    if (container != null) {
+      activeRegionContainers.add(container);
+    }
+    registeredRef.current = container;
+  });
+  // Takes the container out of the shared registry when the region unmounts.
+  useEffect(
+    () => () => {
+      if (registeredRef.current != null) {
+        activeRegionContainers.delete(registeredRef.current);
+        registeredRef.current = null;
+      }
+    },
+    [],
+  );
 
   /**
    * Handle focus events - redirect focus back into container if it escapes.
@@ -389,9 +429,20 @@ export function useFocusRegionContainment(
           return;
         }
 
+        // Focus can sit on an element that is not a Tab stop (a dialog title
+        // with tabIndex -1). It takes its place in the order with the stops.
+        const isProgrammaticStop = !(focusable as Element[]).includes(active);
         // jsdom groups a selector list by selector, not in document order.
+        const order = inTabOrder(
+          [...focusable, ...(isProgrammaticStop ? [active] : [])].sort(
+            (a, b) => (precedes(a, b) ? -1 : 1),
+          ),
+        );
         const stops = collapseRadioGroups(
-          [...focusable].sort((a, b) => (precedes(a, b) ? -1 : 1)),
+          order.filter(
+            (element): element is HTMLElement =>
+              !isProgrammaticStop || element !== active,
+          ),
           active,
         );
         const first = stops[0];
@@ -405,16 +456,14 @@ export function useFocusRegionContainment(
           return;
         }
 
-        // Programmatic focus can also sit on an element that is not a Tab stop
-        // (a dialog title with tabIndex -1). Its place in document order
-        // decides the edge: nothing tabbable before it means Shift+Tab is
-        // leaving the region, nothing after it means Tab is.
-        const isProgrammaticStop = !(focusable as Element[]).includes(active);
+        // A focused element that is no tab stop has a place in the order.
+        // With no tab stop before it, Shift+Tab is leaving the region. With
+        // none after it, Tab is.
         if (event.shiftKey) {
           // Shift+Tab: if on (or before) the first element, wrap to last
           if (
             active === first ||
-            (isProgrammaticStop && precedes(active, first))
+            (isProgrammaticStop && order.indexOf(active) < order.indexOf(first))
           ) {
             wrapFocus(event, last);
           }
@@ -422,7 +471,7 @@ export function useFocusRegionContainment(
           // Tab: if on (or after) the last element, wrap to first
           if (
             active === last ||
-            (isProgrammaticStop && precedes(last, active))
+            (isProgrammaticStop && order.indexOf(active) > order.indexOf(last))
           ) {
             wrapFocus(event, first);
           }

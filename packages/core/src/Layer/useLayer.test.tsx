@@ -540,6 +540,56 @@ describe('viewport inset (spec:AST-059)', () => {
     expect(layerEl.className).not.toContain('useLayer__styles.heldInlineStart');
   });
 
+  it('watches the trigger that replaces the first one while the layer is open (FR5)', async () => {
+    const observed: Element[] = [];
+    class Observer {
+      observe(target: Element) {
+        observed.push(target);
+      }
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', Observer);
+
+    function ReplacedTriggerHarness() {
+      const layer = useLayer({mode: 'context'});
+      const [isReplaced, setIsReplaced] = useState(false);
+      return (
+        <>
+          <button
+            key={isReplaced ? 'second' : 'first'}
+            type="button"
+            ref={layer.ref}
+            onClick={layer.show}>
+            {isReplaced ? 'Second' : 'First'}
+          </button>
+          <button type="button" onClick={() => setIsReplaced(true)}>
+            Replace
+          </button>
+          {layer.render(<span>Layer content</span>, {
+            placement: 'below',
+            alignment: 'start',
+          })}
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    const {container} = render(<ReplacedTriggerHarness />);
+    const page = within(container);
+    const first = page.getByRole('button', {name: 'First'});
+    await user.click(first);
+    expect(observed).toEqual([first]);
+
+    await user.click(page.getByRole('button', {name: 'Replace'}));
+    expect(observed).toEqual([
+      first,
+      page.getByRole('button', {name: 'Second'}),
+    ]);
+  });
+
   it('holds every aligned side and edge, and never a centered layer (FR5)', async () => {
     class Observer {
       constructor(private readonly callback: IntersectionObserverCallback) {}

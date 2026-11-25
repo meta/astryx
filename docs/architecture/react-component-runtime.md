@@ -380,8 +380,7 @@ those contracts, and one user-facing rule that no component owns: how a
   subpath too: it marks a group's member so press feedback leaves its press to
   the group's tracker.
   `prepareFocusReturnOnRemoval` is on that subpath too: it returns focus when
-  a removal loses it, so a Lab Tour step that ends sends focus to its target
-  or the opener.
+  a removal loses it.
 - **INV15 — The animator animates a number.** The animator has a value mode:
   it plays a number, such as a count or a chart value, on the same timing as its property channels: theme motion tokens for a program-started change, and measured springs only where `spec:AST-094` FR45 keeps them, and hands the value to an `onUpdate`
   callback each frame for the component to format and write. The component owns
@@ -618,6 +617,25 @@ contracts.
   sets no state, starts no timer and announces nothing (INV5). Internal: never
   in `hooks/index.ts` or the package entry; Lab imports it from
   `@astryxdesign/core/internal/clipboard-copy`.
+- `packages/core/src/internal/tour.ts` — the entry
+  `@astryxdesign/core/internal/tour`. It re-exports by name what the Lab Tour
+  takes from Core. `usePopoverInternal` is `usePopover` with Core's internal
+  options and results. Tour uses three of those options and one result:
+  `surfaceProps` and `surfaceRef` make the popover surface a component's own
+  root, `getInvoker` chooses the element that the popover follows in the
+  focus order (`spec:AST-116` FR12), and `isFocusInScope` reports whether
+  focus is in the popover's Escape scope. `isModalDialog`, `isShownAsPopover`
+  and `focusRegionAround` find the layer and the focus region that hold an
+  anchor. `getActiveModalOutlet` gives a step with no anchor the open modal
+  to render in. `layerClickBoundary` keeps a press on Tour's overlay from
+  handlers around Tour. `readsPopoverSource` reports whether the browser puts
+  a popover after the element it is shown with, `getFocusableElements` lists
+  the tab stops inside an element, and `precedes` compares two nodes in document
+  order. The rest are an Effect hook (`useIsomorphicLayoutEffect`), a
+  media-query read (`matchesMediaQuery`) and DOM reads and checks
+  (`containsAlongFlatTree`, `deepActiveElement`, `takesFocusAsIs`,
+  `isHTMLElement`). The package entry and the other internal entries export
+  none of these. Internal: never in the package entry.
 
 ## Deciding specs
 
