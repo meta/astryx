@@ -266,10 +266,17 @@ function installRecorder() {
       if (!runs || !(typeof target === 'string' || target instanceof URL)) {
         return original.apply(this, args);
       }
-      const file =
-        typeof target === 'string'
-          ? path.resolve(target)
-          : fileURLToPath(target);
+      let file;
+      try {
+        file =
+          typeof target === 'string'
+            ? path.resolve(target)
+            : fileURLToPath(target);
+      } catch {
+        // A URL that names no local file reaches the original unrecorded, so
+        // it fails as it does outside a run: the promise API rejects.
+        return original.apply(this, args);
+      }
       if (kind !== 'realpath') {
         // Its state is taken when it is first read, before the read, so a
         // change made while the operation runs shows as a change afterwards.
