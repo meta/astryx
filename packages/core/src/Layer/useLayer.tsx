@@ -1256,7 +1256,8 @@ function readPortalWritingContext(
 
 /**
  * The `dir` for a portalled layer whose writing context copies a direction the
- * host lacks. A direction the caller's own `style` sets wins, so it gets none.
+ * host lacks. A direction set in the caller's own `style` wins. The layer then
+ * gets no `dir`.
  */
 function portalDir(
   portalStyle: React.CSSProperties | null,
