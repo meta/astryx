@@ -15,7 +15,7 @@
 
 import React, {useSyncExternalStore} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {mergeProps} from '../utils/mergeProps';
+import {mergeProps} from '../utils';
 import {isApplePlatform} from '../utils/isApplePlatform';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';

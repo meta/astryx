@@ -19,6 +19,7 @@
   "packages/core/src/Breadcrumbs/BreadcrumbItem.tsx": ["../Icon", "../utils"],
   "packages/core/src/Breadcrumbs/Breadcrumbs.tsx": ["../utils"],
   "packages/core/src/ButtonGroup/ButtonGroup.tsx": ["../utils"],
+  "packages/core/src/Calendar/hooks/useCalendarNavigation.ts": ["../../i18n"],
   "packages/core/src/Card/Card.tsx": ["../utils"],
   "packages/core/src/Carousel/Carousel.tsx": [
     "../Button",
@@ -252,6 +253,7 @@
   "packages/core/src/Grid/GridSpan.tsx": ["../utils"],
   "packages/core/src/InputGroup/InputGroup.tsx": ["../Field", "../utils"],
   "packages/core/src/InputGroup/InputGroupText.tsx": ["../utils"],
+  "packages/core/src/Kbd/Kbd.tsx": ["../utils"],
   "packages/core/src/Layout/LayoutPanel.tsx": ["../utils"],
   "packages/core/src/Lightbox/Lightbox.tsx": [
     "../Icon",
@@ -554,6 +556,7 @@
     "../utils"
   ],
   "packages/core/src/Typeahead/TypeaheadItem.tsx": ["../utils"],
+  "packages/core/src/hooks/useKeyboardHint.tsx": ["../Kbd"],
   "packages/lab/src/Comments/CommentComposer.tsx": ["../EmojiPicker"],
   "packages/lab/src/Schedule/Schedule.tsx": ["./plugins"]
 }

@@ -26,7 +26,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Kbd} from '../Kbd/Kbd';
+import {Kbd} from '../Kbd';
 import {noInvoker, useLayerInternal} from '../Layer/useLayer';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {

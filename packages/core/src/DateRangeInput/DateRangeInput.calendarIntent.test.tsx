@@ -4,7 +4,8 @@
  * @file DateRangeInput.calendarIntent.test.tsx
  * @input vitest (jsdom), Testing Library, DateRangeInput with its Calendar
  *   module counted
- * @output Tests which intents on the trigger start loading the Calendar
+ * @output Tests that a touch entry does not start loading the Calendar and
+ *   a mouse entry does
  * @position Testing for DateRangeCalendar.tsx
  */
 
@@ -29,7 +30,7 @@ async function settle() {
 }
 
 describe('DateRangeInput Calendar intent', () => {
-  it('does not start the load on a touch entry, and starts it on focus', async () => {
+  it('does not start the load on a touch entry, and starts it on a mouse entry', async () => {
     render(<DateRangeInput value={null} onChange={noop} label="Stay" />);
     const control = document.querySelector<HTMLElement>(
       'button[aria-haspopup="dialog"]:not([tabindex="-1"])',
@@ -42,9 +43,7 @@ describe('DateRangeInput Calendar intent', () => {
     await settle();
     expect(calendarImport.calls).toBe(0);
 
-    act(() => {
-      control.focus();
-    });
+    fireEvent.pointerEnter(control.parentElement, {pointerType: 'mouse'});
     await settle();
     expect(calendarImport.calls).toBe(1);
   });
