@@ -780,12 +780,9 @@
     {
       "name": "component-lab-tour",
       "path": "components/lab/tour",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-tour-step",
-      "path": "components/lab/tour-step",
-      "aliases": []
+      "aliases": [
+        "components/lab/tour-step"
+      ]
     },
     {
       "name": "component-lab-transfer-list",

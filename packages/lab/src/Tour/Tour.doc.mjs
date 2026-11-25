@@ -7,6 +7,8 @@ const stepFields =
 export const docs = {
   name: 'Tour',
   displayName: 'Tour',
+  // Keeps the registry route of the TourStep component. Steps are data now.
+  registry: {aliases: ['lab/tour-step']},
   category: 'Feedback & Status',
   keywords: [
     'tour',
