@@ -6581,25 +6581,26 @@ describe('Touch Events from a browser that exposes no ontouchstart', () => {
 describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR24, FR43)', () => {
   /** The page listeners live now, by type: what was added and not removed. */
   function pageListeners(): () => string[] {
-    const counts = new Map<string, number>();
-    for (const target of [document, window] as EventTarget[]) {
-      const add = target.addEventListener.bind(target);
-      const remove = target.removeEventListener.bind(target);
-      vi.spyOn(target, 'addEventListener').mockImplementation(
-        (type, listener, options) => {
+    // Plain spies, which pass each call through to the real method.
+    const added = [document, window].map(target =>
+      vi.spyOn(target as EventTarget, 'addEventListener'),
+    );
+    const removed = [document, window].map(target =>
+      vi.spyOn(target as EventTarget, 'removeEventListener'),
+    );
+    return () => {
+      const counts = new Map<string, number>();
+      for (const spy of added) {
+        for (const [type] of spy.mock.calls) {
           counts.set(type, (counts.get(type) ?? 0) + 1);
-          add(type, listener, options);
-        },
-      );
-      vi.spyOn(target, 'removeEventListener').mockImplementation(
-        (type, listener, options) => {
+        }
+      }
+      for (const spy of removed) {
+        for (const [type] of spy.mock.calls) {
           counts.set(type, (counts.get(type) ?? 0) - 1);
-          remove(type, listener, options);
-        },
-      );
-    }
-    return () =>
-      [...counts]
+        }
+      }
+      return [...counts]
         .filter(
           ([type, count]) =>
             count > 0 &&
@@ -6609,6 +6610,7 @@ describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR
         )
         .map(([type]) => type)
         .sort();
+    };
   }
 
   function fineHost(): GestureHost {
@@ -6644,7 +6646,7 @@ describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR
     vi.useRealTimers();
   });
 
-  it('keeps one passive pointerdown listener on each element that uses a gesture and none on the page while idle; a disabled one keeps none', () => {
+  it('keeps one passive pointerdown listener on each element that uses a gesture and no gesture listener on the page while idle; a disabled one keeps none', () => {
     const {box, row, off} = mount(
       '<div id="box"></div><div id="row"></div><div id="off"></div>',
     );

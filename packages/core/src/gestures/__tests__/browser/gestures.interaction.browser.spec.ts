@@ -2033,8 +2033,11 @@ test.describe('under a fine primary pointer (spec:AST-094 FR43, FR24)', () => {
     browserName,
   }) => {
     await open(page, browserName);
-    // Attaching every gesture of the page added no page-level listener.
-    expect(await page.evaluate(() => window.__attachListeners)).toEqual([]);
+    // Attaching every gesture of the page added one page-level listener: the
+    // shared press controller's passive selectionchange.
+    expect(await page.evaluate(() => window.__attachListeners)).toEqual([
+      'selectionchange',
+    ]);
     // A press that nothing claims (a pan pressed and lifted in place).
     const start = await center(page, 'hpan');
     await page.mouse.move(start.x, start.y);

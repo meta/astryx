@@ -632,8 +632,11 @@ describe('attachContextRequest (spec:AST-094 FR43)', () => {
       'pointerdown',
       'touchmove',
     ]);
+    // The page gets only the host's one shared selectionchange listener.
     expect(
-      [...viewAdded.mock.calls, ...docAdded.mock.calls].map(call => call[0]),
+      [...viewAdded.mock.calls, ...docAdded.mock.calls]
+        .map(call => call[0])
+        .filter(type => type !== 'selectionchange'),
     ).toEqual([]);
     detach2();
     expect(removed.mock.calls.map(call => call[0]).sort()).toEqual([
