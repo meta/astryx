@@ -24,7 +24,7 @@ import {
 } from 'vitest';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 
-beforeAll(() => {
+beforeAll(async () => {
   HTMLDialogElement.prototype.showModal =
     HTMLDialogElement.prototype.showModal ||
     function (this: HTMLDialogElement) {
@@ -35,6 +35,9 @@ beforeAll(() => {
     function (this: HTMLDialogElement) {
       this.removeAttribute('open');
     };
+  // Warm the runner's transforms outside the test. The module reset below
+  // still gives each case a drawer loader that has not run.
+  await import('./MobileNav');
 });
 
 class MockResizeObserver {
@@ -70,8 +73,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// Each case imports a fresh module graph, so the first drawer load in a
-// case compiles the drawer's modules.
 const LOAD = {timeout: 15_000};
 
 /**
@@ -120,12 +121,12 @@ describe('the AppShell drawer before it has loaded', () => {
     // swizzled SideNav inside the package AppShell.
     vi.resetModules();
     const otherCopy = await import('./MobileNavToggle');
-    await act(async () => {
-      expect(await otherCopy.loadMobileNavDrawer()).toBe(true);
-    });
+    // A pending import must not leave an act scope open if this test times out.
+    const load = otherCopy.loadMobileNavDrawer();
     expect(
       await screen.findByText('Home', undefined, LOAD),
     ).toBeInTheDocument();
+    expect(await load).toBe(true);
     expect(dialog()).not.toHaveAttribute('open');
   });
 
