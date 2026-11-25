@@ -126,6 +126,7 @@ import {markReorderPreview} from '../privateAttributes/reorderPreview.stylex';
 import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {
   markTravelling,
+  setTravellingBackdrop,
   travellingStyles,
 } from '../privateAttributes/travelling.stylex';
 import {
@@ -325,7 +326,8 @@ const travelEnds = new WeakMap<HTMLElement, () => void>();
  * above the rows it passes, on its preview's backdrop.
  */
 function travel(row: HTMLElement, backdrop: string | null): void {
-  travelEnds.set(row, markTravelling(row, backdrop));
+  setTravellingBackdrop(row, backdrop);
+  travelEnds.set(row, markTravelling(row));
 }
 
 function endTravel(row: HTMLElement): void {
@@ -333,6 +335,7 @@ function endTravel(row: HTMLElement): void {
   if (end != null) {
     travelEnds.delete(row);
     end();
+    setTravellingBackdrop(row, null);
   }
 }
 

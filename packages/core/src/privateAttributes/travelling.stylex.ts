@@ -30,29 +30,36 @@ const SURFACE = `var(${BACKDROP}, ${colorVars['--color-background-surface']})`;
 const marks = new WeakMap<Element, object>();
 
 /**
- * Marks `row` as sliding across rows that move the other way, on `backdrop`
- * or else the surface. Returns the call that removes the mark when the slide
- * ends. A later mark on the row stays when that call runs.
+ * Marks `row` as sliding across rows that move the other way. Returns the
+ * call that removes the mark when the slide ends. A later mark on the row
+ * stays when that call runs.
  */
-export function markTravelling(
-  row: HTMLElement,
-  backdrop: string | null = null,
-): () => void {
+export function markTravelling(row: Element): () => void {
   const mark = {};
   marks.set(row, mark);
   row.setAttribute(TRAVELLING, '');
+  return () => {
+    if (marks.get(row) === mark) {
+      marks.delete(row);
+      row.removeAttribute(TRAVELLING);
+    }
+  };
+}
+
+/**
+ * Sets the backdrop a travelling `row` rides on in place of the surface, or
+ * clears it with `null`. Only the reorder engine imports it, so a List
+ * without `reorderable` does not load it.
+ */
+export function setTravellingBackdrop(
+  row: HTMLElement,
+  backdrop: string | null,
+): void {
   if (backdrop == null) {
     row.style.removeProperty(BACKDROP);
   } else {
     row.style.setProperty(BACKDROP, backdrop);
   }
-  return () => {
-    if (marks.get(row) === mark) {
-      marks.delete(row);
-      row.removeAttribute(TRAVELLING);
-      row.style.removeProperty(BACKDROP);
-    }
-  };
 }
 
 export const travellingStyles = stylex.create({

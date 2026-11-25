@@ -1873,25 +1873,31 @@ describe('List reorderable', () => {
     }
   });
 
-  it('does not mark a dropped row as travelling under Reduce Motion', () => {
-    document.body.setAttribute('data-astryx-reduced-motion', '');
-    try {
-      stubPrimaryPointer(false);
-      render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
-      const list = screen.getByRole('list');
-      layOut(list);
-      const handle = handleOf('A');
-      const row = handle.closest('li')!;
-      mouseDrag(handle, 322, 322 + 70);
-      act(() => {
-        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
-      });
-      expect(labels()).toEqual(['B', 'C', 'A', 'D']);
-      expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
-    } finally {
-      document.body.removeAttribute('data-astryx-reduced-motion');
-    }
-  });
+  it.each([
+    ['a fine', false],
+    ['a coarse', true],
+  ])(
+    'does not mark a dropped row as travelling under Reduce Motion with %s primary pointer',
+    (_, coarse) => {
+      document.body.setAttribute('data-astryx-reduced-motion', '');
+      try {
+        stubPrimaryPointer(coarse);
+        render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+        const list = screen.getByRole('list');
+        layOut(list);
+        const handle = handleOf('A');
+        const row = handle.closest('li')!;
+        mouseDrag(handle, 322, 322 + 70);
+        act(() => {
+          fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+        });
+        expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+        expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+      } finally {
+        document.body.removeAttribute('data-astryx-reduced-motion');
+      }
+    },
+  );
 
   it("reads a key move's glide spring once, however many rows slide", async () => {
     stubPrimaryPointer(true);
