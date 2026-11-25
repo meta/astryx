@@ -531,6 +531,7 @@ test('a list flipped above its trigger by an option that grows shrinks to the ro
     });
     const detail = JSON.stringify({...facts, limit: LANDSCAPE_LIMIT});
     expect(facts.top, detail).toBeGreaterThanOrEqual(15.5);
+    expect(facts.top, detail).toBeLessThanOrEqual(16.5);
     expect(facts.bottom, detail).toBeLessThanOrEqual(LANDSCAPE_LIMIT + 0.5);
     expect(facts.scrolls, detail).toBe(true);
   }).toPass({timeout: 3_000});
@@ -553,13 +554,19 @@ test('a list flipped above its trigger by an option that grows shrinks to the ro
       const layer = list.closest<HTMLElement>('[popover]');
       const box = list.getBoundingClientRect();
       const capVar =
-        layer?.style.getPropertyValue('--_layer-keyboard-max-block-size') ?? '';
+        layer != null
+          ? getComputedStyle(layer)
+              .getPropertyValue('--_layer-keyboard-max-block-size')
+              .trim()
+          : '';
       return {
         height: box.height,
         capVar,
+        inlineMaxHeight: list.style.maxHeight,
       };
     });
     expect(facts.height).toBeCloseTo(naturalHeight, 0);
-    expect(facts.capVar).toBe('');
+    expect(facts.capVar).toBe('100vh');
+    expect(facts.inlineMaxHeight).toBe('');
   }).toPass({timeout: 3_000});
 });

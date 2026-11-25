@@ -757,7 +757,7 @@ describe('Selector', () => {
       // The margin for a list above its anchor ends at the keyboard's term.
       await waitFor(() => {
         expect(popover?.getAttribute('style')).toContain(
-          'var(--_layer-keyboard-inset-block-end, 0px))))',
+          '+ var(--_layer-keyboard-inset-block-end, 0px)))',
         );
       });
     } finally {

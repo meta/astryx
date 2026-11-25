@@ -1564,6 +1564,7 @@ export function Selector<T extends SelectorOptionType>(
 
   const {
     marginBlockStart: rawMarginBlockStart,
+    maxHeight: rawMaxHeight,
     isPositioned: rawIsPositioned,
     remeasure: remeasureOverlay,
   } = useSelectedItemOverlayMargin({
@@ -1581,6 +1582,12 @@ export function Selector<T extends SelectorOptionType>(
     shouldOverlaySelectedItem && rawMarginBlockStart != null
       ? rawMarginBlockStart
       : null;
+  const overlayMaxHeight =
+    surface.activePresentation === 'popover' &&
+    shouldOverlaySelectedItem &&
+    rawMaxHeight != null
+      ? rawMaxHeight
+      : undefined;
   const overlayMarginProperty: Record<string, string> =
     overlayMargin == null ? {} : {[OVERLAY_MARGIN_PROPERTY]: overlayMargin};
   const popoverOffsetStyle: React.CSSProperties | undefined =
@@ -2239,15 +2246,22 @@ export function Selector<T extends SelectorOptionType>(
           ? handleTriggerKeyDown
           : undefined
       }
-      {...stylex.props(
-        styles.dropdown,
-        listboxHasOverflow ? styles.touchPanYPinchZoom : styles.touchPinchZoom,
-        surface.activePresentation === 'popover' &&
-          variant === 'input' &&
-          styles.dropdownInput,
-        surface.activePresentation === 'popover' &&
-          !isPositioned &&
-          styles.dropdownHidden,
+      {...mergeProps(
+        stylex.props(
+          styles.dropdown,
+          listboxHasOverflow
+            ? styles.touchPanYPinchZoom
+            : styles.touchPinchZoom,
+          surface.activePresentation === 'popover' &&
+            variant === 'input' &&
+            styles.dropdownInput,
+          surface.activePresentation === 'popover' &&
+            !isPositioned &&
+            styles.dropdownHidden,
+        ),
+        overlayMaxHeight != null
+          ? {style: {maxHeight: overlayMaxHeight}}
+          : undefined,
       )}>
       {renderOptions()}
     </div>
