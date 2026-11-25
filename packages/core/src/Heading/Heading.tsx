@@ -308,11 +308,13 @@ export function Heading({
   // Build inline style for -webkit-line-clamp (dynamic value)
   const inlineStyle = maxLines > 1 ? {WebkitLineClamp: maxLines} : undefined;
 
-  // Plain text in one script that the ellipsis cuts takes its own direction,
-  // so it keeps its start on either page. End-aligned text keeps the page's
-  // direction: its own direction would move it to the other edge.
+  // Plain text in one script that one line's ellipsis cuts takes its own
+  // direction, so it keeps its start on either page. A multi-line clamp keeps
+  // the start on any page, and in Chromium its ellipsis leaves the box under
+  // the page's alignment, so it keeps the page's direction. End-aligned text
+  // keeps it too: its own direction would move it to the other edge.
   const cutDirection =
-    maxLines > 0 && justify !== 'end'
+    maxLines === 1 && justify !== 'end'
       ? cutTextDirection(children).dir
       : undefined;
 

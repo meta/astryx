@@ -1414,10 +1414,13 @@ describe('Text cut by maxLines keeps the start of a one-script label', () => {
     }
   });
 
-  it('keeps the page direction without maxLines, for end-aligned text and for a rich node', () => {
+  it('keeps the page direction without maxLines, for a multi-line clamp, for end-aligned text and for a rich node', () => {
     render(
       <div dir="rtl">
         <Text>Uncut label</Text>
+        <Text maxLines={2} hasTruncateTooltip={false}>
+          Two-line label
+        </Text>
         <Text maxLines={1} justify="end" hasTruncateTooltip={false}>
           End label
         </Text>
@@ -1427,6 +1430,7 @@ describe('Text cut by maxLines keeps the start of a one-script label', () => {
       </div>,
     );
     expect(screen.getByText('Uncut label')).not.toHaveAttribute('dir');
+    expect(screen.getByText('Two-line label')).not.toHaveAttribute('dir');
     expect(screen.getByText('End label')).not.toHaveAttribute('dir');
     expect(screen.getByText('Rich label').parentElement).not.toHaveAttribute(
       'dir',
