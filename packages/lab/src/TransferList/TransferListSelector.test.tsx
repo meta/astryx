@@ -36,7 +36,6 @@ import type {TransferListOption} from './TransferList';
 import {createReorderable} from '@astryxdesign/core';
 import type * as CoreHooks from '@astryxdesign/core/hooks';
 
-// Records each message TransferList announces, then announces it as before.
 const announcements = vi.hoisted((): string[] => []);
 vi.mock('@astryxdesign/core/hooks', async importOriginal => {
   const actual = await importOriginal<typeof CoreHooks>();
@@ -785,8 +784,6 @@ describe('TransferListSelector draft reset timing', () => {
 });
 
 describe('TransferListSelector while a change is pending', () => {
-  // React keeps every async transition pending until all of them settle, so
-  // each test settles what it leaves pending.
   const pending: Array<() => void> = [];
   const settle = async () => {
     await act(async () => {
@@ -841,7 +838,6 @@ describe('TransferListSelector while a change is pending', () => {
     expect(onCommit).toHaveBeenCalledOnce();
     expect(announcements).toContain('Owner added. 3 items selected.');
     announcements.length = 0;
-    // The added row's place goes to the next Add, busy as it is.
     const addUpdated = within(dialog).getByRole('button', {
       name: 'Add Updated',
       ...hidden,
@@ -884,6 +880,46 @@ describe('TransferListSelector while a change is pending', () => {
       'updated',
     ]);
     expect(announcements).toContain('Updated added. 4 items selected.');
+  });
+
+  it('refuses transfers while isLoading is set, as while a change is pending', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const view = render(
+      <TransferListSelector
+        label="Visible fields"
+        options={OPTIONS}
+        value={['name']}
+        onChange={onChange}
+      />,
+    );
+    await openSelector();
+    view.rerender(
+      <TransferListSelector
+        label="Visible fields"
+        options={OPTIONS}
+        value={['name']}
+        onChange={onChange}
+        isLoading
+      />,
+    );
+    const dialog = screen.getByRole('dialog', {
+      name: 'Visible fields',
+      ...hidden,
+    });
+    await waitFor(() => {
+      expect(dialog.querySelector('[aria-busy="true"]')).not.toBeNull();
+    });
+    const addOwner = within(dialog).getByRole('button', {
+      name: 'Add Owner',
+      ...hidden,
+    });
+    expect(addOwner).toHaveAttribute('aria-busy', 'true');
+    expect(addOwner).toHaveAttribute('aria-disabled', 'true');
+
+    await user.click(addOwner);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(transferAnnouncements()).toEqual([]);
   });
 
   it('marks every transfer action busy and aria-disabled, never natively disabled, until the change settles', async () => {

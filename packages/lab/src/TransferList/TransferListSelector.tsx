@@ -340,9 +340,6 @@ export function TransferListSelector<T extends string = string>({
                     if (isDisabled) {
                       return;
                     }
-                    // The list refuses transfers while a change is pending. A
-                    // change that arrives anyway is dropped, so that actions
-                    // never stack.
                     if (state.isBusy) {
                       return;
                     }

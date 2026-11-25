@@ -509,8 +509,6 @@ export function TransferList<T extends string = string>({
   const currentValueRef = useRef<readonly T[]>(value);
   const [query, setQuery] = useState('');
   const announce = useAnnounce();
-  // While the owner has a change pending, it drops the next one. So the list
-  // makes no change, and announces none, until that change settles.
   const isBusy = use(TransferListBusyContext);
 
   // Syncs the handlers' ref with the committed `value`. A render React
@@ -588,8 +586,6 @@ export function TransferList<T extends string = string>({
           side === 'selected'
             ? selectedPanelRef.current
             : availablePanelRef.current;
-        // A busy action is still a target: the owner's pending change makes
-        // every action busy before this frame.
         const actions = Array.from(
           panel?.querySelectorAll<HTMLButtonElement>(
             `[data-transfer-list-action="${side}"]:not([disabled])`,
