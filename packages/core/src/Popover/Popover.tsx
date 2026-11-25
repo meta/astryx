@@ -760,6 +760,9 @@ export function Popover({
   const isAnySurfaceOpen = popover.isOpen || isSheetOpen;
   const sheetId = `${popover.id}-sheet`;
 
+  const isSheetOpenRef = useCommittedRef(isSheetOpen);
+  // Whether the open sheet was opened here, whose handler then owns its load.
+  const isSheetOpenedHereRef = useRef(false);
   const setSheetOpen = useCallback(
     (next: boolean) => {
       if (!isControlled) {
@@ -767,10 +770,11 @@ export function Popover({
       }
       onOpenChangeRef.current?.(next);
       if (next) {
+        isSheetOpenedHereRef.current = true;
         // A sheet whose module fails to load closes, so the trigger works
         // again.
         void loadPopoverBottomSheet().then(isLoaded => {
-          if (!isLoaded) {
+          if (!isLoaded && isSheetOpenRef.current) {
             if (!isControlled) {
               setIsSheetOpenState(false);
             }
@@ -779,8 +783,28 @@ export function Popover({
         });
       }
     },
-    [isControlled, onOpenChangeRef],
+    [isControlled, isSheetOpenRef, onOpenChangeRef],
   );
+  // Syncs a caller's open (`isOpen`) with the sheet's module loader: an open
+  // not made here asks for the module and closes when its load fails.
+  useEffect(() => {
+    if (!isSheetOpen) {
+      isSheetOpenedHereRef.current = false;
+      return;
+    }
+    if (isSheetOpenedHereRef.current) {
+      return;
+    }
+    let isCurrent = true;
+    void loadPopoverBottomSheet().then(isLoaded => {
+      if (!isLoaded && isCurrent) {
+        onOpenChangeRef.current?.(false);
+      }
+    });
+    return () => {
+      isCurrent = false;
+    };
+  }, [isSheetOpen, onOpenChangeRef]);
 
   const measureOverflow = useCallback(() => {
     const surface = popover.contentRef.current;
