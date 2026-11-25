@@ -201,6 +201,11 @@ export const docs = {
         description:
           'Place more than 10–12 items in a single menu without grouping them into sections.',
       },
+      {
+        guidance: false,
+        description:
+          'Wrap a ListItem in a ContextMenu: the wrapper sits between the list and its row. Pass the row\u2019s ref to `useContextMenu` instead, which attaches the same menu to the row itself.',
+      },
     ],
   },
   playground: {

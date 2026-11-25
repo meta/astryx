@@ -1,0 +1,229 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+'use client';
+
+/**
+ * @file useContextMenu.tsx
+ * @input A ref to the element, and createContextMenu's options with a
+ *   ReactNode `menuContent`
+ * @output useContextMenu: the React wrapper over createContextMenu,
+ *   returning `{open, close}`; exported from the hooks entry point
+ *   (@astryxdesign/core/hooks) and from ContextMenu's
+ * @position Public hook over the public factory: it hands createContextMenu
+ *   a `render` that portals `menuContent` into the menu's container, carries
+ *   the caller's Core providers (theme, layer, link, i18n) into the menu, and
+ *   passes later options through updateContextMenu. `menuContent` stays
+ *   rendered, in a root the hook owns, into a host the menu's container
+ *   adopts (contextMenuRows.tsx), so its first enabled row is there when
+ *   focus starts; its rows read the menu's own row context, open state,
+ *   layer and layer depth
+ */
+
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+  type RefObject,
+} from 'react';
+import {createPortal} from 'react-dom';
+import {createRoot} from 'react-dom/client';
+import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
+import type {ContextMenuOption} from './ContextMenu';
+import {
+  createMenuRowsSlot,
+  MenuRows,
+  useCoreBridge,
+  type CoreBridge,
+} from './contextMenuRows';
+import {
+  bridgeContextMenu,
+  destroyContextMenuFromReact,
+  createContextMenu,
+  updateContextMenu,
+  type ContextMenuController,
+  type ContextMenuPoint,
+  type CreateContextMenuOptions,
+} from './createContextMenu';
+
+interface UseContextMenuSharedOptions {
+  /** Names the menu for assistive technology. */
+  label?: string;
+  /** While true, the element makes no context request and keeps the browser's own menu. */
+  isDisabled?: boolean;
+  /** Called with true when the menu opens and false when it closes. */
+  onOpenChange?: (isOpen: boolean) => void;
+  /** Where the menu appears, as ContextMenu's `presentation`. */
+  presentation?: AdaptivePresentation;
+}
+
+export type UseContextMenuOptions = UseContextMenuSharedOptions &
+  (
+    | {items: ReadonlyArray<ContextMenuOption>; menuContent?: undefined}
+    | {items?: undefined; menuContent: ReactNode}
+  );
+
+/** What useContextMenu returns. */
+export interface UseContextMenuResult {
+  /** Opens the menu at `at`, client coordinates; at the element without it. */
+  open: (at?: ContextMenuPoint) => void;
+  /** Closes the menu. */
+  close: () => void;
+}
+
+/** `menuContent`, kept rendered in a root the hook owns, into its slot. */
+interface MenuContentPortal {
+  /** The factory's `render`: the container adopts the slot's host. */
+  readonly render: (container: HTMLElement) => () => void;
+  /** Renders `content` with the caller's providers. */
+  draw(content: ReactNode, wrap: CoreBridge): void;
+  unmount(): void;
+}
+
+function createMenuContentPortal(doc: Document): MenuContentPortal {
+  const slot = createMenuRowsSlot(doc);
+  const root = createRoot(doc.createElement('div'));
+  return {
+    render: slot.render,
+    draw(content, wrap) {
+      root.render(
+        createPortal(
+          wrap(<MenuRows slot={slot}>{content}</MenuRows>),
+          slot.host,
+        ),
+      );
+    },
+    unmount() {
+      slot.host.remove();
+      // Called from an effect's cleanup: React cannot unmount a root while
+      // it commits another, so this one renders nothing instead, an update
+      // React takes in its own time, and is dropped with its node.
+      root.render(null);
+    },
+  };
+}
+
+function factoryOptions(
+  options: UseContextMenuOptions,
+  onOpenChange: (isOpen: boolean) => void,
+  portal: MenuContentPortal | null,
+): CreateContextMenuOptions {
+  const shared = {
+    label: options.label,
+    isDisabled: options.isDisabled,
+    onOpenChange,
+    presentation: options.presentation,
+  };
+  return portal != null
+    ? {...shared, render: portal.render}
+    : {...shared, items: options.items ?? []};
+}
+
+/** The element the hook's menu is attached to, and how to detach it. */
+interface Attached {
+  element: HTMLElement;
+  hasContent: boolean;
+  detach: () => void;
+}
+
+/**
+ * Attaches a context menu to the element `ref` points at:
+ * it opens on that element's context request, and unmounting removes it.
+ * When the ref moves to another element, the menu moves with it.
+ */
+export function useContextMenu(
+  ref: RefObject<HTMLElement | null>,
+  options: UseContextMenuOptions,
+): UseContextMenuResult {
+  const wrap = useCoreBridge();
+  const hasContent = options.menuContent !== undefined;
+  const latestRef = useRef({options, wrap});
+  const controllerRef = useRef<ContextMenuController | null>(null);
+  const portalRef = useRef<MenuContentPortal | null>(null);
+  const attachedRef = useRef<Attached | null>(null);
+  const handleOpenChange = useCallback((isOpen: boolean) => {
+    latestRef.current.options.onOpenChange?.(isOpen);
+  }, []);
+
+  // Syncs the factory's menu with this render's options, the caller's
+  // providers and `menuContent`.
+  useLayoutEffect(() => {
+    latestRef.current = {options, wrap};
+    const controller = controllerRef.current;
+    if (controller == null) {
+      return;
+    }
+    const portal = portalRef.current;
+    updateContextMenu(
+      controller,
+      factoryOptions(options, handleOpenChange, portal),
+    );
+    bridgeContextMenu(controller, wrap);
+    if (portal != null) {
+      portal.draw(options.menuContent, wrap);
+    }
+  });
+
+  // Every commit checks the element the ref points at now: a ref moved to
+  // another element moves the menu with it.
+  useEffect(() => {
+    const element = ref.current;
+    const attached = attachedRef.current;
+    if (
+      attached != null &&
+      attached.element === element &&
+      attached.hasContent === hasContent
+    ) {
+      return;
+    }
+    attached?.detach();
+    attachedRef.current = null;
+    if (element == null) {
+      return;
+    }
+    const latest = latestRef.current;
+    const portal = hasContent
+      ? createMenuContentPortal(element.ownerDocument)
+      : null;
+    portal?.draw(latest.options.menuContent, latest.wrap);
+    const controller = createContextMenu(
+      element,
+      factoryOptions(latest.options, handleOpenChange, portal),
+    );
+    bridgeContextMenu(controller, latest.wrap);
+    controllerRef.current = controller;
+    portalRef.current = portal;
+    attachedRef.current = {
+      element,
+      hasContent,
+      detach: () => {
+        destroyContextMenuFromReact(controller);
+        portal?.unmount();
+        if (controllerRef.current === controller) {
+          controllerRef.current = null;
+          portalRef.current = null;
+        }
+      },
+    };
+  });
+
+  // Syncs the factory's menu with this component's life: unmounting destroys
+  // the menu and everything it added.
+  useEffect(
+    () => () => {
+      attachedRef.current?.detach();
+      attachedRef.current = null;
+    },
+    [],
+  );
+
+  return useMemo(
+    () => ({
+      open: (at?: ContextMenuPoint) => controllerRef.current?.open(at),
+      close: () => controllerRef.current?.close(),
+    }),
+    [],
+  );
+}
