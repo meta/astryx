@@ -187,8 +187,11 @@ happens between pages.
   follows the fallback, and FR10's out-of-view rule follows
   `spec:AST-059`'s fallback. FR7–FR9, the rest of FR10 and FR14–FR17 are
   unchanged.
-- Browser evidence: real Chromium and WebKit for FR7, FR10 and
-  FR14–FR16; jsdom for step order, ARIA and event ordering.
+- Browser evidence: real Chromium, Firefox and WebKit for FR7, FR10 and
+  FR14–FR16; jsdom for step order, ARIA and event ordering. The browser tests
+  run in Chromium and WebKit on every change, and in Firefox by hand. One
+  FR10 result differs in Firefox: while a scrolling panel clips a step's
+  anchor, Firefox keeps painting the callout, and Chromium and WebKit do not.
 
 ## Current-state impact
 
@@ -391,3 +394,9 @@ the callout and the anchor, which holds the keyboard.
   Options: the app passes a ref object whose `current` reads the element; or
   a lookup input on the step, which `spec:AST-116` DEC-1 rejects for
   `usePopover`. Until ruled, a step takes `anchorRef` only.
+- **OQ5 — Can an app turn off the element that holds the callout's place?**
+  (`human-api`) FR14 puts one empty element in the app's page while a step
+  without a backdrop shows. No current caller needs to leave it out. Options:
+  an input on Tour, or on a step, that leaves the element out, so the callout
+  has the place that `spec:AST-116` FR12 gives it; or no input. Until ruled,
+  an app has no input for it.

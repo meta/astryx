@@ -472,8 +472,9 @@ test('with a backdrop, a step whose anchor leaves shows centered and stays modal
 });
 
 for (const story of ['scrolled-anchor', 'scrolled-anchor-with-backdrop']) {
-  test(`a callout whose anchor scrolls out of its panel is not painted, and returns with the anchor (${story})`, async ({
+  test(`while a scrolling panel clips its anchor, a callout is not painted in Chromium and WebKit and is painted in Firefox, and it shows with the anchor again (${story})`, async ({
     page,
+    browserName,
   }) => {
     // The anchor scrolls into view at once, so the panel's offset is final.
     await page.emulateMedia({reducedMotion: 'reduce'});
@@ -484,8 +485,11 @@ for (const story of ['scrolled-anchor', 'scrolled-anchor-with-backdrop']) {
     await expect(ring(page)).toBeVisible();
     const panel = page.getByTestId('panel');
 
-    // The browser stops painting a layer whose anchor a scrolling panel clips.
-    // Its box and its `visibility` stay, so the test asks what is at its center.
+    // Chromium and WebKit stop painting a layer whose anchor a scrolling
+    // panel clips. Firefox keeps painting a layer that is a popover. The
+    // layer's box and its `visibility` stay, so the test asks what is at its
+    // center.
+    const hidesClipped = browserName !== 'firefox';
     const isPainted = async () =>
       callout(page).evaluate(node => {
         const rect = node.getBoundingClientRect();
@@ -503,7 +507,18 @@ for (const story of ['scrolled-anchor', 'scrolled-anchor-with-backdrop']) {
     const shown = await panel.evaluate(node => node.scrollTop);
 
     await panel.evaluate(node => node.scrollTo({top: 0, behavior: 'instant'}));
-    await expect.poll(isPainted).toBe(false);
+    if (hidesClipped) {
+      await expect.poll(isPainted).toBe(false);
+    } else {
+      // Two frames after the scroll, the callout is still painted.
+      await page.evaluate(
+        () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }),
+      );
+      expect(await isPainted()).toBe(true);
+    }
     await expect(state(page)).toContainText('active: export; ended: none');
 
     await panel.evaluate(
