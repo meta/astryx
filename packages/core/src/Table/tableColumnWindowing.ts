@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+'use client';
+
 /**
  * @file tableColumnWindowing.ts
  * @input A `Table.virtualization` value
