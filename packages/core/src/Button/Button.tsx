@@ -72,6 +72,7 @@ import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {ButtonHitAreaContext} from './buttonHitArea';
+import {createSharedContext} from '../utils/sharedContext';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
@@ -361,6 +362,18 @@ const variants = stylex.create({
     },
   },
 });
+
+/**
+ * Internal to Core. True where a Core part's Button name already contains its
+ * tooltip text, such as Banner's dismiss button and the field clear button.
+ * The tooltip still shows but adds no description. The package does not
+ * export it.
+ */
+export const ButtonTooltipInNameContext = createSharedContext<boolean>(
+  'ButtonTooltipInNameContext',
+  1,
+  false,
+);
 
 /**
  * Button variant type derived from ButtonVariantMap.
@@ -1059,10 +1072,13 @@ export function Button({
           (addsNoName(icon) && addsNoName(endContent) ? label : undefined));
   // A tooltip that repeats the name adds nothing to the description, so a
   // screen reader does not read the same words twice.
+  const isTooltipInName = use(ButtonTooltipInNameContext);
   const isTooltipName =
     tooltip != null &&
     accessibleName != null &&
-    tooltip.trim() === accessibleName.trim();
+    (isTooltipInName
+      ? accessibleName.includes(tooltip.trim())
+      : tooltip.trim() === accessibleName.trim());
 
   // When a tooltip is attached via the hook, point aria-describedby at the
   // tooltip content (composing with any consumer-provided value).
