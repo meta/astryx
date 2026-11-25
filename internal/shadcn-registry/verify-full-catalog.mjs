@@ -567,11 +567,12 @@ function writeConsumer(project, items, packageDirs, {tsx}) {
   // pnpm 11 matches file: dependencies by <name>@file:<path relative to consumer>.
   const allowBuilds = {};
   if (packageDirs) {
+    const realProject = fs.realpathSync(project);
     for (const [name, directory] of [...packageDirs.entries()].sort((a, b) =>
       a[0].localeCompare(b[0]),
     )) {
       if (!name.startsWith('@astryxdesign/')) continue;
-      const relDir = path.relative(project, directory).split(path.sep).join('/');
+      const relDir = path.relative(realProject, directory).split(path.sep).join('/');
       allowBuilds[`${name}@file:${relDir}`] = true;
     }
   } else {
