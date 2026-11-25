@@ -1543,10 +1543,10 @@ describe('ListInput', () => {
     const list = within(container);
 
     const remove = list.getByRole('button', {name: 'Remove guest 2'});
-    remove.focus();
+    act(() => remove.focus());
     fireEvent.click(remove);
     const ada = list.getByDisplayValue('Ada');
-    ada.focus();
+    act(() => ada.focus());
 
     act(() => applyLater?.());
     expect(list.queryByDisplayValue('Grace')).toBeNull();
