@@ -250,7 +250,7 @@ entry with every other crossing kept, in the entry build above. A local run
 on another platform or Node version can print gzip sizes a few tenths of a KB
 apart. Rows share modules, so they do not add up. The truncation tooltip's touch code costs Button,
 IconButton, Link, and Table nothing on its own, because another of their
-crossings brings the same module. Table carries 134.5 KB eager.
+crossings brings the same module. Table carries 121.3 KB eager.
 
 ### Must not reach
 
@@ -292,8 +292,6 @@ an allowlist row does.
 - INV1 gap: Table's import reaches the cell context menu, 88.5 KB gzip, for
   cells with no actions, while `component:TableCell` PR1 loads a menu only
   when actions are given.
-- INV7 gap: Table's import reaches the window controller and the shared
-  windowing module, 3.6 KB gzip, for a Table that never windows.
 - INV3 gap: no record says how a tooltip's description reaches assistive
   technology before its surface loads, for the triggers whose tooltip is
   their description.
