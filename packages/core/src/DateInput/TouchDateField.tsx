@@ -82,6 +82,8 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
 import {useLocale} from '../i18n';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {localeTextStyles} from '../utils/textDirection';
 import {useInputGroup} from '../InputGroup';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {joinAriaIDs} from '../utils/inputAria';
@@ -620,6 +622,8 @@ export function TouchDateField({
   const pressable = usePressFeedback();
   const t = useComponentTranslator();
   const locale = useLocale();
+  // A date the locale formats reads in the locale's direction.
+  const textDirection = getLocaleDirection(locale);
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.dateInput.placeholder');
@@ -1418,8 +1422,10 @@ export function TouchDateField({
         aria-haspopup="dialog"
         aria-autocomplete="none"
         autoComplete="off"
+        dir={controlProps.dir ?? textDirection}
         {...stylex.props(
           styles.input,
+          localeTextStyles.pageAlign,
           isEffectivelyDisabled && styles.inputDisabled,
         )}
       />

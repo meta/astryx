@@ -49,7 +49,7 @@ import {assetDataUri, isAssetPath} from './assets.mjs';
 import {NOT_AN_IMAGE, showsImage} from './image-attributes.mjs';
 import {parseSrcset} from './srcset.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed, servedImportTarget} from './served-packages.mjs';
-import {packageResolveHooks} from './package-resolve-hooks.mjs';
+import {noteLinkedFolder, packageLookups, packageResolveHooks} from './package-resolve-hooks.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {sha256} from './source-block.mjs';
@@ -324,6 +324,20 @@ const isLocal = file =>
   !file.includes(NODE_MODULES) && (file === entry || file.startsWith(SCOPE_PREFIX));
 
 /**
+ * A folder the page's own modules live in, or one that holds the page: never
+ * the folder of another package. @param {string} folder with a trailing separator
+ */
+const pageFolder = folder => isLocal(folder) || entry.startsWith(folder);
+
+/**
+ * What the package resolve hook keeps (see package-resolve-hooks.mjs). The
+ * linked packages are noted as linkedPackageRoots reads the links, so imports
+ * inside a linked package resolve by path even when its first file is
+ * imported by its path, not by the package's name.
+ */
+const PACKAGE_LOOKUPS = packageLookups();
+
+/**
  * The real folders of the packages that a `node_modules` folder links to
  * inside the folder whose modules the page carries (`npm link`, a `file:`
  * dependency, a workspace package). Node loads such a package's modules by
@@ -344,8 +358,8 @@ function linkedPackageRoots() {
   const scanned = new Set();
   /** @type {string[]} */
   const found = [];
-  /** @param {string} link */
-  const addIfLinkedIn = link => {
+  /** @param {string} link @param {string} name the package the link is named for */
+  const addIfLinkedIn = (link, name) => {
     let real;
     try {
       if (!fs.lstatSync(link).isSymbolicLink()) return;
@@ -353,6 +367,7 @@ function linkedPackageRoots() {
     } catch {
       return;
     }
+    noteLinkedFolder(name, real, PACKAGE_LOOKUPS, pageFolder);
     const folder = real + path.sep;
     if (isLocal(folder) && !entry.startsWith(folder) && !roots.has(folder)) {
       roots.add(folder);
@@ -375,11 +390,11 @@ function linkedPackageRoots() {
         for (const name of names) {
           const link = path.join(modules, name);
           if (!name.startsWith('@')) {
-            addIfLinkedIn(link);
+            addIfLinkedIn(link, name);
             continue;
           }
           try {
-            for (const scoped of fs.readdirSync(link)) addIfLinkedIn(path.join(link, scoped));
+            for (const scoped of fs.readdirSync(link)) addIfLinkedIn(path.join(link, scoped), `${name}/${scoped}`);
           } catch {
             // A scope that cannot be read holds no package that Node can load.
           }
@@ -1644,12 +1659,16 @@ if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
     data: {parent: pathToFileURL(servedParent.filename).href, names: Object.keys(SINGLE_COPY_ALIASES)},
   });
 }
-// Imports between the files of an installed package resolve by path (a
-// Node without in-thread hooks resolves them itself). The hook answers only
-// relative imports inside a package, and single-copy-hooks.mjs answers only
-// package names, so neither changes what the other resolves.
+// Imports between the files of an installed or a linked package resolve by
+// path (a Node without in-thread hooks resolves them itself). The hook
+// answers relative imports inside a package, and a package name only with
+// the answer the next resolvers, single-copy-hooks.mjs among them, gave from
+// the same folder, so it never changes what single-copy-hooks.mjs resolves.
+// The page's own folders, and a folder that holds the page, are never a
+// linked package's: the page's modules compile as its own.
 const registerHooks = /** @type {any} */ (Module).registerHooks;
-if (typeof registerHooks === 'function') registerHooks(packageResolveHooks());
+if (typeof registerHooks === 'function')
+  registerHooks(packageResolveHooks(PACKAGE_LOOKUPS, {skip: pageFolder}));
 
 /** What the StyleX compiler reads as a theme or constants file, by name. */
 const STYLEX_THEME_FILE = /\.(?:stylex(?:\.const)?|transformed)(?:\.(?:js|ts|tsx|jsx|mjs|cjs))?$/;

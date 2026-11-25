@@ -56,6 +56,7 @@ import {useId, useRef, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {Button} from '../Button';
+import {ButtonTooltipInNameContext} from '../Button/Button';
 import {Icon} from '../Icon';
 import type {IconName, IconColor} from '../Icon';
 import {
@@ -800,23 +801,25 @@ export function Banner({
               />
             )}
             {isDismissable && (
-              <Button
-                variant="ghost"
-                size="sm"
-                label={dismissName}
-                tooltip={dismissTooltip}
-                icon={<Icon icon="close" size="sm" color="inherit" />}
-                onClick={handleDismiss}
-                className={
-                  mergeProps(
-                    themeProps('banner-close'),
-                    hasStatusStyle(status)
-                      ? stylex.props(statusControlStyles[status])
-                      : {},
-                  ).className
-                }
-                isIconOnly
-              />
+              <ButtonTooltipInNameContext value>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  label={dismissName}
+                  tooltip={dismissTooltip}
+                  icon={<Icon icon="close" size="sm" color="inherit" />}
+                  onClick={handleDismiss}
+                  className={
+                    mergeProps(
+                      themeProps('banner-close'),
+                      hasStatusStyle(status)
+                        ? stylex.props(statusControlStyles[status])
+                        : {},
+                    ).className
+                  }
+                  isIconOnly
+                />
+              </ButtonTooltipInNameContext>
             )}
           </div>
         )}

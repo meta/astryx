@@ -14,13 +14,26 @@
  * - /packages/core/src/Table/index.ts (exports)
  */
 
-import {useId, useRef, useMemo, type ReactNode} from 'react';
+import {
+  useCallback,
+  useId,
+  useRef,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../../../theme/tokens.stylex';
 import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
 import {ComponentIcon} from '../../../Icon/ComponentIcon';
 import {resolveContextActions} from '../../tableContextMenu';
+import {createDevWarnings} from '../../../utils/devWarning';
+import {INTERACTIVE_SELECTORS} from '../../../hooks/useClickableContainer';
+import {
+  cutTextDirection,
+  truncatedTextStyles,
+} from '../../../utils/textDirection';
 import type {
   TablePlugin,
   HeaderCellRenderProps,
@@ -227,6 +240,36 @@ function getNextDirection(
 // Sort Header Button Component
 // =============================================================================
 
+/** A control nested in the label: Core's interactive elements, or a positive tab stop. */
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
+const HEADER_CONTROL_SELECTOR = `${INTERACTIVE_SELECTORS},[tabindex]:not([tabindex="-1"])`;
+
+/**
+ * The label cuts its own text, so a plain-text label takes its text's
+ * direction: a Latin label keeps its start on a right-to-left page.
+ */
+function SortLabel({
+  labelRef,
+  children,
+}: {
+  labelRef: (label: HTMLSpanElement | null) => void;
+  children: ReactNode;
+}) {
+  const {dir} = cutTextDirection(children);
+  return (
+    <span
+      ref={labelRef}
+      dir={dir}
+      {...stylex.props(
+        sortStyles.label,
+        dir != null && truncatedTextStyles.pageAlign,
+      )}>
+      {children}
+    </span>
+  );
+}
+
 function SortHeaderButton<T extends Record<string, unknown>>({
   column,
   children,
@@ -253,6 +296,29 @@ function SortHeaderButton<T extends Record<string, unknown>>({
       : direction === 'descending'
         ? 'arrowDown'
         : 'arrowsUpDown';
+
+  // A header that holds its own control nests that control in the Sort
+  // button, which no assistive technology can operate (WCAG 4.1.2). Table has
+  // no place outside the Sort control for a caller's header control, so the
+  // column warns, from the label it first renders.
+  const [warn] = useState(createDevWarnings);
+  const labelRef = useCallback(
+    (label: HTMLSpanElement | null) => {
+      if (
+        process.env.NODE_ENV !== 'production' &&
+        label?.querySelector(HEADER_CONTROL_SELECTOR) != null
+      ) {
+        warn(
+          'useTableSortable',
+          `the header of sortable column "${sortKey}" holds its own control. ` +
+            'Its control nests in the Sort button, which assistive technology ' +
+            'cannot operate; this column cannot hold a header control while it ' +
+            'is sortable.',
+        );
+      }
+    },
+    [warn, sortKey],
+  );
 
   // The button is named by its column's text, so the column header keeps
   // that name; direction lives in the header's aria-sort. Only the multi-sort
@@ -316,7 +382,7 @@ function SortHeaderButton<T extends Record<string, unknown>>({
         )}
         aria-describedby={rank != null ? priorityId : undefined}
         onClick={handleClick}>
-        <span {...stylex.props(sortStyles.label)}>{children}</span>
+        <SortLabel labelRef={labelRef}>{children}</SortLabel>
         <span
           {...stylex.props(
             sortStyles.iconWrapper,

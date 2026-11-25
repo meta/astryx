@@ -5,7 +5,7 @@
  * with the range that reads; the room between items is the gap of the
  * part that holds them; a visited link has no state set can name; a
  * selected tab's underline said with "with"; a date picker's selected
- * date; the joined answer paints the page as its own answer does; a
+ * date; the joined answer sets the page token in each mode; a
  * readable-text line names no empty mode; white text on the header goes
  * to the mode it reads in; a weight word before a size word is a weight;
  * a rung set "instead of" another is one ask. Every line offered is run.
@@ -98,11 +98,70 @@ describe('values and holders', () => {
     ]);
   }, 240_000);
 
-  it('the room between items is the gap of the part that holds them', async () => {
-    const rs = await how('q0', 'list items more spacing between them');
-    expect(writes(rs)).toEqual([]);
-    expect(texts(rs)).toMatch(/the room between list-items is list's gap/);
+  // "More" room between the items, with no amount, is a step up of the
+  // holder's own gap, never the items' padding.
+  it.each([
+    'list items more spacing between them',
+    'a little more space between list items',
+    'more space between list items',
+  ])(
+    "%s steps up the list's gap",
+    async question => {
+      const rs = await how('q0', question);
+      expect(writes(rs)).toEqual(["set q0 gap 'var(--spacing-1)' --on list"]);
+      expect(texts(rs)).toMatch(
+        /the room between list-items is list's gap: --spacing-1 \(0\.25rem\), the next stop up the theme's spacing scale \(now --spacing-0-5, 0\.125rem\)/,
+      );
+    },
+    240_000,
+  );
+  // A gap of 0 takes the scale's first stop.
+  it('a zero gap takes the first stop', async () => {
+    const t = await fresh('g0');
+    await follow([`set ${t} gap 0px --on list`]);
+    const rs = await how(t, 'a little more space between list items');
+    expect(writes(rs)).toEqual([`set ${t} gap 'var(--spacing-0-5)' --on list`]);
   }, 240_000);
+  // The offered line run, the same ask takes the next stop from there.
+  it('asked again after its line runs, the gap takes the next stop', async () => {
+    const t = await fresh('g1');
+    const first = writes(await how(t, 'more space between list items'));
+    expect(first).toEqual([`set ${t} gap 'var(--spacing-1)' --on list`]);
+    await follow(first);
+    const rs = await how(t, 'more space between list items');
+    expect(writes(rs)).toEqual([`set ${t} gap 'var(--spacing-1-5)' --on list`]);
+    expect(texts(rs)).toMatch(/\(now --spacing-1, 0\.25rem\)/);
+  }, 240_000);
+  // The gap's token set on the list itself is the list's own length.
+  it('a gap token set on the list is measured there', async () => {
+    const t = await fresh('g3');
+    await follow([`set ${t} --spacing-0-5 10px --on list`]);
+    const rs = await how(t, 'more space between list items');
+    expect(writes(rs)).toEqual([`set ${t} gap 'var(--spacing-3)' --on list`]);
+    expect(texts(rs)).toMatch(/\(now --spacing-0-5, 10px\)/);
+  }, 240_000);
+  // A gap in em is measured too.
+  it('a gap in em takes the stop past it', async () => {
+    const t = await fresh('g2');
+    await follow([`set ${t} gap 0.5em --on list`]);
+    expect(writes(await how(t, 'more space between list items'))).toEqual([
+      `set ${t} gap 'var(--spacing-3)' --on list`,
+    ]);
+  }, 240_000);
+  // No way, another way, or an exact amount said: still asked for a value.
+  it.each([
+    'space between list items',
+    'less space between list items',
+    'double the space between list items',
+  ])(
+    '%s names the gap for a value',
+    async question => {
+      const rs = await how('q0', question);
+      expect(writes(rs)).toEqual([]);
+      expect(texts(rs)).toMatch(/the room between list-items is list's gap/);
+    },
+    240_000,
+  );
 
   it('a visited link has no state set can name', async () => {
     const rs = await how('q0', 'links purple after visiting');
@@ -127,7 +186,7 @@ describe('values and holders', () => {
 });
 
 describe('the page and its text', () => {
-  it('the joined answer paints the page as its own answer does', async () => {
+  it('the joined answer sets the page token in each mode, the frame left as it is', async () => {
     const t = await fresh('p1');
     const lines = top(
       await how(
@@ -137,11 +196,7 @@ describe('the page and its text', () => {
     );
     expect(lines).toEqual([
       `set ${t} --color-background-body '#191919' --mode dark`,
-      `set ${t} background-color '#191919' --on app-shell --mode dark`,
-      `set ${t} background-color '#191919' --on layout-content --mode dark`,
       `set ${t} --color-background-body '#ffffff' --mode light`,
-      `set ${t} background-color '#ffffff' --on app-shell --mode light`,
-      `set ${t} background-color '#ffffff' --on layout-content --mode light`,
     ]);
     await follow(lines);
   }, 240_000);

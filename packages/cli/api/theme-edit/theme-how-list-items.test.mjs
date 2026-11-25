@@ -200,7 +200,7 @@ describe('corners on some sides', () => {
 
 describe('a rule and a tint', () => {
   it(
-    'a rule with its own verb after a part clause is the theme’s; a tint is the color at a low strength',
+    'a rule with its own verb after a part clause is the theme’s; a tint word fills with a light tint of the color it names',
     async test => {
       needsBases(test);
       const r = await answer(
@@ -208,11 +208,12 @@ describe('a rule and a tint', () => {
       );
       expect(r.first).toContain("--color-text-primary '#1f2937' --mode light");
       expect(r.text).not.toMatch(/nothing changes/);
-      expect(
-        (await answer('selected nav items tinted forest green')).first,
-      ).toEqual([
-        "background-color 'color-mix(in srgb, #228b22 15%, transparent)' --on top-nav-item --state selected",
-      ]);
+      const tinted = (await answer('selected nav items tinted forest green'))
+        .first;
+      expect(tinted).toContain(
+        "background-color '#b7e2b3' --on top-nav-item --state selected --mode light",
+      );
+      expect(tinted.join('\n')).not.toMatch(/color-mix|'#228b22'/);
     },
     T,
   );

@@ -960,6 +960,43 @@ export function readTraits(pic, scale = 1) {
         options: [t.step],
       });
     }
+  // Controls share one height at each size, so the picture's control height
+  // is one token on the controls: the buttons' and the inputs' when they
+  // agree, else the family read from more boxes, with the other family's
+  // height named as a reading not written (written too, the two would
+  // fight over the same token).
+  const heightAt = (/** @type {string} */ on) =>
+    traits.findIndex(t => t.trait === 'height' && t.on === on);
+  const [bi, ii] = [heightAt('button-like'), heightAt('inputs')];
+  if (bi >= 0 || ii >= 0) {
+    const pick = (/** @type {number} */ i) => traits[i];
+    const [b, n] = [bi >= 0 ? pick(bi) : null, ii >= 0 ? pick(ii) : null];
+    const pxOf = (/** @type {any} */ t) => parseFloat(String(t.value));
+    const main =
+      b && n
+        ? Math.abs(pxOf(b) - pxOf(n)) <= 2 ||
+          groups['button-like'].length >= groups.inputs.length
+          ? b
+          : n
+        : (b ?? n);
+    const other = b && n && main === b ? n : b && n ? b : null;
+    const agree = !!other && Math.abs(pxOf(b) - pxOf(n)) <= 2;
+    for (const i of [bi, ii].filter(i => i >= 0).sort((x, y) => y - x))
+      traits.splice(i, 1);
+    const m = /** @type {any} */ (main);
+    traits.push({
+      ...m,
+      on: 'controls',
+      read: agree ? `${m.read}; ${/** @type {any} */ (other).read}` : m.read,
+      step: {...m.step, on: 'controls'},
+    });
+    if (other && !agree)
+      unsure.push({
+        trait: 'height',
+        on: other.on,
+        why: `${other.read} read ${other.value}, where ${m.read} read ${m.value}: controls share one height at each size, so ${m.value} is written for every control`,
+      });
+  }
   unsure.push({trait: 'font', on: 'theme', why: 'the typeface is not read from pictures; set the family you want with the font dial'});
   // The same readings as trait slots per family, for the editor's traits
   // (fill with gradient, edge with bevel, depth): measured looks no setting

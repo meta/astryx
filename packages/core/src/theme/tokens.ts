@@ -22,8 +22,9 @@
  * - /packages/core/src/theme/index.ts
  */
 
-import {tokenDefaults, type DefinedTheme, type TokenName} from './defineTheme';
+import type {DefinedTheme, TokenName} from './defineTheme';
 import {generatedScopedStatusRoleDefaults} from './statusRoleDefaults';
+import {tokenDefaults} from './tokenDefaults';
 import {resolveTokenReferences} from './tokenReferences';
 import {
   evaluateColorFunctions,

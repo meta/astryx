@@ -39,11 +39,14 @@ import {
 import {TableContext} from './TableContext';
 import {use} from 'react';
 import {
+  getWindowFallbackReason,
   isFixedHeightColumn,
   getLogicalPositionExtraVar,
   getLogicalPositionRenderer,
   withLogicalPositionWidths,
 } from './tableColumnAdmission';
+import {cutHeadingStyles} from './table.stylex';
+import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
 import {isRenderable} from '../utils/isRenderable';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import * as stylex from '@stylexjs/stylex';
@@ -94,6 +97,7 @@ import {devError} from '../utils/devWarning';
 import {useDevWarningPerMessage} from '../hooks/useDevWarning';
 import {EmptyState} from '../EmptyState';
 import {Text} from '../Text';
+import {TextMeasureOnInterestContext} from '../Text/textClampContext';
 import {themeProps} from '../utils/themeProps';
 import {
   registerEnglishFallback,
@@ -303,10 +307,14 @@ function TableBodyCell<T extends Record<string, unknown>>({
     typeof rawContent === 'string' &&
     rawContent.length > 0
   ) {
+    // Many cells mount at once, so each measures its truncation on its
+    // first hover, tap or focus, which is when its tooltip can first show.
     content = (
-      <Text type="body" maxLines={1}>
-        {rawContent}
-      </Text>
+      <TextMeasureOnInterestContext value={true}>
+        <Text type="body" maxLines={1}>
+          {rawContent}
+        </Text>
+      </TextMeasureOnInterestContext>
     );
   } else {
     content = rawContent;
@@ -609,6 +617,20 @@ const MemoizedTableRow = memo(TableRowInner, areRowPropsEqual) as <
 // =============================================================================
 
 /**
+ * The development warning's reason for a column that turns row windowing off:
+ * the first-party plugin's own reason, or a caller's renderCell and its remedy.
+ */
+function describeCustomCellFallback<T extends Record<string, unknown>>(
+  column: TableColumn<T>,
+): string {
+  const pluginReason = getWindowFallbackReason(column);
+  if (pluginReason != null) {
+    return `${pluginReason}, so row virtualization is off for this table`;
+  }
+  return `column "${column.key}" has a custom renderCell, which Table cannot check keeps the fixed row height, so row virtualization is off for this table. Columns without renderCell, the selection column and a row-number column that counts from 1 stay windowed; render this column's value without renderCell to window the rows`;
+}
+
+/**
  * Inner BaseTable implementation (generic-preserving).
  */
 function BaseTableInner<T extends Record<string, unknown>>({
@@ -725,7 +747,10 @@ function BaseTableInner<T extends Record<string, unknown>>({
   }, [mode, ScrollWrapper, admission.rowModel, identity, textOverflowProp]);
   // Admission reads the resolved columns: widened row-number columns are new
   // objects that the admission registry does not know.
-  const hasFixedHeightColumns = resolvedColumns.every(isFixedHeightColumn);
+  const customCellColumn = resolvedColumns.find(
+    column => !isFixedHeightColumn(column),
+  );
+  const hasFixedHeightColumns = customCellColumn == null;
   const windowFallbackReason =
     invalidReason ??
     (config == null
@@ -733,8 +758,8 @@ function BaseTableInner<T extends Record<string, unknown>>({
       : (sharedFallbackReason ??
         (rowIndexStart != null || rowCount != null
           ? 'legacy row offsets or counts conflict with windowed metadata'
-          : !hasFixedHeightColumns
-            ? 'a custom cell renderer has no fixed-height admission'
+          : customCellColumn != null
+            ? describeCustomCellFallback(customCellColumn)
             : !Number.isFinite(config.rowHeight) ||
                 config.rowHeight <= 0 ||
                 !Number.isFinite(config.initialViewportHeight) ||
@@ -930,17 +955,32 @@ function BaseTableInner<T extends Record<string, unknown>>({
       // Resolve header content from slots — plugins write to named slots
       // to avoid conflicts (e.g. sort writes `after`, resize writes `overlay`)
       const resolvedContent = cellRenderProps.content ?? headerContent;
+      // A truncating header discloses a cut heading only through its
+      // keyboard-focus tooltip, so it carries no native title, which the
+      // browser shows on hover.
       const headerTitleProp =
-        typeof resolvedContent === 'string' && resolvedContent.length > 0
+        textOverflow !== 'truncate' &&
+        typeof resolvedContent === 'string' &&
+        resolvedContent.length > 0
           ? {title: resolvedContent}
           : {};
       const {before, after, overlay, below} = cellRenderProps;
       const hasSlots =
         before != null || after != null || overlay != null || below != null;
 
+      // The label cuts its own text before the "after" controls, so a
+      // plain-text label takes its text's direction.
+      const labelDirection = cutTextDirection(resolvedContent);
       const labelRow = isRenderable(after) ? (
         <div {...stylex.props(styles.headerLabelRow)}>
-          <span {...stylex.props(styles.headerLabel)}>{resolvedContent}</span>
+          <span
+            {...labelDirection}
+            {...stylex.props(
+              styles.headerLabel,
+              labelDirection.dir != null && truncatedTextStyles.pageAlign,
+            )}>
+            {resolvedContent}
+          </span>
           {after}
         </div>
       ) : (
@@ -957,12 +997,30 @@ function BaseTableInner<T extends Record<string, unknown>>({
       const belowId = `${headerLabelIdBase}-below-${columnIndex}`;
       const hasBelow = isRenderable(below);
 
+      // The resize boundary makes the cell's overflow visible, so the cell
+      // cannot cut the label. A plain-text label with no before or after slot
+      // cuts in its own box.
+      const cutsOwnLabel =
+        textOverflow === 'truncate' &&
+        (typeof resolvedContent === 'string' ||
+          typeof resolvedContent === 'number') &&
+        !isRenderable(before) &&
+        !isRenderable(after);
       const headerInner = !hasSlots ? (
         resolvedContent
       ) : namesOwnHeader ? (
         <>
-          {/* Inline, so the cell's text-overflow still reaches the label. */}
-          <span id={labelId}>
+          <span
+            id={labelId}
+            {...(cutsOwnLabel
+              ? {
+                  ...labelDirection,
+                  ...stylex.props(
+                    cutHeadingStyles.label,
+                    labelDirection.dir != null && truncatedTextStyles.pageAlign,
+                  ),
+                }
+              : null)}>
             {before}
             {labelRow}
           </span>

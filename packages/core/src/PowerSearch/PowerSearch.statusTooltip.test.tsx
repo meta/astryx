@@ -14,13 +14,13 @@ import {render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {PowerSearch} from './PowerSearch';
 import type {PowerSearchConfig} from './types';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // A field in the sheet presentation loads the sheet module on mount, and the
 // load runs past the test that started it. The file loads it before any test
 // runs, so no load is still running when the test environment is torn down.
 await import('./PowerSearchBottomSheet');
 
-const h = {hidden: true} as const;
 const MESSAGE = 'Add at least one filter';
 
 const config: PowerSearchConfig = {
@@ -92,7 +92,7 @@ describe('PowerSearch status icon', () => {
     expect(
       await screen.findAllByRole('button', {name: 'Error details'}),
     ).toHaveLength(1);
-    const tooltip = await screen.findByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent(MESSAGE);
     expect(
       screen.getByRole('combobox').getAttribute('aria-describedby'),
@@ -121,7 +121,7 @@ describe('PowerSearch status icon', () => {
     const trigger = screen.getByRole('button', {name: /Search issues/});
     expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
     const button = await screen.findByRole('button', {name: 'Error details'});
-    const tooltip = await screen.findByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent(MESSAGE);
     const describedBy = (trigger.getAttribute('aria-describedby') ?? '').split(
       ' ',

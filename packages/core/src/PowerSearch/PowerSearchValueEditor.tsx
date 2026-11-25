@@ -60,12 +60,12 @@ import {Selector} from '../Selector';
 import {Tokenizer} from '../Tokenizer/Tokenizer';
 import {Typeahead} from '../Typeahead';
 import {useLocale} from '../i18n';
-import type {TranslatorFn} from '../i18n';
 import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/PowerSearch/PowerSearchValueEditor.generated';
+import {buildRelativeDateOptions} from './relativeDateOptions';
 
 registerEnglishFallback(english);
 
@@ -650,56 +650,6 @@ function DateAbsoluteEditor({
       width={presentation === 'bottom-sheet' ? '100%' : undefined}
     />
   );
-}
-
-const RELATIVE_DATE_UNITS = [
-  {
-    unit: 'day',
-    amounts: [1, 3, 7, 14, 30],
-    ago: '@astryx.powersearch.sheet.relativeDaysAgo',
-    fromNow: '@astryx.powersearch.sheet.relativeDaysFromNow',
-  },
-  {
-    unit: 'week',
-    amounts: [1, 2, 4],
-    ago: '@astryx.powersearch.sheet.relativeWeeksAgo',
-    fromNow: '@astryx.powersearch.sheet.relativeWeeksFromNow',
-  },
-  {
-    unit: 'month',
-    amounts: [1, 3, 6, 12],
-    ago: '@astryx.powersearch.sheet.relativeMonthsAgo',
-    fromNow: '@astryx.powersearch.sheet.relativeMonthsFromNow',
-  },
-] as const;
-
-/**
- * The relative-date choices an operator offers, in display order. Shared by
- * the popover's Selector and the sheet presentation's rows so both list the
- * same values. The labels are the catalog's ICU plural messages.
- */
-export function buildRelativeDateOptions(
-  operatorValue: OperatorValue & {type: 'date_relative'},
-  t: TranslatorFn,
-): {value: string; label: string}[] {
-  const result: {value: string; label: string}[] = [];
-  for (const {unit, amounts, ago, fromNow} of RELATIVE_DATE_UNITS) {
-    for (const amount of amounts) {
-      if (operatorValue.isPastAllowed !== false) {
-        result.push({
-          value: `${amount}${unit[0]}_ago`,
-          label: t(ago, {count: amount}),
-        });
-      }
-      if (operatorValue.isFutureAllowed !== false) {
-        result.push({
-          value: `${amount}${unit[0]}_from_now`,
-          label: t(fromNow, {count: amount}),
-        });
-      }
-    }
-  }
-  return result;
 }
 
 function DateRelativeEditor({

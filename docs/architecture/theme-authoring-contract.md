@@ -12,6 +12,7 @@ owners: [cixzhang, imdreamrunner]
 applies_to:
   [
     packages/core/src/theme/defineTheme.ts,
+    packages/core/src/theme/breakpoints.ts,
     packages/core/src/theme/themeAdaptations.ts,
     packages/core/src/theme/syntax/defineSyntaxTheme.ts,
     packages/core/src/theme/expandColorScale.ts,
@@ -304,8 +305,12 @@ public surface belongs to
   touches no DOM and has no import-time side effects (`spec:AST-108` FR6).
 - `packages/core/src/theme/defineTheme.ts` owns the public input, normalized IR,
   orchestration, and extension behavior.
-- `themeAdaptations.ts` owns the fixed breakpoint/condition vocabulary,
-  validation, inherited rule ordering, axis completion, and concrete rule writes.
+- `breakpoints.ts` owns the fixed breakpoint vocabulary: the width breakpoint
+  names and defaults, the media features and the StyleX key that spell a size
+  edge, and the compact definition (`spec:AST-012` FR9). It imports nothing.
+- `themeAdaptations.ts` owns the fixed condition vocabulary, validation,
+  inherited rule ordering, axis completion, and concrete rule writes. It
+  re-exports the breakpoint vocabulary.
 - `syntax/defineSyntaxTheme.ts` constructs syntax themes before `defineTheme`
   adopts their tokens.
 - `expandColorScale.ts`, `expandTypeScale.ts`, `expandRadiusScale.ts`, and

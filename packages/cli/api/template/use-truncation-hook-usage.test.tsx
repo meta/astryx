@@ -69,8 +69,11 @@ describe('useTruncationHookUsage example', () => {
 
     await act(async () => {});
 
-    // In the DOM, cells containing paths render span elements with truncation refs
-    const spans = Array.from(container.querySelectorAll('td span'));
+    // In the DOM, cells containing paths render span elements with truncation
+    // refs. A tooltip's hidden description copy is not one of them.
+    const spans = Array.from(
+      container.querySelectorAll('td span:not([hidden][id$="-description"])'),
+    );
     expect(spans.length).toBe(3);
   });
 });
