@@ -617,7 +617,12 @@ test.describe('under a finger', () => {
 
   test('with Reduce Motion a drop whose release reaches the page late lands the rows at once, never blank', async ({
     page,
+    browserName,
   }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'the release time stamp is set through Chromium CDP',
+    );
     await page.emulateMedia({reducedMotion: 'reduce'});
     const before = await settledTops(page);
     const {at, rowHeight} = await handleOf(page, 'Inbox');
