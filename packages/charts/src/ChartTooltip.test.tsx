@@ -453,6 +453,7 @@ describe('ChartTooltip series without a value key', () => {
   function renderAlone(makeKeyless: () => SeriesDef, renderFn?: Mock) {
     const keyless = makeKeyless();
     keyless._uid = `0:${keyless.key}`;
+    // Inject hover points directly to test row derivation; streamGL.resolve() returns [].
     const harness = makeHarness({
       resolved: new Map([[keyless._uid, SALES_POINTS]]),
     });
