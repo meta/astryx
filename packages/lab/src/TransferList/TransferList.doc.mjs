@@ -157,9 +157,10 @@ export const docs = {
       default: "'No available options'",
     },
     {
-      name: 'noResultsText',
-      type: 'string',
-      description: 'Message shown when search has no matches in a list.',
+      name: 'emptySearchText',
+      type: 'ReactNode',
+      description:
+        'Shown in a list while the search matches none of its options. An element can carry a link or an action.',
       default: "'No results'",
     },
     {
@@ -380,9 +381,10 @@ export const docs = {
           default: "'No available options'",
         },
         {
-          name: 'noResultsText',
-          type: 'string',
-          description: 'Message shown when search has no matches in a list.',
+          name: 'emptySearchText',
+          type: 'ReactNode',
+          description:
+            'Shown in a list while the search matches none of its options. An element can carry a link or an action.',
           default: "'No results'",
         },
         {
@@ -758,7 +760,7 @@ export const docsDense = {
     renderOption: 'Custom row content.',
     selectedEmptyText: 'Selected-list empty message.',
     availableEmptyText: 'Available-list empty message.',
-    noResultsText: 'No search matches message.',
+    emptySearchText: 'No search matches content (ReactNode).',
     applyLabel: 'Staged Apply label; default Apply.',
     cancelLabel: 'Staged Cancel label; default Cancel.',
     size: 'Field and trigger size.',
@@ -807,7 +809,7 @@ export const docsDense = {
         renderOption: 'Custom row content.',
         selectedEmptyText: 'Selected-list empty message.',
         availableEmptyText: 'Available-list empty message.',
-        noResultsText: 'No search matches message.',
+        emptySearchText: 'No search matches content (ReactNode).',
         xstyle: 'TransferList-root StyleX override.',
       },
     },

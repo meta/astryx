@@ -744,6 +744,26 @@ describe('TransferListSelector', () => {
   });
 });
 
+describe('TransferListSelector search', () => {
+  it('shows emptySearchText in each list the search empties', async () => {
+    const user = userEvent.setup();
+    render(
+      <TransferListSelector
+        label="Visible fields"
+        options={OPTIONS}
+        value={['name']}
+        onChange={() => {}}
+        hasSearch
+        emptySearchText="No column matches"
+      />,
+    );
+    await openSelector();
+
+    await user.type(screen.getByRole('searchbox', hidden), 'zzz');
+    expect(screen.getAllByText('No column matches')).toHaveLength(2);
+  });
+});
+
 describe('TransferListSelector draft reset timing', () => {
   it('replaces a staged draft in the same commit as an external value change', async () => {
     const user = userEvent.setup();

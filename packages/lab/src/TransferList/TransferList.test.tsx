@@ -518,7 +518,7 @@ describe('TransferList', () => {
           hasSearch
           searchLabel="Filter columns"
           searchPlaceholder="Find a column"
-          noResultsText="No matching columns"
+          emptySearchText="No matching columns"
         />,
       );
 
@@ -531,6 +531,27 @@ describe('TransferList', () => {
       expect(screen.getAllByText('No matching columns').length).toBeGreaterThan(
         0,
       );
+    });
+
+    it('shows an element given as emptySearchText in each panel the search empties', async () => {
+      const user = userEvent.setup();
+      render(
+        <ControlledTransferList
+          initialValue={['name']}
+          hasSearch
+          emptySearchText={
+            <>
+              No matching columns. <button type="button">Add a column</button>
+            </>
+          }
+        />,
+      );
+
+      await user.type(screen.getByRole('searchbox'), 'zzz');
+      expect(
+        screen.getAllByRole('button', {name: 'Add a column'}),
+      ).toHaveLength(2);
+      expect(screen.getAllByText(/No matching columns\./)).toHaveLength(2);
     });
 
     it('disables search by default, and shows a reorder handle with reorderable', () => {

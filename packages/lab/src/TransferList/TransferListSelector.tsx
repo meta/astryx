@@ -119,7 +119,7 @@ type TransferListContentProp =
   | 'renderOption'
   | 'selectedEmptyText'
   | 'availableEmptyText'
-  | 'noResultsText';
+  | 'emptySearchText';
 
 export type TransferListSelectorCommitBehavior = 'immediate' | 'staged';
 
@@ -232,7 +232,7 @@ export function TransferListSelector<T extends string = string>({
   renderOption,
   selectedEmptyText,
   availableEmptyText,
-  noResultsText,
+  emptySearchText,
   ...selectorProps
 }: TransferListSelectorProps<T>): ReactNode {
   const t = useTranslator();
@@ -360,7 +360,7 @@ export function TransferListSelector<T extends string = string>({
                   renderOption={renderOption}
                   selectedEmptyText={selectedEmptyText}
                   availableEmptyText={availableEmptyText}
-                  noResultsText={noResultsText}
+                  emptySearchText={emptySearchText}
                 />
               </TransferListBusyContext>
             </fieldset>

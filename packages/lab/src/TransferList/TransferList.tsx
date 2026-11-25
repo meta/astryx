@@ -155,8 +155,11 @@ export interface TransferListProps<T extends string = string> extends Omit<
   selectedEmptyText?: string;
   /** Empty copy for the available panel. */
   availableEmptyText?: string;
-  /** Empty copy while a search query is active. */
-  noResultsText?: string;
+  /**
+   * Shown in a panel while a search matches none of its options. An element
+   * can carry a link or an action. @default 'No results'
+   */
+  emptySearchText?: ReactNode;
 }
 
 // Core List's handle is its grip alone. It stays clear of its row's edge by
@@ -475,7 +478,7 @@ export function TransferList<T extends string = string>({
   renderOption,
   selectedEmptyText: selectedEmptyTextFromProps,
   availableEmptyText: availableEmptyTextFromProps,
-  noResultsText: noResultsTextFromProps,
+  emptySearchText: emptySearchTextFromProps,
   xstyle,
   className,
   style,
@@ -496,8 +499,8 @@ export function TransferList<T extends string = string>({
     selectedEmptyTextFromProps ?? t('@astryx.transferList.selectedEmpty');
   const availableEmptyText =
     availableEmptyTextFromProps ?? t('@astryx.transferList.availableEmpty');
-  const noResultsText =
-    noResultsTextFromProps ?? t('@astryx.transferList.noResults');
+  const emptySearchText =
+    emptySearchTextFromProps ?? t('@astryx.transferList.noResults');
   const labelId = useId();
   const descriptionId = useId();
   const selectedHeadingId = useId();
@@ -1018,7 +1021,7 @@ export function TransferList<T extends string = string>({
                 data-transfer-list-empty="selected"
                 {...stylex.props(styles.empty)}>
                 <Text type="supporting" color="secondary">
-                  {normalizedQuery === '' ? selectedEmptyText : noResultsText}
+                  {normalizedQuery === '' ? selectedEmptyText : emptySearchText}
                 </Text>
               </div>
             )}
@@ -1089,7 +1092,9 @@ export function TransferList<T extends string = string>({
                 data-transfer-list-empty="available"
                 {...stylex.props(styles.empty)}>
                 <Text type="supporting" color="secondary">
-                  {normalizedQuery === '' ? availableEmptyText : noResultsText}
+                  {normalizedQuery === ''
+                    ? availableEmptyText
+                    : emptySearchText}
                 </Text>
               </div>
             )}
