@@ -3,8 +3,9 @@
 /**
  * @file useScrollOverflow.test.tsx
  * @input Uses vitest, @testing-library/react, useScrollOverflow
- * @output Unit tests for the hook's measurement, what it observes (the
- *   container's scroll and size, and its content), and its rendered-only gate
+ * @output Unit tests for the hook's measurement, its first one after layout,
+ *   what it observes (the container's scroll and size, and its content), and
+ *   its rendered-only gate
  * @position Testing; jsdom lays nothing out, so the scroll box is faked and
  *   `checkVisibility` is stubbed per element.
  */
@@ -12,10 +13,11 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, renderHook} from '@testing-library/react';
 import {useScrollOverflow, useShownScrollOverflow} from './useScrollOverflow';
+import {observeResize} from '../utils/sharedResizeObserver';
 
 // jsdom has no ResizeObserver. This one hands the test the shared observer's
-// callback so a resize can be delivered on demand; the registration-time
-// measurement comes from `observeResize` itself.
+// callback so a resize can be delivered on demand. It sends no notification of
+// its own: a test delivers the first one, as a browser does after layout.
 let deliverResize: ((entries: ResizeObserverEntry[]) => void) | null = null;
 
 class FakeResizeObserver implements ResizeObserver {
@@ -67,6 +69,16 @@ function stubRendered(el: HTMLElement, rendered: boolean | undefined) {
   });
 }
 
+/**
+ * The notification a browser sends after it lays `el` out. Its result
+ * commits in a microtask, which the browser runs before it paints.
+ */
+async function layOut(el: HTMLElement) {
+  await act(async () => {
+    deliverResize?.([resizeEntry(el)]);
+  });
+}
+
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', FakeResizeObserver);
 });
@@ -79,9 +91,114 @@ afterEach(() => {
 });
 
 describe('useScrollOverflow', () => {
-  it('measures a rendered container when the ref attaches', () => {
+  it('reads no layout or style when the ref attaches, and measures at the first resize notification', async () => {
+    const el = document.createElement('div');
+    el.append(document.createElement('div'), document.createElement('div'));
+    const reads = fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+    const checkVisibility = vi.fn(() => true);
+    Object.defineProperty(el, 'checkVisibility', {
+      configurable: true,
+      value: checkVisibility,
+    });
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+
+    // The ref attaches in React's commit.
+    act(() => {
+      result.current.scrollRef(el);
+    });
+    expect(checkVisibility).not.toHaveBeenCalled();
+    expect(totalReads(reads)).toBe(0);
+    expect(result.current.hasOverflow).toBe(false);
+
+    // The browser lays the container out, then notifies: the read happens
+    // there.
+    await layOut(el);
+    expect(result.current.hasOverflow).toBe(true);
+    expect(result.current.overflowStart).toBe(false);
+    expect(result.current.overflowEnd).toBe(true);
+    expect(totalReads(reads)).toBeGreaterThan(0);
+    unmount();
+  });
+
+  it('measures and commits in a microtask after the first delivery: before the frame paints, at the offset that delivery leaves', async () => {
+    const el = document.createElement('div');
+    const child = document.createElement('div');
+    el.append(child);
+    const reads = fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+    stubRendered(el, true);
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+    act(() => {
+      result.current.scrollRef(el);
+    });
+
+    let readsInDelivery = -1;
+    let afterMicrotask: unknown = null;
+    await act(async () => {
+      // One delivery reports the container and its child.
+      deliverResize?.([resizeEntry(el), resizeEntry(child)]);
+      readsInDelivery = totalReads(reads);
+      // A later callback of the same delivery scrolls the container, as
+      // TabList's reveal of its selected tab does.
+      fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300, scrollLeft: 300});
+      await Promise.resolve();
+      // No frame and no timer has run: only the microtask.
+      afterMicrotask = {
+        start: result.current.overflowStart,
+        end: result.current.overflowEnd,
+      };
+    });
+
+    expect(readsInDelivery).toBe(0);
+    // The edges of the scrolled offset, committed before the frame paints.
+    expect(afterMicrotask).toEqual({start: true, end: false});
+    unmount();
+  });
+
+  it('measures nothing after it detaches before that microtask', async () => {
     const el = document.createElement('div');
     const reads = fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+    stubRendered(el, true);
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+    act(() => {
+      result.current.scrollRef(el);
+    });
+
+    await act(async () => {
+      deliverResize?.([resizeEntry(el)]);
+      result.current.scrollRef(null);
+    });
+
+    expect(totalReads(reads)).toBe(0);
+    expect(result.current.hasOverflow).toBe(false);
+    unmount();
+  });
+
+  it('reads nothing for a child that another observer already watches', async () => {
+    const el = document.createElement('div');
+    const child = document.createElement('div');
+    el.append(child);
+    const reads = fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+    stubRendered(el, true);
+    // An element that is already observed gets no first notification.
+    const stopWatching = observeResize(child, () => {});
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+
+    await act(async () => {
+      result.current.scrollRef(el);
+    });
+    expect(totalReads(reads)).toBe(0);
+
+    await layOut(el);
+    expect(result.current.hasOverflow).toBe(true);
+    unmount();
+    stopWatching();
+  });
+
+  it('measures at once where no ResizeObserver exists', () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    const el = document.createElement('div');
+    el.append(document.createElement('div'));
+    fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
     stubRendered(el, true);
     const {result, unmount} = renderHook(() => useScrollOverflow());
 
@@ -90,9 +207,7 @@ describe('useScrollOverflow', () => {
     });
 
     expect(result.current.hasOverflow).toBe(true);
-    expect(result.current.overflowStart).toBe(false);
     expect(result.current.overflowEnd).toBe(true);
-    expect(totalReads(reads)).toBeGreaterThan(0);
     unmount();
   });
 
@@ -118,7 +233,7 @@ describe('useScrollOverflow', () => {
     unmount();
   });
 
-  it('keeps the last state while hidden and measures again on the reveal', () => {
+  it('keeps the last state while hidden and measures again on the reveal', async () => {
     const el = document.createElement('div');
     const reads = fakeScrollBox(el, {
       scrollWidth: 600,
@@ -131,6 +246,7 @@ describe('useScrollOverflow', () => {
     act(() => {
       result.current.scrollRef(el);
     });
+    await layOut(el);
     expect(result.current.overflowStart).toBe(true);
     expect(result.current.overflowEnd).toBe(true);
 
@@ -156,7 +272,7 @@ describe('useScrollOverflow', () => {
     unmount();
   });
 
-  it('measures a scroll while hidden, so a reveal at the same size is already right', () => {
+  it('measures a scroll while hidden, so a reveal at the same size is already right', async () => {
     const el = document.createElement('div');
     fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
     stubRendered(el, true);
@@ -165,6 +281,7 @@ describe('useScrollOverflow', () => {
     act(() => {
       result.current.scrollRef(el);
     });
+    await layOut(el);
     expect(result.current.overflowStart).toBe(false);
     expect(result.current.overflowEnd).toBe(true);
 
@@ -191,7 +308,7 @@ describe('useScrollOverflow', () => {
     unmount();
   });
 
-  it('measures in a browser without checkVisibility', () => {
+  it('measures in a browser without checkVisibility', async () => {
     const el = document.createElement('div');
     const reads = fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
     stubRendered(el, undefined);
@@ -200,6 +317,7 @@ describe('useScrollOverflow', () => {
     act(() => {
       result.current.scrollRef(el);
     });
+    await layOut(el);
 
     expect(result.current.hasOverflow).toBe(true);
     expect(totalReads(reads)).toBeGreaterThan(0);
@@ -334,7 +452,7 @@ describe('useScrollOverflow', () => {
 });
 
 describe('useShownScrollOverflow', () => {
-  function attach() {
+  async function attach() {
     const el = document.createElement('div');
     fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
     stubRendered(el, true);
@@ -342,6 +460,7 @@ describe('useShownScrollOverflow', () => {
     act(() => {
       hook.result.current.scrollRef(el);
     });
+    await layOut(el);
     return {el, ...hook};
   }
 
@@ -353,8 +472,8 @@ describe('useShownScrollOverflow', () => {
         }),
     );
 
-  it('measures the edges from a reported position while the scroll offset stays put', () => {
-    const {result, unmount} = attach();
+  it('measures the edges from a reported position while the scroll offset stays put', async () => {
+    const {result, unmount} = await attach();
     expect([result.current.overflowStart, result.current.overflowEnd]).toEqual([
       false,
       true,
@@ -372,8 +491,18 @@ describe('useShownScrollOverflow', () => {
     unmount();
   });
 
-  it('commits an edge change in the report itself, so a held row changes the buttons in its frame', () => {
-    const {result, unmount} = attach();
+  it('marks the edges that the first measurement set, and no later edges', async () => {
+    const {result, unmount} = await attach();
+    expect(result.current.overflowEnd).toBe(true);
+    expect(result.current.isFirstMeasurement).toBe(true);
+    act(() => result.current.followShown({offset: 150, travel: 300}));
+    expect(result.current.overflowStart).toBe(true);
+    expect(result.current.isFirstMeasurement).toBe(false);
+    unmount();
+  });
+
+  it('commits an edge change in the report itself, so a held row changes the buttons in its frame', async () => {
+    const {result, unmount} = await attach();
     act(() => {
       result.current.followShown({offset: 150, travel: 300});
       // Rendered before the report returns, not when the batch ends.
@@ -403,7 +532,7 @@ describe('useShownScrollOverflow', () => {
   });
 
   it('keeps the reported edges for one frame after null, then measures the scroll offset', async () => {
-    const {el, result, unmount} = attach();
+    const {el, result, unmount} = await attach();
     act(() => result.current.followShown({offset: 300, travel: 300}));
     act(() => result.current.followShown(null));
     expect(result.current.overflowEnd).toBe(false);
@@ -417,9 +546,9 @@ describe('useShownScrollOverflow', () => {
     unmount();
   });
 
-  it('leaves no frame running when the container detaches or the hook unmounts', () => {
+  it('leaves no frame running when the container detaches or the hook unmounts', async () => {
     const cancel = vi.spyOn(window, 'cancelAnimationFrame');
-    const {result, unmount} = attach();
+    const {result, unmount} = await attach();
     act(() => result.current.followShown({offset: 300, travel: 300}));
     act(() => result.current.followShown(null));
     const calls = cancel.mock.calls.length;

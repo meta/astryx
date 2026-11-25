@@ -29,9 +29,11 @@ import {
   countBetween,
   frames,
   freezeTimers,
+  holdAnimations,
   installTimerGate,
   openStory,
   releaseAnimations,
+  seekAnimations,
   startBusyControl,
   startScreencast,
   thawTimers,
@@ -1307,6 +1309,35 @@ test.describe('under a finger', () => {
       expect(Number(last?.opacity)).toBeLessThan(0.01);
     },
   );
+
+  test('a tap on Cancel once a held entrance rests closes the alert', async ({
+    page,
+  }) => {
+    const {driver, trigger, dialog} = await openPage(page);
+    const entrance = await themeTiming(page, ENTRANCE);
+    await installTimerGate(page);
+    await driver.tap(await centerOf(trigger));
+    await waitForAnimation(dialog);
+    // A storyboard holds the entrance and seeks it while the page's timers
+    // wait. Here it stops 1 ms before the end of its curve, and the timers
+    // wait past that end.
+    await freezeTimers(page);
+    await holdAnimations(page, dialog, {
+      judges: {target: dialog, property: 'opacity'},
+    });
+    await seekAnimations(page, entrance.ms - 1);
+    await page.waitForTimeout(entrance.ms);
+    // The timers that end the entrance's input hold run while the entrance is
+    // still held, so they look again later. The entrance then rests before
+    // the hold ends.
+    await thawTimers(page);
+    await releaseAnimations(page);
+    await waitForRest(dialog);
+    await driver.tap(
+      await centerOf(dialog.getByRole('button', {name: 'Cancel'})),
+    );
+    await expect(dialog).toBeHidden();
+  });
 });
 
 /**

@@ -17,7 +17,7 @@ import {VStack} from '@astryxdesign/core/Layout';
 import {Link} from '@astryxdesign/core/Link';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
-import type {BlogPost} from '../../lib/blog/schema';
+import type {BlogPostMeta} from '../../lib/blog/schema';
 import {AuthorByline} from './AuthorByline';
 import {BlogCoverArt} from './BlogCoverArt';
 import {ReleaseCoverArt} from './ReleaseCoverArt';
@@ -76,7 +76,7 @@ export function BlogFeatureCard({
   hideDescription = false,
   coverSizes,
 }: {
-  post: BlogPost;
+  post: BlogPostMeta;
   hideDescription?: boolean;
   /**
    * How wide the card's layout draws the cover, as an `<img>` `sizes` value.

@@ -1381,6 +1381,14 @@ describe('Timestamp', () => {
       );
     });
 
+    it("names the copy button 'Copy <value>' once: its 'Copy' tooltip adds no description", async () => {
+      render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
+      const card = await openTimestampHoverCard();
+      const button = card.querySelector('button')!;
+      expect(button.getAttribute('aria-label')).toMatch(/^Copy /);
+      expect(button).toHaveAccessibleDescription('');
+    });
+
     describe('copy icon slot', () => {
       // Label each shared icon's artwork, so a test reads which name rendered.
       const icons = {

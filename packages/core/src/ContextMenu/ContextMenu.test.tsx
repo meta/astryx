@@ -293,6 +293,42 @@ describe('ContextMenu', () => {
     expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {pageDir: 'rtl', menuDir: 'ltr', isFlipped: false},
+    {pageDir: 'ltr', menuDir: 'rtl', isFlipped: true},
+  ] as const)(
+    'points the sheet Back chevron by the menu direction, not the page (page $pageDir, menu $menuDir)',
+    async ({pageDir, menuDir, isFlipped}) => {
+      const user = userEvent.setup();
+      render(
+        <div dir={pageDir}>
+          <div dir={menuDir}>
+            <ContextMenu
+              presentation="bottom-sheet"
+              label="Row actions"
+              items={[
+                {label: 'Move to project', items: [{label: 'Apollo launch'}]},
+              ]}>
+              <div>Right-click me</div>
+            </ContextMenu>
+          </div>
+        </div>,
+      );
+
+      fireEvent.contextMenu(screen.getByText('Right-click me'));
+      await user.click(
+        await screen.findByRole('button', {name: /Move to project/}),
+      );
+      const backIcon = screen
+        .getByRole('button', {name: 'Back'})
+        .querySelector('.astryx-icon');
+      expect(backIcon).not.toBeNull();
+      expect(
+        getComputedStyle(backIcon as Element).transform === 'scaleX(-1)',
+      ).toBe(isFlipped);
+    },
+  );
+
   it('names the sheet after a node-label submenu while its level shows', async () => {
     const user = userEvent.setup();
 

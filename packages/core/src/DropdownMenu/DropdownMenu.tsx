@@ -117,7 +117,8 @@ import {
   durationVars,
   easeVars,
 } from '../theme/tokens.stylex';
-import {isRenderable, mergeProps, rtlStyles} from '../utils';
+import {isRenderable, mergeProps} from '../utils';
+import {menuDirectionMirror} from './menuDirectionMirror.stylex';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -890,7 +891,7 @@ function DropdownMenuBottomSheet({
                   <Icon
                     icon="chevronLeft"
                     size="sm"
-                    xstyle={rtlStyles.mirror}
+                    xstyle={menuDirectionMirror.mirror}
                   />
                 }
                 isIconOnly
