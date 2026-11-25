@@ -253,8 +253,16 @@ test.describe('a mouse drop that moves the first record', () => {
     // The other records stay still during the drag: these are their shown
     // places just before the drop.
     const shown = await fieldTops();
+    // The glide starts at the drop and runs on the page's animation clock.
+    // The clock stands still from just before the release until the tops are
+    // read, so the read sees the glide's first frame however slowly the test
+    // runs.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Animation.enable');
+    await cdp.send('Animation.setPlaybackRate', {playbackRate: 0});
     await page.mouse.up();
     const landed = await fieldTops();
+    await cdp.send('Animation.setPlaybackRate', {playbackRate: 1});
     const after = await order();
     expect(after[0]).toBe(before[1]);
     // The record that became first gained the column labels, and its fields
