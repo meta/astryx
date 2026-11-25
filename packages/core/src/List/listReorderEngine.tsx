@@ -122,6 +122,7 @@ import {
   markReorderSource,
 } from '../privateAttributes/reorderSource.stylex';
 import {markReorderPreview} from '../privateAttributes/reorderPreview.stylex';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {
   hideReorderLine,
   showReorderLine,
@@ -594,6 +595,8 @@ interface PendingDrop {
    */
   readonly velocity: number;
   readonly restore: RowRestore;
+  /** The release's time, when the gesture reported one. */
+  readonly releasedAt: number | undefined;
 }
 
 /** A reorder mode move, reported and waiting for its commit. */
@@ -684,6 +687,8 @@ export interface ReorderGestureEvent {
    * dropped row's glide starts at.
    */
   readonly velocity?: number;
+  /** At a release, its event's time on the `performance.now()` clock. */
+  readonly time?: number;
 }
 
 /** A long press's state as a reorder gesture's; null while it waits. */
@@ -1296,6 +1301,7 @@ export class ListReorderController implements ListReorderSession {
             state: 'ended',
             y: up.clientY,
             velocity: velocity.velocity(up.timeStamp).y,
+            time: up.timeStamp,
           });
         }
       };
@@ -1365,6 +1371,7 @@ export class ListReorderController implements ListReorderSession {
               state === 'ended' && touch != null
                 ? velocity.velocity(touch.time).y
                 : undefined,
+            time: state === 'ended' ? touch?.time : undefined,
           });
         }
       },
@@ -1386,7 +1393,7 @@ export class ListReorderController implements ListReorderSession {
         this.track(event.y);
         break;
       case 'ended':
-        this.drop(event.velocity ?? 0);
+        this.drop(event.velocity ?? 0, event.time);
         break;
       case 'cancelled':
         this.cancel();
@@ -1777,7 +1784,7 @@ export class ListReorderController implements ListReorderSession {
    * The drop: the move is reported, and on its commit the row glides into
    * its place, starting at the release's y `velocity` in px/s.
    */
-  private drop(velocity: number): void {
+  private drop(velocity: number, releasedAt?: number): void {
     const session = this.session;
     if (session == null) {
       return;
@@ -1824,6 +1831,7 @@ export class ListReorderController implements ListReorderSession {
       droppedTop,
       velocity,
       restore: session.restore,
+      releasedAt,
     };
     options.onReorder({key, to: position});
     // A consumer that does not apply the move by the end of the task gets
@@ -2058,7 +2066,13 @@ export class ListReorderController implements ListReorderSession {
 
   private rebase(pending: PendingDrop): void {
     const {list} = pending;
-    const at = motionNow();
+    // Under Reduce Motion the drop's cross-fade is timed from the release, so
+    // it ends within its 200 ms of the release however late the commit runs.
+    // Nothing travels there, so the rows read the same at the release as now.
+    const at =
+      pending.releasedAt != null && reducesMotion(list)
+        ? Math.min(pending.releasedAt, motionNow())
+        : motionNow();
     // Every read comes before the first write, so the drop lays out once.
     const rows = pending.rows.map((element, index) => {
       if (!this.rows.holds(element, list)) {

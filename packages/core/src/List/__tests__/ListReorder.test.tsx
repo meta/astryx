@@ -1833,6 +1833,52 @@ describe('List reorderable', () => {
     }
   });
 
+  it.each([
+    ['a fine', false],
+    ['a coarse', true],
+  ])(
+    'under Reduce Motion with %s primary pointer, times the drop from the release, so it ends within its 200 ms of the release',
+    (_, coarse) => {
+      stubPrimaryPointer(coarse);
+      document.body.setAttribute('data-astryx-reduced-motion', '');
+      // The commit runs 40 ms after the release.
+      let clock = 1000;
+      const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      const glide = vi.spyOn(touchMotion, 'glide');
+      const follow = vi.spyOn(touchMotion, 'follow');
+      try {
+        render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+        const list = screen.getByRole('list');
+        layOut(list);
+        const handle = handleOf('A');
+        mouseDrag(handle, 322, 322 + 70);
+        const up = new PointerEvent('pointerup', {
+          ...MOUSE,
+          clientY: 322 + 70,
+          bubbles: true,
+        });
+        const releasedAt = up.timeStamp;
+        clock = releasedAt + 40;
+        act(() => {
+          handle.dispatchEvent(up);
+        });
+        expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+        const starts = [...glide.mock.calls, ...follow.mock.calls].map(
+          call => call[3],
+        );
+        expect(starts.length).toBeGreaterThan(0);
+        for (const start of starts) {
+          expect(start).toBe(releasedAt);
+        }
+      } finally {
+        glide.mockRestore();
+        follow.mockRestore();
+        now.mockRestore();
+        document.body.removeAttribute('data-astryx-reduced-motion');
+      }
+    },
+  );
+
   it("reads a key move's glide spring once, however many rows slide", async () => {
     stubPrimaryPointer(true);
     const follow = vi.spyOn(touchMotion, 'follow');
