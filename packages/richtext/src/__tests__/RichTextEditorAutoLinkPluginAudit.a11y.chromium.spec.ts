@@ -27,7 +27,9 @@ import {
 } from '@astryxdesign/a11y-spec/storybook';
 import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 
-const EVIDENCE = path.resolve('test-results/richtext-autolink-audit-evidence');
+const EVIDENCE = path.resolve(
+  'test-results/rich-text-editor-auto-link-plugin-audit-evidence',
+);
 const STORY = 'richtext-richtexteditor--with-auto-link';
 const NEW_TAB = {target: '_blank', rel: 'noopener noreferrer'};
 
