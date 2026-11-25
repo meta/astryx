@@ -46,7 +46,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import {useCommittedRefInto} from '../hooks/useCommittedRef';
-import {readAccessibleName} from '../utils/accessibleName';
+import {labelledByText, readAccessibleName} from '../utils/accessibleName';
 import * as stylex from '@stylexjs/stylex';
 import {usePopoverInternal} from '../Popover/usePopover';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
@@ -394,7 +394,11 @@ export type DropdownMenuPresentation = AdaptivePresentation;
 export interface DropdownMenuTriggerProps {
   /** Attaches the control as the menu's anchor and focus-return target. */
   ref: (element: HTMLElement | null) => void;
-  /** The menu points at this id with `aria-labelledby`. */
+  /**
+   * The menu points at this id with `aria-labelledby`. When the trigger names
+   * itself by its own `aria-labelledby` and those ids resolve to text, the
+   * menu points at those ids instead.
+   */
   id: string;
   onClick: (event: React.MouseEvent<HTMLElement>) => void;
   onClickCapture: (event: React.MouseEvent<HTMLElement>) => void;
@@ -572,15 +576,22 @@ function holdInvokerThroughPress(
 }
 
 /**
+ * The ids an element names itself by with `aria-labelledby`, when they resolve
+ * to non-empty text. A dangling or empty reference names nothing, so the
+ * element keeps the name it has from elsewhere.
+ */
+function readNameReference(element: HTMLElement | null): string | undefined {
+  if (element == null || labelledByText(element) == null) {
+    return undefined;
+  }
+  return element.getAttribute('aria-labelledby')?.trim();
+}
+
+/**
  * The name of a menu opened from a custom trigger: the caller's `aria-label`
  * when it is a non-empty string, else the trigger's own accessible name. The
  * popover and the bottom sheet both name the menu through this.
  */
-/** The ids an element names itself by with `aria-labelledby`, if any. */
-function readNameReference(element: HTMLElement | null): string | undefined {
-  const ids = element?.getAttribute('aria-labelledby')?.trim();
-  return ids ? ids : undefined;
-}
 
 function resolveCustomTriggerMenuName(
   callerLabel: unknown,

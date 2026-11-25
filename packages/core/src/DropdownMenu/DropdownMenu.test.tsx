@@ -4274,6 +4274,30 @@ describe('DropdownMenu custom trigger', () => {
     expect(menu).toHaveAttribute('aria-labelledby', 'project-heading');
   });
 
+  it('a custom trigger whose aria-labelledby resolves to nothing still names the menu by its own text', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        renderTrigger={props => (
+          <button type="button" {...props} aria-labelledby="missing">
+            Project actions
+          </button>
+        )}>
+        <DropdownMenuItem label="Rename" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Project actions'});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    const menu = screen.getByRole('menu', {
+      name: 'Project actions',
+      hidden: true,
+    });
+    expect(menu).toHaveAttribute('aria-labelledby', trigger.id);
+  });
+
   it('a disabled custom trigger never opens the bottom sheet', async () => {
     const user = userEvent.setup();
     render(
