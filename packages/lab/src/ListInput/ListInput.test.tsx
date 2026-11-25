@@ -1512,6 +1512,134 @@ describe('ListInput', () => {
     });
   });
 
+  it("reads focus from the list's own document when the owner applies a change later", () => {
+    let applyLater: (() => void) | undefined;
+    function LaterList() {
+      const [value, setValue] = useState(guests);
+      return (
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={value}
+          onChange={nextValue => {
+            applyLater = () => setValue(nextValue);
+          }}
+          getItemKey={guest => guest.id}
+          createItem={() => createdGuest}
+          columns={columns}
+        />
+      );
+    }
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument;
+    if (frameDocument == null) {
+      throw new Error('The iframe has no document.');
+    }
+    const container = frameDocument.body.appendChild(
+      frameDocument.createElement('div'),
+    );
+    const {unmount} = render(<LaterList />, {container});
+    const list = within(container);
+
+    const remove = list.getByRole('button', {name: 'Remove guest 2'});
+    remove.focus();
+    fireEvent.click(remove);
+    const ada = list.getByDisplayValue('Ada');
+    ada.focus();
+
+    act(() => applyLater?.());
+    expect(list.queryByDisplayValue('Grace')).toBeNull();
+    expect(frameDocument.activeElement?.tagName).toBe('INPUT');
+    expect(frameDocument.activeElement === ada).toBe(true);
+    unmount();
+    frame.remove();
+  });
+
+  it('moves focus when it rests on the root element as the owner applies a change later', () => {
+    let applyLater: (() => void) | undefined;
+    function LaterList() {
+      const [value, setValue] = useState(guests);
+      return (
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={value}
+          onChange={nextValue => {
+            applyLater = () => setValue(nextValue);
+          }}
+          getItemKey={guest => guest.id}
+          createItem={() => createdGuest}
+          columns={columns}
+        />
+      );
+    }
+    render(<LaterList />);
+
+    const remove = screen.getByRole('button', {name: 'Remove guest 2'});
+    remove.focus();
+    fireEvent.click(remove);
+    const root = document.documentElement;
+    root.tabIndex = -1;
+    try {
+      root.focus();
+      expect(document.activeElement).toBe(root);
+
+      act(() => applyLater?.());
+      expect(
+        screen.getByRole('button', {name: 'Remove guest 1'}),
+      ).toHaveFocus();
+    } finally {
+      root.removeAttribute('tabindex');
+    }
+  });
+
+  it('focuses the record now in the removed place when two removals apply at once and the planned one also left', async () => {
+    const removedIDs = new Set<string>();
+    let applyAll: (() => void) | undefined;
+    function BatchList() {
+      const [value, setValue] = useState([
+        ...guests,
+        createdGuest,
+        {id: 'mae', name: 'Mae'},
+      ]);
+      return (
+        <ListInput<Guest>
+          label="Guests"
+          itemName="guest"
+          value={value}
+          onChange={(_, change) => {
+            if (change.type === 'remove') {
+              removedIDs.add(change.item.id);
+              applyAll = () =>
+                setValue(current =>
+                  current.filter(guest => !removedIDs.has(guest.id)),
+                );
+            }
+          }}
+          getItemKey={guest => guest.id}
+          createItem={() => createdGuest}
+          columns={columns}
+        />
+      );
+    }
+    render(<BatchList />);
+
+    const removeLinus = screen.getByRole('button', {name: 'Remove guest 3'});
+    removeLinus.focus();
+    fireEvent.click(removeLinus);
+    const removeGrace = screen.getByRole('button', {name: 'Remove guest 2'});
+    removeGrace.focus();
+    fireEvent.click(removeGrace);
+
+    act(() => applyAll?.());
+    expect(shownNames()).toEqual(['Ada', 'Mae']);
+    expect(screen.getByRole('button', {name: 'Remove guest 2'})).toHaveFocus();
+    await waitFor(() => {
+      expect(politeAnnouncements()).toContain('Removed guest 2.');
+    });
+  });
+
   it('leaves focus where the user moved it when the owner applies a change later', async () => {
     let applyLater: (() => void) | undefined;
     function LaterList() {
