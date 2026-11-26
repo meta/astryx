@@ -31,6 +31,8 @@ system_specs:
     spec:AST-061/FR2,
     spec:AST-061/FR6,
     spec:AST-061/FR8,
+    spec:AST-061/DEC-4,
+    spec:AST-061/DEC-6,
     spec:AST-061/DEC-7,
     spec:AST-061/DEC-8,
     spec:AST-064/FR2,
@@ -51,7 +53,7 @@ system_specs:
 | Builder impact          | None.                                                                                                                                                                                                                   |
 | Compatibility/readiness | Released in `@astryxdesign/richtext`. Draft observational record.                                                                                                                                                       |
 | Review checks           | Reject a `textbox` role or widget-only ARIA on the content, a parse failure that throws into the host, a view that keeps its first `value`, or a wide table that widens the page.                                       |
-| Governing rules         | `spec:AST-061` FR2, FR6, FR8, DEC-7, DEC-8; `spec:AST-064` FR2, FR8; `spec:AST-106` FR5.                                                                                                                                |
+| Governing rules         | `spec:AST-061` FR2, FR6, FR8, DEC-4, DEC-6, DEC-7, DEC-8; `spec:AST-064` FR2, FR8.                                                                                                                                      |
 
 This table is a review projection; the body below is authoritative.
 
@@ -91,8 +93,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Block typography, spacing, measure, direction and the code block frame —
   owned by `spec:AST-061` and the shared editor theme.
 - How a Markdown plugin node renders — owned by `spec:AST-064` FR8.
-- A labelled, read-only field — owned by `component:RichTextEditor` with
-  `isReadOnly`.
+- A labelled, read-only field — `RichTextEditor` with `isReadOnly`;
+  `spec:AST-061` DEC-7 makes the editor the labelled form field.
 
 ## Public concepts
 
@@ -106,17 +108,17 @@ Consumer migration instructions belong in consumer docs and release notes.
 Draft requirements identify their basis so observed code is not mistaken for an
 intentional decision. A `current` contract contains no unresolved rows.
 
-| ID  | Candidate invariant                                                                                                                                                                                                                                                       | Basis                                                 | Draft review state |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------ |
-| FR1 | The view renders the serialized editor state in `value` with the editor's default nodes plus `nodes`, and it is not editable.                                                                                                                                             | `spec:AST-061` DEC-7; current behavior                | settled            |
-| FR2 | Every block takes the theme's body type, as the editor and core `Markdown` set it, not the host page's font.                                                                                                                                                              | `spec:AST-061` FR2                                    | settled            |
-| FR3 | A block lays out in the direction of its own text; a block whose text has no strongly directional character takes the provider's direction. Task checkboxes sit at the inline start of their item in that direction.                                                      | `spec:AST-061` FR6                                    | settled            |
-| FR4 | A fenced code block shows the editor's code frame, with its language label and a copy action, after the content in tab order.                                                                                                                                             | `spec:AST-061` FR8, DEC-4                             | settled            |
-| FR5 | A Markdown plugin node renders through `markdownExtensions` exactly as core `Markdown` renders it, and a node whose plugin is not passed shows its source.                                                                                                                | `spec:AST-064` FR2, FR8; `spec:AST-106` FR5           | settled            |
-| FR6 | A later `value` replaces the rendered content.                                                                                                                                                                                                                            | Current behavior; consumer docs                       | verify             |
-| FR7 | A value that is not JSON, or that names a node type the view does not register, renders `errorFallback` (default nothing) inside the root element instead of throwing. `onParseError` receives each distinct failure once, after commit. A corrected value renders again. | Current behavior; consumer docs                       | verify             |
-| FR8 | A table wider than the view scrolls inside a group named "Table" that takes a tab stop only while it overflows, as core `Table` does, so the page does not scroll sideways.                                                                                               | Current behavior; consumer docs                       | verify             |
-| FR9 | `className`, `style` and `xstyle` merge with the view's own styles on the root element, and other base props land on it, in both the content and the fallback state.                                                                                                      | `architecture:public-component-api`; current behavior | verify             |
+| ID  | Candidate invariant                                                                                                                                                                                                                                                       | Basis                                                   | Draft review state |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------ |
+| FR1 | The view renders the serialized editor state in `value` with the editor's default nodes plus `nodes`, and it is not editable.                                                                                                                                             | `spec:AST-061` DEC-7; current behavior                  | settled            |
+| FR2 | Body text — paragraphs, list items, quotes and table cells — takes the theme's body size, leading, family and color, as the editor and core `Markdown` set it, not the host page's font. Headings keep the heading type.                                                  | `spec:AST-061` FR2                                      | settled            |
+| FR3 | A prose block (paragraph, heading, quote or list item) lays out in the direction of its own text; a prose block whose text has no strongly directional character takes the provider's direction. A task checkbox sits at the inline start of its item in that direction.  | `spec:AST-061` FR6; current behavior (checkbox side)    | settled            |
+| FR4 | A fenced code block shows the editor's code frame: a copy action, and the language label when the fence names one. The copy action follows the content in tab order.                                                                                                      | `spec:AST-061` FR8, DEC-4; current behavior (tab order) | settled            |
+| FR5 | A Markdown plugin node renders through `markdownExtensions` exactly as core `Markdown` renders it, and a node whose plugin is not passed shows its source.                                                                                                                | `spec:AST-064` FR2, FR8                                 | settled            |
+| FR6 | A later `value` replaces the rendered content.                                                                                                                                                                                                                            | Current behavior; consumer docs                         | verify             |
+| FR7 | A value that is not JSON, or that names a node type the view does not register, renders `errorFallback` (default nothing) inside the root element instead of throwing. `onParseError` receives each distinct failure once, after commit. A corrected value renders again. | Current behavior; consumer docs                         | verify             |
+| FR8 | A table wider than the view scrolls inside a group named by the translated table label ("Table" in English) that takes a tab stop only while it overflows, as core `Table` does, so the page does not scroll sideways.                                                    | Current behavior; consumer docs                         | verify             |
+| FR9 | `className`, `style` and `xstyle` merge with the view's own styles on the root element, and other base props land on it, in both the content and the fallback state.                                                                                                      | `architecture:public-component-api`; current behavior   | verify             |
 
 FR7 gap: a first value that names an unregistered node renders the fallback,
 but the view updates its state while Lexical's composer renders, which React
@@ -161,18 +163,18 @@ reports as an error.
 
 ## Verification map
 
-| Contract | Verification                                                                                                 | Representative states              | Mutation or failure expectation                                         | Audit section |
-| -------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------- | ----------------------------------------------------------------------- | ------------- |
-| FR1, AR1 | `RichTextEditor.test.tsx` read-only and document-content cases                                               | default                            | An editable or `textbox` content fails.                                 | —             |
-| FR2      | `RichTextView.a11y.chromium.spec.ts`                                                                         | light, dark                        | A block in the host page's font fails.                                  | —             |
-| FR3      | `BlockDirectionPlugin.test.tsx` (block direction); RTL audit overlay-side check on the digit-only task story | both directions                    | A block in the wrong direction, or a checkbox on the wrong side, fails. | —             |
-| FR4      | `CodeBlockHeaderPlugin.test.tsx`                                                                             | named and unnamed language         | A missing copy action fails.                                            | —             |
-| FR5      | `MarkdownExtensionsPlugin.test.tsx`                                                                          | passed and missing plugin          | A node that does not match core fails.                                  | —             |
-| FR6      | `RichTextEditor.test.tsx` value-change case                                                                  | changed value                      | A view that keeps its first value fails.                                | —             |
-| FR7      | `RichTextEditor.test.tsx` malformed-JSON, StrictMode, recovery and unregistered-node cases                   | malformed, unregistered, recovered | A throw, a missing fallback or a repeated report fails.                 | —             |
-| FR8      | `TableScrollRegionPlugin.test.tsx`                                                                           | fits, overflows                    | A missing name or a tab stop on a table that fits fails.                | —             |
-| FR9      | `RichTextEditor.test.tsx` className, xstyle and fallback styling cases                                       | content, fallback                  | A dropped class fails.                                                  | —             |
-| AR2      | `markdownTaskList.test.tsx`                                                                                  | checked, unchecked                 | An editable checkbox in the view fails.                                 | —             |
+| Contract | Verification                                                                                                                                     | Representative states              | Mutation or failure expectation                                         | Audit section |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | ----------------------------------------------------------------------- | ------------- |
+| FR1, AR1 | `RichTextEditor.test.tsx` read-only and document-content cases                                                                                   | default                            | An editable or `textbox` content fails.                                 | —             |
+| FR2      | `RichTextView.a11y.chromium.spec.ts`                                                                                                             | light, dark                        | A block in the host page's font fails.                                  | —             |
+| FR3      | `BlockDirectionPlugin.test.tsx` (block direction); RTL audit overlay-side check on the digit-only task story                                     | both directions                    | A block in the wrong direction, or a checkbox on the wrong side, fails. | —             |
+| FR4      | `CodeBlockHeaderPlugin.test.tsx` (frame, label, copy action). Evidence gap: no ongoing test checks the tab order.                                | named and unnamed language         | A missing copy action fails.                                            | —             |
+| FR5      | `MarkdownExtensionsPlugin.test.tsx`                                                                                                              | passed and missing plugin          | A node that does not match core fails.                                  | —             |
+| FR6      | `RichTextEditor.test.tsx` value-change case                                                                                                      | changed value                      | A view that keeps its first value fails.                                | —             |
+| FR7      | `RichTextEditor.test.tsx` malformed-JSON, StrictMode, recovery and unregistered-node cases                                                       | malformed, unregistered, recovered | A throw, a missing fallback or a repeated report fails.                 | —             |
+| FR8      | `TableScrollRegionPlugin.test.tsx` (name and conditional tab stop). Evidence gap: no ongoing test checks that the page does not scroll sideways. | fits, overflows                    | A missing name or a tab stop on a table that fits fails.                | —             |
+| FR9      | `RichTextEditor.test.tsx` className, xstyle and fallback styling cases. Evidence gap: no test covers `style` or other base props.                | content, fallback                  | A dropped class fails.                                                  | —             |
+| AR2      | `markdownTaskList.test.tsx`                                                                                                                      | checked, unchecked                 | An editable checkbox in the view fails.                                 | —             |
 
 ## Decision log
 

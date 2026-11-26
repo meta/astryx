@@ -65,8 +65,8 @@ const styles = stylex.create({
     // Holds the code block headers and task checkboxes drawn over the
     // content.
     position: 'relative',
-    // The document's body text, as core Markdown and the editor set it
-    // (spec:AST-061 FR2). Without it, blocks the theme leaves unsized —
+    // The document's body text, as core Markdown and the editor set it.
+    // Without it, blocks the theme leaves unsized —
     // list items, quotes, table cells — take the host page's font.
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-body-size'],
@@ -90,8 +90,9 @@ const styles = stylex.create({
  *
  * `role` must be `null`, not `undefined`: Lexical substitutes its `textbox`
  * default for `undefined`. The ARIA keys reach the element through Lexical's
- * trailing prop spread, which is why `undefined` clears them. A proposed
- * upstream fix (facebook/lexical#9270) would make these overrides no-ops.
+ * trailing prop spread, which is why `undefined` clears them. If Lexical
+ * stops writing these attributes on a read-only editor, the overrides do
+ * nothing.
  *
  * A caller who wants read-only form-field semantics instead wants
  * `<RichTextEditor isReadOnly />`, which is a labelled field by construction.
@@ -173,8 +174,7 @@ export interface RichTextViewProps extends BaseProps {
  * This mirrors the canonical Lexical pattern for applying externally-sourced
  * serialized state after mount: the Lexical Playground's ActionsPlugin does the
  * same `editor.setEditorState(editor.parseEditorState(...))` from inside a
- * plugin (see facebook/lexical
- * packages/lexical-playground/src/plugins/ActionsPlugin/index.tsx). It is
+ * plugin. It is
  * necessary because the composer builds the editor once and reads the initial
  * state exactly once at that point, so a changed prop cannot re-seed the editor
  * on its own. A read-only view has no history, so we skip the Playground's

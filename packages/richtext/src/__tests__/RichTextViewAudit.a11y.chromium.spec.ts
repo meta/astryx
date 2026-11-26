@@ -140,6 +140,7 @@ async function readView(page: Page) {
         left: rect.left,
         right: rect.right,
         top: rect.top,
+        bottom: rect.bottom,
         width: rect.width,
         height: rect.height,
       };
@@ -268,11 +269,16 @@ function checkDocument(
       reading.copy.box.height >= 24,
     `copy button ${JSON.stringify(reading.copy?.box)}`,
   );
+  const copyBox = reading.copy?.box;
+  const code = reading.code;
   check(
-    reading.copy?.box != null &&
-      reading.code != null &&
-      reading.copy.box.top <= reading.code.top + reading.code.height,
-    'copy button is not drawn on its code block',
+    copyBox != null &&
+      code != null &&
+      copyBox.top >= code.top - 1 &&
+      copyBox.bottom <= code.bottom + 1 &&
+      copyBox.left >= code.left - 1 &&
+      copyBox.right <= code.right + 1,
+    `copy button ${JSON.stringify(copyBox)} is not inside its code block ${JSON.stringify(code)}`,
   );
   check(reading.table?.name === 'Table', `table group ${reading.table?.name}`);
   check(
@@ -316,7 +322,8 @@ for (const direction of ['ltr', 'rtl'] as const) {
       // then takes a tab stop.
       check(reading.table?.overflows === true, 'table does not overflow');
       check(reading.table?.tabIndex === 0, `group ${reading.table?.tabIndex}`);
-      await frame('rest', {reading});
+      const axe = await checkAxe(page, check);
+      await frame('rest', {reading, axe});
     },
   });
 }
@@ -328,26 +335,31 @@ cases.push({
   direction: 'ltr',
   viewport: PHONE,
   run: async (page, check, frame) => {
-    // Tab order inside the view: the link, the table group while it
-    // overflows, then the copy button after the content. The task
-    // checkboxes take no tab stop.
+    // Tab order from the view's first stop, its link: the table group while
+    // it overflows, the copy button after the content, then out of the view.
+    // The task checkboxes, drawn after the copy button, take no tab stop.
     await page.locator(`${VIEW} a`).first().focus();
     const stops: string[] = [];
-    for (let index = 0; index < 3; index++) {
+    for (let index = 0; index < 4; index++) {
       stops.push(
-        await page.evaluate(() => {
+        await page.evaluate(view => {
           const active = document.activeElement as HTMLElement | null;
-          return active == null
-            ? 'none'
-            : `${active.tagName.toLowerCase()}:${active.getAttribute('aria-label') ?? active.textContent?.trim() ?? ''}`;
-        }),
+          if (active == null) {
+            return 'none';
+          }
+          if (!document.querySelector(view)?.contains(active)) {
+            return 'outside';
+          }
+          return `${active.tagName.toLowerCase()}:${active.getAttribute('aria-label') ?? active.textContent?.trim() ?? ''}`;
+        }, VIEW),
       );
       await page.keyboard.press('Tab');
     }
     check(
       stops[0] === 'a:launch plan' &&
         stops[1] === 'div:Table' &&
-        stops[2] === 'button:Copy code',
+        stops[2] === 'button:Copy code' &&
+        stops[3] === 'outside',
       `tab stops ${stops.join(' > ')}`,
     );
     await page.locator(`${VIEW} button[aria-label="Copy code"]`).focus();
