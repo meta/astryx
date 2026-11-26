@@ -27,6 +27,7 @@ verified_by:
     packages/core/src/hooks/useGridFocus.test.tsx,
     packages/core/src/Calendar/__tests__/Calendar.a11y.test.tsx,
     packages/core/src/Calendar/__tests__/Calendar.a11y.chromium.spec.ts,
+    packages/core/src/Calendar/lazyCalendarFields.test.tsx,
     scripts/check-knowledge.mjs,
     scripts/generate-cldr-weekdays.test.mjs,
   ]
@@ -39,6 +40,7 @@ architecture:
     architecture:public-component-api,
     architecture:component-theming-surface,
     architecture:react-component-runtime,
+    architecture:component-import-boundaries,
   ]
 contributing: []
 system_specs:
@@ -100,6 +102,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The calendar months it lays out, their labels, and month and year steps in
   the resolved calendar system.
 - Single and range selection semantics, bounds, constraints, and span limits.
+- The internal `Calendar/LazyCalendar.tsx` and `Calendar/useLazyCalendarOpen.ts`.
+  Date fields that load the Calendar on demand use `LazyCalendar` and
+  `useLazyCalendarOpen` (`architecture:component-import-boundaries` INV1,
+  INV4).
 
 **Does not own / non-goals**
 

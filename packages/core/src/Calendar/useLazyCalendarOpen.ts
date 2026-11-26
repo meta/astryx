@@ -40,7 +40,8 @@ export interface LazyCalendarOpen<Options> {
  * An open asked for before Calendar loads opens once it loads, and a failed
  * load drops it. The popover never shows without Calendar. While the open is
  * held, the trigger still reads as closed, so another press is another open
- * intent and keeps the hold. A press outside the field, focus moving to
+ * intent and keeps the hold; its options replace the held ones, so the open
+ * that follows the load is the latest one asked for. A press outside the field, focus moving to
  * another element, Escape, or the field becoming disabled drops the hold, as
  * Selector's held sheet open does. No popover then appears later, over what
  * the person turned to.
@@ -67,6 +68,7 @@ export function useLazyCalendarOpen<Options>({
   const holdOpenUntilLoaded = useCallback(
     (options: Options | undefined) => {
       if (heldOptionsRef.current != null) {
+        heldOptionsRef.current = {options};
         return;
       }
       heldOptionsRef.current = {options};

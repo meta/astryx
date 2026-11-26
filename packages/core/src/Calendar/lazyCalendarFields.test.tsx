@@ -130,6 +130,21 @@ describe.each(FIELDS)('$name Calendar on first intent', ({element}) => {
     expect(dateInput()).toHaveFocus();
   });
 
+  it('opens as the latest held open asks, with focus kept in the input', async () => {
+    render(element());
+    act(() => {
+      dateInput().focus();
+    });
+    fireEvent.click(toggle());
+    act(() => {
+      dateInput().focus();
+    });
+    fireEvent.keyDown(dateInput(), {key: 'ArrowDown'});
+    await finishLoad();
+    expect(dateInput()).toHaveAttribute('aria-expanded', 'true');
+    expect(dateInput()).toHaveFocus();
+  });
+
   it('drops the held open on Escape', async () => {
     render(element());
     act(() => {
