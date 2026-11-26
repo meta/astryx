@@ -398,8 +398,8 @@ interface UseComboboxInternalOptions<
 > extends UseComboboxOptions<T> {
   /**
    * Whether the open list is in the document. False while an open waits for
-   * its surface to load, so a press or key can neither close the list nor act
-   * on an option no one can see.
+   * its surface to load. A second press, Enter, Space and the highlight keys
+   * then leave that open as it is.
    * Defaults to `isOpen`.
    */
   isListShown?: boolean;
@@ -604,9 +604,8 @@ export function useComboboxInternal<
         return;
       }
 
-      // While an open waits for its list, there is no option to move across.
-      // The keys that move the highlight are held back, and the list opens at
-      // its opening option.
+      // While an open waits for its list, no option shows. The open keeps its
+      // opening option.
       if (isOpen && !isListShown && HIGHLIGHT_KEYS.has(e.key)) {
         e.preventDefault();
         return;

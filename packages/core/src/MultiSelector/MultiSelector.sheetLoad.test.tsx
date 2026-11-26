@@ -117,7 +117,14 @@ describe('MultiSelector bottom-sheet load', () => {
     render(
       <MultiSelector
         label="Labels"
-        options={['Bug', 'Feature']}
+        options={[
+          {
+            value: 'bug',
+            label: 'Bug',
+            action: <button type="button">Edit Bug</button>,
+          },
+          {value: 'feature', label: 'Feature'},
+        ]}
         value={[]}
         onChange={onChange}
         presentation="bottom-sheet"
@@ -143,6 +150,9 @@ describe('MultiSelector bottom-sheet load', () => {
       fireEvent.keyDown(trigger, {key});
     }
     fireEvent.keyDown(trigger, {key: 'End'});
+    // In a grid the inline arrows cannot reach the row's action either.
+    fireEvent.keyDown(trigger, {key: 'ArrowRight'});
+    fireEvent.keyDown(trigger, {key: 'ArrowRight'});
     expect(onChange).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -155,15 +165,15 @@ describe('MultiSelector bottom-sheet load', () => {
     const listboxId = trigger.getAttribute('aria-controls');
     expect(document.getElementById(listboxId ?? '')).toHaveAttribute(
       'role',
-      'listbox',
+      'grid',
     );
-    // The sheet opens at its opening option, not where the keys would have
-    // taken the highlight.
-    expect(
-      document.getElementById(
-        trigger.getAttribute('aria-activedescendant') ?? '',
-      ),
-    ).toHaveTextContent('Bug');
+    // The sheet opens on the opening row, not where the keys would have taken
+    // the highlight, and not on its action cell.
+    const active = document.getElementById(
+      trigger.getAttribute('aria-activedescendant') ?? '',
+    );
+    expect(active).toHaveAttribute('role', 'row');
+    expect(active).toHaveTextContent('Bug');
     expect(screen.getAllByRole('dialog', {hidden: true})).toHaveLength(1);
     expect(onChange).not.toHaveBeenCalled();
   });
