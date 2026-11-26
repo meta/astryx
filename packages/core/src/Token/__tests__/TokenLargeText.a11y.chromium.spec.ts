@@ -167,6 +167,8 @@ test('a focused control in the end content keeps its focus ring', async ({
     };
   });
   expect(result).not.toBeNull();
-  expect(result?.reach).toBeGreaterThan(0);
+  // A Core control draws the Core ring (2 px at a 3 px offset by default), so
+  // the check measures the reach the end content must leave room for.
+  expect(result?.reach).toBeGreaterThanOrEqual(5);
   expect(result?.inside).toBe(true);
 });
