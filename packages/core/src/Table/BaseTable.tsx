@@ -1341,17 +1341,10 @@ function BaseTableInner<T extends Record<string, unknown>>({
   const runtimeValue = useMemo(
     () => ({
       ...runtime,
-      viewportHeight: windowPlan.isWindowed
-        ? config?.initialViewportHeight
-        : undefined,
+      isBlockViewport: windowPlan.isWindowed,
       isLoadingAdmitted,
     }),
-    [
-      runtime,
-      windowPlan.isWindowed,
-      config?.initialViewportHeight,
-      isLoadingAdmitted,
-    ],
+    [runtime, windowPlan.isWindowed, isLoadingAdmitted],
   );
   return (
     <TableRuntimeContext value={runtimeValue}>
