@@ -63,6 +63,11 @@ let checkoutSha: string;
 let storybookSha: string;
 let holdsMotion = true;
 
+/** The part of Storybook's preview this spec reads: the story render's phase. */
+interface StorybookPreviewWindow extends Window {
+  __STORYBOOK_PREVIEW__?: {currentRender?: {phase?: string}};
+}
+
 async function settle(page: Page) {
   if (holdsMotion) {
     await holdMotionStill(page);
@@ -195,9 +200,12 @@ cases.push({
   run: async (page, check, frame) => {
     await page.getByRole('button', {name: 'Make content overflow'}).click();
     await expect(page.locator(CONDITIONAL)).toHaveAttribute('tabindex', '0');
+    await page.getByRole('button', {name: 'Make content fit'}).focus();
+    await page.keyboard.press('Tab');
+    await settle(page);
     const overflowing = await readViewport(page, CONDITIONAL);
-    check(overflowing.tabIndex === '0', `tabindex ${overflowing.tabIndex}`);
-    await frame('overflowing', {overflowing});
+    check(overflowing.focused, 'Tab did not reach the overflowing viewport');
+    await frame('overflowing-focused', {overflowing});
   },
 });
 
@@ -214,16 +222,22 @@ for (const mode of ['light', 'dark'] as const) {
         page,
         '[data-evidence="scrollbar-default"]',
       );
-      const neutral = await page.evaluate(() =>
-        getComputedStyle(document.documentElement)
-          .getPropertyValue('--color-neutral')
-          .trim(),
-      );
-      // The thumb resolves from the neutral token; the track is transparent.
+      // The neutral token as this viewport resolves it.
+      const neutral = await page
+        .locator('[data-evidence="scrollbar-default"]')
+        .evaluate(element => {
+          const probe = document.createElement('span');
+          probe.style.color = 'var(--color-neutral)';
+          element.append(probe);
+          const color = getComputedStyle(probe).color;
+          probe.remove();
+          return color;
+        });
+      const [thumb, track] =
+        viewport.scrollbarColor.match(/rgba?\([^)]*\)/g) ?? [];
       check(
-        /transparent|rgba\(0, 0, 0, 0\)/.test(viewport.scrollbarColor) &&
-          viewport.scrollbarColor !== 'auto',
-        `scrollbar-color ${viewport.scrollbarColor} (neutral ${neutral})`,
+        thumb === neutral && track === 'rgba(0, 0, 0, 0)',
+        `scrollbar-color ${viewport.scrollbarColor}; neutral ${neutral}`,
       );
       const axe = await checkAxe(page, check);
       await frame('rest', {viewport, neutral, axe});
@@ -304,7 +318,8 @@ for (const direction of ['ltr', 'rtl'] as const) {
       const pageOverflow = await page.evaluate(() =>
         document.scrollingElement == null
           ? null
-          : document.scrollingElement.scrollWidth - innerWidth,
+          : document.scrollingElement.scrollWidth -
+            document.scrollingElement.clientWidth,
       );
       check(
         pageOverflow != null && pageOverflow <= 0,
@@ -334,6 +349,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
           const hostStyle = getComputedStyle(host);
           const rect = element.getBoundingClientRect();
           return {
+            hostPaddingStart: parseFloat(hostStyle.paddingInlineStart),
             viewport: {left: rect.left, right: rect.right},
             hostInner: {
               left: hostRect.left + parseFloat(hostStyle.borderLeftWidth),
@@ -341,7 +357,10 @@ for (const direction of ['ltr', 'rtl'] as const) {
             },
           };
         });
-      // With isFullBleed the viewport reaches the container's inner edges.
+      check(
+        geometry.hostPaddingStart > 0,
+        `container has no inline padding to escape: ${geometry.hostPaddingStart}`,
+      );
       check(
         Math.abs(geometry.viewport.left - geometry.hostInner.left) <= 1 &&
           Math.abs(geometry.viewport.right - geometry.hostInner.right) <= 1,
@@ -424,6 +443,13 @@ async function runCase(page: Page, item: AuditCase) {
   try {
     await page.goto(url, {waitUntil: 'load'});
     await page.locator('#storybook-root [data-evidence]').first().waitFor();
+    // Play functions toggle, focus and scroll the viewports; read them only
+    // after Storybook finishes the render, play included.
+    await page.waitForFunction(
+      () =>
+        (window as StorybookPreviewWindow).__STORYBOOK_PREVIEW__?.currentRender
+          ?.phase === 'finished',
+    );
     await settle(page);
     sensors = await pageSensors(page);
     check(!sensors.storybookError, 'storybook error display');
