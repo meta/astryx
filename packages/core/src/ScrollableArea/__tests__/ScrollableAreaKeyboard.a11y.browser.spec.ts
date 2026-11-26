@@ -137,9 +137,11 @@ test('the keyboard reaches the whole block scroll range of the focused viewport'
   expect(afterPage - afterArrow).toBeGreaterThan(pageHeight / 2);
   await page.keyboard.press('End');
   await expect(viewport).toHaveAttribute('data-scroll-block-end', 'true');
+  const atEnd = await settledOffset(page, viewport, scrollTop);
 
   await page.keyboard.press('PageUp');
   const afterPageUp = await settledOffset(page, viewport, scrollTop);
+  expect(atEnd - afterPageUp).toBeGreaterThan(pageHeight / 2);
   await page.keyboard.press('ArrowUp');
   const afterArrowUp = await settledOffset(page, viewport, scrollTop);
   expect(afterArrowUp).toBeLessThan(afterPageUp);
