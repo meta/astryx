@@ -254,17 +254,86 @@ export function focusForLastInput(
   element.focus({...options, focusVisible: false});
 }
 
+/** Whether Tab reaches the element: it takes focus and is in the Tab order. */
+function isTabStop(element: HTMLElement): boolean {
+  return element.tabIndex >= 0 && element.matches(FOCUSABLE_SELECTOR);
+}
+
+/** Whether an `overflow` value makes a scroll container. */
+function scrolls(overflow: string): boolean {
+  return (
+    overflow === 'auto' ||
+    overflow === 'scroll' ||
+    overflow === 'hidden' ||
+    overflow === 'overlay'
+  );
+}
+
 /**
- * Returns focus to `opener` after an overlay closes, without a scroll and with
- * the ring the last input calls for. WebKit records the nearest focusable
- * ancestor of a tapped button as the opener, such as a `tabindex="-1"` main
- * region. A reveal of that region scrolls the page to its top edge.
+ * Whether the element fits inside the viewport and inside each scroller
+ * around it, so that one scroll can show all of it.
+ */
+function fitsVisibleArea(element: HTMLElement): boolean {
+  const view = element.ownerDocument.defaultView;
+  if (view == null) {
+    return false;
+  }
+  const box = element.getBoundingClientRect();
+  const viewport = view.visualViewport;
+  if (
+    box.width > (viewport?.width ?? view.innerWidth) ||
+    box.height > (viewport?.height ?? view.innerHeight)
+  ) {
+    return false;
+  }
+  for (
+    let scroller = element.parentElement;
+    scroller != null;
+    scroller = scroller.parentElement
+  ) {
+    const style = view.getComputedStyle(scroller);
+    if (
+      (scrolls(style.overflowX) && box.width > scroller.clientWidth) ||
+      (scrolls(style.overflowY) && box.height > scroller.clientHeight)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Scrolls a focus return target just into view, to its nearest edge, when it
+ * holds focus, is a Tab stop, and fits the visible area but is not wholly
+ * inside it. A target that is not a Tab stop is never scrolled to: WebKit
+ * records the nearest focusable ancestor of a tapped button as the opener,
+ * such as a `tabindex="-1"` main region, and a reveal of that region scrolls
+ * the page to its top edge. A target larger than the visible area is not
+ * scrolled either. Internal.
+ */
+export function revealReturnTarget(element: HTMLElement): void {
+  if (
+    element.ownerDocument.activeElement !== element ||
+    !isTabStop(element) ||
+    typeof element.scrollIntoView !== 'function' ||
+    !fitsVisibleArea(element)
+  ) {
+    return;
+  }
+  element.scrollIntoView({block: 'nearest', inline: 'nearest'});
+}
+
+/**
+ * Returns focus to `opener` after an overlay closes, with the ring the last
+ * input calls for. The focus itself does not scroll; `revealReturnTarget`
+ * then shows a Tab-stop opener that the page scrolled out of view.
  */
 export function returnFocusForLastInput(
   opener: HTMLElement,
   modality?: InteractionModality,
 ): void {
   focusForLastInput(opener, {preventScroll: true}, modality);
+  revealReturnTarget(opener);
 }
 
 /**

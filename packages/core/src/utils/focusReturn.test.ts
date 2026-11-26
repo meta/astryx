@@ -203,6 +203,90 @@ describe('returnFocusForLastInput', () => {
   });
 });
 
+describe('returnFocusForLastInput reveal', () => {
+  // jsdom lays nothing out and has no scrollIntoView. Each case gives the
+  // opener a box and records the reveal.
+  let reveal: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    reveal = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: reveal,
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+    document.body.innerHTML = '';
+  });
+
+  function opener(
+    html: string,
+    box: {width: number; height: number} = {width: 80, height: 32},
+  ): HTMLElement {
+    document.body.innerHTML = html;
+    const element = document.querySelector<HTMLElement>('[data-opener]');
+    if (element == null) {
+      throw new Error('no opener');
+    }
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+      ...box,
+      top: 0,
+      left: 0,
+      right: box.width,
+      bottom: box.height,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    return element;
+  }
+
+  it('scrolls a Tab-stop opener just into view, to its nearest edge', () => {
+    const element = opener('<button data-opener>Open</button>');
+    returnFocusForLastInput(element);
+    expect(document.activeElement).toBe(element);
+    expect(reveal.mock.calls).toEqual([
+      [{block: 'nearest', inline: 'nearest'}],
+    ]);
+  });
+
+  it('never scrolls to an opener that is not a Tab stop', () => {
+    const element = opener('<div data-opener tabindex="-1">Region</div>');
+    returnFocusForLastInput(element);
+    expect(document.activeElement).toBe(element);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it('does not scroll a Tab-stop opener taller than the viewport', () => {
+    const element = opener(
+      '<div data-opener tabindex="0">Table viewport</div>',
+      {width: 80, height: window.innerHeight + 1},
+    );
+    returnFocusForLastInput(element);
+    expect(document.activeElement).toBe(element);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it('does not scroll a Tab-stop opener taller than the scroller around it', () => {
+    const element = opener(
+      '<div style="overflow-x: auto; overflow-y: auto"><button data-opener>Open</button></div>',
+    );
+    const scroller = element.parentElement as HTMLElement;
+    vi.spyOn(scroller, 'clientHeight', 'get').mockReturnValue(20);
+    vi.spyOn(scroller, 'clientWidth', 'get').mockReturnValue(200);
+    returnFocusForLastInput(element);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it('does not scroll when the opener did not take focus', () => {
+    const element = opener('<button data-opener disabled>Open</button>');
+    returnFocusForLastInput(element);
+    expect(document.activeElement).not.toBe(element);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+});
+
 describe('focusForLastInput in a second document', () => {
   it("follows the last input in the element's own document by default", () => {
     __startInteractionModalityTrackingForTest();
