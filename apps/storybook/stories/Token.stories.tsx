@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Token, type TokenColor} from '@astryxdesign/core/Token';
 
@@ -312,6 +313,70 @@ export const AllVariations: Story = {
           ))}
         </div>
       </div>
+    </div>
+  ),
+};
+
+function RemovableRow({
+  label,
+  value,
+  isClickable = false,
+  href,
+}: {
+  label: string;
+  value: string;
+  isClickable?: boolean;
+  href?: string;
+}) {
+  const [isRemoved, setIsRemoved] = useState(false);
+  if (isRemoved) {
+    return <p>Removed {label}</p>;
+  }
+  return (
+    <Token
+      label={label}
+      onClick={isClickable ? () => {} : undefined}
+      href={href}
+      endContent={<span style={{fontWeight: 700}}>{value}</span>}
+      onRemove={() => setIsRemoved(true)}
+    />
+  );
+}
+
+/**
+ * Long end content in a narrow space: the value shrinks with the label, so
+ * the Remove button stays inside the token at any text size.
+ */
+export const LongEndContentInNarrowSpace: Story = {
+  render: () => (
+    <div
+      style={{
+        width: '200px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: '8px',
+      }}>
+      <RemovableRow label="Static range:" value="Dec 30, 2024 – Jan 2, 2025" />
+      <RemovableRow
+        label="Clickable range:"
+        value="Dec 30, 2024 – Jan 2, 2025"
+        isClickable
+      />
+      <RemovableRow
+        label="Link range:"
+        value="Dec 30, 2024 – Jan 2, 2025"
+        href="#link-range"
+      />
+      <Token
+        label="With a control:"
+        endContent={
+          <button type="button" aria-label="Range details">
+            i
+          </button>
+        }
+        onRemove={() => {}}
+      />
     </div>
   ),
 };
