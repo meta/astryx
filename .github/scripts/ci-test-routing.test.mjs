@@ -801,7 +801,7 @@ describe('full component typechecks', () => {
 
   it('keeps the previous list for a head that predates pnpm typecheck', () => {
     const step = load('ci.yml').jobs.typecheck.steps.find(
-      candidate => candidate.name === 'Typecheck every package',
+      candidate => candidate.name === 'Typecheck the packages in scope',
     );
     expect(step.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
     expect(step.run).toContain(

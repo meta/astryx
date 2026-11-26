@@ -361,7 +361,7 @@ describe('Node-tooling CI routing', () => {
     expect(
       step(ci.jobs['test-build'], 'Run Build package contracts'),
     ).toMatchObject({
-      if: `${BROAD_NOT_LAB} && matrix.part == 'contracts'`,
+      if: `${BROAD_NOT_LAB} && steps.part.outputs.run == 'true' && matrix.part == 'contracts'`,
       run: 'pnpm test:build',
     });
     // The Build package's owner keeps its contracts. The list lives once, in
@@ -389,7 +389,7 @@ describe('Node-tooling CI routing', () => {
       'Verify guest fixture contrast',
     ]) {
       expect(step(ci.jobs['test-build'], name).if).toBe(
-        `${BROAD_NOT_LAB} && matrix.part == 'fixtures'`,
+        `${BROAD_NOT_LAB} && steps.part.outputs.run == 'true' && matrix.part == 'fixtures'`,
       );
     }
     // No size-base job: Main keeps the merge base's sizes, and build-storybook

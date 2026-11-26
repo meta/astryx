@@ -3241,6 +3241,38 @@ jobs:
         uses: ./.github/actions/setup
 
       # The doc, template and CLI typechecks resolve the built package types.
+      # A pull request typechecks the packages its change reaches
+      # (typecheck-scope.mjs). A shared or unknown change, or a scope it
+      # cannot read (no merge base, no package list), typechecks every
+      # package. Every package still builds: a typecheck reads its
+      # dependencies' built types.
+      - name: Find the merge base for the typecheck scope
+        id: typecheck-base
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ ! -f .github/scripts/merge-base.sh ]; then
+            echo "::notice title=Typecheck scope::This head predates merge-base.sh, so every package is typechecked."
+            exit 0
+          fi
+          sha=$(.github/scripts/merge-base.sh "$BASE_REF" 'the typecheck scope' 5 || true)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Choose the packages to typecheck
+        id: typecheck-scope
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        env:
+          FULL_SUITE: ${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite || 'true' }}
+          MERGE_BASE: ${{ steps.typecheck-base.outputs.sha }}
+        run: |
+          if [ ! -f .github/scripts/typecheck-scope.mjs ]; then
+            echo "::notice title=Typecheck scope::This head predates typecheck-scope.mjs, so every package is typechecked."
+            echo 'mode=all' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node .github/scripts/typecheck-scope.mjs
+
       - name: Build packages
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: pnpm build
@@ -3250,11 +3282,23 @@ jobs:
       # or tsconfig joins by defining or extending that script, not this job.
       # A PR head cut before `pnpm typecheck` existed runs the previous list,
       # loaded from the merge commit these steps come from.
-      - name: Typecheck every package
+      - name: Typecheck the packages in scope
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         env:
           WORKFLOW_SHA: ${{ github.sha }}
+          SCOPE_MODE: ${{ steps.typecheck-scope.outputs.mode }}
+          SCOPE_FILTERS: ${{ steps.typecheck-scope.outputs.filters }}
         run: |
+          if [ "$SCOPE_MODE" = none ]; then
+            echo "::notice title=Not affected::Not affected: this change touches no package that is typechecked."
+            exit 0
+          fi
+          if [ "$SCOPE_MODE" = some ]; then
+            # Word splitting is wanted: one --filter=<package> per word.
+            # shellcheck disable=SC2086
+            pnpm -r --no-bail --workspace-concurrency=1 --if-present $SCOPE_FILTERS run typecheck
+            exit
+          fi
           if node -e "process.exit(require('./package.json').scripts?.typecheck ? 0 : 1)"; then
             pnpm typecheck
           else
@@ -5541,9 +5585,29 @@ jobs:
           echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
           exit 1
 
+      # Each part names the paths its tests read (test-build-scope.mjs; its
+      # test proves the lists complete). A shared or unknown change runs both.
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
+        with:
+          paths: ${{ matrix.part == 'contracts' && '^(?:packages/build/|packages/core/|packages/lab/|packages/cli/|\.github/scripts/theme-layer-cascade\.js$|scripts/build-css\.data-tokens\.browser\.test\.mjs$|scripts/stylex-module-resolution\.browser\.test\.mjs$|scripts/stylex-size-boundary\.browser\.test\.mjs$)' || '^(?:internal/vibe-tests/|packages/cli/|packages/core/|packages/themes/|scripts/lib/workspace-globs\.mjs$)' }}
+
+      - name: Decide whether this part's inputs changed
+        id: part
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        env:
+          FULL_SUITE: ${{ steps.scope.outputs.full_suite }}
+          TOUCHES: ${{ steps.scope.outputs.touches }}
+          PART: ${{ matrix.part }}
+        run: |
+          if [ "$FULL_SUITE" = true ] || [ "$TOUCHES" = true ]; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'run=false' >> "$GITHUB_OUTPUT"
+          echo "::notice title=Not affected::Not affected: no input of test-build (${PART}) changed, so this part has nothing to test."
+          echo "Not affected: no input of test-build (${PART}) changed, so this part has nothing to test." >> "$GITHUB_STEP_SUMMARY"
 
       - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'
@@ -5552,56 +5616,56 @@ jobs:
 
       - name: Check out the repository
         id: checkout_2
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && steps.part.outputs.run == 'true'
         uses: actions/checkout@v7
         timeout-minutes: 5
         continue-on-error: true
 
       - name: Check out the repository (second try)
         id: checkout_2_again
-        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && steps.part.outputs.run == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
         uses: actions/checkout@v7
         timeout-minutes: 5
         continue-on-error: true
 
       - name: Stop when the checkout failed twice
-        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && steps.part.outputs.run == 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
         run: |
           echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
           exit 1
 
       - name: Per-author heavy-suite caps
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && steps.part.outputs.run == 'true'
         uses: ./.github/actions/heavy-caps
 
       # The daily heavy-run cap counts this step (spec:AST-030 FR16).
       - name: Heavy suite runs
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && steps.part.outputs.run == 'true'
         run: 'true'
 
       - uses: ./.github/actions/setup
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && steps.part.outputs.run == 'true'
       - name: Install Playwright
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && steps.part.outputs.run == 'true'
         run: npx playwright install chromium
 
       # The Build package's contracts: the packed consumer's dependencies, the
       # production CSS-layer cascade, and cross-package StyleX markers in a
       # real browser. `pnpm test:build` owns the list.
       - name: Run Build package contracts
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && matrix.part == 'contracts'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && steps.part.outputs.run == 'true' && matrix.part == 'contracts'
         run: pnpm test:build
 
       # The fixtures part: the vibe-tests canonical setup compositions and the
       # guest fixture contrast need a production browser render.
       - name: Verify canonical setup compositions
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && matrix.part == 'fixtures'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && steps.part.outputs.run == 'true' && matrix.part == 'fixtures'
         env:
           ASTRYX_CANONICAL_SETUP_BROWSER: '1'
         run: pnpm vitest run internal/vibe-tests/setup-test/setup-canonical.test.ts --project node --maxWorkers=1
 
       - name: Verify guest fixture contrast
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && matrix.part == 'fixtures'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true' && steps.part.outputs.run == 'true' && matrix.part == 'fixtures'
         run: pnpm -F @astryxdesign/vibe-tests fixtures:contrast
 
   # The full visual plan first loads every Core story to learn which theming
