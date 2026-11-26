@@ -24,6 +24,7 @@ import React, {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {visibleText} from '../utils/accessibleName';
 import {
   useTooltip,
   type TooltipFocusTrigger,
@@ -185,27 +186,10 @@ function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
   return tokens.size > 0 ? [...tokens].join(' ') : undefined;
 }
 
-/** The text a screen reader reads in `element`: hidden descendants left out. */
-function visibleTextOf(element: Element): string {
-  let text = '';
-  for (const node of Array.from(element.childNodes)) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      text += node.textContent ?? '';
-    } else if (
-      node instanceof Element &&
-      !node.hasAttribute('hidden') &&
-      node.getAttribute('aria-hidden') !== 'true'
-    ) {
-      text += visibleTextOf(node);
-    }
-  }
-  return text;
-}
-
 /**
  * The trigger's accessible name as Button's `tooltip` reads it: its
- * `aria-label`, else its text content without hidden descendants (such as
- * this tooltip's own hidden copy). Null when `aria-labelledby` names it from
+ * `aria-label`, else the text an assistive technology reads in it (not this
+ * tooltip's own hidden copy). Null when `aria-labelledby` names it from
  * other elements: that name is not compared, so the tooltip still describes
  * the trigger.
  */
@@ -217,7 +201,7 @@ function nameOf(element: Element): string | null {
   if (label != null && label.trim() !== '') {
     return label.trim();
   }
-  return visibleTextOf(element).replace(/\s+/g, ' ').trim();
+  return visibleText(element);
 }
 
 /** A tooltip that repeats its trigger's name adds no description. */
