@@ -1660,8 +1660,8 @@ describe('MultiSelector', () => {
     await user.click(screen.getByRole('button', {name: 'Fruit'}));
     await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
 
-    // The panel message is role="presentation", so the live region is the
-    // only thing a screen reader gets — it has to say the same words.
+    // The live region announces the panel message, so it has to say the
+    // same words.
     await waitFor(() =>
       expect(politeRegion()?.textContent).toBe('Nothing like that here'),
     );
@@ -5120,8 +5120,8 @@ describe('MultiSelector hasCreate', () => {
     );
     await user.click(screen.getByRole('button', {name: 'Labels'}));
     await enterQuery(user, screen.getByRole('combobox', h), 'Urgent');
-    // The empty-state message is role="presentation", so the live region is
-    // what a screen reader gets — it must say what is on screen: a row.
+    // The live region announces the panel's outcome, so it must say what is
+    // on screen: a row.
     await waitFor(() => {
       expect(politeRegion()?.textContent).toBe('Create "Urgent"');
     });
