@@ -253,6 +253,32 @@ describe('duration-balanced Node legs', () => {
     expect(order).toHaveLength(7);
   });
 
+  it('starts a file with a leg of its own last in its leg, after the light files', async () => {
+    const spec = file => ({
+      project: {
+        name: 'node',
+        config: {sequence: {groupOrder: 0}, isolate: true},
+      },
+      moduleId: path.join(ROOT, file),
+    });
+    const own =
+      'packages/cli/api/theme-edit/theme-edit-border-added-size.test.mjs';
+    expect(takesOwnNodeLeg(own)).toBe(true);
+    const light = slowest.filter(file => !drawsInRealChrome(file)).slice(-4);
+    const sequencer = new DurationShardSequencer({
+      config: {root: ROOT, shard: {index: 1, count: 1}},
+      cache: {
+        getFileTestResults: () => undefined,
+        getFileStats: () => undefined,
+      },
+    });
+    const order = (await sequencer.sort([own, ...light].map(spec))).map(item =>
+      path.relative(ROOT, item.moduleId),
+    );
+    expect(order).toHaveLength(5);
+    expect(order[order.length - 1]).toBe(own);
+  });
+
   it('is the sequencer every Vitest run uses', () => {
     const config = fs.readFileSync(path.join(ROOT, 'vitest.config.ts'), 'utf8');
     expect(config).toContain(
