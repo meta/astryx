@@ -1,0 +1,85 @@
+{
+  "pr": 13796,
+  "main": "f51e61da6c0e84bf1ab65923d018facdda928227",
+  "head": "6f269a5f80e75d8c6e041c18e0c4fd719d2617bf",
+  "browser": "Chromium 149.0.7827.55 (Playwright 1.61.1, headless)",
+  "clock": "2026-11-25T20:00:00Z (fixed)",
+  "timeZone": "UTC",
+  "ranges": {
+    "absolute": "ABSOLUTE 2026-01-05 to ABSOLUTE 2026-01-07",
+    "relative": "RELATIVE 7 days back to NOW"
+  },
+  "pairs": [
+    {
+      "pair": "token-*-absolute-en-us-1280-light.png",
+      "range": "absolute",
+      "locale": "en-US",
+      "width": 1280,
+      "mode": "light",
+      "main": {
+        "file": "token-main-absolute-en-us-1280-light.png",
+        "tokenName": "Created: is between date range",
+        "removeName": "Remove Created: is between date range"
+      },
+      "head": {
+        "file": "token-head-absolute-en-us-1280-light.png",
+        "tokenName": "Created: is between Jan 5 – 7, 2026",
+        "removeName": "Remove Created: is between Jan 5 – 7, 2026"
+      }
+    },
+    {
+      "pair": "token-*-relative-de-de-390-dark.png",
+      "range": "relative",
+      "locale": "de-DE",
+      "width": 390,
+      "mode": "dark",
+      "main": {
+        "file": "token-main-relative-de-de-390-dark.png",
+        "tokenName": "Created: is between Datumsbereich",
+        "removeName": "Created: is between Datumsbereich entfernen"
+      },
+      "head": {
+        "file": "token-head-relative-de-de-390-dark.png",
+        "tokenName": "Created: is between 18.–25. Nov. 2026",
+        "removeName": "Created: is between 18.–25. Nov. 2026 entfernen"
+      }
+    },
+    {
+      "pair": "token-*-absolute-ar-sa-rtl-1280-light.png",
+      "range": "absolute",
+      "locale": "ar-SA",
+      "width": 1280,
+      "mode": "light",
+      "main": {
+        "file": "token-main-absolute-ar-sa-rtl-1280-light.png",
+        "tokenName": "Created: is between نطاق التاريخ",
+        "removeName": "إزالة Created: is between نطاق التاريخ"
+      },
+      "head": {
+        "file": "token-head-absolute-ar-sa-rtl-1280-light.png",
+        "tokenName": "Created: is between ٥–٧ يناير ٢٠٢٦",
+        "removeName": "إزالة Created: is between ٥–٧ يناير ٢٠٢٦"
+      }
+    },
+    {
+      "pair": "sheet-*-absolute-en-us-phone-390.png",
+      "range": "absolute",
+      "locale": "en-US",
+      "width": 390,
+      "mode": "light",
+      "emulation": "phone 390x844 DPR 3, touch, coarse pointer",
+      "main": {
+        "file": "sheet-main-absolute-en-us-phone-390.png",
+        "triggerName": "Search Created: is between date range",
+        "filtersRowName": "Created is between date range",
+        "removeName": "Remove Created filter"
+      },
+      "head": {
+        "file": "sheet-head-absolute-en-us-phone-390.png",
+        "triggerName": "Search Created: is between Jan 5 – 7, 2026",
+        "filtersRowName": "Created is between Jan 5 – 7, 2026",
+        "removeName": "Remove Created filter"
+      }
+    }
+  ]
+}
