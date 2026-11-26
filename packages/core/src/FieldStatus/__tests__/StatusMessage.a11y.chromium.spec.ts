@@ -121,10 +121,11 @@ async function mountState(
   await subjectFor(page).waitFor({state: 'attached'});
   await expect(subjectFor(page)).toHaveCount(1);
   if ('focusSelector' in state) {
-    await expect(page.locator(state.focusSelector)).toHaveAttribute(
-      'aria-describedby',
-      /\S+/,
-    );
+    // Wait for the lazy Tooltip before focusing its mark. The tooltip repeats
+    // the mark's name, so it mounts without adding a description.
+    await expect(
+      page.locator('[hidden]').filter({hasText: /^Target$/}),
+    ).toBeAttached();
   }
 }
 
