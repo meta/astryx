@@ -339,6 +339,12 @@ export * from './CircularProgress';
 // ListInput — compact editor for short collections of simple records
 export * from './ListInput';
 
+export {
+  InfinityList,
+  type InfinityListHandle,
+  type InfinityListProps,
+} from './InfinityList';
+
 // LogStream — experimental streaming log viewer
 export {
   LogStream,
