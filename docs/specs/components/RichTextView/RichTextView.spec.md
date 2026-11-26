@@ -183,8 +183,8 @@ None.
 ## Open questions
 
 - **OQ1 — Does the view take a `ref`?** (`human-api`) The view's props have
-  no `ref`, and `spec:AST-061` DEC-8 names `ref` only for
-  `RichTextEditorToolbar`.
+  no `ref`. `spec:AST-061` DEC-8 names a `ref` for the editor and the toolbar,
+  and none for the view.
 
 ## Content boundary
 
