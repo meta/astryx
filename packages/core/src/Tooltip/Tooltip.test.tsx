@@ -262,6 +262,28 @@ describe('Tooltip', () => {
       ).toHaveAccessibleDescription('Delete the file for good');
     });
 
+    it('adds and removes the description as the text stops and starts repeating the name', () => {
+      const {rerender} = render(
+        <Tooltip content="Delete the file for good">
+          <IconButton label="Delete" icon={<TestIcon />} />
+        </Tooltip>,
+      );
+      const button = () => screen.getByRole('button', {name: 'Delete'});
+      expect(button()).toHaveAccessibleDescription('Delete the file for good');
+      rerender(
+        <Tooltip content="Delete">
+          <IconButton label="Delete" icon={<TestIcon />} />
+        </Tooltip>,
+      );
+      expect(button()).not.toHaveAttribute('aria-describedby');
+      rerender(
+        <Tooltip content="Delete it">
+          <IconButton label="Delete" icon={<TestIcon />} />
+        </Tooltip>,
+      );
+      expect(button()).toHaveAccessibleDescription('Delete it');
+    });
+
     it('adds no description to an anchorRef trigger whose text is the tooltip text', () => {
       function Anchored() {
         const anchorRef = useRef<HTMLButtonElement>(null);
