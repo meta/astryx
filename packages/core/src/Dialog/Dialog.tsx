@@ -96,6 +96,7 @@ import {
   isLayerFocusStranded,
   prepareFocusRepairOnRemoval,
   restoreLayerFocus,
+  revealReturnTarget,
   trackLayerFocus,
   type LayerFocusRecord,
 } from '../utils/focusReturn';
@@ -728,8 +729,10 @@ export function Dialog({
         doc,
         isFocusMovedInOnOpen: true,
         // The ring follows the last input in the opener's own document.
-        focus: element =>
-          focusForLastInputTemporarily(element, {preventScroll: true}),
+        focus: element => {
+          focusForLastInputTemporarily(element, {preventScroll: true});
+          revealReturnTarget(element);
+        },
       });
     }
     wasOpenRef.current = isOpenNow;

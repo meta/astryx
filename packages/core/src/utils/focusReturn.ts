@@ -7,7 +7,8 @@
  * @output Focus ownership and availability through shadow hosts and frames
  *   (`ownsFocus`, `isFocusUnclaimed`); whether focus would be lost if a
  *   surface hid now; a focus move whose ring follows the last input; an
- *   overlay's focus return that never scrolls the page; the path that moves
+ *   overlay's focus return that scrolls only a hidden Tab-stop opener just
+ *   into view (`revealReturnTarget`); the path that moves
  *   focus out of removed or hidden content; and the focus return that
  *   Popover, Dialog and DropdownMenu run as they close (`trackLayerFocus`,
  *   `restoreLayerFocus`).
@@ -35,6 +36,7 @@ import {
   isShadowRoot,
 } from './nodeType';
 import {devWarn} from './devWarning';
+import {SCROLLABLE_OVERFLOW} from './scrollView';
 
 function focusRoot(node: Node): Document | ShadowRoot | null {
   const root = node.getRootNode();
@@ -254,17 +256,103 @@ export function focusForLastInput(
   element.focus({...options, focusVisible: false});
 }
 
+/** Whether Tab reaches the element: it takes focus and is in the Tab order. */
+function isTabStop(element: HTMLElement): boolean {
+  return element.tabIndex >= 0 && element.matches(FOCUSABLE_SELECTOR);
+}
+
 /**
- * Returns focus to `opener` after an overlay closes, without a scroll and with
- * the ring the last input calls for. WebKit records the nearest focusable
- * ancestor of a tapped button as the opener, such as a `tabindex="-1"` main
- * region. A reveal of that region scrolls the page to its top edge.
+ * Whether one scroll can show all of the element without moving content that
+ * a person cannot scroll back. The element fits inside the viewport and inside
+ * each scroller a person can scroll. `scrollIntoView` also scrolls a box with
+ * `overflow: hidden`, such as a carousel track or a truncation wrapper. So
+ * such a box must already show, along that axis, what stays visible inside it
+ * after the scroll. That is the element itself, or the nearest scroller a
+ * person can scroll between them, such as a dialog's scrolling body inside its
+ * clipped frame.
+ */
+function fitsVisibleArea(element: HTMLElement): boolean {
+  const doc = element.ownerDocument;
+  const view = doc.defaultView;
+  if (view == null) {
+    return false;
+  }
+  const box = element.getBoundingClientRect();
+  let shown: DOMRect = box;
+  const viewport = view.visualViewport;
+  if (
+    box.width > (viewport?.width ?? view.innerWidth) ||
+    box.height > (viewport?.height ?? view.innerHeight)
+  ) {
+    return false;
+  }
+  for (
+    let scroller = element.parentElement;
+    scroller != null;
+    scroller = scroller.parentElement
+  ) {
+    const style = view.getComputedStyle(scroller);
+    const scrollsX = SCROLLABLE_OVERFLOW.has(style.overflowX);
+    const scrollsY = SCROLLABLE_OVERFLOW.has(style.overflowY);
+    if (
+      (scrollsX && box.width > scroller.clientWidth) ||
+      (scrollsY && box.height > scroller.clientHeight)
+    ) {
+      return false;
+    }
+    // A scroll lock can hide the page's own overflow while a surface is
+    // open. The page stays a scroller a person uses.
+    if (scroller === doc.documentElement || scroller === doc.body) {
+      continue;
+    }
+    const clip = scroller.getBoundingClientRect();
+    if (
+      (style.overflowX === 'hidden' &&
+        (shown.left < clip.left || shown.right > clip.right)) ||
+      (style.overflowY === 'hidden' &&
+        (shown.top < clip.top || shown.bottom > clip.bottom))
+    ) {
+      return false;
+    }
+    if (scrollsX || scrollsY) {
+      shown = clip;
+    }
+  }
+  return true;
+}
+
+/**
+ * Scrolls a focus return target just into view, to its nearest edge, when it
+ * holds focus, is a Tab stop, and fits the visible area but is not wholly
+ * inside it. A target that is not a Tab stop is never scrolled to: WebKit
+ * records the nearest focusable ancestor of a tapped button as the opener,
+ * such as a `tabindex="-1"` main region, and a reveal of that region scrolls
+ * the page to its top edge. A target larger than the visible area is not
+ * scrolled either, nor one that a box with `overflow: hidden` clips. Internal.
+ */
+export function revealReturnTarget(element: HTMLElement): void {
+  if (
+    element.ownerDocument.activeElement !== element ||
+    !isTabStop(element) ||
+    typeof element.scrollIntoView !== 'function' ||
+    !fitsVisibleArea(element)
+  ) {
+    return;
+  }
+  element.scrollIntoView({block: 'nearest', inline: 'nearest'});
+}
+
+/**
+ * Returns focus to `opener` after an overlay closes, with the ring the last
+ * input calls for. The focus itself does not scroll; `revealReturnTarget`
+ * then shows a Tab-stop opener that the page scrolled out of view.
  */
 export function returnFocusForLastInput(
   opener: HTMLElement,
   modality?: InteractionModality,
 ): void {
   focusForLastInput(opener, {preventScroll: true}, modality);
+  revealReturnTarget(opener);
 }
 
 /**
