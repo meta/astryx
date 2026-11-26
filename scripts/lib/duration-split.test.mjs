@@ -146,6 +146,29 @@ describe('splitting test files by recorded time', () => {
     ).toBe(true);
   });
 
+  it("lets only the items `besideAlone` accepts join an `alone` item's leg", () => {
+    // o takes its own leg; m (4) may join the `together` leg but not o's,
+    // though o's leg is the shorter.
+    const seconds = {c1: 12, o: 9, h: 20, m: 4, l1: 1, l2: 1};
+    const cost = costOf(Object.keys(seconds), seconds);
+    const apart = {
+      together: item => item.startsWith('c') || item === 'o',
+      alone: item => item === 'o',
+      besideTogether: item => cost(item) <= 4,
+      besideAlone: item => cost(item) <= 1,
+    };
+    const legs = splitByDuration(Object.keys(seconds), 3, cost, [], apart);
+    const own = legs.find(leg => leg.includes('o'));
+    for (const item of own) expect(['o', 'l1', 'l2']).toContain(item);
+    expect(legs.flat().sort()).toEqual(Object.keys(seconds).sort());
+    // Without `besideAlone`, `besideTogether` decides both legs.
+    const same = splitByDuration(Object.keys(seconds), 3, cost, [], {
+      ...apart,
+      besideAlone: undefined,
+    });
+    expect(same.find(leg => leg.includes('o'))).toContain('m');
+  });
+
   it('refuses a split that lost, repeated or added an item', () => {
     expect(() => assertEachOnce(['a', 'b'], [['a'], []])).toThrow(
       'lost or repeated',

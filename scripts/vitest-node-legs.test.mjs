@@ -28,6 +28,7 @@ import {
   WALL_SECONDS,
   WATCHDOG_MARGIN_SECONDS,
   BESIDE_REAL_CHROME_SECONDS,
+  BESIDE_OWN_LEG_SECONDS,
   takesOwnNodeLeg,
   drawsInRealChrome,
   nodeFileCost,
@@ -46,7 +47,7 @@ import {
   recordProblem,
   stepOutputs,
 } from './vitest-node-legs.mjs';
-import {splitByDuration} from './lib/duration-split.mjs';
+import {fitLegsToBudget, splitByDuration} from './lib/duration-split.mjs';
 import {partitionByDuration} from './vitest-shard-sequencer.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -322,7 +323,42 @@ describe('the Node leg plan', () => {
     }
   });
 
-  it('gives a marked real-Chrome file a leg of its own, with only light, non-packing files beside it, on pull requests and main', () => {
+  it("keeps the lightest files beside a marked file below the shared leg's limit, and the leg counts as they were", () => {
+    expect(BESIDE_OWN_LEG_SECONDS).toBeLessThan(BESIDE_REAL_CHROME_SECONDS);
+    const loosen = cost => ({
+      ...nodeLegsApart(cost),
+      besideAlone: nodeLegsApart(cost).besideTogether,
+    });
+    // A pull request plans as many legs as with the shared leg's limit.
+    const cost = nodeFileCost(files, seconds);
+    const strict = fitLegsToBudget(files, cost, {
+      budget: LEG_BUDGET_SECONDS,
+      maxLegs: MAX_NODE_LEGS,
+      ...nodeLegsApart(cost),
+    });
+    const loose = fitLegsToBudget(files, cost, {
+      budget: LEG_BUDGET_SECONDS,
+      maxLegs: MAX_NODE_LEGS,
+      ...loosen(cost),
+    });
+    expect(strict.count).toBe(loose.count);
+    expect(plan.legs).toBe(loose.count);
+    // Main's slowest leg at its legs is no longer than with that limit.
+    const main = nodeLegFiles(ROOT, {swizzleProofOwnJob: false});
+    const mainCost = nodeFileCost(main, seconds);
+    const legs = planMainNodeLegs(main, seconds).legs;
+    const longest = apart =>
+      Math.max(
+        ...splitByDuration(main, legs, mainCost, [], apart).map(leg =>
+          leg.reduce((sum, file) => sum + mainCost(file), 0),
+        ),
+      );
+    expect(longest(nodeLegsApart(mainCost))).toBeLessThanOrEqual(
+      longest(loosen(mainCost)) + 1,
+    );
+  });
+
+  it('gives a marked real-Chrome file a leg of its own, with only the lightest non-packing files beside it, on pull requests and main', () => {
     const own =
       'packages/cli/api/theme-edit/theme-edit-border-added-size.test.mjs';
     expect(takesOwnNodeLeg(own)).toBe(true);
@@ -342,7 +378,7 @@ describe('the Node leg plan', () => {
       for (const file of leg.filter(f => f !== own)) {
         expect(drawsInRealChrome(file), `${run}: ${file}`).toBe(false);
         expect(cost(file), `${run}: ${file}`).toBeLessThanOrEqual(
-          BESIDE_REAL_CHROME_SECONDS,
+          BESIDE_OWN_LEG_SECONDS,
         );
         expect(file, run).not.toMatch(/(^|\/)packed-[^/]*\.test\.mjs$/);
       }

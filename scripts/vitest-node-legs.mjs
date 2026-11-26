@@ -155,6 +155,14 @@ const OWN_LEG_SOURCE = /^\/\/ node-leg: own\b/m;
 // picture scans need, and the pictures have a fixed time bound.
 export const BESIDE_REAL_CHROME_SECONDS = 10;
 
+// The most seconds a file may plan to join a real-Chrome file's own leg
+// (`// node-leg: own`). That file starts last in its leg, so the files still
+// running when it starts run beside its picture run, which is near its
+// bound; the lighter they are, the sooner they end. It is the lowest
+// half-second step whose files still fill that leg, so the leg counts stay
+// as they are.
+export const BESIDE_OWN_LEG_SECONDS = 3.5;
+
 // A test that packs the CLI (`packed-*.test.mjs`) never joins that leg, even
 // when its recorded time is short: a cold pack cache packs again.
 const PACKING_TEST = /(^|\/)packed-[^/]*\.test\.mjs$/;
@@ -200,9 +208,11 @@ export function takesOwnNodeLeg(file, root = ROOT) {
 
 /**
  * How a Node split keeps the real-Chrome files apart: they share the last
- * leg, except a file that takes a leg of its own (`// node-leg: own`), and
- * only files that plan at most `BESIDE_REAL_CHROME_SECONDS` and pack nothing
- * join either leg. The planners and the sequencer use the same rule.
+ * leg, except a file that takes a leg of its own (`// node-leg: own`). Only
+ * files that pack nothing join either leg: at most
+ * `BESIDE_REAL_CHROME_SECONDS` beside the shared leg, and at most
+ * `BESIDE_OWN_LEG_SECONDS` beside an own leg. The planners and the sequencer
+ * use the same rule.
  * @param {(file: string) => number} cost
  * @param {{root?: string, realChrome?: (file: string) => boolean, ownLeg?: (file: string) => boolean}} [options]
  * @returns {import('./lib/duration-split.mjs').KeptApart}
@@ -222,6 +232,10 @@ export function nodeLegsApart(
       !realChrome(file) &&
       !PACKING_TEST.test(file) &&
       cost(file) <= BESIDE_REAL_CHROME_SECONDS,
+    besideAlone: file =>
+      !realChrome(file) &&
+      !PACKING_TEST.test(file) &&
+      cost(file) <= BESIDE_OWN_LEG_SECONDS,
   };
 }
 
