@@ -216,14 +216,15 @@ Consumer migration instructions belong in consumer docs and release notes.
   `aria-describedby` names a hidden copy of its text rendered with the trigger
   in server and client markup; once mounted, it names the tooltip's content and
   the copy is removed, so the text renders once. A truncation tooltip whose text
-  is its element's own content adds no description. A Tooltip whose string or
-  number `content`, trimmed, equals its trigger element's accessible name (its
+  is its element's own content adds no description. A Tooltip on an element child or
+  an `anchorRef` target whose string or number `content`, trimmed, equals that
+  element's accessible name (its
   `aria-label`, else its text content) adds no description either, as
   `component:Button` FR12 does, so the name is not read twice; other content
   still describes the trigger, and a name from `aria-labelledby` still gets the
   description, as in `component:Button` FR12. The Tooltip reads the name when it
   wires its trigger and when its content changes; a name that changes later is
-  not compared again, as with FR2's changed-trigger gap. While `show()` pins the
+  not compared again, as with FR2's changed-trigger gap. A text-only child keeps its description: its inline span is not a named control. While `show()` pins the
   tooltip (FR9), its shown text stays readable, and FR10 announces it. Apart
   from FR2's changed-trigger and server-markup gaps.
 - **AR2 — Content on hover or focus.** The tooltip is hoverable, dismissible,
