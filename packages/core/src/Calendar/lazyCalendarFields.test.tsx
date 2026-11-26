@@ -48,7 +48,7 @@ import {DateTimeInput} from '../DateTimeInput/DateTimeInput';
 
 const noop = () => {};
 
-const FIELDS: Array<{name: string; element: () => ReactElement}> = [
+const FIELDS: {name: string; element: () => ReactElement}[] = [
   {
     name: 'DateTimeInput',
     element: () => <DateTimeInput label="Starts" onChange={noop} />,

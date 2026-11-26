@@ -22,6 +22,13 @@ import {DateTimeInput, type DateTimeInputProps} from './DateTimeInput';
 import {FormLayout} from '../FormLayout';
 import {expectFieldInputProps} from '../Field/fieldInputFamily.testing';
 import {describeFieldInputParts} from '../Field/fieldInputFamily.render-testing';
+import {loadCalendar} from '../Calendar/LazyCalendar';
+// Calendar loads on the field's first intent. Loading it up front lets these
+// cases open the popover synchronously; Calendar/lazyCalendarFields.test.tsx
+// covers the load itself.
+beforeAll(async () => {
+  await loadCalendar();
+});
 
 // The date input is the field's semantic control: the label names it.
 const SURFACES = [
