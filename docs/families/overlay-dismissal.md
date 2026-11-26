@@ -322,9 +322,9 @@ plain focus, which the browser scrolls into view as it chooses.
 | List's reorder-mode hint                                                                                                                                                                                                                                                             | shared owner, registered while reorder mode is on             | none                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | DropdownMenuSubMenu, PowerSearchEditPopover                                                                                                                                                                                                                                          | local only                                                    | Must migrate from component-specific listeners or registries to the shared owner                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
-FR9 gap: in WebKit, a DropdownMenu closed by Escape or by a press outside gets
-the browser's own popover focus return, which shows a Tab-stop opener in the
-middle of the view rather than at its nearest edge.
+FR9 gap: a DropdownMenu closed by Escape or by a press outside gets the
+browser's own popover focus return, which in WebKit and in Chromium 155 shows a
+Tab-stop opener in the middle of the view rather than at its nearest edge.
 
 The rows marked partial or local are current adoption gaps against FR1, and the
 rows naming an implementation gap are gaps against FR8 or FR9. They are not

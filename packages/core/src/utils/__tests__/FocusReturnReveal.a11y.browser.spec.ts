@@ -171,20 +171,19 @@ async function expectRevealed(
 }
 
 /**
- * WebKit restores focus itself when a menu's popover hides with focus inside
- * it, as on an Escape or an outside press, and it centres the opener. The
- * opener is then wholly in view, so nothing is left to reveal, but it is not
- * at its nearest edge.
+ * WebKit and Chromium 155 restore focus themselves when a menu's popover hides
+ * with focus inside it, as on an Escape or an outside press, and they centre
+ * the opener. The opener is then wholly in view, so nothing is left to reveal,
+ * but it is not at its nearest edge. Older Chromium builds do not centre it.
  */
-function browserCentres(member: Member, browserName: string): boolean {
-  return member.name === 'DropdownMenu' && browserName === 'webkit';
+function browserCentres(member: Member): boolean {
+  return member.name === 'DropdownMenu';
 }
 
 for (const member of MEMBERS) {
   test.describe(`${member.name} focus return`, () => {
     test('an Escape close shows an opener the page scrolled out of view', async ({
       page,
-      browserName,
     }) => {
       await mountTall(page, member, 400);
       await scrollOpenerAbove(page, member.opener(page), 600);
@@ -192,7 +191,7 @@ for (const member of MEMBERS) {
       await page.keyboard.press('Escape');
       await expect(member.surface(page)).toBeHidden();
       await expectRevealed(page, member, {
-        atNearestEdge: !browserCentres(member, browserName),
+        atNearestEdge: !browserCentres(member),
       });
     });
 
@@ -213,7 +212,6 @@ for (const member of MEMBERS) {
 
     test('a press outside shows an opener the page scrolled out of view', async ({
       page,
-      browserName,
     }) => {
       await mountTall(page, member, 400);
       await scrollOpenerAbove(page, member.opener(page), 600);
@@ -231,7 +229,7 @@ for (const member of MEMBERS) {
       await page.mouse.click(10, y);
       await expect(member.surface(page)).toBeHidden();
       await expectRevealed(page, member, {
-        atNearestEdge: !browserCentres(member, browserName),
+        atNearestEdge: !browserCentres(member),
       });
     });
   });
