@@ -81,7 +81,9 @@ export function assertEachOnce(items, legs, what = 'item') {
  * accepts join them there. With `apart.alone`, each of those items takes a
  * leg of its own before the last, with only the items `apart.besideAlone`
  * accepts beside it, when a leg is still left for the other items; with
- * fewer legs it goes where a `together` item goes. With one leg, or none of those items, the split is
+ * fewer legs it goes where a `together` item goes. When the items
+ * `apart.besideAlone` accepts run out before they fill that leg, the items
+ * `apart.besideTogether` accepts join it instead. With one leg, or none of those items, the split is
  * as without it.
  * @param {string[]} items
  * @param {number} count
@@ -135,6 +137,24 @@ export function splitByDuration(items, count, cost, reserved = [], apart = {}) {
     );
     leg.items.push(item);
     leg.total += cost(item);
+  }
+  // The items `besideAlone` accepts must fill each lone leg: greedy placement
+  // leaves a leg that never ran out of items within one of its items of the
+  // shortest open leg. When they run out first, the lone leg would hold every
+  // one of them, so the split falls back to `besideTogether` for it.
+  if (apart.besideAlone && loneLegs.size > 0) {
+    const open = legs.filter(leg => leg !== keptLeg && !loneLegs.has(leg));
+    const shortest = Math.min(...open.map(leg => leg.total));
+    const short = [...loneLegs].some(leg => {
+      const company = leg.items.filter(item => !ownLegs.includes(item));
+      const step = Math.max(0, ...company.map(cost));
+      return open.length > 0 && leg.total + step < shortest;
+    });
+    if (short)
+      return splitByDuration(items, count, cost, reserved, {
+        ...apart,
+        besideAlone: undefined,
+      });
   }
   const result = legs.map(leg => leg.items.sort());
   assertEachOnce(items, result, 'file');

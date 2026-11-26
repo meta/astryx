@@ -385,6 +385,21 @@ describe('the Node leg plan', () => {
     }
   });
 
+  it("keeps a marked file's leg to the shared limit's files where the lightest cannot fill it, as in an 8-leg split", () => {
+    // CodeBunny's in-house lab splits Main's files into 8 legs. There the
+    // files under BESIDE_OWN_LEG_SECONDS cannot fill the marked file's leg,
+    // which would then hold every one of them, over a thousand files.
+    const main = nodeLegFiles(ROOT, {swizzleProofOwnJob: false});
+    const cost = nodeFileCost(main, seconds);
+    const legs = partitionByDuration(main, 8, seconds);
+    const own = legs.find(leg => leg.some(file => takesOwnNodeLeg(file)));
+    expect(own.length).toBeLessThanOrEqual((main.length / 8) * 2);
+    for (const file of own.filter(f => !takesOwnNodeLeg(f))) {
+      expect(drawsInRealChrome(file), file).toBe(false);
+      expect(cost(file), file).toBeLessThanOrEqual(BESIDE_REAL_CHROME_SECONDS);
+    }
+  });
+
   it("plans from each planner's sparse checkout as the legs split in a full one", () => {
     // ci.yml's room, deploy.yml's main-commit and cli-minimum-node.yml's
     // version job plan from sparse checkouts; each must hold every

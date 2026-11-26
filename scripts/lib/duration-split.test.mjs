@@ -148,8 +148,9 @@ describe('splitting test files by recorded time', () => {
 
   it("lets only the items `besideAlone` accepts join an `alone` item's leg", () => {
     // o takes its own leg; m (4) may join the `together` leg but not o's,
-    // though o's leg is the shorter.
-    const seconds = {c1: 12, o: 9, h: 20, m: 4, l1: 1, l2: 1};
+    // though o's leg is the shorter. The light items fill o's leg.
+    const seconds = {c1: 12, o: 9, h: 20, m: 4};
+    for (let i = 1; i <= 20; i += 1) seconds[`l${i}`] = 1;
     const cost = costOf(Object.keys(seconds), seconds);
     const apart = {
       together: item => item.startsWith('c') || item === 'o',
@@ -159,7 +160,7 @@ describe('splitting test files by recorded time', () => {
     };
     const legs = splitByDuration(Object.keys(seconds), 3, cost, [], apart);
     const own = legs.find(leg => leg.includes('o'));
-    for (const item of own) expect(['o', 'l1', 'l2']).toContain(item);
+    for (const item of own) expect(item === 'o' || cost(item) <= 1).toBe(true);
     expect(legs.flat().sort()).toEqual(Object.keys(seconds).sort());
     // Without `besideAlone`, `besideTogether` decides both legs.
     const same = splitByDuration(Object.keys(seconds), 3, cost, [], {
@@ -167,6 +168,25 @@ describe('splitting test files by recorded time', () => {
       besideAlone: undefined,
     });
     expect(same.find(leg => leg.includes('o'))).toContain('m');
+  });
+
+  it("lets the items `besideTogether` accepts fill an `alone` item's leg when the `besideAlone` ones run out", () => {
+    // Only l1 and l2 (1 s each) pass `besideAlone`: they cannot fill o's leg
+    // against h1 and h2, so m1 and m2 (3 s, under `besideTogether`) join it.
+    const seconds = {o: 2, c: 1, h1: 9, h2: 9, m1: 3, m2: 3, l1: 1, l2: 1};
+    const cost = costOf(Object.keys(seconds), seconds);
+    const apart = {
+      together: item => item === 'c' || item === 'o',
+      alone: item => item === 'o',
+      besideTogether: item => cost(item) <= 3,
+      besideAlone: item => cost(item) <= 1,
+    };
+    const legs = splitByDuration(Object.keys(seconds), 4, cost, [], apart);
+    const own = legs.find(leg => leg.includes('o'));
+    expect(own.some(item => item !== 'o' && cost(item) > 1)).toBe(true);
+    expect(own).not.toContain('h1');
+    expect(own).not.toContain('h2');
+    expect(legs.flat().sort()).toEqual(Object.keys(seconds).sort());
   });
 
   it('refuses a split that lost, repeated or added an item', () => {

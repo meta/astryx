@@ -159,8 +159,10 @@ export const BESIDE_REAL_CHROME_SECONDS = 10;
 // (`// node-leg: own`). That file starts last in its leg, so the files still
 // running when it starts run beside its picture run, which is near its
 // bound; the lighter they are, the sooner they end. It is the lowest
-// half-second step whose files still fill that leg, so the leg counts stay
-// as they are.
+// half-second step whose files still fill that leg at the pull-request and
+// Main leg counts. Where they cannot fill it (fewer legs, as in an 8-leg
+// split), the leg takes the shared leg's files instead
+// (splitByDuration's `besideAlone`), so it never holds every light file.
 export const BESIDE_OWN_LEG_SECONDS = 3.5;
 
 // A test that packs the CLI (`packed-*.test.mjs`) never joins that leg, even
