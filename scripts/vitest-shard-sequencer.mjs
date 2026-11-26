@@ -18,7 +18,9 @@
  *   slowest single file sets the floor (spec:AST-030 FR22). The files that
  *   draw pages in a real Chrome share the last leg, with only light files
  *   beside them, so their pictures never run beside the packing and
- *   conformance suites (`nodeLegsApart`). Within a leg it
+ *   conformance suites; a real-Chrome file with a `// node-leg: own` line
+ *   takes a leg of its own, with the same light files beside it
+ *   (`nodeLegsApart`). Within a leg it
  *   starts the slowest recorded file first, so that file never waits behind
  *   others. Each file costs what the Node leg planner
  *   (scripts/vitest-node-legs.mjs) books for it, so the legs it planned are

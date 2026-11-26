@@ -20,6 +20,7 @@ import {
   PER_FILE_SECONDS,
   drawsInRealChrome,
   nodeFileCost,
+  takesOwnNodeLeg,
 } from './vitest-node-legs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -88,19 +89,32 @@ describe('duration-balanced Node legs', () => {
     count => {
       const legs = partitionByDuration(files, count, recorded);
       const legOf = file => legs.findIndex(leg => leg.includes(file));
-      // The last leg holds the real-Chrome files and light files only
+      // The last leg holds the real-Chrome files and light files only, and
+      // a marked real-Chrome file takes a leg of its own the same way
       // (nodeLegsApart), so the heavy files spread over the other legs.
+      const apartLegs = new Set([
+        count - 1,
+        ...files.filter(file => takesOwnNodeLeg(file)).map(legOf),
+      ]);
+      const open = count - apartLegs.size;
       const top = slowest
         .filter(file => !drawsInRealChrome(file))
-        .slice(0, count - 1)
+        .slice(0, open)
         .map(legOf);
-      expect(new Set(top).size).toBe(count - 1);
-      expect(top).not.toContain(count - 1);
-      // Greedy slowest-first: legs differ by at most the slowest file's time.
+      expect(new Set(top).size).toBe(open);
+      for (const leg of apartLegs) expect(top).not.toContain(leg);
+      // Greedy slowest-first: the other legs differ by at most the slowest
+      // file's time. The real-Chrome legs take light files only; with few
+      // legs those run out, so those legs may end shorter, never longer.
       const totals = legs.map(total);
-      expect(Math.max(...totals) - Math.min(...totals)).toBeLessThanOrEqual(
-        recorded[slowest[0]],
-      );
+      const openTotals = totals.filter((_, i) => !apartLegs.has(i));
+      expect(
+        Math.max(...openTotals) - Math.min(...openTotals),
+      ).toBeLessThanOrEqual(recorded[slowest[0]]);
+      for (const leg of apartLegs)
+        expect(totals[leg]).toBeLessThanOrEqual(
+          Math.max(...openTotals) + recorded[slowest[0]],
+        );
     },
   );
 
@@ -113,10 +127,11 @@ describe('duration-balanced Node legs', () => {
       expect(zeros).toBeGreaterThan(100);
       const mean = files.length / count;
       for (const [index, leg] of legs.entries()) {
-        // The real-Chrome files' leg tops up with light files only, so it
-        // holds more of them.
-        if (index < count - 1)
-          expect(leg.length).toBeLessThanOrEqual(mean * 1.15);
+        // The real-Chrome files' legs top up with light files only, so they
+        // hold more of them.
+        if (index === count - 1 || leg.some(file => takesOwnNodeLeg(file)))
+          continue;
+        expect(leg.length).toBeLessThanOrEqual(mean * 1.15);
         expect(leg.filter(zero).length).toBeLessThanOrEqual(
           (zeros / count) * 1.5,
         );
