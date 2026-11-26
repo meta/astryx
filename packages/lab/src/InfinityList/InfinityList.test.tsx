@@ -2,7 +2,7 @@
 
 import {createRef} from 'react';
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import {InfinityList, type InfinityListHandle} from './InfinityList';
 
 const label = 'Archive';
@@ -25,31 +25,57 @@ function expectItem(index: number, count = itemCount) {
 
 describe('InfinityList', () => {
   it('reaches an exact distant item and the last item without mounting the archive', () => {
-    const ref = createRef<InfinityListHandle>();
-    render(<InfinityList {...props} ref={ref} />);
-    expectItem(0);
+    const handleRef = createRef<InfinityListHandle>();
+    vi.useFakeTimers();
+    try {
+      render(<InfinityList {...props} handleRef={handleRef} />);
+      expectItem(0);
 
-    act(() => ref.current?.scrollToIndex(750_000_003));
-    expectItem(750_000_003);
-    expect(screen.queryByText('Record 1')).not.toBeInTheDocument();
+      act(() => handleRef.current?.scrollToIndex(750_000_003));
+      act(() => vi.advanceTimersToNextFrame());
+      expectItem(750_000_003);
+      expect(screen.queryByText('Record 1')).not.toBeInTheDocument();
 
-    act(() => ref.current?.scrollToIndex(itemCount - 1));
-    expectItem(itemCount - 1);
+      act(() => handleRef.current?.scrollToIndex(itemCount - 1));
+      act(() => vi.advanceTimersToNextFrame());
+      expectItem(itemCount - 1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('keeps nearby records available across two native scroll band changes', () => {
-    const {container} = render(<InfinityList {...props} />);
-    const viewport = container.firstElementChild as HTMLElement;
-    fireEvent.scroll(viewport, {target: {scrollTop: 999_000}});
-    expectItem(31_218);
-    expect(viewport.scrollTop).toBeLessThan(750_000);
-
-    const nextTop = viewport.scrollTop + 320;
-    fireEvent.scroll(viewport, {target: {scrollTop: nextTop}});
-    expectItem(31_228);
-    fireEvent.scroll(viewport, {target: {scrollTop: 128}});
-    expectItem(15_597);
-    expect(viewport.scrollTop).toBeGreaterThan(250_000);
+  it('batches wheel deltas and moves the list without writing native scrollTop', () => {
+    const getItemLabel = vi.fn(props.getItemLabel);
+    vi.useFakeTimers();
+    try {
+      const {container} = render(
+        <InfinityList {...props} getItemLabel={getItemLabel} />,
+      );
+      const list = screen.getByRole('list', {name: label});
+      const viewport = list.parentElement as HTMLElement;
+      const initialCalls = getItemLabel.mock.calls.length;
+      const initialItem = within(list).getByText('Record 1');
+      expect(fireEvent.wheel(viewport, {deltaY: 2.5})).toBe(false);
+      expect(fireEvent.wheel(viewport, {deltaY: 3.25})).toBe(false);
+      expect(list.style.getPropertyValue('--infinity-translate')).toBe('0px');
+      act(() => vi.advanceTimersToNextFrame());
+      expect(list.style.getPropertyValue('--infinity-translate')).toBe(
+        '-5.75px',
+      );
+      expect(within(list).getByText('Record 1')).toBe(initialItem);
+      expect(getItemLabel).toHaveBeenCalledTimes(initialCalls);
+      expect(viewport.scrollTop).toBe(0);
+      fireEvent.wheel(viewport, {deltaMode: 1, deltaY: 80});
+      act(() => vi.advanceTimersToNextFrame());
+      expectItem(80);
+      expect(viewport.scrollTop).toBe(0);
+      expect(container.querySelector('[role="scrollbar"]')).toHaveAttribute(
+        'aria-valuenow',
+        '80',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps every item in a short list available', () => {

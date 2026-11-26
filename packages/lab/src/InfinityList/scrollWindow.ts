@@ -2,8 +2,8 @@
 
 /**
  * @file scrollWindow.ts
- * @input Fixed item pitch and a bounded native scroll position
- * @output Logical item indices and the current native scroll extent
+ * @input Logical item position and a fixed-pitch viewport
+ * @output Viewport bounds and a range from the shared planner
  * @position Geometry adapter for the Lab list
  */
 import {calculateListWindow} from '@astryxdesign/core/internal/virtualization';
@@ -15,94 +15,132 @@ export interface ScrollGeometry {
 }
 
 export interface ScrollPosition {
-  bandStart: number;
-  scrollTop: number;
+  index: number;
+  offset: number;
 }
 
-export const INITIAL_POSITION: ScrollPosition = {bandStart: 0, scrollTop: 0};
+export const INITIAL_POSITION: ScrollPosition = {index: 0, offset: 0};
 
-// Keep the spacer well inside the range that engines can lay out natively.
-const MAX_NATIVE_HEIGHT = 1_000_000;
-
-function getBandSize({itemCount, itemHeight}: ScrollGeometry): number {
-  return Math.min(itemCount, Math.floor(MAX_NATIVE_HEIGHT / itemHeight));
+export function endPosition({
+  itemCount,
+  itemHeight,
+  viewportHeight,
+}: ScrollGeometry): ScrollPosition {
+  const fullRows = Math.floor(viewportHeight / itemHeight);
+  const remainder = viewportHeight % itemHeight;
+  if (itemCount <= viewportHeight / itemHeight) {
+    return INITIAL_POSITION;
+  }
+  return remainder === 0
+    ? {index: itemCount - fullRows, offset: 0}
+    : {index: itemCount - fullRows - 1, offset: itemHeight - remainder};
 }
 
-// Without rebasing, the native range stops at the end of the first band.
-function placeBand(
+export function movePosition(
   geometry: ScrollGeometry,
-  index: number,
-  offset: number,
+  position: ScrollPosition,
+  delta: number,
 ): ScrollPosition {
-  const {itemCount, itemHeight, viewportHeight} = geometry;
-  const bandSize = getBandSize(geometry);
-  const bandStart = Math.max(
-    0,
-    Math.min(itemCount - bandSize, index - Math.floor(bandSize / 2)),
-  );
-  return {
-    bandStart,
-    scrollTop: Math.min(
-      Math.max(0, bandSize * itemHeight - viewportHeight),
-      (index - bandStart) * itemHeight + offset,
-    ),
-  };
+  if (!Number.isFinite(delta) || delta === 0) {
+    return position;
+  }
+  const height = geometry.itemHeight;
+  const offset = position.offset + delta;
+  const rows = Math.floor(offset / height);
+  const end = endPosition(geometry);
+  if (rows > end.index - position.index) {
+    return end;
+  }
+  if (rows < -position.index) {
+    return INITIAL_POSITION;
+  }
+  const index = position.index + rows;
+  const remainder = Math.max(0, offset - rows * height);
+  return index === end.index && remainder > end.offset
+    ? end
+    : {index, offset: remainder};
 }
 
 export function jumpToItem(
   geometry: ScrollGeometry,
   index: number,
 ): ScrollPosition {
-  return placeBand(
-    geometry,
-    Math.max(0, Math.min(geometry.itemCount - 1, index)),
-    0,
+  const end = endPosition(geometry);
+  return index > end.index ? end : {index: Math.max(0, index), offset: 0};
+}
+
+export function wheelDistance(
+  geometry: ScrollGeometry,
+  {deltaX, deltaY, deltaMode, shiftKey}: WheelEvent,
+) {
+  if (shiftKey && deltaX === 0) {
+    return 0;
+  }
+  return (
+    deltaY *
+    (deltaMode === 1
+      ? geometry.itemHeight
+      : deltaMode === 2
+        ? geometry.viewportHeight
+        : 1)
   );
 }
 
-export function updateScrollWindow(
+export function scrollFraction(
   geometry: ScrollGeometry,
   position: ScrollPosition,
-  scrollTop: number,
+): number {
+  const end = endPosition(geometry);
+  const last = end.index + end.offset / geometry.itemHeight;
+  return last === 0
+    ? 0
+    : (position.index + position.offset / geometry.itemHeight) / last;
+}
+
+export function positionAtFraction(
+  geometry: ScrollGeometry,
+  fraction: number,
 ): ScrollPosition {
-  const {itemCount, itemHeight, viewportHeight} = geometry;
-  const bandSize = getBandSize(geometry);
-  const height = bandSize * itemHeight;
-  const top = Math.max(0, Math.min(height - viewportHeight, scrollTop));
-  const nearStart = top < height / 4 && position.bandStart > 0;
-  const nearEnd =
-    top + viewportHeight > (height * 3) / 4 &&
-    position.bandStart < itemCount - bandSize;
-  if (nearStart || nearEnd) {
-    const index = Math.floor(top / itemHeight);
-    return placeBand(
-      geometry,
-      position.bandStart + index,
-      top - index * itemHeight,
-    );
+  if (fraction <= 0) {
+    return INITIAL_POSITION;
   }
-  return top === position.scrollTop ? position : {...position, scrollTop: top};
+  const end = endPosition(geometry);
+  if (fraction >= 1) {
+    return end;
+  }
+  const target = fraction * (end.index + end.offset / geometry.itemHeight);
+  const index = Math.floor(target);
+  return {index, offset: (target - index) * geometry.itemHeight};
 }
 
 export function readScrollWindow(
-  geometry: ScrollGeometry,
-  position: ScrollPosition,
+  {itemCount, itemHeight, viewportHeight}: ScrollGeometry,
+  {index, offset}: ScrollPosition,
 ) {
-  const rowCount = getBandSize(geometry);
-  const {itemHeight, viewportHeight} = geometry;
+  // Plan in viewport-local coordinates so large indices cannot round away input deltas.
+  const origin = Math.max(0, index - 4);
   const plan = calculateListWindow({
-    rowCount,
+    rowCount: Math.min(
+      itemCount - origin,
+      Math.ceil(viewportHeight / itemHeight) + 10,
+    ),
     rowHeight: itemHeight,
     viewportHeight,
-    scrollTop: position.scrollTop,
+    scrollTop: (index - origin) * itemHeight + offset,
     startOffset: 0,
     isMeasured: true,
   });
-  return {
-    start: position.bandStart + (plan?.start ?? 0),
-    end: position.bandStart + (plan?.end ?? 0),
-    firstVisibleIndex: position.bandStart + (plan?.firstVisibleIndex ?? 0),
-    offset: (plan?.start ?? 0) * itemHeight,
-    height: rowCount * itemHeight,
-  };
+  return {start: origin + (plan?.start ?? 0), end: origin + (plan?.end ?? 0)};
+}
+
+export function coversViewport(
+  {itemCount, itemHeight, viewportHeight}: ScrollGeometry,
+  {index, offset}: ScrollPosition,
+  range: ReturnType<typeof readScrollWindow>,
+) {
+  const end = Math.min(
+    itemCount,
+    index + Math.ceil((offset + viewportHeight) / itemHeight),
+  );
+  return index >= range.start && end <= range.end;
 }
