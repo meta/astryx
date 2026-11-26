@@ -728,9 +728,7 @@ export function Dialog({
         opener: isHTMLElement(opener) ? opener : null,
         doc,
         isFocusMovedInOnOpen: true,
-        // The ring follows the last input in the opener's own document. The
-        // focus does not scroll; a Tab-stop opener the page scrolled out of
-        // view is then shown at its nearest edge.
+        // The ring follows the last input in the opener's own document.
         focus: element => {
           focusForLastInputTemporarily(element, {preventScroll: true});
           revealReturnTarget(element);

@@ -321,6 +321,39 @@ describe('returnFocusForLastInput reveal', () => {
     expect(reveal).toHaveBeenCalledOnce();
   });
 
+  it('scrolls an opener inside a scroller that a box with overflow hidden shows in full', () => {
+    // A dialog's clipped frame around its scrolling body: the body shows
+    // the opener after the scroll, so the frame need not move.
+    const element = opener(
+      '<div style="overflow-x: hidden; overflow-y: hidden"><div style="overflow-x: auto; overflow-y: auto"><button data-opener>Open</button></div></div>',
+    );
+    const body = element.parentElement as HTMLElement;
+    const frame = body.parentElement as HTMLElement;
+    const rect = (top: number, height: number) => ({
+      width: 200,
+      height,
+      top,
+      left: 0,
+      right: 200,
+      bottom: top + height,
+      x: 0,
+      y: top,
+      toJSON: () => ({}),
+    });
+    // The opener sits below both, scrolled out of the body's view.
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+      ...rect(500, 32),
+      width: 80,
+      right: 80,
+    });
+    vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(rect(0, 300));
+    vi.spyOn(body, 'clientHeight', 'get').mockReturnValue(300);
+    vi.spyOn(body, 'clientWidth', 'get').mockReturnValue(200);
+    vi.spyOn(frame, 'getBoundingClientRect').mockReturnValue(rect(0, 300));
+    returnFocusForLastInput(element);
+    expect(reveal).toHaveBeenCalledOnce();
+  });
+
   it('does not scroll when the opener did not take focus', () => {
     const element = opener('<button data-opener disabled>Open</button>');
     returnFocusForLastInput(element);

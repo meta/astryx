@@ -268,8 +268,11 @@ function scrollsForPerson(overflow: string): boolean {
  * Whether one scroll can show all of the element without moving content that
  * a person cannot scroll back. The element fits inside the viewport and inside
  * each scroller a person can scroll. A box with `overflow: hidden` (such as a
- * carousel track or a truncation wrapper) must already show the element along
- * that axis: `scrollIntoView` scrolls such a box too.
+ * carousel track or a truncation wrapper) must already show, along that axis,
+ * what the scroll leaves visible inside it: the element itself, or the nearest
+ * scroller a person can scroll between them (a dialog's scrolling body inside
+ * its clipped frame), since that scroller shows the element after the scroll.
+ * `scrollIntoView` scrolls a hidden box too.
  */
 function fitsVisibleArea(element: HTMLElement): boolean {
   const doc = element.ownerDocument;
@@ -278,6 +281,7 @@ function fitsVisibleArea(element: HTMLElement): boolean {
     return false;
   }
   const box = element.getBoundingClientRect();
+  let shown: DOMRect = box;
   const viewport = view.visualViewport;
   if (
     box.width > (viewport?.width ?? view.innerWidth) ||
@@ -291,9 +295,11 @@ function fitsVisibleArea(element: HTMLElement): boolean {
     scroller = scroller.parentElement
   ) {
     const style = view.getComputedStyle(scroller);
+    const scrollsX = scrollsForPerson(style.overflowX);
+    const scrollsY = scrollsForPerson(style.overflowY);
     if (
-      (scrollsForPerson(style.overflowX) && box.width > scroller.clientWidth) ||
-      (scrollsForPerson(style.overflowY) && box.height > scroller.clientHeight)
+      (scrollsX && box.width > scroller.clientWidth) ||
+      (scrollsY && box.height > scroller.clientHeight)
     ) {
       return false;
     }
@@ -305,11 +311,14 @@ function fitsVisibleArea(element: HTMLElement): boolean {
     const clip = scroller.getBoundingClientRect();
     if (
       (style.overflowX === 'hidden' &&
-        (box.left < clip.left || box.right > clip.right)) ||
+        (shown.left < clip.left || shown.right > clip.right)) ||
       (style.overflowY === 'hidden' &&
-        (box.top < clip.top || box.bottom > clip.bottom))
+        (shown.top < clip.top || shown.bottom > clip.bottom))
     ) {
       return false;
+    }
+    if (scrollsX || scrollsY) {
+      shown = clip;
     }
   }
   return true;

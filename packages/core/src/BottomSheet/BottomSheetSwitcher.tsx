@@ -634,9 +634,7 @@ export function BottomSheetSwitcher({
         // With a sheet still open beneath the flow, focus returns into that
         // sheet: to the opener when it is there, else to the sheet's panel.
         // Otherwise, like the browser's own return on close(), the focus does
-        // not scroll: the page kept its scroll offset under the lock. A
-        // Tab-stop opener the page scrolled out of view is then shown at its
-        // nearest edge; any other opener is not scrolled to.
+        // not scroll: the page kept its scroll offset under the lock.
         const revealed =
           left?.revealed ?? getBottomSheetBeneath(stackKeyRef.current);
         const trigger = triggerRef.current;

@@ -314,3 +314,67 @@ test('an opener that a box with overflow hidden clips is not scrolled into that 
   await page.waitForTimeout(250);
   expect(await track.evaluate(node => node.scrollTop)).toBe(0);
 });
+
+test('an opener inside a scroller that a box with overflow hidden frames is shown by that scroller', async ({
+  page,
+}) => {
+  const member = MEMBERS[0];
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=${member.story}&viewMode=story`,
+  );
+  const opener = member.opener(page);
+  await expect(opener).toBeVisible();
+  await page.evaluate(() => {
+    const root = document.getElementById('storybook-root');
+    if (root?.parentNode == null) {
+      throw new Error('no story root');
+    }
+    const spacer = (height: number) => {
+      const node = document.createElement('div');
+      node.style.height = `${height}px`;
+      return node;
+    };
+    // A clipped frame around a scrolling body, as a dialog or a sheet lays
+    // out its content.
+    const frame = document.createElement('div');
+    frame.id = 'clipped-frame';
+    frame.style.overflow = 'hidden';
+    frame.style.height = '300px';
+    const body = document.createElement('div');
+    body.id = 'scrolling-body';
+    body.style.overflow = 'auto';
+    body.style.height = '300px';
+    root.parentNode.insertBefore(frame, root);
+    frame.append(body);
+    body.append(spacer(400), root, spacer(1200));
+    body.scrollTop = 900;
+  });
+  const frame = page.locator('#clipped-frame');
+  const body = page.locator('#scrolling-body');
+  await opener.evaluate(node =>
+    (node as HTMLElement).focus({preventScroll: true}),
+  );
+  await openFromKeyboard(page, member);
+  await page.keyboard.press('Escape');
+  await expect(member.surface(page)).toBeHidden();
+  await expect(opener).toBeFocused();
+  // The body scrolls the opener just into its view, at its top edge.
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const node = document.querySelector<HTMLElement>(
+          '#scrolling-body button',
+        );
+        const area = document.getElementById('scrolling-body');
+        if (node == null || area == null) {
+          return null;
+        }
+        return Math.round(
+          node.getBoundingClientRect().top - area.getBoundingClientRect().top,
+        );
+      }),
+    )
+    .toBe(0);
+  expect(await body.evaluate(node => node.scrollTop)).toBeLessThan(900);
+  expect(await frame.evaluate(node => node.scrollTop)).toBe(0);
+});
