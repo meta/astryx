@@ -169,10 +169,11 @@ function mockVisualViewport(height: number, offsetTop = 0) {
   return viewport;
 }
 
-// The layout viewport — `100dvh`, `window.innerHeight` — which is what the
-// sheet's height budget and its detents are measured against. Deliberately
-// separate from the visual viewport above: the mobile keyboard shrinks that
-// one and leaves this one alone, and the sheet has to tell them apart.
+// The small viewport — `100svh`, which height budgets and touch-sheet detents
+// use — is separate from the live layout viewport used by caller-sized and
+// fine-pointer detents. Both are deliberately separate from the visual
+// viewport above: the mobile keyboard shrinks that one and leaves the layout
+// viewport alone, and the sheet has to tell them apart.
 function mockWindowHeight(height: number) {
   vi.stubGlobal('innerHeight', height);
 }
@@ -204,6 +205,23 @@ function mockPrimaryPointer(pointer: 'coarse' | 'fine') {
     'matchMedia',
     vi.fn((query: string) => ({
       matches: query === `(pointer: ${pointer})`,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
+function mockTouchPointer() {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches:
+        query === '(pointer: coarse)' || query === '(any-pointer: coarse)',
       media: query,
       onchange: null,
       addEventListener: vi.fn(),
@@ -2035,7 +2053,7 @@ describe('BottomSheet', () => {
       // 448px of layout height shows 400px of sheet: half the 800px window.
       expect(sheet.style.height).toBe('448px');
 
-      // Shrink the window. The sheet's budget is `92dvh`, so its border box
+      // Shrink the window. The sheet's budget is `92svh`, so its border box
       // follows: 0.92 * 600 + the 48px reserve = 600px.
       vi.spyOn(sheet, 'getBoundingClientRect').mockImplementation(() =>
         rect({
@@ -2059,6 +2077,82 @@ describe('BottomSheet', () => {
       expect(sheet.style.transition).toBe('none');
       act(() => reconciliationFrames.splice(0).forEach(frame => frame(0)));
       expect(sheet.style.transition).toBe('');
+    });
+
+    it('keeps a touch detent stable through toolbar movement and re-resolves it after a small-viewport resize', () => {
+      const observers = mockResizeObserverInstances();
+      mockTouchPointer();
+      mockVisualViewport(800);
+      mockWindowHeight(800);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Release notes"
+          snapPoints={SNAP_POINTS}
+          height="tall">
+          Content
+        </BottomSheet>,
+      );
+      const sheet = getSheet();
+      const probe = [
+        ...document.body.querySelectorAll<HTMLElement>('div'),
+      ].find(element => element.style.blockSize === '100svh');
+      if (probe == null) {
+        throw new Error('small viewport probe not found');
+      }
+      let smallViewportHeight = 800;
+      const probeSpy = vi
+        .spyOn(probe, 'getBoundingClientRect')
+        .mockImplementation(() => rect({top: 0, bottom: smallViewportHeight}));
+      vi.spyOn(sheet, 'getBoundingClientRect').mockImplementation(() =>
+        rect({
+          top: 0,
+          bottom: sheet.style.height
+            ? Number.parseFloat(sheet.style.height)
+            : 784,
+        }),
+      );
+      const sheetObserver = observers.find(instance =>
+        instance.observed.has(sheet),
+      );
+      try {
+        act(() => {
+          sheetObserver?.callback(
+            [resizeEntry(784, 736)],
+            sheetObserver as unknown as ResizeObserver,
+          );
+        });
+
+        // With a touch reserve of 320px, the p50 visible detent is 400px.
+        // The fully-open visible height is 464px, so the settled offset is
+        // 64px and its layout height is the visible detent plus the reserve.
+        fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
+        fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 64});
+        fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 64});
+        fireEvent.transitionEnd(sheet, {propertyName: 'transform'});
+        const settledHeight = sheet.style.height;
+        expect(settledHeight).not.toBe('');
+
+        // The layout viewport changes as browser chrome moves, but the small
+        // viewport and therefore the fractional detent do not.
+        act(() => {
+          window.innerHeight = 1000;
+          window.dispatchEvent(new Event('resize'));
+        });
+        expect(sheet.style.height).toBe(settledHeight);
+        expect(sheet.style.getPropertyValue('--_sheet-reserve')).toBe('320px');
+
+        // A real small-viewport change re-resolves the same fractional stop.
+        act(() => {
+          smallViewportHeight = 600;
+          window.innerHeight = 600;
+          window.dispatchEvent(new Event('resize'));
+        });
+        expect(sheet.style.height).not.toBe(settledHeight);
+      } finally {
+        probeSpy.mockRestore();
+      }
     });
 
     it('keeps its detents when the keyboard shrinks the visual viewport', () => {
@@ -2251,7 +2345,7 @@ describe('BottomSheet', () => {
       dragHandleTo(336);
       expect(sheet.style.height).toBe('448px');
 
-      // Without an inline height the sheet renders its natural 92dvh budget.
+      // Without an inline height the sheet renders its natural 92svh budget.
       vi.spyOn(sheet, 'getBoundingClientRect').mockImplementation(() =>
         rect({
           top: 0,
@@ -2673,7 +2767,7 @@ describe('BottomSheet', () => {
 
       expect(sheet.getBoundingClientRect()).toEqual(initialRect);
       expect(sheet.style.height).toBe('');
-      expect(sheet.style.getPropertyValue('--_sheet-budget')).toBe('92dvh');
+      expect(sheet.style.getPropertyValue('--_sheet-budget')).toBe('92svh');
       expect(positioner.style.getPropertyValue('--_sheet-keyboard-lift')).toBe(
         '',
       );

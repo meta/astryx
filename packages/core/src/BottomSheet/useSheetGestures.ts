@@ -33,10 +33,11 @@
 // writes the resting values after each commit, so a settle animates from
 // where the finger left the sheet.
 //
-// A resting sheet re-resolves its detent by index on a resize, an
+// A resting sheet re-resolves its detent by index on a real resize, an
 // orientation change, or new snap points, and re-anchors without animating.
 // The pixels change meaning when the viewport changes, but the chosen stop
-// does not.
+// does not. Hosts that ignore browser-chrome-only resizes keep their resolver
+// on the same viewport snapshot, so this hook has no geometry to change.
 //
 // On touch, the body hands the gesture to the sheet when every scroller under
 // the finger is at the edge that the pull opposes (see scrollChainUnder). A
@@ -406,8 +407,8 @@ export interface UseSheetGesturesOptions {
    * Resolver for candidate visible detent heights in px below the fully open
    * visible height. Called at the start of each drag, and again whenever the
    * viewport changes while the sheet rests, so the detents track the window
-   * (rotation, a resized desktop window, collapsing browser chrome). The fully
-   * open height is always the tallest detent. Omit for a single-height sheet
+   * (rotation and a resized desktop window). The fully open height is always
+   * the tallest detent. Omit for a single-height sheet
    * (a drag then only dismisses or springs back).
    *
    * Keep the identity stable: a new function is read as new stops, and

@@ -85,9 +85,9 @@ import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 const HEIGHT_BUDGETS = {
-  hug: '92dvh',
-  capped: '62dvh',
-  tall: '92dvh',
+  hug: '92svh',
+  capped: '62svh',
+  tall: '92svh',
 } as const;
 
 export type BottomSheetHeight = keyof typeof HEIGHT_BUDGETS;
@@ -203,25 +203,48 @@ function clearingScrimFade(panel: Element): Animation | undefined {
   ).at(-1);
 }
 
-// Measure the viewport that the height budgets use. They are `dvh`, which
-// the virtual keyboard does not shrink, so `visualViewport` would differ by
-// the keyboard's height. `useMobileKeyboard` handles the keyboard and does
-// not change the detents.
+// Measure the live layout viewport used by caller-sized and fine-pointer
+// sheets. Touch sheets use the small viewport below, because their named
+// height budgets use `svh`. `useMobileKeyboard` handles the keyboard
+// separately and does not change the detents.
 function layoutViewportHeight(): number {
   return typeof window === 'undefined' ? 0 : window.innerHeight;
 }
 
-// The layout viewport's height, as the `resize` listener last read it. While
-// the listener runs, a render reads this value, never `innerHeight`. After a
-// commit's DOM writes, a read of `innerHeight` forces a style recalculation
-// and a layout. Open sheets share one listener. With no sheet open, the value
-// is null, because nothing keeps it current.
+let smallViewportProbe: HTMLElement | null = null;
+
+function readSmallViewportHeight(): number {
+  if (typeof document === 'undefined' || document.body == null) {
+    return layoutViewportHeight();
+  }
+  if (smallViewportProbe == null) {
+    smallViewportProbe = document.createElement('div');
+    smallViewportProbe.setAttribute('aria-hidden', 'true');
+    smallViewportProbe.style.cssText =
+      'position:fixed;visibility:hidden;pointer-events:none;inline-size:0;block-size:100svh;';
+    document.body.appendChild(smallViewportProbe);
+  }
+  const height = smallViewportProbe.getBoundingClientRect().height;
+  return height > 0 ? height : layoutViewportHeight();
+}
+
+// The small viewport's height, as the shared `resize` listener last measured
+// it. A toolbar-only resize leaves this value alone, while a real layout
+// resize changes it. Open touch sheets share one listener and one probe. With
+// no sheet open, the value is null because nothing keeps it current.
 let viewportHeight: number | null = null;
 const viewportHeightListeners = new Set<() => void>();
 let stopViewportResize: (() => void) | null = null;
 
 function handleViewportResize(): void {
-  viewportHeight = layoutViewportHeight();
+  const nextHeight = readSmallViewportHeight();
+  // Keep the numeric reserve stable just as `svh` keeps the CSS budget stable
+  // when only the browser toolbar moves. A small-viewport change represents a
+  // real layout change, including a split-screen or keyboard resize.
+  if (viewportHeight === nextHeight) {
+    return;
+  }
+  viewportHeight = nextHeight;
   for (const listener of viewportHeightListeners) {
     listener();
   }
@@ -232,9 +255,9 @@ function subscribeToViewportHeight(onChange: () => void): () => void {
   if (stopViewportResize == null) {
     stopViewportResize = subscribeInput(window, 'resize', handleViewportResize);
     // A resize between the first render and this listener has no event left
-    // to deliver. So read the height now, and let React compare it with the
+    // to deliver. So measure the probe now, and let React compare it with the
     // height it rendered.
-    viewportHeight = layoutViewportHeight();
+    viewportHeight = readSmallViewportHeight();
     onChange();
   }
   return () => {
@@ -243,6 +266,8 @@ function subscribeToViewportHeight(onChange: () => void): () => void {
       stopViewportResize?.();
       stopViewportResize = null;
       viewportHeight = null;
+      smallViewportProbe?.remove();
+      smallViewportProbe = null;
     }
   };
 }
@@ -252,8 +277,14 @@ function readViewportHeight(): number {
   if (stopViewportResize == null) {
     return layoutViewportHeight();
   }
-  viewportHeight ??= layoutViewportHeight();
+  viewportHeight ??= readSmallViewportHeight();
   return viewportHeight;
+}
+
+// Snap points share the same stable small viewport while a touch sheet is
+// tracking it. Caller-sized and fine-pointer sheets retain live resize math.
+function snapPointViewportHeight(tracksViewport: boolean): number {
+  return tracksViewport ? readViewportHeight() : layoutViewportHeight();
 }
 
 function readNoViewportHeight(): number {
@@ -865,26 +896,6 @@ export function BottomSheetPanel({
   if (keyedSnapPoints.key !== snapPointsKey) {
     setKeyedSnapPoints({key: snapPointsKey, points: snapPoints});
   }
-  const {snapHeights, ignoredSnapPointsWarning} = useMemo(() => {
-    const {key, points} = keyedSnapPoints;
-    if (key === '') {
-      return {snapHeights: undefined, ignoredSnapPointsWarning: ''};
-    }
-    const ignored = (points ?? []).filter(point => !isValidSnapPoint(point));
-    return {
-      snapHeights: () =>
-        resolveSnapPoints(points ?? [], layoutViewportHeight()),
-      ignoredSnapPointsWarning:
-        ignored.length === 0
-          ? ''
-          : `snapPoints ignored ${JSON.stringify(ignored)}. A snap point is a viewport fraction above 0 and up to 1 (0.5 is half the screen), a px length ('320px'), or a percentage ('50%').`,
-    };
-  }, [keyedSnapPoints]);
-  useDevWarning(
-    'BottomSheet',
-    ignoredSnapPointsWarning,
-    ignoredSnapPointsWarning !== '',
-  );
 
   // A caller's height owns the element's height: the drag never writes it.
   const consumerHeight = style?.height;
@@ -899,6 +910,30 @@ export function BottomSheetPanel({
   // sizes, which nothing extends by the reserve; the stretch stops at it.
   const hasTouchPointer = useMediaQuery('(any-pointer: coarse)');
   const tracksViewport = isPresented && hasTouchPointer && !isSizedByCaller;
+  const {snapHeights, ignoredSnapPointsWarning} = useMemo(() => {
+    const {key, points} = keyedSnapPoints;
+    if (key === '') {
+      return {snapHeights: undefined, ignoredSnapPointsWarning: ''};
+    }
+    const ignored = (points ?? []).filter(point => !isValidSnapPoint(point));
+    return {
+      snapHeights: () =>
+        resolveSnapPoints(
+          points ?? [],
+          snapPointViewportHeight(tracksViewport),
+        ),
+      ignoredSnapPointsWarning:
+        ignored.length === 0
+          ? ''
+          : `snapPoints ignored ${JSON.stringify(ignored)}. A snap point is a viewport fraction above 0 and up to 1 (0.5 is half the screen), a px length ('320px'), or a percentage ('50%').`,
+    };
+  }, [keyedSnapPoints, tracksViewport]);
+  useDevWarning(
+    'BottomSheet',
+    ignoredSnapPointsWarning,
+    ignoredSnapPointsWarning !== '',
+  );
+
   // Each argument is a module function, so React keeps one snapshot function
   // across renders and does not re-read it in the commit.
   const trackedViewportHeight = useSyncExternalStore(

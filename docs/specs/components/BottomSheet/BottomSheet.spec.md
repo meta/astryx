@@ -300,6 +300,9 @@ remain documented in `BottomSheet.doc.mjs`.
 - The handle's pill is a pseudo-element and a standalone sheet's dialog holds
   the panel in place, so a standalone sheet's frame has no positioner or pill
   element of its own.
+- Under a touch pointer, open sheets share one hidden probe element on the
+  document body. Its one job is to measure the small viewport (`100svh`) that
+  the named height budgets use; it exists only while such a sheet is open.
 - Elements a presenting component adds beyond this frame are its own to
   justify.
 - **PR1 — One stack per document.** Sheets rendered by every copy of the
