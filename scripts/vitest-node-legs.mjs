@@ -158,8 +158,9 @@ export const BESIDE_REAL_CHROME_SECONDS = 10;
 // The most seconds a file may plan to join a real-Chrome file's own leg
 // (`// node-leg: own`). That file starts last in its leg, so the files still
 // running when it starts run beside its picture run, which is near its
-// bound; the lighter they are, the sooner they end. This is the least limit
-// whose files still fill that leg, so the leg counts stay as they are.
+// bound; the lighter they are, the sooner they end. It is the lowest
+// half-second step whose files still fill that leg, so the leg counts stay
+// as they are.
 export const BESIDE_OWN_LEG_SECONDS = 3.5;
 
 // A test that packs the CLI (`packed-*.test.mjs`) never joins that leg, even
