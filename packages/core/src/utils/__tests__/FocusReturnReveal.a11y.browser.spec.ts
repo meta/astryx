@@ -10,7 +10,8 @@
  *   that the page scrolled wholly or partly out of view is scrolled just into
  *   view at its nearest edge when the surface closes by Escape, by a control
  *   inside it, or by a press outside it; a Tab-stop opener taller than the
- *   viewport is not scrolled.
+ *   viewport is not scrolled, and neither is a box with `overflow: hidden`
+ *   that clips the opener.
  * @position Chromium and WebKit. A return target that is not a Tab stop (a
  *   `tabindex="-1"` region) is covered by DialogCloseScroll and
  *   BottomSheetCloseScroll, which require that the page does not move.
@@ -274,4 +275,44 @@ test('a Tab-stop return target taller than the viewport is not scrolled', async 
   await expect(member.surface(page)).toBeHidden();
   await page.waitForTimeout(250);
   expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
+});
+
+test('an opener that a box with overflow hidden clips is not scrolled into that box', async ({
+  page,
+}) => {
+  const member = MEMBERS[0];
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=${member.story}&viewMode=story`,
+  );
+  const opener = member.opener(page);
+  await expect(opener).toBeVisible();
+  await page.evaluate(() => {
+    const root = document.getElementById('storybook-root');
+    if (root?.parentNode == null) {
+      throw new Error('no story root');
+    }
+    const spacer = (height: number) => {
+      const node = document.createElement('div');
+      node.style.height = `${height}px`;
+      return node;
+    };
+    // A clipped track, as a carousel or a truncation wrapper uses: a person
+    // cannot scroll it, and the opener sits below its visible part.
+    const track = document.createElement('div');
+    track.id = 'clipped-track';
+    track.style.overflow = 'hidden';
+    track.style.height = '200px';
+    root.parentNode.insertBefore(track, root);
+    track.append(spacer(400), root, spacer(600));
+  });
+  const track = page.locator('#clipped-track');
+  await opener.evaluate(node =>
+    (node as HTMLElement).focus({preventScroll: true}),
+  );
+  await openFromKeyboard(page, member);
+  await page.keyboard.press('Escape');
+  await expect(member.surface(page)).toBeHidden();
+  await expect(opener).toBeFocused();
+  await page.waitForTimeout(250);
+  expect(await track.evaluate(node => node.scrollTop)).toBe(0);
 });

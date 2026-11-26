@@ -279,6 +279,48 @@ describe('returnFocusForLastInput reveal', () => {
     expect(reveal).not.toHaveBeenCalled();
   });
 
+  it('does not scroll an opener that a box with overflow hidden clips', () => {
+    const element = opener(
+      '<div style="overflow-x: hidden; overflow-y: hidden"><button data-opener>Open</button></div>',
+    );
+    const track = element.parentElement as HTMLElement;
+    // The track shows 0 to 20; the opener's box (0 to 32) runs past it.
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
+      width: 200,
+      height: 20,
+      top: 0,
+      left: 0,
+      right: 200,
+      bottom: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    returnFocusForLastInput(element);
+    expect(document.activeElement).toBe(element);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it('scrolls an opener that a box with overflow hidden shows in full', () => {
+    const element = opener(
+      '<div style="overflow-x: hidden; overflow-y: hidden"><button data-opener>Open</button></div>',
+    );
+    const track = element.parentElement as HTMLElement;
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
+      width: 200,
+      height: 100,
+      top: 0,
+      left: 0,
+      right: 200,
+      bottom: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    returnFocusForLastInput(element);
+    expect(reveal).toHaveBeenCalledOnce();
+  });
+
   it('does not scroll when the opener did not take focus', () => {
     const element = opener('<button data-opener disabled>Open</button>');
     returnFocusForLastInput(element);

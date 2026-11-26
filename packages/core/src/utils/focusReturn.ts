@@ -259,22 +259,21 @@ function isTabStop(element: HTMLElement): boolean {
   return element.tabIndex >= 0 && element.matches(FOCUSABLE_SELECTOR);
 }
 
-/** Whether an `overflow` value makes a scroll container. */
-function scrolls(overflow: string): boolean {
-  return (
-    overflow === 'auto' ||
-    overflow === 'scroll' ||
-    overflow === 'hidden' ||
-    overflow === 'overlay'
-  );
+/** Whether an `overflow` value lets a person scroll the box. */
+function scrollsForPerson(overflow: string): boolean {
+  return overflow === 'auto' || overflow === 'scroll' || overflow === 'overlay';
 }
 
 /**
- * Whether the element fits inside the viewport and inside each scroller
- * around it, so that one scroll can show all of it.
+ * Whether one scroll can show all of the element without moving content that
+ * a person cannot scroll back. The element fits inside the viewport and inside
+ * each scroller a person can scroll. A box with `overflow: hidden` (such as a
+ * carousel track or a truncation wrapper) must already show the element along
+ * that axis: `scrollIntoView` scrolls such a box too.
  */
 function fitsVisibleArea(element: HTMLElement): boolean {
-  const view = element.ownerDocument.defaultView;
+  const doc = element.ownerDocument;
+  const view = doc.defaultView;
   if (view == null) {
     return false;
   }
@@ -293,8 +292,22 @@ function fitsVisibleArea(element: HTMLElement): boolean {
   ) {
     const style = view.getComputedStyle(scroller);
     if (
-      (scrolls(style.overflowX) && box.width > scroller.clientWidth) ||
-      (scrolls(style.overflowY) && box.height > scroller.clientHeight)
+      (scrollsForPerson(style.overflowX) && box.width > scroller.clientWidth) ||
+      (scrollsForPerson(style.overflowY) && box.height > scroller.clientHeight)
+    ) {
+      return false;
+    }
+    // A scroll lock can hide the page's own overflow while a surface is
+    // open. The page stays a scroller a person uses.
+    if (scroller === doc.documentElement || scroller === doc.body) {
+      continue;
+    }
+    const clip = scroller.getBoundingClientRect();
+    if (
+      (style.overflowX === 'hidden' &&
+        (box.left < clip.left || box.right > clip.right)) ||
+      (style.overflowY === 'hidden' &&
+        (box.top < clip.top || box.bottom > clip.bottom))
     ) {
       return false;
     }
@@ -309,7 +322,7 @@ function fitsVisibleArea(element: HTMLElement): boolean {
  * records the nearest focusable ancestor of a tapped button as the opener,
  * such as a `tabindex="-1"` main region, and a reveal of that region scrolls
  * the page to its top edge. A target larger than the visible area is not
- * scrolled either. Internal.
+ * scrolled either, nor one that a box with `overflow: hidden` clips. Internal.
  */
 export function revealReturnTarget(element: HTMLElement): void {
   if (
