@@ -171,10 +171,11 @@ async function expectRevealed(
 }
 
 /**
- * WebKit and Chromium 155 restore focus themselves when a menu's popover hides
- * with focus inside it, as on an Escape or an outside press, and they centre
- * the opener. The opener is then wholly in view, so nothing is left to reveal,
- * but it is not at its nearest edge. Older Chromium builds do not centre it.
+ * A keyboard open focuses the menu's first row with a plain focus. WebKit and
+ * Chromium 155 then scroll the page to centre the menu, which brings the
+ * opener into view before the close. The close then has nothing to reveal,
+ * and the opener is not at its nearest edge. Older Chromium builds do not
+ * scroll at the open.
  */
 function browserCentres(member: Member): boolean {
   return member.name === 'DropdownMenu';
