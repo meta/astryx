@@ -9,7 +9,7 @@ export const docs = {
   keywords: ['virtualization', 'list', 'large data', 'scroll'],
   usage: {
     description:
-      'Experimental list for browsing up to one billion fixed-height text items without allocating the full data set. Scroll locally or use the ref to jump to an exact index. The native scrollbar represents the current segment, not the entire archive. Items are read-only and only the mounted window is exposed to assistive technology. The list owns its viewport; it does not window document scroll.',
+      'Experimental list for browsing up to one billion fixed-height text items without allocating the full data set. Use the wheel to move locally, the scrollbar to navigate the full range, or handleRef to jump to an exact index. Items are read-only and only the mounted window is exposed to assistive technology. The list owns its viewport; it does not window document scroll.',
   },
   props: [
     {
@@ -27,13 +27,14 @@ export const docs = {
     {
       name: 'itemHeight',
       type: 'number',
-      description: 'Fixed item height in whole CSS pixels.',
+      description: 'Fixed item height in whole CSS pixels, from 1 to 65,536.',
       required: true,
     },
     {
       name: 'viewportHeight',
       type: 'number',
-      description: 'Height of the scroll area in whole CSS pixels.',
+      description:
+        'Viewport height in whole CSS pixels, from 1 to 65,536. The viewport can span at most 1,024 items.',
       required: true,
     },
     {
@@ -43,7 +44,7 @@ export const docs = {
       required: true,
     },
     {
-      name: 'ref',
+      name: 'handleRef',
       type: 'Ref<InfinityListHandle>',
       description:
         'Exposes scrollToIndex for exact jumps. Changing the count or geometry resets the viewport.',

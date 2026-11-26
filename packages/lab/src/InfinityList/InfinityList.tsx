@@ -4,40 +4,28 @@
 
 /**
  * @file InfinityList.tsx
- * @input A fixed item height, a viewport height, and labels indexed by position
- * @output A native scroll area that mounts only nearby items
+ * @input Fixed item geometry and labels indexed by position
+ * @output Nearby items in a clipped viewport with logical scrolling
  * @position Lab experiment for lists beyond browser layout limits
  */
-import {
-  useImperativeHandle,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type Ref,
-} from 'react';
+import {useId, useImperativeHandle, useMemo, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
-import {
-  INITIAL_POSITION,
-  jumpToItem,
-  readScrollWindow,
-  updateScrollWindow,
-} from './scrollWindow';
+import {InfinityScrollbar} from './InfinityScrollbar';
+import {endPosition, jumpToItem} from './scrollWindow';
+import {useInfinityScroll} from './useInfinityScroll';
 
 const styles = stylex.create({
-  viewport: {maxBlockSize: 'none', overflowAnchor: 'none'},
+  root: {display: 'flex'},
+  viewport: {overflow: 'clip', flex: '1 1 auto', minInlineSize: 0},
+  height: (height: number) => ({blockSize: height}),
   list: {
-    boxSizing: 'border-box',
     listStyle: 'none',
     margin: 0,
-    paddingInlineStart: 0,
-    paddingBlockEnd: 0,
+    padding: 0,
+    transform: 'translateY(var(--infinity-translate, 0px))',
+    willChange: 'transform',
   },
-  extent: (height: number, offset: number) => ({
-    blockSize: height,
-    paddingBlockStart: offset,
-  }),
   item: {
     boxSizing: 'border-box',
     overflow: 'hidden',
@@ -59,11 +47,11 @@ export interface InfinityListProps {
   itemCount: number;
   /** Fixed item height in whole CSS pixels. */
   itemHeight: number;
-  /** Native scroll viewport height in whole CSS pixels. */
+  /** Viewport height in whole CSS pixels. */
   viewportHeight: number;
   /** Supplies the text for a mounted item. No array of all items is needed. */
   getItemLabel: (index: number) => string;
-  ref?: Ref<InfinityListHandle>;
+  handleRef?: Ref<InfinityListHandle>;
 }
 
 function assertGeometry(
@@ -86,7 +74,7 @@ function assertGeometry(
   }
 }
 
-/** Fixed-height text items in a bounded native scroll area. */
+/** Fixed-height text items in a clipped scroll viewport. */
 export function InfinityList(props: InfinityListProps) {
   const {itemCount, itemHeight, viewportHeight} = props;
   assertGeometry(itemCount, itemHeight, viewportHeight);
@@ -104,74 +92,74 @@ function InfinityListViewport({
   itemHeight,
   viewportHeight,
   getItemLabel,
-  ref,
+  handleRef,
 }: InfinityListProps) {
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState(INITIAL_POSITION);
-  const geometry = {itemCount, itemHeight, viewportHeight};
-  const window = readScrollWindow(geometry, position);
+  const id = useId();
+  const geometry = useMemo(
+    () => ({itemCount, itemHeight, viewportHeight}),
+    [itemCount, itemHeight, viewportHeight],
+  );
+  const end = endPosition(geometry);
+  const canScroll = end.index > 0 || end.offset > 0;
+  const thumbHeight = Math.min(
+    viewportHeight,
+    Math.max(24, viewportHeight ** 2 / (Math.max(1, itemCount) * itemHeight)),
+  );
+  const {viewportRef, listRef, thumbRef, range, navigate, move, readFraction} =
+    useInfinityScroll(geometry, viewportHeight - thumbHeight);
 
   useImperativeHandle(
-    ref,
+    handleRef,
     () => ({
       scrollToIndex(index) {
         if (Number.isSafeInteger(index)) {
-          setPosition(
-            jumpToItem({itemCount, itemHeight, viewportHeight}, index),
-          );
+          navigate(jumpToItem(geometry, index));
         }
       },
     }),
-    [itemCount, itemHeight, viewportHeight],
+    [geometry, navigate],
   );
-
-  // Sync the native viewport with the range that just committed.
-  useLayoutEffect(() => {
-    const viewport = viewportRef.current;
-    if (
-      viewport !== null &&
-      Math.abs(viewport.scrollTop - position.scrollTop) > 0.5
-    ) {
-      viewport.scrollTop = position.scrollTop;
-    }
-  }, [position]);
 
   const itemProps = stylex.props(styles.item, styles.pitch(itemHeight));
   return (
-    <ScrollableArea
-      ref={viewportRef}
-      label={label}
-      height={viewportHeight}
-      stickyContainment={
-        itemCount * itemHeight > viewportHeight ? 'always' : undefined
-      }
-      xstyle={styles.viewport}
-      onScroll={event => {
-        const scrollTop = event.currentTarget.scrollTop;
-        setPosition(previous =>
-          updateScrollWindow(geometry, previous, scrollTop),
-        );
-      }}>
-      <ul
-        role="list"
+    <div {...stylex.props(styles.root)}>
+      <div
+        ref={viewportRef}
+        role="group"
         aria-label={label}
-        {...stylex.props(
-          styles.list,
-          styles.extent(window.height, window.offset),
-        )}>
-        {Array.from({length: window.end - window.start}, (_, i) => {
-          const index = window.start + i;
-          return (
-            <li
-              key={index}
-              aria-posinset={index + 1}
-              aria-setsize={itemCount}
-              {...itemProps}>
-              {getItemLabel(index)}
-            </li>
-          );
-        })}
-      </ul>
-    </ScrollableArea>
+        {...stylex.props(styles.viewport, styles.height(viewportHeight))}>
+        <ul
+          id={id}
+          ref={listRef}
+          role="list"
+          aria-label={label}
+          {...stylex.props(styles.list)}>
+          {Array.from({length: range.end - range.start}, (_, i) => {
+            const index = range.start + i;
+            return (
+              <li
+                key={index}
+                aria-posinset={index + 1}
+                aria-setsize={itemCount}
+                {...itemProps}>
+                {getItemLabel(index)}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      {canScroll && (
+        <InfinityScrollbar
+          geometry={geometry}
+          controls={id}
+          label={label}
+          thumbHeight={thumbHeight}
+          thumbRef={thumbRef}
+          navigate={navigate}
+          move={move}
+          readFraction={readFraction}
+        />
+      )}
+    </div>
   );
 }
