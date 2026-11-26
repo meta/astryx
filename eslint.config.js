@@ -21,14 +21,19 @@ import {scope as commentProvenanceScope} from './internal/eslint-plugin-astryx/n
 /**
  * Astryx ESLint Configuration
  *
- * Two-tier linting philosophy:
- * - CI/Agents: Strict mode (errors) - Set ASTRYX_STRICT_LINT=1 or CI=true
- * - Humans: Recommended mode (warnings) - Default for local development
+ * Two tiers:
+ * - CI and agents: strict mode, set by ASTRYX_STRICT_LINT=1 or CI=true. The
+ *   plugin's strict config applies, and each rule below that reads
+ *   `isStrictMode` reports an error. A rule the repository has not yet cleared
+ *   stays a warning in both tiers; it reads `isStrictMode` once its last
+ *   warning is fixed (scripts/lint-strict-promotions.test.mjs lists those).
+ * - People: recommended mode, the default for local development, where the
+ *   same rules warn.
  *
  * Usage:
- *   pnpm lint                    # Human mode (warnings)
- *   ASTRYX_STRICT_LINT=1 pnpm lint  # Strict mode (errors)
- *   CI=true pnpm lint            # Also triggers strict mode
+ *   pnpm lint                       # Recommended mode
+ *   ASTRYX_STRICT_LINT=1 pnpm lint  # Strict mode
+ *   CI=true pnpm lint               # Also strict mode
  */
 
 const isStrictMode =
@@ -282,7 +287,7 @@ export default defineConfig(
         },
       ],
       'no-console': ['warn', {allow: ['warn', 'error']}],
-      curly: 'warn',
+      curly: isStrictMode ? 'error' : 'warn',
       '@typescript-eslint/no-non-null-assertion': 'warn',
       '@typescript-eslint/consistent-type-assertions': [
         'warn',
