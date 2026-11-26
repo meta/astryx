@@ -8,8 +8,7 @@
  * @output Exports LazyCalendar, the host of a date field's popover Calendar,
  *   and loadCalendar and isCalendarLoaded, which the field's intent and its
  *   open call use
- * @position Internal surface host for DateInput, DateTimeInput,
- *   DateRangeInput and PowerSearch's date editor
+ * @position Internal surface host for DateTimeInput and DateRangeInput
  *
  * The host renders nothing until Calendar has loaded. A field opens its
  * popover only after the load, so the popover never shows without its

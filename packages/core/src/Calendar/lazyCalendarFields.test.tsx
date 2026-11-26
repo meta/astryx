@@ -165,6 +165,34 @@ describe.each(FIELDS)('$name Calendar on first intent', ({element}) => {
   });
 });
 
+describe('DateTimeInput time segment while Calendar loads', () => {
+  function timeInput(): HTMLElement {
+    return screen.getByLabelText('Starts time');
+  }
+
+  it('drops the held open on a press on the time segment', async () => {
+    render(<DateTimeInput label="Starts" onChange={noop} />);
+    fireEvent.click(toggle());
+    fireEvent.pointerDown(timeInput());
+    fireEvent.pointerUp(timeInput());
+    await finishLoad();
+    expect(dateInput()).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('drops the held open when focus moves to the time segment', async () => {
+    render(<DateTimeInput label="Starts" onChange={noop} />);
+    act(() => {
+      dateInput().focus();
+    });
+    fireEvent.keyDown(dateInput(), {key: 'ArrowDown'});
+    act(() => {
+      timeInput().focus();
+    });
+    await finishLoad();
+    expect(dateInput()).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
 describe('DateTimeInput with the native picker', () => {
   it('loads no Calendar on an intent', () => {
     render(
