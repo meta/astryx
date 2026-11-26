@@ -15,12 +15,12 @@ import {Temporal as TemporalPolyfill} from 'temporal-polyfill/full';
 import {DateRangeInput, type DateRangeInputProps} from './DateRangeInput';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import {__resetDevWarnings} from '../utils/devWarning';
-import {loadDateRangeCalendar} from './DateRangeCalendar';
+import {loadCalendar} from '../Calendar/LazyCalendar';
 // Calendar loads on the trigger's first intent. Loading it up front lets these
 // cases open the popover synchronously; DateRangeInput.calendarLoad*.test.tsx
 // covers the load itself.
 beforeAll(async () => {
-  await loadDateRangeCalendar();
+  await loadCalendar();
 });
 
 const host = globalThis as {Temporal?: unknown};

@@ -22,9 +22,9 @@ const calendarLoad = vi.hoisted(() => ({
   finish: (_isLoaded: boolean) => {},
 }));
 
-vi.mock('./DateRangeCalendar', () => ({
-  isDateRangeCalendarLoaded: () => calendarLoad.isLoaded,
-  loadDateRangeCalendar: async () => {
+vi.mock('../Calendar/LazyCalendar', () => ({
+  isCalendarLoaded: () => calendarLoad.isLoaded,
+  loadCalendar: async () => {
     if (calendarLoad.pending == null) {
       calendarLoad.loads += 1;
       calendarLoad.pending = new Promise<boolean>(resolve => {
@@ -37,7 +37,7 @@ vi.mock('./DateRangeCalendar', () => ({
     }
     return calendarLoad.pending;
   },
-  DateRangeCalendar: () => <div data-testid="range-calendar" />,
+  LazyCalendar: () => <div data-testid="range-calendar" />,
 }));
 
 import {DateRangeInput} from './DateRangeInput';

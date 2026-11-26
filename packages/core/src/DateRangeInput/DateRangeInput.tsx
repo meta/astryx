@@ -70,14 +70,8 @@ import type {
 } from '../Calendar';
 import {useCalendarConstraints} from '../Calendar/hooks';
 import {usePopover} from '../Popover';
-import {useOutsidePress} from '../Layer/outsidePress';
-import {isShadowRoot} from '../utils/nodeType';
-import {useCommittedRef} from '../hooks/useCommittedRef';
-import {
-  DateRangeCalendar,
-  isDateRangeCalendarLoaded,
-  loadDateRangeCalendar,
-} from './DateRangeCalendar';
+import {LazyCalendar} from '../Calendar/LazyCalendar';
+import {useLazyCalendarOpen} from '../Calendar/useLazyCalendarOpen';
 import {useTooltip} from '../Tooltip';
 import {mergeProps} from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
@@ -730,97 +724,22 @@ export function DateRangeInput({
     ],
   );
 
-  // An open asked for before Calendar loads opens once it loads, and a
-  // failed load drops it. The popover never shows without Calendar.
-  // While the open is held, the trigger still reads as closed, so another
-  // press is another open intent and keeps the hold. A press outside the
-  // field, focus moving to another element, or Escape drops the hold, as
-  // Selector's held sheet open does. No popover then appears later, over what
-  // the person turned to.
-  const isOpenHeldRef = useRef(false);
-  const heldPressWatch = useOutsidePress();
   const fieldRef = useRef<HTMLDivElement | null>(null);
-  const showPopoverRef = useCommittedRef(popover.show);
-  const isDisabledRef = useCommittedRef(isEffectivelyDisabled);
-  const dropHeldOpen = useCallback(() => {
-    isOpenHeldRef.current = false;
-    heldPressWatch.stop();
-  }, [heldPressWatch]);
-  const holdOpenUntilLoaded = useCallback(() => {
-    if (isOpenHeldRef.current) {
-      return;
-    }
-    isOpenHeldRef.current = true;
-    const field = fieldRef.current;
-    if (field != null) {
-      const root = field.getRootNode();
-      heldPressWatch.start(field, path => path.includes(field), dropHeldOpen, {
-        root: isShadowRoot(root) ? root : null,
-        // The drop closes no layer, so a backdrop press still closes its host.
-        isDismissal: false,
-      });
-    }
-    void loadDateRangeCalendar().then(isLoaded => {
-      if (!isOpenHeldRef.current) {
-        return;
-      }
-      dropHeldOpen();
-      // An unmounted or now disabled field opens nothing.
-      if (
-        isLoaded &&
-        !isDisabledRef.current &&
-        fieldRef.current?.isConnected === true
-      ) {
-        showPopoverRef.current();
-      }
-    });
-  }, [dropHeldOpen, heldPressWatch, isDisabledRef, showPopoverRef]);
+  const lazyCalendar = useLazyCalendarOpen({
+    fieldRef,
+    isDisabled: isEffectivelyDisabled,
+    show: popover.show,
+  });
   const handleToggle = useCallback(() => {
     if (isEffectivelyDisabled) {
       return;
     }
     if (popover.isOpen) {
       popover.hide();
-    } else if (isDateRangeCalendarLoaded()) {
-      popover.show();
     } else {
-      holdOpenUntilLoaded();
+      lazyCalendar.open();
     }
-  }, [holdOpenUntilLoaded, isEffectivelyDisabled, popover]);
-  const handleFieldBlur = useCallback(
-    (event: React.FocusEvent<HTMLDivElement>) => {
-      const next = event.relatedTarget;
-      if (
-        isOpenHeldRef.current &&
-        next instanceof Node &&
-        !event.currentTarget.contains(next)
-      ) {
-        dropHeldOpen();
-      }
-    },
-    [dropHeldOpen],
-  );
-  const handleFieldKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === 'Escape' && isOpenHeldRef.current) {
-        dropHeldOpen();
-      }
-    },
-    [dropHeldOpen],
-  );
-  // The trigger's intent (a mouse or pen entry, a focus or a press) starts
-  // loading Calendar, so an open that follows finds it loaded.
-  const preloadCalendar = useCallback(() => {
-    void loadDateRangeCalendar();
-  }, []);
-  const preloadCalendarOnPointerEnter = useCallback(
-    (event: React.PointerEvent) => {
-      if (event.pointerType !== 'touch') {
-        preloadCalendar();
-      }
-    },
-    [preloadCalendar],
-  );
+  }, [isEffectivelyDisabled, lazyCalendar, popover]);
 
   const handleRangeSelect = useCallback(
     (range: DateRange) => {
@@ -891,11 +810,7 @@ export function DateRangeInput({
           // compose, so attaching unconditionally is safe.
           disabledMessageTooltip.ref(el);
         }}
-        onPointerEnter={preloadCalendarOnPointerEnter}
-        onPointerDown={preloadCalendar}
-        onFocus={preloadCalendar}
-        onBlur={handleFieldBlur}
-        onKeyDown={handleFieldKeyDown}
+        {...lazyCalendar.fieldProps}
         {...mergeProps(
           themeProps('date-range-input', {
             size,
@@ -1062,7 +977,7 @@ export function DateRangeInput({
             {/* The layer renders its children open or closed, so mount the
               calendar only while it is open. */}
             {popover.isOpen && (
-              <DateRangeCalendar
+              <LazyCalendar
                 calendar={calendar}
                 mode="range"
                 value={optimisticValue}

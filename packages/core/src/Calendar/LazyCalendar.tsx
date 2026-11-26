@@ -3,15 +3,16 @@
 'use client';
 
 /**
- * @file DateRangeCalendar.tsx
+ * @file LazyCalendar.tsx
  * @input Uses Calendar through the shared module loader
- * @output Exports DateRangeCalendar, the host of the range picker's popover
- *   Calendar, and loadDateRangeCalendar and isDateRangeCalendarLoaded, which
- *   the trigger's intent and its open call use
- * @position Internal surface host for DateRangeInput
+ * @output Exports LazyCalendar, the host of a date field's popover Calendar,
+ *   and loadCalendar and isCalendarLoaded, which the field's intent and its
+ *   open call use
+ * @position Internal surface host for DateInput, DateTimeInput,
+ *   DateRangeInput and PowerSearch's date editor
  *
- * The host renders nothing until Calendar has loaded. DateRangeInput opens
- * its popover only after the load, so the popover never shows without its
+ * The host renders nothing until Calendar has loaded. A field opens its
+ * popover only after the load, so the popover never shows without its
  * Calendar. It renders nothing on the server or while the page hydrates;
  * the closed popover holds no Calendar.
  */
@@ -19,16 +20,16 @@
 import {useSyncExternalStore, type ReactElement} from 'react';
 import {warnOnce} from '../utils/devWarning';
 import {createModuleLoader} from '../utils/moduleLoader';
-import type * as CalendarModule from '../Calendar/Calendar';
-import type {CalendarProps} from '../Calendar/Calendar';
+import type * as CalendarModule from './Calendar';
+import type {CalendarProps} from './Calendar';
 
 const calendar = createModuleLoader<typeof CalendarModule>(
-  async () => import('../Calendar/Calendar'),
+  async () => import('./Calendar'),
   {
     onLoadFailure: () =>
       warnOnce(
-        'date-range-input:calendar-load-failed',
-        'DateRangeInput',
+        'calendar:load-failed',
+        'Calendar',
         "The calendar could not load. Reload the page if it doesn't come back.",
       ),
   },
@@ -43,16 +44,16 @@ const readNoCalendar = (): null => null;
  * browser that keeps a failed module keeps the Calendar unavailable until
  * the page reloads.
  */
-export async function loadDateRangeCalendar(): Promise<boolean> {
+export async function loadCalendar(): Promise<boolean> {
   return calendar.tryLoad();
 }
 
 /** True once Calendar has loaded. */
-export function isDateRangeCalendarLoaded(): boolean {
+export function isCalendarLoaded(): boolean {
   return calendar.loaded() != null;
 }
 
-export function DateRangeCalendar(props: CalendarProps): ReactElement | null {
+export function LazyCalendar(props: CalendarProps): ReactElement | null {
   const loaded = useSyncExternalStore(
     calendar.subscribe,
     readCalendar,

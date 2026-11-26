@@ -6,7 +6,7 @@
  *   module counted
  * @output Tests that a touch entry does not start loading the Calendar and
  *   a mouse entry does
- * @position Testing for DateRangeCalendar.tsx
+ * @position Testing for LazyCalendar.tsx
  */
 
 import {act, fireEvent, render} from '@testing-library/react';
