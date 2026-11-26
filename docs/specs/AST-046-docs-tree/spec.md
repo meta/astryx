@@ -42,7 +42,7 @@ This record owns how a doc gets its one home in the tree, how a route is formed,
 how `astryx docs` reads the tree, and what `astryx doctor` checks. It places the
 CLI's own docs and the namespace docs and guides each integration ships, and
 gives every other doc a home in a generated level named for its category,
-Guides or Foundations; a later change may move those docs into real sections.
+Guides or Foundations.
 
 A long flat topic can become a namespace of short guides, so a reader loads only
 the guide that answers. The split keeps the unambiguous reads a released

@@ -198,10 +198,11 @@ narrow exception.
 Current `main` stores explicit theme colors and has no palette field in the
 normalized theme contract. This proposal preserves that behavior.
 
-No maintained theme uses a palette field. A Neutral adoption is its own change: its palette can
-live in a private theme-owned TypeScript file, while `neutralTheme.ts` explicitly
-references reviewed values that resolve to CSS colors. That adoption requires its own
-visual review, tests, theme record, and release treatment rather than receiving
+Neutral keeps its palette in a private theme-owned TypeScript file,
+`neutralPalettes.ts`, and `neutralTheme.ts` references its reviewed values
+through `neutralPaletteRefs`, which resolve to CSS colors. No palette field
+enters the normalized theme contract. Neutral's palette carries its own visual
+review, tests, theme record, and release treatment rather than receiving
 implicit approval from this contract.
 
 The existing sandbox generator remains useful design evidence. A production

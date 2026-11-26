@@ -261,8 +261,7 @@ still determine whether the implementation satisfies it.
   conditionally overrides that representation. This shape would be rejected
   under FR16 pending a canonical `component:Table` contract. AST-002 does not
   prescribe the replacement API.
-- This policy and template change adds no gate implementation code. The
-  mechanical API gate and its benchmark are separate work.
+- AST-002 defines no mechanical API gate or benchmark.
 
 ## Verification
 

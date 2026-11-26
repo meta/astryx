@@ -112,8 +112,7 @@ This record owns the moves a read offers and how they appear in text and JSON.
   so it survives version changes.
 - **FR10 — Docs and search are in scope.** `astryx docs` and `astryx search`
   MUST meet FR1–FR9, FR11, and FR12. A command a doc shows as an example, in a code
-  block or in prose, is not a link: FR11 keeps it true. Other commands adopt
-  this record each in its own change.
+  block or in prose, is not a link: FR11 keeps it true.
 - **FR11 — Nothing a read shows can go stale.** A move or a cross-link MUST be
   derived when the read is made, never stored in a doc. Every other `astryx`
   command that a doc, a hint line, or the repository's agent prompt shows MUST
