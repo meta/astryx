@@ -2,15 +2,17 @@
 
 /**
  * @file ListInputReorder.a11y.chromium.spec.ts
- * @input The Lab/ListInput › Tag Options story and the A11y/ListInput ›
- *   Fixed record fixture in a built Storybook. Real Chromium touch input
- *   (CDP) and keys on a phone viewport
+ * @input The Lab/ListInput › Tag Options and Reorder Handle Options stories
+ *   and the A11y/ListInput › Fixed record fixture in a built Storybook. Real
+ *   Chromium touch input (CDP) and keys on a phone viewport
  * @output Browser evidence that on a touch screen a keyboard move slides the
  *   records it swaps rather than jumping them in one frame. UIKit's motion is
  *   the same on every touch screen. With a mouse, the records take their
  *   places without travel. Reorder mode marks the record with the list's
  *   insertion line, and stays on through each move. The Add button, each
- *   handle and a fixed record's Remove keep to the record columns
+ *   handle and a fixed record's Remove keep to the record columns. A start
+ *   handle's finger target is at least an end handle's, with each reveal
+ *   behaviour and in a host that clips at the list's edges
  * @position Chromium proof for ListInput's reorder, which runs on core List's
  *   reorder session (List/ListReorderScope.tsx)
  */
@@ -385,30 +387,33 @@ test.describe('a record that stays put', () => {
   }
 });
 
+const REVEAL_BEHAVIORS = ['always', 'adaptive'] as const;
+
 test.describe('a finger on the reorder handle', () => {
   /** The span across the first handle's centre that lands on it, each axis. */
   async function handleTarget(
     page: Page,
     placement: 'start' | 'end',
+    revealBehavior: (typeof REVEAL_BEHAVIORS)[number],
     isClipped = false,
   ) {
     await page.goto(
-      `${storybook.origin}/iframe.html?id=lab-listinput--reorder-handle-options&viewMode=story&args=placement:${placement};revealBehavior:always`,
+      `${storybook.origin}/iframe.html?id=lab-listinput--reorder-handle-options&viewMode=story&args=placement:${placement};revealBehavior:${revealBehavior}`,
     );
     const handle = page.locator(HANDLE).first();
     await handle.waitFor();
     if (isClipped) {
-      // The element right around the ListInput becomes a host that clips at
-      // the list's edges and publishes no padding.
+      // ListInput's own field root becomes a host that clips at the list's
+      // edges and publishes no padding.
       await page.evaluate(() => {
-        const host = document
+        const fieldRoot = document
           .querySelector('[data-list-input-row]')
-          ?.closest('ol')?.parentElement?.parentElement;
-        if (host == null) {
-          throw new Error('no element around the ListInput');
+          ?.closest<HTMLElement>('.astryx-field');
+        if (fieldRoot == null) {
+          throw new Error('no ListInput field root');
         }
-        host.style.setProperty('padding', '0');
-        host.style.setProperty('overflow', 'clip');
+        fieldRoot.style.setProperty('padding', '0');
+        fieldRoot.style.setProperty('overflow', 'clip');
       });
     }
     // The hit area's observers settle its reach after layout.
@@ -441,31 +446,35 @@ test.describe('a finger on the reorder handle', () => {
     });
   }
 
-  test("a start handle's target is at least as large as an end handle's", async ({
-    page,
-  }) => {
-    test.skip(
-      !(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)),
-      'the finger target applies under (pointer: coarse)',
-    );
-    const end = await handleTarget(page, 'end');
-    const start = await handleTarget(page, 'start');
-    const detail = JSON.stringify({start, end});
-    expect(start.width, detail).toBeGreaterThanOrEqual(end.width - 0.5);
-    expect(start.height, detail).toBeGreaterThanOrEqual(end.height - 0.5);
-  });
+  for (const revealBehavior of REVEAL_BEHAVIORS) {
+    test.describe(`revealing ${revealBehavior}`, () => {
+      test("a start handle's target is at least as large as an end handle's", async ({
+        page,
+      }) => {
+        test.skip(
+          !(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)),
+          'the finger target applies under (pointer: coarse)',
+        );
+        const end = await handleTarget(page, 'end', revealBehavior);
+        const start = await handleTarget(page, 'start', revealBehavior);
+        const detail = JSON.stringify({start, end});
+        expect(start.width, detail).toBeGreaterThanOrEqual(end.width - 0.5);
+        expect(start.height, detail).toBeGreaterThanOrEqual(end.height - 0.5);
+      });
 
-  test("in a host that clips at the list's edges, a start handle's target is still at least as large as an end handle's", async ({
-    page,
-  }) => {
-    test.skip(
-      !(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)),
-      'the finger target applies under (pointer: coarse)',
-    );
-    const end = await handleTarget(page, 'end', true);
-    const start = await handleTarget(page, 'start', true);
-    const detail = JSON.stringify({start, end});
-    expect(start.width, detail).toBeGreaterThanOrEqual(end.width - 0.5);
-    expect(start.height, detail).toBeGreaterThanOrEqual(end.height - 0.5);
-  });
+      test("in a host that clips at the list's edges, a start handle's target is still at least as large as an end handle's", async ({
+        page,
+      }) => {
+        test.skip(
+          !(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)),
+          'the finger target applies under (pointer: coarse)',
+        );
+        const end = await handleTarget(page, 'end', revealBehavior, true);
+        const start = await handleTarget(page, 'start', revealBehavior, true);
+        const detail = JSON.stringify({start, end});
+        expect(start.width, detail).toBeGreaterThanOrEqual(end.width - 0.5);
+        expect(start.height, detail).toBeGreaterThanOrEqual(end.height - 0.5);
+      });
+    });
+  }
 });
