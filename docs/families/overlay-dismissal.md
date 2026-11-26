@@ -258,8 +258,8 @@ this record's current membership snapshot must be updated with it.
 
 FR3 gap: a platform close request does not reach a `usePopover` popover with
 `tabBehavior: 'pageOrder'`.
-FR9 gap: Popover and ContextMenu return focus with a plain focus, which the
-browser scrolls into view as it chooses.
+FR9 gap: an anchored Popover or ContextMenu returns focus to a control with a
+plain focus, which the browser scrolls into view as it chooses.
 
 ## Allowed component variation
 
