@@ -269,6 +269,48 @@ describe('AppShell', () => {
     expect(document.activeElement).toBe(main);
   });
 
+  it('leaves the URL alone when the skip link is activated, so a hash router stays on its page', () => {
+    window.history.replaceState(null, '', '#/orders/46');
+    const hashChanges = vi.fn();
+    window.addEventListener('hashchange', hashChanges);
+    try {
+      render(
+        <AppShell>
+          <div>Content</div>
+        </AppShell>,
+      );
+      const skipLink = screen.getByTestId('skip-to-content');
+      // The link keeps its href for a page without script.
+      expect(skipLink).toHaveAttribute('href', '#astryx-app-shell-main');
+      expect(fireEvent.click(skipLink)).toBe(false);
+      expect(document.activeElement).toBe(screen.getByRole('main'));
+      expect(window.location.hash).toBe('#/orders/46');
+      expect(hashChanges).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('hashchange', hashChanges);
+      window.history.replaceState(null, '', ' ');
+    }
+  });
+
+  it.each([
+    ['Cmd', {metaKey: true}],
+    ['Ctrl', {ctrlKey: true}],
+    ['Shift', {shiftKey: true}],
+  ])(
+    'keeps the browser action for a %s-click on the skip link, and still moves focus to main',
+    (_, modifier) => {
+      render(
+        <AppShell>
+          <div>Content</div>
+        </AppShell>,
+      );
+      expect(
+        fireEvent.click(screen.getByTestId('skip-to-content'), modifier),
+      ).toBe(true);
+      expect(document.activeElement).toBe(screen.getByRole('main'));
+    },
+  );
+
   it('gives a second shell its own main id; the first keeps the fixed id', () => {
     const view = render(
       <div>
