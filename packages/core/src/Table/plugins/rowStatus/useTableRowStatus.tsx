@@ -24,6 +24,7 @@ import {warnOnce} from '../../../utils/devWarning';
 import {VisuallyHidden} from '../../../VisuallyHidden';
 import type {TableRowStatus, TableSemanticRowStatus} from '../../index';
 import type {TableColumn, TablePlugin} from '../../types';
+import {registerWindowFallbackReason} from '../../tableColumnAdmission';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -269,6 +270,10 @@ export function useTableRowStatus<T extends Record<string, unknown>>(
         );
       },
     };
+    registerWindowFallbackReason(
+      statusColumn,
+      'the useTableRowStatus column is not one Table checks for a fixed row height',
+    );
 
     return {
       transformColumns(columns) {

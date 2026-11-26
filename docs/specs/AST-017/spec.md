@@ -111,7 +111,9 @@ affects_consumer_docs: [release-process, templates]
       "DEC-28",
       "DEC-30",
       "FR61",
-      "DEC-32"
+      "DEC-32",
+      "DEC-33",
+      "DEC-34"
     ]
   }
 }
@@ -296,7 +298,8 @@ one removal merged ahead of the decision to allow it.
   contract includes fields inside discriminated `data` entries as well as the
   outer envelope. Every field is present in the canonical response type, contract
   tests, text projection where the command provides one, and complete
-  consumer-facing schema documentation. Adding an optional field is nonbreaking
+  consumer-facing schema documentation. A field shown in one section of the
+  text projection is not repeated in another. Adding an optional field is nonbreaking
   when old consumers continue unchanged, but it remains a public schema update and
   does not bypass current-authority review or documentation.
 - **FR14 — No supported CLI behavior is hidden.** Any Astryx CLI behavior
@@ -313,7 +316,10 @@ one removal merged ahead of the decision to allow it.
   Public controls MUST define their accepted values, default, precedence and
   interactions, error behavior, and a representative invocation. Commands and
   options MUST appear in generated help and the machine-readable manifest; help
-  leaves out the ones the run's base does not serve and counts them, and the
+  leaves out the ones the run's base does not serve and counts them. An
+  option's text in help also leaves out a part that names a command or option
+  the run's base does not serve: on a base without layout skeletons, the
+  `template --list` text does not name `--skeleton`. The
   manifest lists every command and every command's option with `available`;
   the global options, which every base serves, carry none (`spec:AST-114`
   FR7).
@@ -402,7 +408,9 @@ one removal merged ahead of the decision to allow it.
   never exported, as experimental or otherwise, except through Core's
   `./internal/*` subpaths, which are reserved for Astryx's own packages,
   undocumented, outside the compatibility promise, versioned in lockstep with
-  Core, and limited by lint to Core and Lab (`architecture:react-component-runtime` INV13); a swizzled copy of a Lab component also keeps importing a StyleX module Core exports there, since its identity is its path (`spec:AST-110` FR1). In Core, an experimental public
+  Core, and limited by lint (`architecture:react-component-runtime` INV13) to
+  Core and to the private Lab and Charts packages, which pin Core's exact
+  version; a swizzled copy of a Lab component also keeps importing a StyleX module Core exports there, since its identity is its path (`spec:AST-110` FR1). In Core, an experimental public
   API's status is
   visible at the call site where it is used, carried by the name the caller
   writes, not only in docs, declarations, or a file path; a component's
@@ -426,7 +434,9 @@ one removal merged ahead of the decision to allow it.
   codemod is supplied when a mechanical migration would materially reduce caller
   work. This exception never covers a change to stable defaults, stable runtime or
   accessibility behavior, ordinary import paths, non-experimental props, or stable
-  CLI commands and machine schemas; those changes follow FR1–FR8. A released stable
+  CLI commands and machine schemas; those changes follow FR1–FR8. The discover
+  listing of experimental icon-set packages that FR27 names is part of the
+  experimental surface: a change to it uses `[experimental]`. A released stable
   surface cannot be retroactively demoted to experimental.
 - **FR23 — Promotion creates a stable contract deliberately.** Promotion is an
   owner-approved change that removes the experimental marker, exposes the settled
@@ -476,18 +486,66 @@ one removal merged ahead of the decision to allow it.
   names; persistence uses a feature- and schema-versioned experimental namespace;
   build tooling uses experimental exports/configuration; and docs use marked
   experimental routes. An omitted opt-in MUST leave stable defaults, output, routes,
-  data, and behavior unchanged. Promotion requires owner approval and a `[feat]`
+  data, and behavior unchanged. For icon sets, installing a package that declares
+  `experimental.iconSets` is an opt-in, as setting `experimental.iconSet` is
+  (`spec:AST-084/DEC-13`). Promotion requires owner approval and a `[feat]`
   Changeset; withdrawal uses `[experimental]` and MUST prove no stable spillover.
-  One named exception: stable theme help and docs, one theme line of the agent
+  Named exceptions follow; stable output names no experimental surface any
+  of them does not name. First, stable theme help and docs, one theme line of the agent
   docs block, one line of `init`'s next steps (beside, never instead of, its
   existing steps), and one line in each of the `theme eject` and
   `theme palette generate` results MAY point at the experimental theme editor
   (`experimental theme editor`, `experimental theme preview`) as the way to make
   and change a theme, and `experimental theme preview app <dir>` as the starter
   app that shows a theme when there is no app yet, phrased for theme work only
-  and labeled experimental each time; no other experimental surface may be
-  named, and the
-  exception ends when the theme editor graduates or is removed.
+  and labeled experimental each time; these lines name no other experimental
+  surface. When `theme add` copies a shared theme that carries the theme
+  editor's saved state, the add MAY write that state's data files to the
+  editor's folder for the theme and read them with the editor's settings
+  checks, and the app copy it writes MAY carry the editor's own mark line,
+  which names the editor command that rewrites the copy, because the editor
+  finds its app copy by that mark; the add's printed output and JSON name no
+  experimental surface. This exception ends when the theme editor graduates
+  or is removed. Another named
+  exception covers the command that writes a page as one HTML file: the
+  answer to an unknown top-level word that asks for it (`export`, `render`,
+  `share`, `bundle`, `snapshot`, `standalone`) MAY suggest
+  `experimental export`, labeled experimental, and never runs it, because
+  people and agents who type those words mean that command; the exception
+  ends when the command graduates or is removed. The command writes only a
+  page that uses Astryx: one whose script holds a module of an Astryx package
+  or that imports an Astryx stylesheet; it refuses any other page with
+  `ERR_RENDER_NOT_ASTRYX` and writes nothing, so the suggestion never turns a
+  page without Astryx into an Astryx file. The same exception covers
+  the command that turns such a file back into its page: the answer to an
+  unknown top-level word that asks for it (`import`, `back`, `restore`,
+  `unrender`, `reverse`) MAY suggest `experimental import`, labeled
+  experimental, and never runs it; it ends when the export exception ends.
+  Another named exception covers sharing a page as one HTML file: the CLI's
+  two guides that teach it (`cli/experimental/share-a-page` and
+  `cli/experimental/export-pages`) set `searchable: true`, and no other doc
+  may. In an Astryx project (one that installs or declares `@astryxdesign/core`
+  or `@astryxdesign/cli`), or outside any package (no package.json at or
+  above the folder), `astryx search`, the `search()` API and an index
+  `exportSearchIndex()` makes there MAY return each of them as one entry,
+  whose own text says it is experimental; in a package without Astryx none of
+  them returns the guides, and every other experimental doc stays out of
+  search. This exception ends when that command graduates or is removed.
+  A further named exception: `astryx discover` may list experimental icon-set
+  packages in a project where icon features are off. Such an entry shows only the catalog's descriptor
+  text, the install line, the opt-in command
+  (`astryx experimental icon use <package>/<set>`), and, when the catalog lists
+  the set's definitions, how many of the CLI's icon definitions it maps
+  (`definitions: N/M`, in text only); it is marked `[experimental]` in text
+  and `experimental: true` in JSON (on a package entry, `experimentalFields`
+  names its icon-set field). The set's icons and definitions themselves, and
+  every other command, `astryx search` and its discover line included, stay
+  behind the icon feature gate. This exception ends when icon
+  sets graduate or are removed.
+  A further named exception: one line of the agent docs block MAY name
+  `experimental export`, only when the project's installed CLI has it and only
+  for a request to share a page as one file; that exception ends when export
+  graduates or is removed.
 - **FR28 — A planned minor needs no prior deprecation; a patch does.** A change
   landing in a declared minor needs no deprecation path: its `[breaking]` Changeset
   describing the change, with the replacement and migration where they help the
@@ -694,7 +752,10 @@ one removal merged ahead of the decision to allow it.
   governs, never evidence for the version that carries it.
 - **FR48 — Admission checks the declared tier.** The declared version is either
   the patch successor or the minor successor of the latest stable release, and
-  that successor is the release tier. In a patch release, a Changeset carrying the
+  that successor is the release tier. For FR49's authenticated owner recut, the
+  archived never-published tag is omitted from the release-base calculation, so
+  the prior published stable tag still defines that tier; the archived tag stays
+  present as evidence. In a patch release, a Changeset carrying the
   `[breaking]` category is inadmissible and MUST be rejected before the release
   consumes it. The admissible routes are FR28's replacement-first deprecation,
   which keeps old usage equivalent and lets the removal ship in a minor release,
@@ -709,8 +770,18 @@ one removal merged ahead of the decision to allow it.
   stable release exists to compare against; and when the declared version is
   neither the patch nor the minor successor of the latest stable release,
   including a version that is already released. The latest stable release is the
-  newest `vX.Y.Z` tag. A prerelease or canary identifier is publication metadata
-  and is never a declared version or a base.
+  newest `vX.Y.Z` tag, except that an authenticated owner recut omits its matching
+  archived never-published tag from admission and Changeset versioning while the
+  tag stays present as evidence. The release plan and marker bind that omission to
+  the verified receipt digest, version, tag name, and tag commit. A prerelease or
+  canary identifier is publication metadata and is never a declared version or a
+  base. An existing stable-version tag also
+  refuses a new release lifecycle unless every publication effect is absent and a
+  SHA-256-verified `tagged-unpublished-owner-recut-authority` receipt matches the
+  declared version and the tag's local commit object. That owner recut keeps the
+  archived tag until the replacement final gate, then records its deletion before
+  creating the replacement tag. A published version or an unauthenticated reuse is
+  always refused.
 - **FR50 — The published release branch squashes back into current main.** After
   branch-owned tag and stable publication are verified, one merge-back change applies a
   squash projection of the exact published release branch onto then-current main. It
@@ -733,13 +804,19 @@ one removal merged ahead of the decision to allow it.
   pin, the lockfile, and version-stamped compatibility asset to the successor plan. The
   default is the cut version's patch successor. The minor successor is used only when
   Cindy explicitly names that minor as the next plan; pending `[breaking]` Changesets
-  are not that decision. The plan MUST NOT merge before an immutable tag or stable
-  package publication makes the cut version non-reusable. After that point it may land
-  through normal gates before or after FR50; merge-back preserves an already-landed
-  newer plan. A terminal cut with neither an immutable tag nor stable package
-  publication closes its prepared plan unmerged. If main already carries a newer owner plan, the prepared change closes or
-  refreshes instead of duplicating or lowering it. Other main work need not wait, and
-  FR46 remains the independent canary-publication safety boundary. The plan remains
+  are not that decision. The plan MUST NOT merge before the cut version's first
+  publication effect (FR49) makes it non-reusable. Under DEC-34, a tagged version with
+  no publication effect anywhere stays reusable for an owner recut from the moment its
+  tag appears, however often a recut replaces that tag, until its first publication
+  effect; while it is reusable, the successor plan does not merge, so a recut from main
+  releases the same version and not its successor. After the version becomes
+  non-reusable, the successor plan may land through normal gates
+  before or after FR50; merge-back preserves an already-landed newer plan. A terminal
+  cut that remains reusable under this owner-recut exception, or that has neither an
+  immutable tag nor stable package publication, closes its prepared plan unmerged. If
+  main already carries a newer owner plan, the prepared change closes or refreshes
+  instead of duplicating or lowering it. Other main work need not wait, and FR46
+  remains the independent canary-publication safety boundary. The plan remains
   malleable under FR46 until the next cut.
 - **FR52 — Repository evidence follows codemods through promotion.** A codemod staged
   for an unreleased change may move from `transforms/next/` into the immutable
@@ -942,7 +1019,10 @@ Public lifecycle classification remains in force with these operational effects:
   lifecycle metadata and no migration of existing Changesets;
 - documentation catalog display names and routes remain mutable data while the stable
   `docs` command and machine-readable schemas stay contractual;
-- exact-main release comparison rejects unclassified deltas; and
+- exact-main release comparison rejects unclassified deltas;
+- under DEC-34, a tagged version with no publication effect anywhere stays
+  reusable for an owner recut, however often a recut replaces its tag, until its
+  first publication effect, and its successor plan waits until then; and
 - a surface other than a component is classified by its own record's compatibility
   contract, and the release process here applies to the result;
 - touch work that changed fine-pointer behavior only as a side effect becomes
@@ -988,7 +1068,7 @@ lands, maintainers apply its requirement in review and release approval.
 | FR15      | Full manifest-derived command matrix, supported-consumer evidence, and scope-specific contract tests                                                                                                                                                                                                                                                            | global invariant, scoped command group, single command, programmatic API                                                                                                                                                                                                                                                                                                                                | A global control is a no-op for any command, has different meanings, or replaces a narrower owning surface                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | FR16–FR18 | Boundary inventory, hostile side-effect probes, response snapshots, and concurrent API tests                                                                                                                                                                                                                                                                    | known and new extension, partial result, text/JSON/API parity, independent concurrent calls                                                                                                                                                                                                                                                                                                             | A route bypasses the guarantee, omitted work looks complete, or one invocation changes another                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | FR19–FR20 | Proposal evidence with a regression fixture for the detection failure, plus composition and provenance tests                                                                                                                                                                                                                                                    | convention covers the case, detection fails, app plus two integrations, refusal, failing contribution, repeated load                                                                                                                                                                                                                                                                                    | A key ships without a reproduced detection failure, a contribution displaces the app or applies twice, a part of the effective value has no inspectable source, or a failure silently weakens protection                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| FR21–FR24 | Published-surface comparison, declaration/doc metadata checks, import-boundary checks, and Changeset classification review                                                                                                                                                                                                                                      | experimental prop object, experimental subpath, patch evolution, promotion, unpublished adjacent field, stable warning behavior, integration theme; a component or module `/experimental` subpath; an `_experimental` export; a behavior module; an `./internal/*` subpath imported from Core, from Lab, and from another package; a swizzled copy's import of an exported `./internal/*.stylex` module | A prose-only marker excludes a stable API, adjacency falsely publishes a new field, an experimental export leaks through a stable path, a patch changes stable behavior, or a promoted API remains unprotected, a file path or subpath alone marks a surface experimental, a behavior, utility, or internal module without a public contract is exported other than through `./internal/*`, an `./internal/*` subpath is documented or imported outside Core and Lab other than a swizzled copy's exported StyleX module (FR21), or an experimental public API in Core does not show its status at the call site in the name the caller writes |
+| FR21–FR24 | Published-surface comparison, declaration/doc metadata checks, import-boundary checks, and Changeset classification review                                                                                                                                                                                                                                      | experimental prop object, experimental subpath, patch evolution, promotion, unpublished adjacent field, stable warning behavior, integration theme; a component or module `/experimental` subpath; an `_experimental` export; a behavior module; an `./internal/*` subpath imported from Core, Lab, Charts, and any other package; a swizzled copy's import of an exported `./internal/*.stylex` module | A prose-only marker excludes a stable API, adjacency falsely publishes a new field, an experimental export leaks through a stable path, a patch changes stable behavior, or a promoted API remains unprotected, a file path or subpath alone marks a surface experimental, a behavior, utility, or internal module without a public contract is exported other than through `./internal/*`, an `./internal/*` subpath is documented or imported outside packages FR21 names other than a swizzled copy's exported StyleX module, or an experimental public API in Core does not show its status at the call site in the name the caller writes |
 | FR25–FR27 | Stable-surface inventory and experimental-boundary matrix                                                                                                                                                                                                                                                                                                       | package/API, CSS/token, CLI/config, persistence, build tooling, docs, whole Lab component                                                                                                                                                                                                                                                                                                               | An unmarked experiment changes stable defaults or a stable surface bypasses compatibility review                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR28–FR31 | Declared-tier check: on a minor, the `[breaking]` Changeset describes the change (old usage, replacement, migration); on a patch, a breaking Changeset is refused and the deprecation ships instead; declaration/doc/build/CLI warning projections; old/new fixtures; dry-run/idempotence/migration tests; maintained-source and latest-stable upgrade evidence | whole component, prop/value, theme field/helper/token/target/source, CLI command, CLI option; old-only, new-only, both, static/dynamic/uncertain migration, text/JSON, development/production                                                                                                                                                                                                           | A warning has no usable modernization route, production runtime changes for deprecation, maintained guidance teaches the old surface, a migration guesses, old behavior degrades early, cadence invents a wait, or one cleanup id covers multiple incompatible deltas                                                                                                                                                                                                                                                                                                                                                                          |
 | FR32–FR35 | Latest-stable victim fixture, pre-existing authority named in the Changeset or pull request, owner review, declared-tier check, and emergency attestation                                                                                                                                                                                                       | victim-free `[fix]`, `[fix]` plus incompatible-fix metadata, coexistence, cleanup transition, critical-harm emergency                                                                                                                                                                                                                                                                                   | A released victim uses bare `[fix]`, a new Changeset tag replaces metadata, a correction record disagrees with its public-surface state, or urgency bypasses migration                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -996,10 +1076,10 @@ lands, maintainers apply its requirement in review and release approval.
 | FR41–FR44 | Schema validation, PR declaration, semantic stable/base/head comparisons, exact-main gate, and immutable publish/rollback receipt                                                                                                                                                                                                                               | duplicate ids, missing evidence, route/schema removal, old-client metadata, partial publish, safe rollback                                                                                                                                                                                                                                                                                              | A label passes without semantics, a delta maps zero or multiple times, fixed-group membership drifts, or a release rebuilds under one identity                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | FR45      | Docs route inventory, repository-reference checks, and Changeset review                                                                                                                                                                                                                                                                                         | catalog entry rename, former-route miss, stable command and JSON schema                                                                                                                                                                                                                                                                                                                                 | Catalog routing is frozen as API, or a rename silently changes the contractual command or response schema                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | FR46–FR47 | Declared-tier Changeset admission, canary publication ordering and cadence, and release-versioning fixtures                                                                                                                                                                                                                                                     | owner increase/decrease, above/equal/below stable, split group, `[breaking]` on patch and minor plans, hourly, on-demand and already-published canary runs                                                                                                                                                                                                                                              | Pending Changesets derive the plan, `[breaking]` passes on a patch or fails on a minor, equality publishes a canary, a lower/split declaration publishes instead of failing, a canary publishes on every push, or a tip whose canaries are all published publishes again                                                                                                                                                                                                                                                                                                                                                                       |
-| FR48      | Category and classification admission under each declared tier                                                                                                                                                                                                                                                                                                  | patch release with `[breaking]`, patch release with a deprecation, minor release with `[breaking]`                                                                                                                                                                                                                                                                                                      | Incompatible work passes in a patch release, or a deprecation is refused in one                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| FR49      | Malformed and inconsistent declaration fixtures                                                                                                                                                                                                                                                                                                                 | disagreeing group versions, canary identifier, release version unlike the cut manifest, already-released version, skipped version, no stable tag                                                                                                                                                                                                                                                        | An untrustworthy or mismatched declaration is released                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| FR48      | Category and classification admission under each declared tier, including owner-recut admission against the prior published stable tag                                                                                                                                                                                                                          | patch release with `[breaking]`, patch release with a deprecation, minor release with `[breaking]`, owner recut with an archived never-published tag and prior published stable tag                                                                                                                                                                                                                     | Incompatible work passes in a patch release, a deprecation is refused in one, or an owner-recut tier is taken from the archived never-published tag instead of the prior published stable tag                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| FR49      | Malformed and inconsistent declaration fixtures plus command-level owner-recut receipt, archived-tag, plan/marker, admission, and versioning fixtures                                                                                                                                                                                                           | disagreeing group versions, canary identifier, release version unlike the cut manifest, already-released version, skipped version, no stable tag, published-version owner recut, missing or mismatched owner-recut receipt, archived-tag retention through the replacement final gate, recorded deletion before replacement tag                                                                         | An untrustworthy or mismatched declaration is released; an owner recut proceeds with any publication effect present or without a matching SHA-256-verified receipt; the archived tag is deleted before the replacement final gate; or the replacement tag is created before the recorded deletion                                                                                                                                                                                                                                                                                                                                              |
 | FR50      | Three-way squash merge-back fixtures bound to the immutable tag, branch head, and plan digest                                                                                                                                                                                                                                                                   | exact branch outputs, frozen deletion, branch-only marker exclusion, post-cut Changeset/manifest edit, newer main declaration, merge conflict, regenerated output                                                                                                                                                                                                                                       | Merge-back differs from release bytes, lands lifecycle files, consumes post-cut work, overwrites a newer main declaration or unrelated field, or chooses a version                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| FR51      | Cut-time successor-plan preparation plus manifest/pin/lockfile/compatibility-asset and lifecycle fixtures                                                                                                                                                                                                                                                       | default patch successor, explicitly named minor, abort before any tag or publication, immutable tag before merge-back, pre-advanced main plan, unrelated main work during equality                                                                                                                                                                                                                      | The plan merges before the cut version is non-reusable, survives a terminal cut with neither an immutable tag nor stable publication, skips the default patch, derives a minor from pending Changesets, splits pins/assets, or the prepared plan or merge-back lowers or duplicates an existing newer plan                                                                                                                                                                                                                                                                                                                                     |
+| FR51      | Cut-time successor-plan preparation plus manifest/pin/lockfile/compatibility-asset and lifecycle fixtures                                                                                                                                                                                                                                                       | default patch successor, explicitly named minor, abort before any tag or publication, immutable tag before merge-back, pre-advanced main plan, unrelated main work during equality, successor-plan lifecycle with a tagged unpublished cut, stable publication, replacement tag that publishes nothing                                                                                                  | The plan merges before the cut version's first publication effect, including after a replacement tag that published nothing; the plan survives a terminal cut that is still reusable, including one with a tagged unpublished version or one with neither an immutable tag nor stable publication; it skips the default patch, derives a minor from pending Changesets, splits pins/assets, or the prepared plan or merge-back lowers or duplicates an existing newer plan                                                                                                                                                                     |
 | FR52      | Promotion fixtures plus every checked-in source consumer run before and after codemod promotion                                                                                                                                                                                                                                                                 | staged transform, promoted transform, missing source, ambiguous candidates, changed entry identity                                                                                                                                                                                                                                                                                                      | Evidence hardcodes only `next/`, keeps a duplicate source, silently chooses among candidates, or passes when the promoted transform no longer exposes the same identity and entries                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | FR53      | Changeset classification review against the governing component record's accessibility evidence                                                                                                                                                                                                                                                                 | a fix that replaces documented keyboard or focus behavior to meet an adopted APG pattern's required parts; a fix that changes a role, state, or accessible name to meet WCAG 2.2 A/AA; a fix that adds an optional prop                                                                                                                                                                                 | An accessibility fix is held for a minor, given a coexistence path, or classified `[breaking]`; or a change that needs an app-layer code edit, or that removes, renames, or narrows public surface, ships as an accessibility `[fix]`                                                                                                                                                                                                                                                                                                                                                                                                          |
 | FR54      | Changeset classification review against the surface's current record, then the same tier admission every Changeset receives                                                                                                                                                                                                                                     | a CLI correction the CLI record classifies as `[fix]`; a CLI change the CLI record leaves undecided; a CLI change the CLI record classifies as `[breaking]` on a patch plan; a component change                                                                                                                                                                                                         | A non-component change is classified by a rule this record restates instead of its surface record, a surface rule turns on risk or adoption, a surface-classified `[breaking]` change ships in a patch or a surface rule makes it patch-eligible, or a component change is classified by a surface record                                                                                                                                                                                                                                                                                                                                      |
@@ -1416,6 +1496,10 @@ Rejected: merging the successor before the cut version becomes non-reusable, whi
 strands a terminal cut with neither a tag nor a publication on a skipped plan; and waiting until merge-back to
 prepare information already fixed at the cut.
 
+Amended by DEC-34: a tagged version with no publication effect anywhere stays
+reusable for an owner recut, however often a recut replaces its tag, until its
+first publication effect, and the successor plan waits until then.
+
 ### DEC-22 — Each surface defines what breaks; this record owns the release process
 
 **Reference:** `spec:AST-017/DEC-22`
@@ -1575,6 +1659,40 @@ reviewed and tested normally before a new full exact-head release gate.
 Rejected: another unchanged retry, accepting a named flake, copying an unreviewed
 patch, allowing product or release-output changes in the repair, or merging around a
 required check.
+
+### DEC-33 — Charts reads Core's resolved calendar through an internal entry
+
+**Reference:** `spec:AST-017/DEC-33`
+**Decider:** pending engineering-owner approval
+
+Chart value formats receive the calendar that the provider resolves, the same
+calendar Core's date components show (`spec:AST-115` FR4), and Core's resolver
+is an internal entry. Charts is private and pins Core's exact version, so it
+moves in lockstep with Core, and FR21 admits it beside Lab. Native is also
+private and pins Core's exact version, but Core's internal entries are web
+modules and native apps load nothing web (`spec:AST-082/DEC-7`), so FR21 does not
+admit Native.
+
+Rejected: a public resolved-calendar hook, because no current Core contract
+defines one.
+
+### DEC-34 — A missed unpublished release recuts the same version from main
+
+**Reference:** `spec:AST-017/DEC-34`
+**Decider:** `cixzhang`, `2026-11-19 20:28:03 PT`
+
+Release versions stay in order. When a release misses its train and no package,
+GitHub Release, deployment, or merge-back was published, the next run recuts the
+same version from current main instead of skipping it. A tag left by the failed
+run is archived evidence, not publication authority. The Chief and release owner
+require the new lifecycle to start only from a SHA-256-verified owner-recut receipt
+that matches the version and the tag's commit
+object. It keeps that tag through the replacement final gate, then records deletion
+before it creates the replacement tag. This mechanism never applies to a version
+with any publication effect.
+
+Rejected: skipping the missed version, silently retargeting the old tag, deleting
+it before the replacement is fully gated, or reusing any published version.
 
 ## Open questions
 

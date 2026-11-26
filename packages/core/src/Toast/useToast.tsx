@@ -3,19 +3,21 @@
 'use client';
 
 import {useCallback, use} from 'react';
-import {createRoot} from 'react-dom/client';
+import type {Root} from 'react-dom/client';
 import {dataAttr} from '../naming';
 import {ToastContext, type ToastContextValue} from './ToastContext';
 import {ToastViewport} from './ToastViewport';
 import {createToastQueue, ToastQueueConnector} from '../Layer/toastHost';
 import {ThemeNestingContext} from '../theme/Theme';
-import {warnOnce} from '../utils/devWarning';
+import {ThemeSourceContext} from '../theme/useTheme';
+import {devError, warnOnce} from '../utils/devWarning';
 import type {
   ToastOptions,
   ToastDismissFn,
   ShowToastFn,
   ToastEntry,
 } from './types';
+import {createModuleLoader} from '../utils/moduleLoader';
 import {sharedForReact} from '../utils/sharedForReact';
 import {sharedSequence} from '../utils/sharedRealm';
 
@@ -24,17 +26,23 @@ import {sharedSequence} from '../utils/sharedRealm';
 // root, so a second React keeps its own.
 const fallback = sharedForReact('toast/use-toast/fallback', 1, () => ({
   context: null as ToastContextValue | null,
-  root: null as ReturnType<typeof createRoot> | null,
+  root: null as Root | null,
 }));
+
+// react-dom/client loads only on the first toast with no LayerProvider. A
+// static import would load it for every import of the package, also where a
+// toast never shows (a server, a test run).
+const clientModule = createModuleLoader(async () => import('react-dom/client'));
 
 const ROOT_THEME_ATTRS = ['data-theme', dataAttr('theme')] as const;
 
-// The fallback container is a detached tree with no ThemeContext, so this
-// mirrors <html>'s theme attributes onto it directly (live via
-// MutationObserver) for the theme's @scope'd CSS to reach it. It's a
-// lifetime-of-app singleton that's never torn down, so there's nothing to
-// disconnect — this returns void.
-function syncRootThemeAttrs(container: HTMLElement): void {
+// The fallback container is a separate tree with no ThemeContext. A toast
+// shown from inside a Theme draws under that Theme (CallerTheme). For other
+// toasts, this copies the theme attributes of <html> to the container, so the
+// theme's scoped CSS reaches them. The container lives as long as the app, so
+// the observer stays connected, unless the viewport fails to load. Returns
+// the function that disconnects it.
+function syncRootThemeAttrs(container: HTMLElement): () => void {
   const sync = () => {
     let mirroredMode: string | null = null;
     for (const attr of ROOT_THEME_ATTRS) {
@@ -64,6 +72,7 @@ function syncRootThemeAttrs(container: HTMLElement): void {
     attributes: true,
     attributeFilter: [...ROOT_THEME_ATTRS],
   });
+  return () => observer.disconnect();
 }
 
 function getFallbackContext(): ToastContextValue {
@@ -88,19 +97,38 @@ function getFallbackContext(): ToastContextValue {
   const container = document.createElement('div');
   container.setAttribute('data-astryx-toast-fallback', '');
   document.body.appendChild(container);
-  syncRootThemeAttrs(container);
+  const stopThemeSync = syncRootThemeAttrs(container);
 
   // Toasts wait in the queue until the fallback viewport's context connects.
   const queue = createToastQueue();
-  fallback.root = createRoot(container);
-  // This root sits inside the app, so a <Theme> in toast content is nested:
-  // it themes its own subtree and leaves the app's <html> sync alone.
-  fallback.root.render(
-    <ThemeNestingContext value={true}>
-      <ToastViewport>
-        <ToastQueueConnector queue={queue} />
-      </ToastViewport>
-    </ThemeNestingContext>,
+  clientModule.load().then(
+    ({createRoot}) => {
+      fallback.root = createRoot(container);
+      // This root sits inside the app, so a <Theme> in toast content is
+      // nested: it themes its own subtree and leaves the app's <html> sync
+      // alone.
+      fallback.root.render(
+        <ThemeNestingContext value={true}>
+          <ToastViewport>
+            <ToastQueueConnector queue={queue} />
+          </ToastViewport>
+        </ThemeNestingContext>,
+      );
+    },
+    (error: unknown) => {
+      // The next toast loads the viewport again, so one failed load does not
+      // turn fallback toasts off for the rest of the page.
+      if (fallback.context === queue.context) {
+        fallback.context = null;
+      }
+      stopThemeSync();
+      container.remove();
+      devError(
+        'useToast',
+        'The fallback toast viewport did not load, so these toasts did not show. The next toast loads it again. Wrap your app with <LayerProvider> to avoid the fallback.',
+        error,
+      );
+    },
   );
 
   fallback.context = queue.context;
@@ -138,16 +166,26 @@ function generateToastId(): string {
  */
 export function useToast(): ShowToastFn {
   const contextFromProvider = use(ToastContext);
+  // The fallback viewport renders outside this tree, and a host page can
+  // rewrite `<html>`. So the toast takes its caller's Theme.
+  const callerTheme = use(ThemeSourceContext);
 
   const showToast = useCallback(
     (options: ToastOptions): ToastDismissFn => {
       const ctx = contextFromProvider ?? getFallbackContext();
       const id = generateToastId();
-      const entry: ToastEntry = {id, options, createdAt: Date.now()};
+      const entry: ToastEntry = {
+        id,
+        options,
+        createdAt: Date.now(),
+        ...(contextFromProvider == null && callerTheme != null
+          ? {callerTheme}
+          : null),
+      };
       ctx.addToast(entry);
       return () => ctx.removeToast(id, 'manual');
     },
-    [contextFromProvider],
+    [contextFromProvider, callerTheme],
   );
 
   return showToast;

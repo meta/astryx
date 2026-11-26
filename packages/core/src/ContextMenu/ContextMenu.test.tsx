@@ -293,6 +293,77 @@ describe('ContextMenu', () => {
     expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {pageDir: 'rtl', menuDir: 'ltr', isFlipped: false},
+    {pageDir: 'ltr', menuDir: 'rtl', isFlipped: true},
+  ] as const)(
+    'points the sheet Back chevron by the menu direction, not the page (page $pageDir, menu $menuDir)',
+    async ({pageDir, menuDir, isFlipped}) => {
+      const user = userEvent.setup();
+      render(
+        <div dir={pageDir}>
+          <div dir={menuDir}>
+            <ContextMenu
+              presentation="bottom-sheet"
+              label="Row actions"
+              items={[
+                {label: 'Move to project', items: [{label: 'Apollo launch'}]},
+              ]}>
+              <div>Right-click me</div>
+            </ContextMenu>
+          </div>
+        </div>,
+      );
+
+      fireEvent.contextMenu(screen.getByText('Right-click me'));
+      await user.click(
+        await screen.findByRole('button', {name: /Move to project/}),
+      );
+      const backIcon = screen
+        .getByRole('button', {name: 'Back'})
+        .querySelector('.astryx-icon');
+      expect(backIcon).not.toBeNull();
+      expect(
+        getComputedStyle(backIcon as Element).transform === 'scaleX(-1)',
+      ).toBe(isFlipped);
+    },
+  );
+
+  it('names the sheet after a node-label submenu while its level shows', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ContextMenu
+        presentation="bottom-sheet"
+        label="Row actions"
+        items={[
+          {
+            label: (
+              <>
+                <em>Move</em> to project
+              </>
+            ),
+            items: [{label: 'Apollo launch'}],
+          },
+        ]}>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+
+    fireEvent.contextMenu(screen.getByText('Right-click me'));
+    await user.click(
+      await screen.findByRole('button', {name: /Move to project/}),
+    );
+    expect(
+      screen.getByRole('dialog', {name: 'Move to project'}),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', {name: 'Back'}));
+    expect(
+      screen.getByRole('dialog', {name: 'Row actions'}),
+    ).toBeInTheDocument();
+  });
+
   it('drills into nested data items inside the BottomSheet', async () => {
     const user = userEvent.setup();
     const onMove = vi.fn();
@@ -395,6 +466,46 @@ describe('ContextMenu', () => {
       expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalledOnce(),
     );
     expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+  });
+
+  it('exposes only the drilled-in view as a menu on compact touch (FR7)', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    const user = userEvent.setup();
+    render(
+      <ContextMenu
+        presentation="popover"
+        label="Actions"
+        items={[
+          {label: 'Rename'},
+          {label: 'Move to', items: [{label: 'Folder A'}]},
+        ]}>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    fireEvent.contextMenu(screen.getByText('Right-click me'));
+    const isShown = (el: HTMLElement) => el.closest('[hidden]') == null;
+    const moveTo = screen
+      .getAllByRole('menuitem', {name: /Move to/, hidden: true})
+      .find(isShown)!;
+    await user.click(moveTo);
+    const view = await waitFor(() =>
+      screen
+        .getAllByRole('menu', {name: 'Move to', hidden: true})
+        .find(isShown)!,
+    );
+    expect(view.parentElement?.closest('[role="menu"]')).toBeNull();
   });
 
   it('closes on Escape even when opened without auto-focus', () => {

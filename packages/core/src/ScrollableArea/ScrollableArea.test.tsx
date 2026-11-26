@@ -58,9 +58,13 @@ function setGeometry(
 
 describe('ScrollableArea', () => {
   let frames: FrameRequestCallback[];
+  // Sends the first resize notification of each element observed since the
+  // last one. A browser sends it after it lays those elements out.
+  let notifyFirstLayout: () => void;
 
   beforeEach(() => {
     frames = [];
+    notifyFirstLayout = () => {};
     vi.stubGlobal(
       'requestAnimationFrame',
       vi.fn((callback: FrameRequestCallback) => {
@@ -71,18 +75,34 @@ describe('ScrollableArea', () => {
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     vi.stubGlobal(
       'ResizeObserver',
-      vi.fn(function () {
-        return {observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn()};
+      vi.fn(function (callback: ResizeObserverCallback) {
+        const unreported = new Set<Element>();
+        notifyFirstLayout = () => {
+          const entries = [...unreported].map(
+            target => ({target}) as ResizeObserverEntry,
+          );
+          unreported.clear();
+          if (entries.length > 0) {
+            callback(entries, {} as ResizeObserver);
+          }
+        };
+        return {
+          observe: vi.fn((element: Element) => unreported.add(element)),
+          unobserve: vi.fn((element: Element) => unreported.delete(element)),
+          disconnect: vi.fn(),
+        };
       }),
     );
   });
 
   afterEach(() => vi.unstubAllGlobals());
 
+  /** A frame runs its callbacks, then lays out and notifies. */
   function flushFrame() {
     void act(() => {
       const pending = frames.splice(0);
       pending.forEach(callback => callback(performance.now()));
+      notifyFirstLayout();
     });
   }
 

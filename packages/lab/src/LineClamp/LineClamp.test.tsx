@@ -1244,6 +1244,37 @@ describe('LineClamp', () => {
       expect(screen.getByTestId('clamp')).not.toHaveAttribute('title');
     });
 
+    it("runs a caller's onPointerEnter and onPointerMove, and mounts the tooltip on the first mouse move", async () => {
+      mockOverflow();
+      const onPointerEnter = vi.fn();
+      const onPointerMove = vi.fn();
+      render(
+        <LineClamp
+          maxLines={2}
+          data-testid="clamp"
+          onPointerEnter={onPointerEnter}
+          onPointerMove={onPointerMove}>
+          Long text
+        </LineClamp>,
+      );
+      const clamp = screen.getByTestId('clamp');
+      await waitFor(() => {
+        expect(clamp).toHaveAttribute('tabindex', '0');
+      });
+      fireEvent.pointerEnter(clamp, {pointerType: 'mouse'});
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      // An arrival with no move is not a hover.
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+      fireEvent.pointerMove(clamp, {pointerType: 'mouse'});
+      expect(onPointerEnter).toHaveBeenCalledTimes(1);
+      expect(onPointerMove).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+      });
+    });
+
     it("calls a caller's stable ref once across re-renders", async () => {
       mockOverflow();
       const ref = vi.fn();

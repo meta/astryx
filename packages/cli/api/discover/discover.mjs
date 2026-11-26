@@ -33,29 +33,35 @@ import {
   discoverPackages,
   findComponent,
   hasSources,
+  iconSetCoverage,
+  keptSavedSearch,
   loadReadKinds,
+  optedIntoIconSets,
   officialDeclarations,
   STABLE_KINDS,
   officialFirst,
   officialList,
+  savedCatalog,
+  withCoreMatch,
   withDeclaredOfficial,
 } from './_adapter.mjs';
-import {
-  availableEntries,
-  catalogState,
-  searchItems,
-  withLatest,
-} from './_catalog-view.mjs';
-import {list} from './list/list.mjs';
-import {detail} from './detail/detail.mjs';
-import {doc, docFromResult} from './detail/doc/doc.mjs';
-import {item} from './detail/item/item.mjs';
-import {search} from './search/search.mjs';
+import {DISCOVER_KINDS} from '../../authoring/discover/parse.mjs';
+export {iconSetCoverageOf} from './_icon-set-coverage.mjs';
+import {answersAny, search} from './search/search.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 
 const DEFAULT_LIMIT = 20;
+
+// The catalog view and the list, detail, doc and item leaves load only for
+// an answer that needs them: search's discover line imports this module on
+// every search and, with a kept record, needs none of them.
+const catalogView = () => import('./_catalog-view.mjs');
+const listLeaf = () => import('./list/list.mjs');
+const detailLeaf = () => import('./detail/detail.mjs');
+const docLeaf = () => import('./detail/doc/doc.mjs');
+const itemLeaf = () => import('./detail/item/item.mjs');
 
 /**
  * Split a package-shaped query: `name`, `name@version`, or `name/item`, with an
@@ -165,6 +171,143 @@ export function answersQueries(project) {
 }
 
 /**
+ * Whether `astryx discover <query>` would list a match, read from the saved
+ * copies of the discover sources' full catalogs instead of calling the
+ * sources: the same installed packages and catalog items, ranked and cut by
+ * discover's own search (see answersAny), with no rule of its own. Null when
+ * no source has a saved copy, or when discover answers every query in the
+ * project with the list (FR1), so nothing is known. The search command reads
+ * it to point at `discover` only when discover has an answer.
+ * @param {string} query free text, as search takes it
+ * @param {{type?: string}} [options] an item kind, when the search keeps one
+ * @returns {Promise<boolean | null>}
+ */
+export async function wouldAnswer(query, {type} = {}) {
+  const input = await keptSavedSearch(savedSearchInput, isSavedSearchInput);
+  if (input == null || input.packages == null) return null;
+  const kind = /** @type {readonly string[]} */ (DISCOVER_KINDS).includes(
+    type ?? '',
+  )
+    ? /** @type {import('../../authoring/discover/type').DiscoverKind} */ (type)
+    : undefined;
+  return answersAny(input.packages, query, {items: input.items, type: kind});
+}
+
+/**
+ * @typedef {{packages: Array<{name: string, components: string[]}>, items: Array<Pick<import('./_catalog-view.mjs').SearchItem, 'kind' | 'name' | 'title' | 'summary' | 'description' | 'keywords' | 'packageDescription'>>} | {packages: null}} SavedSearchInput
+ */
+
+/**
+ * The packages and items `discover <query>` searches when its sources answer
+ * from their saved copies: the packages the project has, with the official
+ * packages declared in it, and every item those and the copies list, icon
+ * sets included. Null when nothing is known: no copy reads back, or discover
+ * answers every query with the list (FR1). No source is called.
+ * @param {import('../../foundation/config/project.mjs').Project} project
+ */
+async function savedItems(project) {
+  const official = officialList({project});
+  const saved = savedCatalog(project, {official});
+  if (saved == null) return null;
+  const {packages: scanned} = await discoverPackages(project);
+  const catalog = {sources: [], packages: saved};
+  const declarations = officialDeclarations(project, official.packages);
+  const integrations = await describeInstalled(project, scanned);
+  if (integrations.length === 0 && !hasSources(project)) return null;
+  const packages = withDeclaredOfficial(
+    project,
+    integrations,
+    catalog,
+    declarations,
+    official.packages,
+  );
+  const {searchItems} = await catalogView();
+  const items = searchItems(
+    packages,
+    catalog,
+    declaredDependencies(project),
+    declarations.any,
+  );
+  return {packages, items};
+}
+
+/**
+ * Whether `astryx discover <query>` lists an item of `kind` the project
+ * could add, answered by discover's own search over the saved copies of the
+ * discover sources' catalogs. No source is called, so before a discover run
+ * has saved a copy the answer is false. Never throws.
+ * @param {import('../../foundation/config/project.mjs').Project} project
+ * @param {string} query free text, as discover takes it
+ * @param {import('../../authoring/discover/type').DiscoverKind} kind
+ * @returns {Promise<boolean>}
+ */
+export async function listsToAdd(project, query, kind) {
+  try {
+    const saved = await savedItems(project);
+    if (saved == null) return false;
+    const {data} = await search(saved.packages, query, {
+      items: saved.items,
+      limit: DEFAULT_LIMIT,
+    });
+    return data.matches.some(match => match.kind === kind && !match.installed);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What discover searches over the saved copies (see {@link savedItems}),
+ * icon sets only where icon features are on. `packages: null` when nothing
+ * is known.
+ * @param {import('../../foundation/config/project.mjs').Project} project
+ * @returns {Promise<SavedSearchInput>}
+ */
+async function savedSearchInput(project) {
+  const saved = await savedItems(project);
+  if (saved == null) return {packages: null};
+  const {packages} = saved;
+  // Discover lists the icon sets a project could add in every project, but
+  // search is a stable command: where icon features are off, its discover
+  // line never answers from an icon set (spec:AST-017 FR27).
+  const iconSets = optedIntoIconSets(project);
+  const items = saved.items.filter(
+    item => iconSets || item.kind !== 'icon-set',
+  );
+  // Only what the ranking reads is kept: the smaller the record, the less a
+  // search spends reading it back.
+  return {
+    packages: packages.map(pkg => ({
+      name: pkg.name,
+      components: pkg.components,
+    })),
+    items: items.map(item => ({
+      kind: item.kind,
+      name: item.name,
+      ...(item.title ? {title: item.title} : {}),
+      ...(item.summary ? {summary: item.summary} : {}),
+      ...(item.description ? {description: item.description} : {}),
+      ...(item.keywords?.length ? {keywords: item.keywords} : {}),
+      ...(item.packageDescription
+        ? {packageDescription: item.packageDescription}
+        : {}),
+    })),
+  };
+}
+
+/**
+ * The shape a kept {@link savedSearchInput} needs.
+ * @param {any} value
+ * @returns {boolean}
+ */
+function isSavedSearchInput(value) {
+  return (
+    value != null &&
+    (value.packages === null ||
+      (Array.isArray(value.packages) && Array.isArray(value.items)))
+  );
+}
+
+/**
  * @param {string} [query]
  * @param {import('./discover.type.mjs').DiscoverOptions} [options]
  * @returns {Promise<
@@ -177,7 +320,9 @@ export function answersQueries(project) {
  */
 export async function discover(query, options = {}) {
   const {lang = null, zh = false, type, limit} = options;
-  // An experimental kind is read only in a project that opts in (spec:AST-017
+  const {availableEntries, catalogState, searchItems, shownEntry, withLatest} =
+    await catalogView();
+  // An experimental kind is read only in a project where it is on (spec:AST-017
   // FR27); only then does `--type` take it, or an error name it.
   const kinds =
     options.type != null &&
@@ -248,6 +393,7 @@ export async function discover(query, options = {}) {
       entry => entry.name,
     );
     const named = new Set(fromSources.map(entry => entry.name));
+    const {list} = await listLeaf();
     return list(withLatest(packages, catalog), {
       configured,
       type,
@@ -272,6 +418,9 @@ export async function discover(query, options = {}) {
   }
 
   const target = splitTarget(query);
+  // A query of several words is free text, even when it starts with a
+  // scoped name (FR4): no package or item has a space in its name.
+  const packageShaped = !/\s/.test(query);
 
   /**
    * One package, one version, or one item, once `target.name` is known to be
@@ -319,8 +468,14 @@ export async function discover(query, options = {}) {
       // Only an entry the official list supplied gets a pinned version.
       add: entry?.official ? addOfficial : add,
       installedAs,
+      iconSets: optedIntoIconSets(project),
+      coverageOf: iconSetCoverage,
     };
-    if (!target.item) return detail(packages, target.name, context);
+    if (!target.item) {
+      const {detail} = await detailLeaf();
+      return detail(packages, target.name, context);
+    }
+    const {item} = await itemLeaf();
     const found = item(packages, target.name, target.item, context);
     if (found) return found;
     // An installed icon set that was withdrawn answers nothing; say why
@@ -335,34 +490,48 @@ export async function discover(query, options = {}) {
         ERROR_CODES.ERR_UNKNOWN_COMPONENT,
       );
     }
-    if (officialOnly) {
+    // Suggest only what the page itself would show: never an installed
+    // package's icon set while icon features are off.
+    const shown =
+      entry &&
+      shownEntry(entry, {
+        installed: packages.some(p => p.name === target.name) || !!installedAs,
+        iconSets: context.iconSets,
+      });
+    if (officialOnly && shown) {
       throw new AstryxError(
         `"${target.item}" not found in ${target.name}`,
-        similarItems(entry, target.item),
+        similarItems(shown, target.item),
         ERROR_CODES.ERR_UNKNOWN_PACKAGE,
       );
     }
     // Only an installed package has docs to fall back to. For one that is
     // only in a source, the item is what is unknown, not the package.
-    if (entry && !isIntegration) {
+    if (shown && !isIntegration) {
       throw new AstryxError(
         `"${target.item}" not found in ${target.name}`,
-        similarItems(entry, target.item),
+        similarItems(shown, target.item),
         ERROR_CODES.ERR_UNKNOWN_COMPONENT,
       );
     }
+    const {doc} = await docLeaf();
     return await doc(integrations, target.name, target.item, {lang, zh});
   };
 
   // An installed component keeps resolving to its full doc, before any source
   // is asked anything.
-  const installedPkg = integrations.find(p => p.name === target.name);
+  const installedPkg = packageShaped
+    ? integrations.find(p => p.name === target.name)
+    : undefined;
   if (installedPkg && target.item && !target.version) {
-    const resolved = findComponent([installedPkg], target.item);
-    if (resolved) return await docFromResult(resolved, {lang, zh});
+    const resolved = await findComponent([installedPkg], target.item);
+    if (resolved) {
+      const {docFromResult} = await docLeaf();
+      return await docFromResult(resolved, {lang, zh});
+    }
   }
 
-  if (target.scoped) {
+  if (target.scoped && packageShaped) {
     return await packageView(
       await catalogFor({package: target.name, version: target.version}),
     );
@@ -370,8 +539,9 @@ export async function discover(query, options = {}) {
 
   const listing = await catalogFor();
   const isPackage =
-    installedPkg != null ||
-    listing.packages.some(p => p.package === target.name);
+    packageShaped &&
+    (installedPkg != null ||
+      listing.packages.some(p => p.package === target.name));
   if (isPackage && (target.version || target.item || target.name === query)) {
     return await packageView(
       await catalogFor({package: target.name, version: target.version}),
@@ -379,10 +549,17 @@ export async function discover(query, options = {}) {
   }
 
   const packages = installedFor(listing);
-  return await search(packages, query, {
-    items: searchItems(packages, listing, declared, declarations.any),
-    type,
-    only,
-    limit: limit ?? DEFAULT_LIMIT,
-  });
+  try {
+    return await search(packages, query, {
+      items: searchItems(packages, listing, declared, declarations.any),
+      type,
+      only,
+      limit: limit ?? DEFAULT_LIMIT,
+    });
+  } catch (err) {
+    if (err instanceof AstryxError && err.code === ERROR_CODES.ERR_NOT_FOUND) {
+      throw await withCoreMatch(err, query, project?.cwd ?? process.cwd());
+    }
+    throw err;
+  }
 }

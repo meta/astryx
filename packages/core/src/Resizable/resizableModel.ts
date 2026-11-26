@@ -6,12 +6,14 @@
  *   bounds, snap points, and a storage key
  * @output The resize model's pure parts: size parsing and resolution against a
  *   basis, clamping and snapping, persistence, and the content-box measurement
- *   of a percentage basis
- * @position Shared by useResizable and createResizable, so both resolve,
- *   clamp, snap and persist alike; no React, and no DOM work on import
+ *   of a percentage basis; and the channel from useResizable to ResizeHandle,
+ *   keyed by the props the hook returns
+ * @position Shared by useResizable, createResizable and ResizeHandle; no
+ *   React, and no DOM work on import
  */
 
 import type {DevWarnings} from '../utils/devWarning';
+import type {ResizableProps, ResizableRegion} from './useResizable';
 
 export type ResizableDirection = 'horizontal' | 'vertical';
 
@@ -359,4 +361,104 @@ export function measureContentBox(
         parseFloat(style.paddingLeft) -
         parseFloat(style.paddingRight);
   return Number.isFinite(size) ? size : null;
+}
+
+// =============================================================================
+// The hook-to-handle channel
+// =============================================================================
+
+/**
+ * Collapse/expand for a region, keyed by the `ResizableProps` object the hook
+ * returns. A handle's Enter and double-click use them so the pane restores
+ * its previous position (APG window splitter) rather than emulating the
+ * toggle with a resize to the minimum.
+ *
+ * Kept off `ResizableProps` on purpose: that type is exported, so a new field
+ * on it — optional or underscored — is a public delta. This map and
+ * {@link getCollapseControls} are the package's own channel between the hook
+ * and the handle; neither is re-exported from the package.
+ */
+type CollapseControls = {collapse: () => void; expand: () => void};
+const collapseControls = new WeakMap<ResizableProps, CollapseControls>();
+
+/**
+ * A drag's end with its release velocity, in px per second and signed like
+ * the move's delta. Kept off the exported `ResizableProps` for the same reason
+ * as the collapse controls; {@link endResizeAt} is internal.
+ */
+const releaseEnds = new WeakMap<ResizableProps, (velocity: number) => void>();
+
+/**
+ * The maximum an unbounded region reports as `aria-valuemax`: a measured
+ * extent that stands in for the missing configured maximum — the container's
+ * content box on the active axis while a percentage bound already observes
+ * it, or the window's extent along the axis — floored at the current size
+ * and, while collapsed, at the resolved minimum. The region is never clamped
+ * to it; it is what the separator announces. Kept off the exported
+ * `ResizableProps` for the same reason as the collapse controls;
+ * `getEffectiveMaxPx` is internal.
+ */
+const effectiveMaxima = new WeakMap<ResizableProps, number>();
+
+/**
+ * The props behind a component's `resizable` slot. It takes useResizable's
+ * output directly, and still takes that output's `props`.
+ */
+export function resizablePropsOf(
+  value: ResizableRegion | ResizableProps,
+): ResizableProps {
+  return 'props' in value ? value.props : value;
+}
+
+/** The reported maximum for `props`, or `undefined` for a hand-built object. */
+export function getEffectiveMaxPx(props: ResizableProps): number | undefined {
+  return effectiveMaxima.get(props);
+}
+
+/**
+ * The collapse/expand pair the hook registered for `props`, or `undefined`
+ * for a hand-built `ResizableProps` object (which the handle then toggles
+ * with a resize gesture). Internal to the package.
+ */
+export function getCollapseControls(
+  props: ResizableProps,
+): CollapseControls | undefined {
+  return collapseControls.get(props);
+}
+
+/**
+ * Ends the drag `props` follows at a release `velocity`. A props object the
+ * hook did not return ends without one. Internal to the package.
+ */
+export function endResizeAt(props: ResizableProps, velocity: number): void {
+  const end = releaseEnds.get(props);
+  if (end == null) {
+    props._onResizeEnd();
+    return;
+  }
+  end(velocity);
+}
+
+/** The hook records a region's collapse/expand pair for its props. */
+export function registerCollapseControls(
+  props: ResizableProps,
+  controls: CollapseControls,
+): void {
+  collapseControls.set(props, controls);
+}
+
+/** The hook records how a drag on its props ends at a release velocity. */
+export function registerReleaseEnd(
+  props: ResizableProps,
+  end: (velocity: number) => void,
+): void {
+  releaseEnds.set(props, end);
+}
+
+/** The hook records the measured maximum an unbounded region reports. */
+export function registerEffectiveMaxPx(
+  props: ResizableProps,
+  maxPx: number,
+): void {
+  effectiveMaxima.set(props, maxPx);
 }

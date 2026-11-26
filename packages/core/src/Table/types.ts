@@ -201,18 +201,18 @@ export interface TableColumn<T extends Record<string, unknown>> {
    * badges, status dots, formatted text, icons, or composed layouts.
    *
    * @compositionHint Use renderCell to compose rich table cells:
-   * - Badge for status labels (success/warning/error variants)
-   * - StatusDot for colored indicators
+   * - StatusDot beside a Text label for a status column
    * - Text with color="success"|"error" for formatted values
    * - HStack to combine multiple elements in a cell
    * - Avatar for user/entity cells
+   * - Badge only for a rare state that needs action, not in every row
    *
    * @example
-   * ```tsx
+   * ```
    * renderCell: (item) => (
    *   <HStack gap={2} align="center">
-   *     <StatusDot status={item.isActive ? 'success' : 'error'} />
-   *     <Badge variant={item.isActive ? 'success' : 'error'} label={item.isActive ? 'Active' : 'Inactive'} />
+   *     <StatusDot variant={item.isActive ? 'success' : 'neutral'} label={item.isActive ? 'Active' : 'Inactive'} />
+   *     <Text>{item.isActive ? 'Active' : 'Inactive'}</Text>
    *   </HStack>
    * )
    * ```
@@ -710,7 +710,9 @@ export interface BaseTableProps<
     afterTable?: ReactNode;
   }>;
   /**
-   * How default-rendered body cell text behaves when it exceeds column width.
+   * How default-rendered cell text behaves when it exceeds column width.
+   * Header cells follow the same mode: under `'wrap'` a long heading wraps in
+   * a data-driven table, and in children mode its column grows to fit it.
    *
    * - `'wrap'` (default) — text wraps and the row grows taller
    * - `'truncate'` — text is clipped with an ellipsis; default-rendered cells

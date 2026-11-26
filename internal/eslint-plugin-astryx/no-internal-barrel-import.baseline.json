@@ -19,16 +19,6 @@
   "packages/core/src/Breadcrumbs/BreadcrumbItem.tsx": ["../Icon", "../utils"],
   "packages/core/src/Breadcrumbs/Breadcrumbs.tsx": ["../utils"],
   "packages/core/src/ButtonGroup/ButtonGroup.tsx": ["../utils"],
-  "packages/core/src/Calendar/Calendar.tsx": [
-    "../Button",
-    "../Icon",
-    "../VisuallyHidden",
-    "../hooks",
-    "../i18n",
-    "../utils",
-    "./hooks"
-  ],
-  "packages/core/src/Calendar/hooks/useCalendarDays.ts": ["../../i18n"],
   "packages/core/src/Calendar/hooks/useCalendarNavigation.ts": ["../../i18n"],
   "packages/core/src/Card/Card.tsx": ["../utils"],
   "packages/core/src/Carousel/Carousel.tsx": [
@@ -77,7 +67,6 @@
   ],
   "packages/core/src/Chat/useSpeechRecognition.ts": ["../i18n"],
   "packages/core/src/Chat/useTriggerMenu.tsx": ["../utils"],
-  "packages/core/src/CheckboxList/CheckboxList.tsx": ["../Tooltip", "../utils"],
   "packages/core/src/Citation/Citation.tsx": ["../Icon", "../utils"],
   "packages/core/src/ClickableCard/ClickableCard.tsx": ["../utils"],
   "packages/core/src/Code/Code.tsx": ["../utils"],
@@ -129,15 +118,8 @@
     "../Spinner",
     "../Tooltip",
     "../VisuallyHidden",
-    "../i18n",
     "../utils"
   ],
-  "packages/core/src/DateInput/MonthScroller.tsx": [
-    "../Calendar",
-    "../i18n",
-    "../utils"
-  ],
-  "packages/core/src/DateInput/MonthYearWheels.tsx": ["../i18n", "../utils"],
   "packages/core/src/DateInput/NativeDateField.tsx": [
     "../Calendar",
     "../Field",
@@ -169,7 +151,6 @@
   ],
   "packages/core/src/DateInput/Wheel.tsx": ["../utils"],
   "packages/core/src/DateRangeInput/DateRangeInput.tsx": [
-    "../Calendar",
     "../Calendar/hooks",
     "../Field",
     "../Icon",
@@ -217,12 +198,7 @@
     "../hooks",
     "../utils"
   ],
-  "packages/core/src/Drawer/Drawer.tsx": [
-    "../Layer",
-    "../Layout",
-    "../hooks",
-    "../utils"
-  ],
+  "packages/core/src/Drawer/Drawer.tsx": ["../Layer", "../Layout", "../utils"],
   "packages/core/src/Drawer/DrawerHeader.tsx": [
     "../Button",
     "../Heading",
@@ -299,11 +275,6 @@
   ],
   "packages/core/src/MetadataList/MetadataList.tsx": ["../utils"],
   "packages/core/src/MetadataList/MetadataListItem.tsx": ["../utils"],
-  "packages/core/src/MobileNav/MobileNav.tsx": [
-    "../Button",
-    "../Icon",
-    "../utils"
-  ],
   "packages/core/src/MobileNav/MobileNavToggle.tsx": [
     "../Button",
     "../Icon",
@@ -323,7 +294,6 @@
   ],
   "packages/core/src/NavIcon/NavIcon.tsx": ["../utils"],
   "packages/core/src/NavMenu/NavHeadingMenu.tsx": ["../utils"],
-  "packages/core/src/NavMenu/NavHeadingMenuItem.tsx": ["../Icon", "../Text"],
   "packages/core/src/NumberInput/NumberInput.tsx": [
     "../Field",
     "../Icon",
@@ -376,7 +346,6 @@
     "../utils"
   ],
   "packages/core/src/Resizable/ResizeHandle.tsx": ["../utils"],
-  "packages/core/src/Section/Section.tsx": ["../utils"],
   "packages/core/src/SegmentedControl/SegmentedControl.tsx": [
     "../Tooltip",
     "../utils"
@@ -392,10 +361,6 @@
     "../Tooltip",
     "../VisuallyHidden",
     "../utils"
-  ],
-  "packages/core/src/Selector/SelectorBottomSheet.tsx": [
-    "../Heading",
-    "../Section"
   ],
   "packages/core/src/Selector/SelectorOption.tsx": [
     "../Icon",

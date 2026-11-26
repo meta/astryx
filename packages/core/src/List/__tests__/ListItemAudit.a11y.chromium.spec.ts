@@ -12,6 +12,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import AxeBuilder from '@axe-core/playwright';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
@@ -99,6 +100,7 @@ async function rowFacts(page: Page, label: string) {
       outline: `${style.outlineStyle} ${style.outlineWidth}`,
       ariaCurrent: row.getAttribute('aria-current'),
       ariaDisabled: row.getAttribute('aria-disabled'),
+      controlAriaCurrent: control?.getAttribute('aria-current') ?? null,
       control:
         control == null
           ? null
@@ -151,13 +153,22 @@ for (const [mode, direction] of [
         `row targets ${rest.classes.join(' ')}`,
       );
       check(rest.control?.tag === 'button', `row control ${rest.control?.tag}`);
+      // The marker sits on the row's button, the element that takes focus.
       check(
-        selected.ariaCurrent === 'true',
-        `selected row aria-current ${selected.ariaCurrent}`,
+        selected.controlAriaCurrent === 'true' && selected.ariaCurrent == null,
+        `selected row aria-current ${selected.ariaCurrent} / button ${selected.controlAriaCurrent}`,
+      );
+      const axe = await new AxeBuilder({page})
+        .include('#storybook-root ul')
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+        .analyze();
+      check(
+        axe.violations.length === 0,
+        `axe ${axe.violations.map(violation => violation.id).join(', ')}`,
       );
       check(
-        rest.ariaCurrent == null,
-        `unselected row aria-current ${rest.ariaCurrent}`,
+        rest.ariaCurrent == null && rest.controlAriaCurrent == null,
+        `unselected row aria-current ${rest.ariaCurrent} / button ${rest.controlAriaCurrent}`,
       );
       check(
         alphaOf(rest.background) === 0,

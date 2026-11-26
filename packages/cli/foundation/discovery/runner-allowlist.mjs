@@ -43,7 +43,7 @@ export const RUNNER_COMMAND_ALLOWLIST = Object.freeze({
       'explains how printed commands start, the pinned `npx @astryxdesign/cli@<version>` among them',
     'packages/cli/assets/docs/tree/project-global-or-both.doc.mjs':
       'compares running the CLI with npx to installing it, and is found by searching for that command',
-    'packages/cli/assets/docs/tree/render-pages.doc.mjs':
+    'packages/cli/assets/docs/tree/export-pages.doc.mjs':
       'quotes the note a rendered file opens with, whose commands are pinned to `npx @astryxdesign/cli@<version>`',
     'packages/cli/assets/docs/tree/install-once.doc.mjs':
       'names a pinned release, `npx @astryxdesign/cli@<version>`, which answers as that version',
@@ -53,5 +53,7 @@ export const RUNNER_COMMAND_ALLOWLIST = Object.freeze({
       'shows what a reader sees for a command token, with their runner',
     'packages/cli/clients/cli/commands/upgrade.doc.mjs':
       'quotes the command upgrade prints when the CLI is older than Core, pinned to the matching release',
+    'packages/cli/assets/docs/working-with-ai.doc.mjs':
+      'shows the MCP client entries, which start the CLI server with `npx @astryxdesign/cli mcp`',
   }),
 });

@@ -28,10 +28,12 @@ import {
 } from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
-import {Button} from '../Button';
-import {Icon} from '../Icon';
-import {useAnnounce, useGridFocus} from '../hooks';
-import {useCalendarConstraints, type CalendarDay} from './hooks';
+import {Button} from '../Button/Button';
+import {Icon} from '../Icon/Icon';
+import {useAnnounce} from '../hooks/useAnnounce';
+import {useGridFocus} from '../hooks/useGridFocus';
+import {useCalendarConstraints} from './hooks/useCalendarConstraints';
+import type {CalendarDay} from './hooks/useCalendarDays';
 import {useCalendarDays} from './hooks/useCalendarDays';
 import {
   calendarStyles,
@@ -67,7 +69,9 @@ import {
   formatCalendarMonthLabel,
   isInCalendarMonth,
 } from '../utils/calendarSystem';
-import {mergeProps, composeEventHandlers, rtlStyles} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {rtlStyles} from '../utils/rtlStyles';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
@@ -101,9 +105,9 @@ import type {
 } from '../utils/dateTypes';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {themeProps} from '../utils/themeProps';
-import {useLocale} from '../i18n';
+import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
-import {VisuallyHidden} from '../VisuallyHidden';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -1418,19 +1422,25 @@ function DayCell({
       {/* Range background */}
       {state.isInRange && (
         <div
-          {...stylex.props(
-            dayCellStyles.rangeBg,
-            dayCellTheme.rangeBg,
-            rangeRounding.roundStart && dayCellStyles.rangeBgRadiusStart,
-            rangeRounding.roundEnd && dayCellStyles.rangeBgRadiusEnd,
-            state.isRangeStart && dayCellStyles.rangeInsetStart,
-            state.isRangeStart &&
-              rangeRounding.roundEnd &&
-              dayCellStyles.rangeInsetEnd,
-            state.isRangeEnd && dayCellStyles.rangeInsetEnd,
-            state.isRangeStart &&
-              rangeRounding.roundStart &&
-              dayCellStyles.rangeInsetStart,
+          {...mergeProps(
+            themeProps('calendar-range', {
+              start: state.isRangeStart ? 'start' : null,
+              end: state.isRangeEnd ? 'end' : null,
+            }),
+            stylex.props(
+              dayCellStyles.rangeBg,
+              dayCellTheme.rangeBg,
+              rangeRounding.roundStart && dayCellStyles.rangeBgRadiusStart,
+              rangeRounding.roundEnd && dayCellStyles.rangeBgRadiusEnd,
+              state.isRangeStart && dayCellStyles.rangeInsetStart,
+              state.isRangeStart &&
+                rangeRounding.roundEnd &&
+                dayCellStyles.rangeInsetEnd,
+              state.isRangeEnd && dayCellStyles.rangeInsetEnd,
+              state.isRangeStart &&
+                rangeRounding.roundStart &&
+                dayCellStyles.rangeInsetStart,
+            ),
           )}
         />
       )}
@@ -1438,13 +1448,19 @@ function DayCell({
       {/* Preview range background */}
       {state.isInPreview && (
         <div
-          {...stylex.props(
-            dayCellStyles.previewBg,
-            dayCellTheme.previewBg,
-            previewRounding.roundStart && dayCellStyles.previewBgRadiusStart,
-            previewRounding.roundEnd && dayCellStyles.previewBgRadiusEnd,
-            state.isPreviewStart && dayCellStyles.previewStart,
-            state.isPreviewEnd && dayCellStyles.previewEnd,
+          {...mergeProps(
+            themeProps('calendar-range-preview', {
+              start: state.isPreviewStart ? 'start' : null,
+              end: state.isPreviewEnd ? 'end' : null,
+            }),
+            stylex.props(
+              dayCellStyles.previewBg,
+              dayCellTheme.previewBg,
+              previewRounding.roundStart && dayCellStyles.previewBgRadiusStart,
+              previewRounding.roundEnd && dayCellStyles.previewBgRadiusEnd,
+              state.isPreviewStart && dayCellStyles.previewStart,
+              state.isPreviewEnd && dayCellStyles.previewEnd,
+            ),
           )}
         />
       )}

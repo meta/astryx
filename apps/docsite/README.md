@@ -26,13 +26,15 @@ from the monorepo and writes typed TypeScript registries to `src/generated/`.
 
 | Registry                      | Source                                             | What it contains                                              |
 | ----------------------------- | -------------------------------------------------- | ------------------------------------------------------------- |
-| `packageRegistry.ts`          | `packages/*/package.json`                          | Name, version, description, README for each published package |
+| `packageRegistry.ts`          | `packages/*/package.json`                          | Name, version, description for each published package         |
+| `packageText.json`            | Each package's `README.md` and `CHANGELOG.md`      | README and changelog text of each package, for server modules |
 | `componentRegistry.ts`        | Core + CLI-configured integration `.doc.mjs` files | Props, usage docs, hooks, groups, per package                 |
 | `componentPreviewRegistry.ts` | Components from those same packages                | Runtime exports for the shared Properties preview             |
 | `blockRegistry.ts`            | CLI + integration template blocks                  | Showcase and example blocks with metadata                     |
 | `templateRegistry.ts`         | CLI `templates/pages/`                             | Page-level templates (e.g. dashboard, settings)               |
 | `docsRegistry.ts`             | CLI `docs/`                                        | Long-form guide and foundation topics                         |
-| `blogRegistry.ts`             | `src/content/blog/posts/`                          | Human-authored blog posts (frontmatter validated)             |
+| `blogRegistry.ts`             | `src/content/blog/posts/`                          | Human-authored blog posts (frontmatter validated), no bodies  |
+| `blogPostBodies.json`         | `src/content/blog/posts/`                          | Markdown body of each blog post, for server modules           |
 | `themeRegistry.ts`            | Installed `@astryxdesign/theme-*` packages         | Built theme objects, keyed by package name                    |
 | `showcaseRegistry.ts`         | Blocks with `isShowcase`                           | Copied showcase source files                                  |
 | `exampleRegistry.ts`          | Blocks with `exampleFor`                           | Copied example blocks per component                           |

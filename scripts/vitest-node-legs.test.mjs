@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {spawnSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
@@ -10,6 +11,12 @@ import {
   JOB_LIMIT_SECONDS,
   LEG_BUDGET_SECONDS,
   MAIN_WARN_MINUTES,
+  MAX_MIN_NODE_LEGS,
+  MIN_NODE_DURATIONS,
+  MIN_NODE_LEG_BUDGET_SECONDS,
+  MIN_NODE_SETUP_SECONDS,
+  MIN_NODE_TARGET_MINUTES,
+  MIN_NODE_TEST_SECONDS_PER_WALL_SECOND,
   MAX_MAIN_NODE_LEGS,
   MAX_NODE_LEGS,
   SLOW_RUNNER,
@@ -20,16 +27,26 @@ import {
   TIGHT_NODE_LEGS,
   WALL_SECONDS,
   WATCHDOG_MARGIN_SECONDS,
+  BESIDE_REAL_CHROME_SECONDS,
+  takesOwnNodeLeg,
+  drawsInRealChrome,
   nodeFileCost,
+  nodeLegsApart,
   nodeLegFiles,
   mainNearLimitNotice,
+  minNodeLegFiles,
+  minNodeLegMinutes,
   overBudgetNotice,
+  planMinNodeLegs,
   planMainNodeLegs,
   projectedLegMinutes,
   planNodeLegs,
   readDurations,
+  RECORDS,
+  recordProblem,
   stepOutputs,
 } from './vitest-node-legs.mjs';
+import {splitByDuration} from './lib/duration-split.mjs';
 import {partitionByDuration} from './vitest-shard-sequencer.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -264,6 +281,132 @@ describe('the Node leg plan', () => {
     );
   });
 
+  it('finds the files that draw in a real Chrome from their source', () => {
+    expect(
+      drawsInRealChrome(
+        'packages/cli/api/theme-edit/theme-edit-border-added-size.test.mjs',
+      ),
+    ).toBe(true);
+    expect(drawsInRealChrome('scripts/vitest-node-legs.test.mjs')).toBe(false);
+    expect(drawsInRealChrome('no/such/file.test.mjs')).toBe(false);
+  });
+
+  it('gives the real-Chrome files one leg, the last, with no packing or heavy file beside them, on pull requests and main', () => {
+    const main = nodeLegFiles(ROOT, {swizzleProofOwnJob: false});
+    for (const [run, list, legsOf] of [
+      ['pull request', files, plan.legs],
+      ['main', main, planMainNodeLegs(main, seconds).legs],
+    ]) {
+      const chrome = list.filter(
+        file => drawsInRealChrome(file) && !takesOwnNodeLeg(file),
+      );
+      expect(chrome.length, run).toBeGreaterThan(10);
+      const cost = nodeFileCost(list, seconds);
+      const legs = partitionByDuration(list, legsOf, seconds);
+      const last = legs[legs.length - 1];
+      expect(
+        chrome.filter(file => !last.includes(file)),
+        run,
+      ).toEqual([]);
+      for (const file of last.filter(f => !drawsInRealChrome(f))) {
+        expect(cost(file), `${run}: ${file}`).toBeLessThanOrEqual(
+          BESIDE_REAL_CHROME_SECONDS,
+        );
+        expect(file, run).not.toMatch(/(^|\/)packed-[^/]*\.test\.mjs$/);
+      }
+      // The packing and conformance suites are spread over the other legs.
+      for (const heavy of list.filter(f =>
+        /packed-gather-cache|packed-search-catalog|door-conformance/.test(f),
+      ))
+        expect(last, `${run}: ${heavy}`).not.toContain(heavy);
+    }
+  });
+
+  it('gives a marked real-Chrome file a leg of its own, with only light, non-packing files beside it, on pull requests and main', () => {
+    const own =
+      'packages/cli/api/theme-edit/theme-edit-border-added-size.test.mjs';
+    expect(takesOwnNodeLeg(own)).toBe(true);
+    expect(
+      takesOwnNodeLeg('packages/cli/api/theme-edit/theme-cut-short.test.mjs'),
+    ).toBe(false);
+    expect(takesOwnNodeLeg('scripts/vitest-node-legs.test.mjs')).toBe(false);
+    const main = nodeLegFiles(ROOT, {swizzleProofOwnJob: false});
+    for (const [run, list, legsOf] of [
+      ['pull request', files, plan.legs],
+      ['main', main, planMainNodeLegs(main, seconds).legs],
+    ]) {
+      const cost = nodeFileCost(list, seconds);
+      const legs = partitionByDuration(list, legsOf, seconds);
+      const leg = legs.find(each => each.includes(own));
+      expect(leg, run).not.toBe(legs[legs.length - 1]);
+      for (const file of leg.filter(f => f !== own)) {
+        expect(drawsInRealChrome(file), `${run}: ${file}`).toBe(false);
+        expect(cost(file), `${run}: ${file}`).toBeLessThanOrEqual(
+          BESIDE_REAL_CHROME_SECONDS,
+        );
+        expect(file, run).not.toMatch(/(^|\/)packed-[^/]*\.test\.mjs$/);
+      }
+    }
+  });
+
+  it("plans from each planner's sparse checkout as the legs split in a full one", () => {
+    // ci.yml's room, deploy.yml's main-commit and cli-minimum-node.yml's
+    // version job plan from sparse checkouts; each must hold every
+    // real-Chrome test file, or it plans another split than the legs run.
+    const workflow = name =>
+      yaml.parse(
+        fs.readFileSync(path.join(ROOT, '.github/workflows', name), 'utf8'),
+      );
+    const planners = [
+      ['ci.yml', 'room'],
+      ['deploy.yml', 'main-commit'],
+      ['cli-minimum-node.yml', 'version'],
+    ];
+    const covers = (step, file) => {
+      const patterns = String(step.with['sparse-checkout'])
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+      if (step.with['sparse-checkout-cone-mode'] === false)
+        return patterns.some(pattern =>
+          path.matchesGlob(file, pattern.replace(/\/$/, '/**')),
+        );
+      return patterns.some(dir =>
+        file.startsWith(`${dir.replace(/\/$/, '')}/`),
+      );
+    };
+    const chrome = files.filter(file => drawsInRealChrome(file));
+    expect(chrome.length).toBeGreaterThan(10);
+    for (const [name, job] of planners) {
+      const steps = workflow(name).jobs[job].steps.filter(
+        step =>
+          String(step.uses ?? '').startsWith('actions/checkout@') &&
+          step.with?.['sparse-checkout'],
+      );
+      expect(steps.length, `${name} ${job}`).toBeGreaterThan(0);
+      for (const step of steps)
+        for (const file of chrome)
+          expect(covers(step, file), `${name} ${job}: ${file}`).toBe(true);
+    }
+    // Planned from room's file set, the split is the one each leg runs.
+    const room = workflow('ci.yml').jobs.room.steps.find(
+      step => step.id === 'checkout',
+    );
+    const readable = file => covers(room, file);
+    const cost = nodeFileCost(files, seconds);
+    expect(
+      splitByDuration(
+        files,
+        plan.legs,
+        cost,
+        [],
+        nodeLegsApart(cost, {
+          realChrome: file => readable(file) && drawsInRealChrome(file),
+        }),
+      ),
+    ).toEqual(partitionByDuration(files, plan.legs, seconds));
+  });
+
   it('gives every leg files on a scoped run: the guards it always runs are nearly the whole suite', () => {
     // A scoped pull-request run lists the tests its change reaches and every
     // guard that reads sources (fs-guard-tests.mjs). With no change at all,
@@ -281,5 +424,96 @@ describe('the Node leg plan', () => {
     const cost = nodeFileCost(guards, seconds);
     const share = guards.reduce((sum, file) => sum + cost(file), 0);
     expect(share / plan.total).toBeGreaterThan(0.5);
+  });
+});
+
+describe("the CLI's legs on its minimum Node", () => {
+  const files = minNodeLegFiles(ROOT);
+  const seconds = readDurations(MIN_NODE_DURATIONS);
+
+  it("collects only the CLI package's test files, as `pnpm -F @astryxdesign/cli test` does", () => {
+    expect(files.length).toBeGreaterThan(0);
+    expect(files.every(file => file.startsWith('packages/cli/'))).toBe(true);
+    expect(files).toContain(
+      'packages/cli/test/swizzle-proof/swizzle-proof.1.test.mjs',
+    );
+  });
+
+  it('derives the budget from the 20-minute target and the pace measured on Node 22.13', () => {
+    expect(MIN_NODE_LEG_BUDGET_SECONDS).toBe(
+      (MIN_NODE_TARGET_MINUTES * 60 - MIN_NODE_SETUP_SECONDS) *
+        MIN_NODE_TEST_SECONDS_PER_WALL_SECOND,
+    );
+    // Run 44258944787's four legs: 2,704, 2,279, 3,363 and 3,461 recorded
+    // seconds took 18.8, 15.7, 22.7 and 23.3 minutes of their test step, about
+    // 40 s after their job started. The projection stays above each, by at
+    // most three minutes.
+    for (const [seconds, minutes] of [
+      [2704, 18.8],
+      [2279, 15.7],
+      [3363, 22.7],
+      [3461, 23.3],
+    ]) {
+      expect(minNodeLegMinutes(seconds)).toBeGreaterThan(minutes + 0.6);
+      expect(minNodeLegMinutes(seconds)).toBeLessThan(minutes + 3);
+    }
+  });
+
+  it('plans the fewest legs that keep the slowest at or under the target on the repository record', () => {
+    const plan = planMinNodeLegs(files, seconds);
+    expect(plan.fits).toBe(true);
+    expect(plan.minutes).toBeLessThanOrEqual(MIN_NODE_TARGET_MINUTES);
+    if (plan.legs > 1) {
+      const cost = nodeFileCost(files, seconds);
+      const fewer = splitByDuration(
+        files,
+        plan.legs - 1,
+        cost,
+        [],
+        nodeLegsApart(cost),
+      ).map(leg =>
+        leg.reduce((sum, file) => sum + nodeFileCost(files, seconds)(file), 0),
+      );
+      expect(Math.max(...fewer)).toBeGreaterThan(MIN_NODE_LEG_BUDGET_SECONDS);
+    }
+  });
+
+  it('runs the most legs and says why, never stopping, when the suite outgrows the target', () => {
+    const slow = Object.fromEntries(files.map(file => [file, 100]));
+    const plan = planMinNodeLegs(files, slow);
+    expect(plan.legs).toBe(MAX_MIN_NODE_LEGS);
+    expect(plan.fits).toBe(false);
+    expect(plan.reason).toContain('past the 20-minute target');
+    const out = execFileSync(
+      process.execPath,
+      [path.join(ROOT, 'scripts/vitest-node-legs.mjs'), 'plan', '--min-node'],
+      {cwd: ROOT, encoding: 'utf8'},
+    );
+    expect(out).toMatch(/"shards":"\[1(,\d+)*\]"/);
+  });
+});
+
+describe('a recorded-times file the plan can use', () => {
+  const write = text => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-times-'));
+    const file = path.join(dir, 'vitest-node-durations.json');
+    fs.writeFileSync(file, text);
+    return file;
+  };
+
+  it('accepts a map of seconds per file, and names what is wrong otherwise', () => {
+    expect(recordProblem(write('{"seconds": {"a.test.mjs": 1.5}}'))).toBeNull();
+    expect(recordProblem(write('{"seconds": '))).toMatch(/cannot be read/);
+    expect(recordProblem(write('{"secs": {}}'))).toMatch(/no map of seconds/);
+    expect(recordProblem(write('{"seconds": {"a.test.mjs": "1"}}'))).toMatch(
+      /records "1" seconds for a.test.mjs/,
+    );
+    expect(recordProblem(write('{"seconds": {"a.test.mjs": -1}}'))).toMatch(
+      /records -1 seconds/,
+    );
+  });
+
+  it('holds for the repository records', () => {
+    for (const file of RECORDS) expect(recordProblem(file), file).toBeNull();
   });
 });

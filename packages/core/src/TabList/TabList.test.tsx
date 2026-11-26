@@ -9,7 +9,7 @@
  * SYNC: When TabList components change, update tests to match new behavior
  */
 
-import {useState} from 'react';
+import {useLayoutEffect, useState, type ReactNode} from 'react';
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
 import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
@@ -68,6 +68,23 @@ afterAll(() => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (HTMLElement.prototype as any).matches = originalMatches;
 });
+
+/**
+ * Runs `onCommit` in the commit that mounts its children: after their layout
+ * effects, and before any passive effect.
+ */
+function AtCommit({
+  onCommit,
+  children,
+}: {
+  onCommit: () => void;
+  children: ReactNode;
+}) {
+  useLayoutEffect(() => {
+    onCommit();
+  }, [onCommit]);
+  return <>{children}</>;
+}
 
 describe('TabList', () => {
   it('renders a nav element with tab buttons', () => {
@@ -1248,6 +1265,179 @@ describe('TabList overflow (scroll)', () => {
     Element.prototype.scrollBy = originalScrollBy;
     Element.prototype.getBoundingClientRect = originalRect;
   });
+
+  it('reads no layout as it mounts, and reveals the selected tab at the first resize notification', () => {
+    // A browser's ResizeObserver reports each element after it lays it out.
+    // jsdom has none, so this one hands the test that first notification.
+    let notifyFirstLayout = () => {};
+    vi.stubGlobal(
+      'ResizeObserver',
+      vi.fn(function (callback: ResizeObserverCallback) {
+        const observed = new Set<Element>();
+        notifyFirstLayout = () =>
+          callback(
+            [...observed].map(target => ({target}) as ResizeObserverEntry),
+            {} as ResizeObserver,
+          );
+        return {
+          observe: (element: Element) => observed.add(element),
+          unobserve: (element: Element) => observed.delete(element),
+          disconnect: () => observed.clear(),
+        };
+      }),
+    );
+    const scrollBy = vi.fn();
+    const originalScrollBy = Element.prototype.scrollBy;
+    const originalRect = Element.prototype.getBoundingClientRect;
+    Element.prototype.scrollBy = scrollBy;
+    const readRect = vi.fn(function (this: Element) {
+      return (
+        this.classList.contains('astryx-tab-strip')
+          ? {left: 0, right: 300, width: 300}
+          : {left: 420, right: 500, width: 80}
+      ) as DOMRect;
+    });
+    Element.prototype.getBoundingClientRect = readRect;
+    const readStyle = vi.spyOn(window, 'getComputedStyle');
+    try {
+      const {unmount} = render(
+        <TabList value="c" onChange={() => {}}>
+          <Tab value="a" label="Alpha" />
+          <Tab value="b" label="Beta" />
+          <Tab value="c" label="Gamma" />
+        </TabList>,
+      );
+      // The mount's effects run in the task that commits it.
+      expect(readRect).not.toHaveBeenCalled();
+      expect(readStyle).not.toHaveBeenCalled();
+      expect(scrollBy).not.toHaveBeenCalled();
+
+      act(() => notifyFirstLayout());
+      expect(scrollBy).toHaveBeenCalledTimes(1);
+      expect(scrollBy).toHaveBeenCalledWith(
+        expect.objectContaining({behavior: 'instant'}),
+      );
+      expect(scrollBy.mock.calls[0][0].left).toBeGreaterThan(0);
+      unmount();
+    } finally {
+      readStyle.mockRestore();
+      Element.prototype.scrollBy = originalScrollBy;
+      Element.prototype.getBoundingClientRect = originalRect;
+      vi.unstubAllGlobals();
+    }
+  });
+
+  // A mount that no event caused can paint before its passive effects run.
+  // The browser's first notification then comes before them.
+  it.each([
+    ['after', false],
+    ['before', true],
+  ])(
+    "commits the edges of the revealed offset before the first frame when the selected tab starts off screen and the first notification comes %s the mount's passive effects",
+    async (_when, isBeforePassiveEffects) => {
+      // A browser's ResizeObserver reports each element after it lays it out,
+      // in the order they were observed: the strip, then the wrapper.
+      let notifyFirstLayout = () => {};
+      vi.stubGlobal(
+        'ResizeObserver',
+        vi.fn(function (callback: ResizeObserverCallback) {
+          const observed = new Set<Element>();
+          notifyFirstLayout = () =>
+            callback(
+              [...observed].map(target => ({target}) as ResizeObserverEntry),
+              {} as ResizeObserver,
+            );
+          return {
+            observe: (element: Element) => observed.add(element),
+            unobserve: (element: Element) => observed.delete(element),
+            disconnect: () => observed.clear(),
+          };
+        }),
+      );
+      // A 300 px strip over 600 px of tabs, with the selected tab 200 px past
+      // its end edge. A scroll moves the offset, as in a browser.
+      const offsets = new WeakMap<Element, number>();
+      const isStrip = (element: Element) =>
+        element.classList.contains('astryx-tab-strip');
+      const stubbed = ['scrollLeft', 'scrollWidth', 'clientWidth'] as const;
+      const originals = stubbed.map(name =>
+        Object.getOwnPropertyDescriptor(Element.prototype, name),
+      );
+      const define = (
+        name: (typeof stubbed)[number],
+        get: (el: Element) => number,
+      ) =>
+        Object.defineProperty(Element.prototype, name, {
+          configurable: true,
+          get(this: Element) {
+            return get(this);
+          },
+        });
+      define('scrollLeft', element => offsets.get(element) ?? 0);
+      define('scrollWidth', element => (isStrip(element) ? 600 : 0));
+      define('clientWidth', element => (isStrip(element) ? 300 : 0));
+      const originalScrollBy = Element.prototype.scrollBy;
+      const originalRect = Element.prototype.getBoundingClientRect;
+      Element.prototype.scrollBy = function (
+        this: Element,
+        options?: ScrollToOptions | number,
+      ) {
+        const left = typeof options === 'object' ? (options.left ?? 0) : 0;
+        offsets.set(this, (offsets.get(this) ?? 0) + left);
+      };
+      Element.prototype.getBoundingClientRect = function (this: Element) {
+        return (
+          isStrip(this)
+            ? {left: 0, right: 300, width: 300}
+            : {left: 420, right: 500, width: 80}
+        ) as DOMRect;
+      };
+      try {
+        const onCommit = () => {
+          if (isBeforePassiveEffects) {
+            notifyFirstLayout();
+          }
+        };
+        const {container, unmount} = render(
+          <AtCommit onCommit={onCommit}>
+            <TabList value="c" onChange={() => {}}>
+              <Tab value="a" label="Alpha" />
+              <Tab value="b" label="Beta" />
+              <Tab value="c" label="Gamma" />
+            </TabList>
+          </AtCommit>,
+        );
+        expect(container.querySelectorAll(ARROW)).toHaveLength(0);
+
+        let arrowsBeforePaint = -1;
+        await act(async () => {
+          if (!isBeforePassiveEffects) {
+            notifyFirstLayout();
+          }
+          await Promise.resolve();
+          // No frame and no timer has run: only the microtask.
+          arrowsBeforePaint = container.querySelectorAll(ARROW).length;
+        });
+        // The reveal scrolled 200 px, so content overflows both edges. Edges
+        // read before the reveal would give the end arrow alone.
+        expect(container.querySelector<HTMLElement>(STRIP)?.scrollLeft).toBe(
+          200,
+        );
+        expect(arrowsBeforePaint).toBe(2);
+        unmount();
+      } finally {
+        stubbed.forEach((name, index) => {
+          const original = originals[index];
+          if (original != null) {
+            Object.defineProperty(Element.prototype, name, original);
+          }
+        });
+        Element.prototype.scrollBy = originalScrollBy;
+        Element.prototype.getBoundingClientRect = originalRect;
+        vi.unstubAllGlobals();
+      }
+    },
+  );
 
   it('keeps the selected tab in view when the host changes value without focus', () => {
     const {strip, rerender} = renderStrip({value: 'a'});

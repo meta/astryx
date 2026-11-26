@@ -10,5 +10,5 @@ export const doc = {
     'A list of citation sources with icons, as you might show at the end of an AI-generated response or article footer.',
   isReady: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['Citation', 'Layout', 'Text'],
+  componentsUsed: ['Citation', 'Icon', 'Layout', 'Text'],
 };

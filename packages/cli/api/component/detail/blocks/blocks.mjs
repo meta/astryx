@@ -10,7 +10,6 @@
 
 import * as path from 'node:path';
 import {findRelatedBlocks, pkgOf} from '../../../template/template.mjs';
-import {renderTokens} from '../../../../foundation/doc-compiler/links.mjs';
 
 /**
  * Project a component's related blocks into the `component.detail.blocks`
@@ -27,7 +26,7 @@ export async function componentDetailBlocks(componentName, cwd, ownerPackage) {
     name: b.dirName,
     package: pkgOf(b),
     displayName: b.name,
-    description: renderTokens(b.description),
+    description: b.description,
     isShowcase: b.isShowcase ?? false,
     category: b.category,
     isReady: b.isReady !== false,

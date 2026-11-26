@@ -22,6 +22,7 @@ const {
   PREBUILT_OPTIONS,
   compileRules,
   pluginOptions,
+  processRules,
   resolveStyleXImport,
   sourcePackages,
   sourceStylesheet,
@@ -29,7 +30,6 @@ const {
 } = require('./source-stylesheet.js');
 const astryxPostcss = require('./next-postcss.js');
 const turbopackLoader = require('./turbopack-loader.js');
-const {processStylexRules} = require('@stylexjs/babel-plugin');
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -68,11 +68,7 @@ describe('a source build against the prebuilt stylesheets', () => {
       ...TARGETS[name],
       provider: provider && TARGETS[provider],
     });
-    const sheet = buildCss.composePackageStylesheet(
-      '',
-      processStylexRules(rules, false),
-      {core: name === 'core'},
-    );
+    const sheet = buildCss.composePackageStylesheet('', processRules(rules));
     // Everything after the banner: the layer order, then the rules.
     return sheet.slice(sheet.indexOf(buildCss.ASTRYX_LAYER_ORDER));
   }
@@ -102,13 +98,9 @@ describe('a source build against the prebuilt stylesheets', () => {
     }
     // Present first. Each package prints rules of its own, after the layer
     // order its block begins with.
-    for (const [index, sheet] of sheets.entries()) {
-      // Core's alone begins with its root block (spec:AST-080 FR3).
-      const root = index === 0 ? '@layer reset \\{[^}]*\\}\\s*\\}\\n\\n' : '';
+    for (const sheet of sheets) {
       expect(sheet).toMatch(
-        new RegExp(
-          `^@layer reset, astryx-base, astryx-theme;\\n\\n${root}@layer astryx-base \\{\\n\\s+\\S`,
-        ),
+        /^@layer reset, astryx-base, astryx-theme;\n\n@layer astryx-base \{\n\s+\S/,
       );
     }
     expect(css).toBe(sheets.join('\n'));
@@ -249,10 +241,9 @@ describe('the @astryx PostCSS plugin', () => {
         "import * as stylex from '@stylexjs/stylex';\nconst s = stylex.create({root: {color: 'red'}});\nexport const Box = () => stylex.props(s.root);",
     });
     const {css, messages} = await run(app);
-    // The layer order first, so the block keeps it wherever it loads, then
-    // Core's root block (spec:AST-080 FR3), then the compiled rules.
+    // The layer order first, so the block keeps it wherever it loads.
     expect(css).toMatch(
-      /^@layer reset, astryx-base, astryx-theme;\n\n@layer reset \{\n {2}:where\(html:not\(\[data-theme\]\)\) \{\n {4}color-scheme: light dark;\n {2}\}\n\}\n\n@layer astryx-base \{\n {2}\.x[a-z0-9]+\{color:red\}/,
+      /^@layer reset, astryx-base, astryx-theme;\n\n@layer astryx-base \{\n {2}\.x[a-z0-9]+\{color:red\}/,
     );
     // It depends on the package's source, never on an app file.
     expect(messages).toEqual([

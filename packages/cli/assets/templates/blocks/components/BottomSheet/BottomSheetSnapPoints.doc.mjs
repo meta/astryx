@@ -20,12 +20,4 @@ export const doc = {
     'Stack',
     'Text',
   ],
-  icons: {
-    ArrowLeftIcon: 'arrowLeft',
-    ArrowRightIcon: 'arrowRight',
-    ArrowUpIcon: 'arrowUp',
-    ArrowUturnLeftIcon: 'undo',
-    FlagIcon: 'flag',
-    MapPinIcon: 'location',
-  },
 };

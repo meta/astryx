@@ -49,6 +49,7 @@ import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {selectorPresentationStyles} from './selectorPresentation.stylex';
 import {groupStyles} from '../InputGroup/groupStyles';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 /**
  * Enters a search query as one change. Typing it key by key can land several
@@ -77,6 +78,8 @@ function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
 // resolves from the module cache and every sheet test waits only on the open.
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
+  await import('./SelectorBottomSheet');
+  await import('./SelectorBottomSheetFrame');
 });
 
 beforeEach(() => {
@@ -303,6 +306,8 @@ function expectSilentBusySpinner() {
 // here, and each test's open waits only for the open.
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
+  await import('./SelectorBottomSheet');
+  await import('./SelectorBottomSheetFrame');
 });
 
 describe('Selector', () => {
@@ -396,7 +401,7 @@ describe('Selector', () => {
 
   it('uses content-hugging height without extra bottom content padding', () => {
     const source = readFileSync(
-      'packages/core/src/Selector/SelectorBottomSheet.tsx',
+      'packages/core/src/Selector/SelectorBottomSheetFrame.tsx',
       'utf8',
     );
 
@@ -581,14 +586,13 @@ describe('Selector', () => {
     const popover = screen
       .getByRole('listbox', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-start span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideAbove');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('emits the direction-independent logical mapping under an RTL ancestor (#3389)', async () => {
-    // The self-* position-area keywords resolve against the popover's own
-    // inherited direction in the browser, so RTL emits the same string as
+    // The logical anchor insets resolve against the popover's own
+    // inherited direction in the browser, so RTL emits the same styles as
     // LTR and the mirroring is pure CSS — jsdom can only assert the string.
     const user = userEvent.setup();
     render(
@@ -607,9 +611,8 @@ describe('Selector', () => {
     const popover = screen
       .getByRole('listbox', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('clamps the default selected-item overlay to the viewport', async () => {
@@ -646,13 +649,15 @@ describe('Selector', () => {
   });
 
   it.each([
-    ['below its anchor', 'marginBlockEnd'],
-    ['already flipped above its anchor', 'marginBlockStart'],
+    ['below its anchor', 'marginBlockEnd', null],
+    ['already flipped above its anchor', 'marginBlockStart', 'self-end'],
   ])(
     "keeps the overlay out of the layer's viewport gutter, the layer %s",
-    async (_, gutterMargin) => {
+    async (_, gutterMargin, flippedAlignSelf) => {
       const restoreRects = mockSelectorRects();
-      // The layer keeps a 16 px gutter from the viewport's block end.
+      // The layer keeps a 16 px gutter from the viewport's block end. A flip
+      // moves it to the block-start margin and mirrors the layer's block
+      // self alignment to the block end.
       const realGetComputedStyle = window.getComputedStyle.bind(window);
       const styleSpy = vi
         .spyOn(window, 'getComputedStyle')
@@ -663,6 +668,11 @@ describe('Selector', () => {
             element.hasAttribute('popover')
           ) {
             Object.defineProperty(style, gutterMargin, {value: '16px'});
+            if (flippedAlignSelf != null) {
+              Object.defineProperty(style, 'alignSelf', {
+                value: flippedAlignSelf,
+              });
+            }
           }
           return style;
         });
@@ -694,6 +704,68 @@ describe('Selector', () => {
       }
     },
   );
+
+  it('measures the overlay again when a scroll stop re-picks the list onto the other side', async () => {
+    const restoreRects = mockSelectorRects();
+    // The browser picks the layer's side. A block flip mirrors the layer's
+    // block self alignment to the block end and moves the gutter to the
+    // block-start margin.
+    let isFlipped = false;
+    const realGetComputedStyle = window.getComputedStyle.bind(window);
+    const styleSpy = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((element, pseudo) => {
+        const style = realGetComputedStyle(element, pseudo);
+        if (
+          isFlipped &&
+          element instanceof HTMLElement &&
+          element.hasAttribute('popover')
+        ) {
+          Object.defineProperty(style, 'alignSelf', {value: 'self-end'});
+          Object.defineProperty(style, 'marginBlockStart', {value: '16px'});
+        }
+        return style;
+      });
+    // Scroll stops arrive as `scrollend`.
+    const view = window as {onscrollend?: unknown};
+    view.onscrollend = null;
+    const user = userEvent.setup();
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+        />,
+      );
+      await user.click(screen.getByRole('combobox'));
+      const popover = screen
+        .getByRole('listbox', {hidden: true})
+        .closest('[popover]');
+      // Opened below its anchor: the margin below the anchor.
+      await waitFor(() => {
+        expect(popover?.getAttribute('style')).toContain(
+          '--_selector-overlay-margin: min(-110px,',
+        );
+      });
+      // A scroll stops, and the re-pick puts the list above its anchor.
+      isFlipped = true;
+      act(() => {
+        document.dispatchEvent(new Event('scrollend'));
+      });
+      // The margin for a list above its anchor ends at the keyboard's term.
+      await waitFor(() => {
+        expect(popover?.getAttribute('style')).toContain(
+          'var(--_layer-keyboard-inset-block-end, 0px))))',
+        );
+      });
+    } finally {
+      delete view.onscrollend;
+      styleSpy.mockRestore();
+      restoreRects();
+    }
+  });
 
   it('aligns the selected item using untransformed layout geometry', async () => {
     const restoreRects = mockSelectorRects({
@@ -862,6 +934,29 @@ describe('Selector', () => {
           spacingVars['--spacing-1'],
         );
       });
+    });
+
+    it('opens the selected-item overlay without a flush inside its commit', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const user = userEvent.setup();
+        render(
+          <Selector
+            label="Fruit"
+            options={OPTIONS}
+            value="Banana"
+            onChange={() => {}}
+          />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        await screen.findByRole('listbox', {hidden: true});
+        // The list's resize report at registration runs inside the open's
+        // commit, where React cannot flush and warns.
+        expect(error.mock.calls.flat().join(' ')).not.toContain('flushSync');
+      } finally {
+        error.mockRestore();
+      }
     });
 
     it('stays flush in the default selected-item overlay', async () => {
@@ -2221,6 +2316,29 @@ describe('Selector', () => {
       expect(onChange).toHaveBeenLastCalledWith('Đào');
     });
 
+    it('selects an option from a letter typed with AltGr (INV17)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="City"
+          options={['Kraków', 'Lublin', 'Łódź']}
+          value="Kraków"
+          onChange={onChange}
+        />,
+      );
+
+      await user.tab();
+      fireEvent.keyDown(document.activeElement as Element, {
+        key: 'ł',
+        ctrlKey: true,
+        altKey: true,
+        modifierAltGraph: true,
+      });
+
+      expect(onChange).toHaveBeenLastCalledWith('Łódź');
+    });
+
     it('puts the exact option first for a typed mark (INV17)', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
@@ -2346,6 +2464,27 @@ describe('Selector', () => {
       const search = screen.getByPlaceholderText('Search…');
       expect(search).toHaveValue('c');
       await waitFor(() => expect(search).toHaveFocus());
+    });
+
+    it('seeds a letter typed with AltGr on a closed hasSearch trigger (INV17)', async () => {
+      const user = userEvent.setup();
+      render(
+        <Selector
+          label="City"
+          options={['Kraków', 'Lublin', 'Łódź']}
+          hasSearch
+        />,
+      );
+
+      await user.tab();
+      fireEvent.keyDown(document.activeElement as Element, {
+        key: 'ł',
+        ctrlKey: true,
+        altKey: true,
+        modifierAltGraph: true,
+      });
+
+      expect(await screen.findByPlaceholderText('Search…')).toHaveValue('ł');
     });
 
     it('accumulates a multi-character prefix and resets it after the timeout', async () => {
@@ -2863,7 +3002,7 @@ describe('Selector', () => {
       const trigger = screen.getByRole('combobox', {
         name: 'Destination Channel',
       });
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
 
       expect(trigger).not.toBeDisabled();
       expect(trigger).toHaveAttribute('aria-disabled', 'true');
@@ -2888,17 +3027,20 @@ describe('Selector', () => {
       const container = screen
         .getByTestId('fruit-selector')
         .closest('.astryx-selector') as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        );
       });
     });
 
@@ -2913,11 +3055,10 @@ describe('Selector', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
     });
 
@@ -2962,7 +3103,7 @@ describe('Selector', () => {
         />,
       );
       const trigger = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -3590,12 +3731,35 @@ describe('Selector statusVariant forwarding', () => {
     const statusButton = screen.getByRole('button', {
       name: /warning details/i,
     });
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent('Visible to all users');
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
     expect(
       screen.getByRole('combobox').getAttribute('aria-describedby'),
     ).toContain(tooltip.id);
+  });
+
+  it('keeps the written order of the status tooltip message under right-to-left', async () => {
+    render(
+      <div dir="rtl">
+        <Selector
+          label="Fruit"
+          options={['Apple', 'Banana']}
+          variant="ghost"
+          status={{type: 'warning', message: '-42 items'}}
+          statusVariant="tooltip"
+        />
+      </div>,
+    );
+    // The tooltip mounts on the first hover; its text keeps the written order.
+    await userEvent.hover(
+      screen.getByRole('button', {name: /warning details/i}),
+    );
+    const tooltip = await screen.findByRole('tooltip', h);
+    expect(within(tooltip).getByText('-42 items')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
   });
 });
 
