@@ -19,7 +19,7 @@
  *   draw pages in a real Chrome share the last leg, with only light files
  *   beside them, so their pictures never run beside the packing and
  *   conformance suites; a real-Chrome file with a `// node-leg: own` line
- *   takes a leg of its own, with the same light files beside it
+ *   takes a leg of its own, with only the lightest files beside it
  *   (`nodeLegsApart`). Within a leg it
  *   starts the slowest recorded file first, so that file never waits behind
  *   others, except that a file with a leg of its own starts last, when the
