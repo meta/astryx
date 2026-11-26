@@ -238,7 +238,7 @@ this record's current membership snapshot must be updated with it.
   never scrolled to: a browser may record a focusable ancestor of the pressed
   control as the return target (WebKit focuses the nearest focusable ancestor
   of a tapped button, such as a `tabindex="-1"` main region), and a reveal of
-  that ancestor would scroll the page to its top edge (DEC-4).
+  that ancestor would scroll the page to its top edge (DEC-3).
 
 - **FR10 — A backdrop press starts and ends on the backdrop.** Dialog with
   `purpose="info"`, Drawer's scrim, CommandPalette through its Dialog,
@@ -385,7 +385,7 @@ where the person acted.
 
 Rejected: one order across documents, where a press in one window dismisses a surface in another.
 
-### DEC-4 — A returning focus reveals a hidden Tab stop that fits the view, never another target
+### DEC-3 — A returning focus reveals a hidden Tab stop that fits the view, never another target
 
 **Decider:** `cixzhang`, `2026-11-17 08:02 PT`
 
