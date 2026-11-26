@@ -5,7 +5,8 @@
  * @input None (a plain CSS selector string constant)
  * @output Exports FOCUSABLE_SELECTOR, isDisabledWithin, preferTabStops,
  *   isVisiblyFocusable, getFocusableElements, notePopoverSource,
- *   popoverSourceOptions, readsPopoverSource and inTabOrder
+ *   popoverSourceOptions, readsPopoverSource, inTabOrder and
+ *   isTabStop
  * @position Internal utility; the canonical CSS selector for focusable
  *   elements, shared by focus-management hooks (e.g. useFocusTrap) so the
  *   selector isn't duplicated across components/hooks. The focus trap and
@@ -44,6 +45,17 @@ export function isDisabledWithin(
 }
 
 /**
+ * Whether the browser's Tab order includes `element`. A negative `tabindex`
+ * takes any element out of it, a button or a link included: a roving group's
+ * other members hold `tabindex="-1"`. FOCUSABLE_SELECTOR keeps such a button
+ * or link, so callers that walk Tab stops filter with this.
+ */
+export function isTabStop(element: Element): boolean {
+  const value = element.getAttribute('tabindex');
+  return value == null || !(Number.parseInt(value, 10) < 0);
+}
+
+/**
  * `elements` with tab stops first, each group in document order. Inside a
  * composite widget with a roving tab stop (a grid, a toolbar), the member
  * that holds `tabindex="0"` comes before the members that hold `-1`.
@@ -56,7 +68,6 @@ export function preferTabStops<T extends Element>(
   const inDocumentOrder = [...elements].sort((a, b) =>
     a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
   );
-  const isTabStop = (element: T) => element.getAttribute('tabindex') !== '-1';
   return [
     ...inDocumentOrder.filter(isTabStop),
     ...inDocumentOrder.filter(element => !isTabStop(element)),
