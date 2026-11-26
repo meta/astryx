@@ -38,7 +38,7 @@ import {
 import * as stylex from '@stylexjs/stylex';
 import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
-import {useCalendarConstraints} from '../Calendar';
+import {useCalendarConstraints} from '../Calendar/hooks/useCalendarConstraints';
 import type {DateInputProps} from './DateInput';
 import {hasEditableDateSegments} from './nativeDateSegments';
 import {useNativeDateRejection} from './useTypedDate';
