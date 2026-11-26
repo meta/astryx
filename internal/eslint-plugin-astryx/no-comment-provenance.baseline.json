@@ -48,8 +48,6 @@
     "spec quote"
   ],
   "packages/core/src/Banner/Banner.tsx": [
-    "#4166",
-    "#4166",
     "FR3",
     "FR3",
     "INV11",
@@ -87,14 +85,11 @@
     "family:action-groups"
   ],
   "packages/core/src/Button/Button.tsx": [
-    "#2508",
     "#2717",
     "#4879",
     "FR3",
-    "FR3",
     "INV11",
     "architecture:theme-tokens",
-    "spec quote",
     "spec:AST-086"
   ],
   "packages/core/src/ButtonGroup/ButtonGroup.tsx": ["#2508"],
@@ -390,7 +385,6 @@
     "FR7",
     "INV1",
     "architecture:interaction-modality",
-    "component:DropdownMenu/DEC-1",
     "spec:AST-059",
     "spec:AST-059",
     "spec:AST-059"
@@ -470,7 +464,6 @@
   "packages/core/src/Indicator/CheckIndicator.tsx": ["#4838", "#4893"],
   "packages/core/src/Indicator/indicatorRegistry.ts": ["#4712"],
   "packages/core/src/Indicator/types.ts": ["#4831", "#4918"],
-  "packages/core/src/InputGroup/groupStyles.ts": ["FR3", "spec quote"],
   "packages/core/src/Item/Item.tsx": ["FR2", "FR4", "spec:AST-085"],
   "packages/core/src/Item/ItemDescriptionContext.tsx": [
     "spec quote",
@@ -520,11 +513,7 @@
     "spec:AST-059"
   ],
   "packages/core/src/Layer/useLayer.tsx": [
-    "#3389",
-    "#3671",
     "#4803",
-    "FR1",
-    "FR1",
     "FR1",
     "FR1",
     "FR3",
@@ -533,9 +522,6 @@
     "FR4",
     "FR4",
     "FR4",
-    "FR4",
-    "FR4",
-    "FR5",
     "FR5",
     "FR5",
     "FR6",
@@ -547,12 +533,6 @@
     "spec quote",
     "spec quote",
     "spec quote",
-    "spec quote",
-    "spec quote",
-    "spec:AST-059",
-    "spec:AST-059",
-    "spec:AST-059",
-    "spec:AST-059",
     "spec:AST-059",
     "spec:AST-059",
     "spec:AST-059",
@@ -591,8 +571,6 @@
     "FR30",
     "FR30",
     "FR5",
-    "FR9",
-    "component:List",
     "component:Markdown",
     "component:Markdown",
     "module:Markdown/sourceLines",
@@ -645,7 +623,7 @@
   "packages/core/src/Markdown/plugins/sourceLines.ts": [
     "module:Markdown/sourceLines"
   ],
-  "packages/core/src/MobileNav/MobileNav.tsx": ["#4290", "#4290", "#5701"],
+  "packages/core/src/MobileNav/MobileNav.tsx": ["#4290", "#4290"],
   "packages/core/src/MultiSelector/MultiSelector.tsx": [
     "AR1",
     "AR2",
@@ -2166,16 +2144,7 @@
     "#5386",
     "https://github.com/meta/astryx/issues/1148"
   ],
-  "packages/core/src/theme/themeAdaptations.ts": [
-    "FR5",
-    "FR9",
-    "FR9",
-    "FR9",
-    "spec:AST-012",
-    "spec:AST-012",
-    "spec:AST-012",
-    "spec:AST-108"
-  ],
+  "packages/core/src/theme/themeAdaptations.ts": ["FR5", "spec:AST-108"],
   "packages/core/src/theme/themeMotion.ts": [
     "FR1",
     "FR15",

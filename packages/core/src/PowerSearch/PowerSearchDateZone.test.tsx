@@ -22,6 +22,12 @@ import type {
   PowerSearchFilter,
   PowerSearchTokenProps,
 } from './types';
+import {loadDateRangeCalendar} from '../DateRangeInput/DateRangeCalendar';
+// DateRangeInput loads its Calendar on the first intent. Loading it up front
+// lets these cases find the calendar's days right after the open.
+beforeAll(async () => {
+  await loadDateRangeCalendar();
+});
 
 const originalMatches = HTMLElement.prototype.matches;
 const popoverOpenState = new WeakMap<HTMLElement, boolean>();

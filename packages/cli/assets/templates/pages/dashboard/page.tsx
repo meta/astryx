@@ -30,11 +30,11 @@ import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 // ============= ICONS =============
 
 import {
-  ArrowPathIcon,
+  RefreshIcon,
   ArrowUpIcon,
   ArrowDownIcon,
-} from '@heroicons/react/24/outline';
-import {StopIcon} from '@heroicons/react/24/solid';
+} from '@astryxdesign/template-icons';
+import {StopIcon} from '@astryxdesign/template-icons/24/solid';
 
 // ============= DATA =============
 
@@ -510,7 +510,7 @@ function ActiveUsersChart() {
             tickFormatter={(v: number) => xAxisLabels[v] ?? ''}
             tick={{
               fontSize: 'var(--font-size-sm, 12px)',
-              fill: 'var(--color-text-secondary, #4E606F)',
+              fill: 'var(--color-text-secondary, #445564)',
             }}
             axisLine={false}
             tickLine={false}
@@ -520,7 +520,7 @@ function ActiveUsersChart() {
             ticks={[0, 20, 40, 60, 80, 100, 120]}
             tick={{
               fontSize: 'var(--font-size-sm, 12px)',
-              fill: 'var(--color-text-secondary, #4E606F)',
+              fill: 'var(--color-text-secondary, #445564)',
             }}
             axisLine={false}
             tickLine={false}
@@ -750,7 +750,7 @@ export default function DashboardTemplate() {
                   label="Reload"
                   variant="secondary"
                   size="md"
-                  icon={<Icon icon={ArrowPathIcon} size="sm" />}
+                  icon={<Icon icon={RefreshIcon} size="sm" />}
                   onClick={() =>
                     // Demo only: replace this toast with the call that performs the action.
                     showToast({

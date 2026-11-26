@@ -37,6 +37,7 @@ import {
 import {isRenderable, mergeProps, rtlStyles} from '../utils';
 import {useClipboardCopy} from '../hooks/useClipboard';
 import {useScrollableArea} from '../hooks/useScrollableArea';
+import {scrollEdgeFadeStyles} from '../hooks/scrollEdgeFade';
 import {Icon} from '../Icon';
 import {ComponentIcon} from '../Icon/ComponentIcon';
 import {IconButton} from '../IconButton';
@@ -67,6 +68,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/CodeBlock/CodeBlock.generated';
 import {devPropError} from '../utils/devWarning';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -205,6 +207,13 @@ const styles = stylex.create({
   headerTitle: {
     display: 'flex',
     alignItems: 'center',
+    // The root is a <pre>, so the title inherits `white-space: pre` and
+    // stays on one line. A long title then runs under the header's controls.
+    // It wraps instead and keeps its own spacing.
+    minWidth: 0,
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
+    '--_astryx-text-overflow-wrap': 'anywhere',
     fontSize: typeScaleVars['--text-supporting-size'],
     fontFamily: typographyVars['--font-family-code'],
     fontWeight: fontWeightVars['--font-weight-medium'],
@@ -254,7 +263,10 @@ const styles = stylex.create({
   // rotates and the element a theme targets, so one selector reaches both.
   collapseChevronIcon: {
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   collapseChevronExpanded: {
@@ -432,9 +444,11 @@ const styles = stylex.create({
   },
   sizeSm: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   sizeMd: {
     fontSize: typeScaleVars['--text-code-size'],
+    lineHeight: typeScaleVars['--text-code-leading'],
   },
   copyButton: {
     // The copy control is a ghost IconButton (Button owns its own padding,
@@ -1138,7 +1152,7 @@ export function CodeBlock({
     : isDiff
       ? languageName === 'plaintext'
         ? 'diff'
-        : `${languageName} diff`
+        : t('@astryx.codeBlock.diffLabel', {language: languageName})
       : languageName !== 'plaintext'
         ? languageName
         : null;
@@ -1170,7 +1184,11 @@ export function CodeBlock({
   // both axes, keeps focus where it is when overflow goes away, and owns the
   // overflow declarations. role="group" (not "region") so several code
   // blocks on a page don't create duplicate same-named landmarks.
-  const {getViewportProps, getContentProps} = useScrollableArea({
+  const {
+    getViewportProps,
+    getContentProps,
+    state: scrollState,
+  } = useScrollableArea({
     axis: 'both',
     // Nothing inside the code viewport sticks to an outer scroller, so the
     // viewport stays a scroll container while its code fits. A long line, or
@@ -1321,6 +1339,7 @@ export function CodeBlock({
           styles.viewport,
           styles.viewportFocusRingInset,
         ),
+        xstyle: scrollEdgeFadeStyles(scrollState.inline),
         style: scrollStyle,
         // Code scrolls and wraps left to right in every page direction.
         dir: 'ltr',

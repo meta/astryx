@@ -16,6 +16,7 @@ import {
   generateThemeRules,
   type DefinedTheme,
 } from './index';
+import {radiusCorners} from './generateThemeRules';
 
 /**
  * Inverted surfaces that keep one side in both page modes, so a test about
@@ -1233,6 +1234,189 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
 // =============================================================================
 
 describe('derived var expansion', () => {
+  describe('a radius of each corner', () => {
+    const rule = (name: string, card: Record<string, string>) =>
+      generateThemeRules(
+        defineTheme({name, components: {card: {base: card}}}),
+      ).find(r => r.includes('.astryx-card')) ?? '';
+
+    it('writes each corner of a card radius to its corner variable, and no logical corner', () => {
+      const css = rule('test-corners', {borderRadius: '12px 12px 0 0'});
+      expect(css).toContain('border-radius: 12px 12px 0 0');
+      expect(css).toContain('--_card-radius-top-left: 12px');
+      expect(css).toContain('--_card-radius-top-right: 12px');
+      expect(css).toContain('--_card-radius-bottom-right: 0');
+      expect(css).toContain('--_card-radius-bottom-left: 0');
+      expect(css).toContain('--_card-radius-start-start: initial');
+      expect(css).toContain('--_card-radius-end-end: initial');
+    });
+
+    it('writes the same corner everywhere for one radius, so a rule it overrides leaves no corner behind', () => {
+      const css = rule('test-corners-one', {borderRadius: '32px'});
+      expect(css).toContain('--_card-radius: 32px');
+      for (const corner of [
+        'top-left',
+        'top-right',
+        'bottom-right',
+        'bottom-left',
+      ]) {
+        expect(css).toContain(`--_card-radius-${corner}: 32px`);
+      }
+    });
+
+    it('writes a corner longhand to its own corner variable, after the radius it follows', () => {
+      const css = rule('test-corners-longhand', {
+        borderRadius: '0',
+        borderStartStartRadius: '20px',
+        borderBottomRightRadius: '6px',
+      });
+      expect(css).toContain('--_card-radius-start-start: 20px');
+      expect(css).not.toContain('--_card-radius-start-start: initial');
+      expect(css).toContain('--_card-radius-bottom-right: 6px');
+      expect(css).not.toContain('--_card-radius-bottom-right: 0');
+    });
+
+    it('a radius after a corner longhand replaces that corner', () => {
+      const css = rule('test-corners-replaced', {
+        borderStartStartRadius: '20px',
+        borderRadius: '4px',
+      });
+      expect(css).not.toContain('--_card-radius-start-start: 20px');
+      expect(css).toContain('--_card-radius-start-start: initial');
+    });
+
+    it('writes no corner variable for a component that reads one radius', () => {
+      const css =
+        generateThemeRules(
+          defineTheme({
+            name: 'test-corners-button',
+            components: {button: {base: {borderRadius: '4px 4px 0 0'}}},
+          }),
+        ).find(r => r.includes('.astryx-button')) ?? '';
+      expect(css).toContain('--_button-radius: 4px 4px 0 0');
+      expect(css).not.toContain('--_button-radius-top-left');
+    });
+  });
+
+  it('reads the corners of a radius as its longhands take them', () => {
+    expect(radiusCorners('0 0 6px 6px')).toEqual(['0', '0', '6px', '6px']);
+    expect(radiusCorners('4px 8px')).toEqual(['4px', '8px', '4px', '8px']);
+    expect(radiusCorners('1px 2px 3px')).toEqual(['1px', '2px', '3px', '2px']);
+    expect(radiusCorners('8px 4px / 2px')).toEqual([
+      '8px 2px',
+      '4px 2px',
+      '8px 2px',
+      '4px 2px',
+    ]);
+    expect(radiusCorners('calc(1rem / 2) var(--radius-inner)')).toEqual([
+      'calc(1rem / 2)',
+      'var(--radius-inner)',
+      'calc(1rem / 2)',
+      'var(--radius-inner)',
+    ]);
+    expect(radiusCorners('1px 2px 3px 4px 5px')).toBeNull();
+    expect(radiusCorners('1px / 2px / 3px')).toBeNull();
+  });
+
+  /** The rule for one selector text, by its start. */
+  const ruleAt = (css: string, start: string) => {
+    const at = css.indexOf(start);
+    return at < 0 ? undefined : css.slice(at, css.indexOf('}', at));
+  };
+
+  it('lowers a pseudo-class block like its resting rule: a normal mapping', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pseudo-class-mapping',
+        components: {button: {base: {':hover': {borderRadius: '9px'}}}},
+      }),
+    ).component;
+    const hover = ruleAt(css, '.astryx-button:hover');
+    expect(hover).toContain('border-radius: 9px');
+    expect(hover).toContain('--_button-radius: 9px');
+  });
+
+  it('lowers a pseudo-class block like its resting rule: replaces', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pseudo-class-replaces',
+        components: {icon: {base: {':hover': {width: '20px'}}}},
+      }),
+    ).component;
+    const hover = ruleAt(css, '.astryx-icon:hover');
+    expect(hover).toContain('--_icon-width: 20px');
+    expect(hover).not.toMatch(/(^|[\s;])width: 20px/);
+  });
+
+  it('lowers a pseudo-class block like its resting rule: container padding', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pseudo-class-container',
+        components: {card: {base: {':hover': {padding: '20px'}}}},
+      }),
+    ).component;
+    const hover = ruleAt(css, '.astryx-card:hover');
+    expect(hover).toContain('--astryx-card-padding: 20px');
+  });
+
+  it('lowers a pseudo-class block on a media surface too', () => {
+    const css = generateOnMediaCSS(
+      defineTheme({
+        name: 'pseudo-class-media',
+        onDark: {
+          components: {button: {base: {':hover': {borderRadius: '9px'}}}},
+        },
+      }),
+    );
+    expect(css).toMatch(/:hover[^{]*\{[^}]*--_button-radius: 9px/);
+  });
+
+  it('reports a rejected pseudo-class declaration once, under the name the theme wrote', () => {
+    const warnings: string[] = [];
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'pseudo-class-boundary',
+        components: {
+          icon: {base: {':hover': {width: '20px} .x { color: red'}}},
+          button: {base: {':hover': {borderRadius: '9px} .x { color: red'}}},
+        },
+      }),
+      warnings,
+    ).join('\n');
+    expect(css).not.toContain('.x {');
+    expect(warnings.filter(w => w.includes('"width"'))).toHaveLength(1);
+    expect(warnings.filter(w => w.includes('"border-radius"'))).toHaveLength(1);
+    // No private name reaches the author.
+    expect(warnings.join('\n')).not.toMatch(/--_/);
+    expect(warnings).toHaveLength(2);
+  });
+
+  it('writes a pseudo-element block as authored', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pseudo-element-as-written',
+        components: {
+          card: {base: {'::before': {padding: '4px'}}},
+          icon: {base: {'::after': {width: '2px'}}},
+          section: {base: {':after': {padding: '6px'}}},
+          button: {base: {':hover::after': {borderRadius: '3px'}}},
+        },
+      }),
+    ).component;
+    const before = ruleAt(css, '.astryx-card::before');
+    expect(before).toContain('padding: 4px');
+    expect(before).not.toContain('--astryx-card-padding');
+    const after = ruleAt(css, '.astryx-icon::after');
+    expect(after).toContain('width: 2px');
+    expect(after).not.toContain('--_icon-width');
+    // (A CSS2 one-colon pseudo-element too.)
+    const oneColon = ruleAt(css, '.astryx-section:after');
+    expect(oneColon).toContain('padding: 6px');
+    expect(oneColon).not.toContain('--astryx-section-padding');
+    expect(css).toMatch(/:hover[^{]*::after[^{]*\{[^}]*border-radius: 3px/);
+    expect(css).not.toContain('--_button-radius: 3px');
+  });
+
   it('emits borderRadius AND internal var for card', () => {
     const theme = defineTheme({
       name: 'test-derived',

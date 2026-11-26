@@ -6,6 +6,7 @@ import {
   getComponent,
   resolveValue,
 } from '../components/component-detail/resolveElements';
+import {components} from '../generated/componentRegistry';
 
 vi.mock('@astryxdesign/core', () => ({
   Badge: () => null,
@@ -20,15 +21,15 @@ vi.mock('@astryxdesign/core', () => ({
 describe('component detail element resolution', () => {
   it('resolves external components and nested descriptors lazily', () => {
     expect(getComponent('RichTextEditor')).not.toBeNull();
-    const tourStep = resolveValue({
-      __element: 'TourStep',
+    const heroHeader = resolveValue({
+      __element: 'DialogHeroHeader',
       props: {title: 'Review'},
     });
-    expect(isValidElement(tourStep)).toBe(true);
-    expect((tourStep as ReactElement).type).not.toBe('TourStep');
+    expect(isValidElement(heroHeader)).toBe(true);
+    expect((heroHeader as ReactElement).type).not.toBe('DialogHeroHeader');
     expect(
-      ((tourStep as ReactElement).type as {displayName?: string}).displayName,
-    ).toBe('TourStep');
+      ((heroHeader as ReactElement).type as {displayName?: string}).displayName,
+    ).toBe('DialogHeroHeader');
   });
 
   it('resolves descriptor arrays from playground defaults into React elements', () => {
@@ -89,4 +90,21 @@ describe('component detail element resolution', () => {
       expect(resolveValue(wrapperProps)).toEqual(wrapperProps);
     },
   );
+
+  it("sizes StatusDot's playground icon to 6px", () => {
+    const statusDot = components['@astryxdesign/core'].find(
+      entry => entry.name === 'StatusDot',
+    );
+    const iconProp = statusDot?.props.find(prop => prop.name === 'icon');
+    const descriptor = iconProp?.slotElements?.[0];
+    expect(descriptor).toBeDefined();
+
+    const resolved = resolveValue(descriptor!) as ReactElement<{
+      width: number;
+      height: number;
+    }>;
+    expect(isValidElement(resolved)).toBe(true);
+    expect(resolved.type).toBe('svg');
+    expect(resolved.props).toMatchObject({width: 6, height: 6});
+  });
 });

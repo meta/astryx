@@ -60,6 +60,8 @@ import {syncReaderTextSize} from './dynamicType';
 import {
   SystemSchemeContext,
   ThemeContext,
+  ThemeSourceContext,
+  createThemeSource,
   ThemeModeContext,
   useRootScheme,
 } from './useTheme';
@@ -68,6 +70,7 @@ import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
   reducedMotionMarkProps,
   setRootReducedMotionMark,
+  ThemeReducesMotionContext,
 } from '../privateAttributes/reducedMotion.stylex';
 import {setRootScheme} from '../privateAttributes/scheme';
 import {createSharedContext} from '../utils/sharedContext';
@@ -95,9 +98,10 @@ const wrapperStyles = stylex.create({
     display: 'contents',
     color: colorVars['--color-text-primary'],
     fontFamily: typographyVars['--font-family-body'],
-    // Text that only inherits its size takes this theme's body size, a
-    // nested theme's own included.
+    // Text that only inherits its size and line height takes this theme's
+    // body size and body leading, a nested theme's own included.
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
   },
   light: {
     colorScheme: 'light',
@@ -425,6 +429,7 @@ export function Theme({
   const parentMode = parentModeValue?.mode;
   const parentForces = parentMode === 'light' || parentMode === 'dark';
   const aroundScheme = use(SystemSchemeContext);
+  const inheritsReducedMotion = use(ThemeReducesMotionContext);
   const systemScheme = parentForces ? 'preference' : aroundScheme;
 
   // A value that is not a defined theme applies no theme of its own. The
@@ -483,6 +488,12 @@ export function Theme({
   const themeless =
     applied == null && (parentModeValue?.themeless ?? !isNested);
   const modeValue = useMemo(() => ({mode, themeless}), [mode, themeless]);
+  const [source] = useState(() => createThemeSource(ctxValue));
+  // Syncs this Theme's value to subscribers in other React roots (the
+  // fallback toast viewport).
+  useIsomorphicLayoutEffect(() => {
+    source.set(ctxValue);
+  }, [source, ctxValue]);
 
   const wrapper = (
     <ThemeNestingContext value={true}>
@@ -505,7 +516,14 @@ export function Theme({
   return (
     <SystemSchemeContext value={systemScheme}>
       <ThemeModeContext value={modeValue}>
-        <ThemeContext value={ctxValue}>{wrapper}</ThemeContext>
+        <ThemeContext value={ctxValue}>
+          <ThemeSourceContext value={source}>
+            <ThemeReducesMotionContext
+              value={reducesMotion || inheritsReducedMotion}>
+              {wrapper}
+            </ThemeReducesMotionContext>
+          </ThemeSourceContext>
+        </ThemeContext>
       </ThemeModeContext>
     </SystemSchemeContext>
   );

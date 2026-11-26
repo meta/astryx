@@ -14,7 +14,17 @@
  * @property {string} [out] - The file to write. Rendering: an .html file (default: the page's name with .html). Reversing: a page module (default: inside a new folder beside the HTML file, named after it, such as `report-restored/`).
  * @property {boolean} [reverse] - Turn a rendered HTML file back into a page module.
  * @property {string} [title] - The rendered page's title (default: its first heading, else the file name). Rendering only.
+ * @property {boolean} [pictures] - Also take pictures of the written file (a phone in light and dark, and a desktop window) to check how it looks, with a browser already on the machine. Rendering only.
  * @property {boolean} [overwrite] - Replace the existing page module when reversing (never a protected file, and never a file other than the page, which always goes into a new folder). Rendering replaces an existing HTML file only when a render wrote it.
+ * @property {boolean} [keepClassNames] - Keep every class of the first paint as written, for a caller that takes the file's markup and styles it with its own copy of the StyleX styles. By default, once the repeated lists of the StyleX classes Astryx's packages write (the `x…` classes) add up to 16 KB, each such list becomes one short alias class, whose rules only the file's own stylesheet holds; the page's own StyleX classes keep their names. Rendering only; refused with `reverse`.
+ */
+
+/**
+ * Pictures of a written file, to check how it looks, not to send: absolute
+ * paths of PNGs in a new folder of the system temp folder, or, when no
+ * browser on the machine took them, why (`skipped`).
+ * @experimental May change or be removed in a patch release.
+ * @typedef {{phone: string, phoneDark: string, desktop: string} | {skipped: string}} RenderPictures
  */
 
 /**
@@ -22,7 +32,7 @@
  * author meant.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
+ * @property {'dropped-children' | 'unknown-prop' | 'props-not-checked' | 'unknown-prop-value' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -50,11 +60,18 @@
  * @property {string[]} data.stylesheets - Package stylesheets that were cut to the rules the page uses and inlined.
  * @property {number} data.classes - Distinct class names in the markup.
  * @property {number} data.cssBytes - Size of the inlined CSS.
+ * @property {number} data.markupBytes - Size of the rendered markup, the page's inlined images included.
+ * @property {number} data.sourceBytes - Size of the embedded source that `--reverse` reads.
  * @property {number} data.images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} data.warnings - Empty when nothing looked wrong.
  * @property {string[]} [data.notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back: a name that reads as a tool's configuration, a file a test or story runner would run, a file outside the carried folder (imported by a relative path or a path alias), an image it cannot carry, or a Sass or Less stylesheet, which a render does not compile. Each also has a warning. Present only when there are some.
  * @property {number} data.scriptBytes - Size of the page's script, which `bytes` includes.
  * @property {number} data.scriptModules - How many modules the page's script holds (the page's own, its packages', React's).
+ * @property {RenderPictures} [data.pictures] - With `pictures`: the pictures taken of the written file, or why there are none.
+ * @property {object} data.checks - Checks run on the written file.
+ * @property {string[]} data.checks.outside - Every reference the file's markup and stylesheets load from outside the file when it opens (a remote address, or a file beside it the render did not carry); empty when the file stands alone.
+ * @property {{exact: boolean, files: number, differs: string[]}} data.checks.roundTrip - Whether the embedded source gives back every carried file byte for byte, how many files it carries, and the carried paths whose embedded copy differs from the file on disk or is missing on either side.
+ * @property {{fetched: string[], failed: {url: string, reason: string}[]}} [data.remoteImages] - The https images the page names: each address the render fetched into the file, and each one it left as the page wrote it, with why (not https, no answer in time, not an image, too large, unreachable). Present when the page names a remote image.
  */
 
 /**

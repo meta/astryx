@@ -46,6 +46,7 @@ import {
   projectFiles,
   refusal,
 } from '../../test-utils/theme-edit-fixture.mjs';
+import {UNASSIGNABLE_PID} from '../../test-utils/unassignable-pid.mjs';
 
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
@@ -1431,8 +1432,10 @@ describe('final pass', () => {
     await themeEditPreviewAdd(undefined, {cwd, theme: 'sea'});
     await stoppedAdd('login', 'pending', 1);
     write(`${ROUTE}/.theme-preview.pending.json`, '{');
-    // The stopped change ran in this process; a killed one is gone, so its
-    // temp files name a process that no longer runs.
+    // A killed change is gone, so its temp files name a process that no
+    // longer runs. The id is above the largest process id Linux gives
+    // (2 ** 22): a fixed id below it, such as 999999, can belong to a live
+    // process on a busy machine, and then the temp files rightly stay.
     for (const f of /** @type {string[]} */ (
       fs.readdirSync(path.join(cwd, ROUTE), {recursive: true})
     ).filter(x => /\.astryx-\d+-[a-z0-9]+\.tmp$/.test(String(x))))
@@ -1441,7 +1444,7 @@ describe('final pass', () => {
         path.join(
           cwd,
           ROUTE,
-          String(f).replace(/astryx-\d+-/, 'astryx-999999-'),
+          String(f).replace(/astryx-\d+-/, `astryx-${UNASSIGNABLE_PID}-`),
         ),
       );
     await themeEditPreviewAdd(undefined, {cwd, template: 'blank'});
@@ -2770,7 +2773,7 @@ describe('final pass 5', () => {
       // Past the files it reads, nothing is removed: see
       // theme-preview-importers.test.mjs, which reads a small tree.
       // A temp file a killed command left goes with the full remove.
-      write('src/app/z1/.page.tsx.astryx-999999-abc123.tmp', 'x');
+      write(`src/app/z1/.page.tsx.astryx-${UNASSIGNABLE_PID}-abc123.tmp`, 'x');
       await themeEditPreviewRemove(undefined, {cwd, path: 'src/app/z1'});
       expect(exists('src/app/z1')).toBe(false);
     } finally {

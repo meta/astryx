@@ -18,6 +18,7 @@
  */
 
 import {useCallback, useState, type ReactNode} from 'react';
+import {flushSync} from 'react-dom';
 import type {BaseProps} from '../BaseProps';
 import type {SectionVariant} from '../Section/Section';
 import type {SpacingStep} from '../utils/types';
@@ -31,7 +32,7 @@ import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
-import {observeResize} from '../utils/sharedResizeObserver';
+import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import {useAttachment} from '../hooks/useAttachment';
 
 /**
@@ -50,6 +51,10 @@ const spacingStepToVar: Record<SpacingStep, keyof typeof spacingVars> = {
   8: '--spacing-8',
   10: '--spacing-10',
 };
+
+// A lane that holds an OverflowList as its own child. OverflowList's theme
+// class marks the list's visible row.
+const HOLDS_OVERFLOW_LIST = ':has(> .astryx-overflow-list)';
 
 const styles = stylex.create({
   // Two-lane layout (no centerContent). A lane keeps its controls on one
@@ -129,6 +134,28 @@ const styles = stylex.create({
   // When only startContent is present, let it fill
   startOnly: {
     flex: '1 1 0%',
+  },
+  // A start lane that holds an OverflowList takes the width the end lane
+  // leaves, and its automatic minimum stops counting the list's unfolded
+  // items. The list then folds to that width, down to its own floor.
+  startFolds: {
+    flexGrow: {default: null, [HOLDS_OVERFLOW_LIST]: 1},
+    flexBasis: {default: null, [HOLDS_OVERFLOW_LIST]: '0%'},
+    minWidth: {default: null, [HOLDS_OVERFLOW_LIST]: 0},
+  },
+  // A two-lane start lane: `twoLane`, except that a lane holding an
+  // OverflowList folds it. Such a lane takes all the free space, because the
+  // end lane grows by 1 and this factor dwarfs it, so the end lane stays at
+  // its content width. It does not wrap, because a wrapping lane would move
+  // the list, at its unfolded width, to a line of its own.
+  twoLaneStart: {
+    flexWrap: {default: 'wrap', [HOLDS_OVERFLOW_LIST]: 'nowrap'},
+    minWidth: {
+      default: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
+      [HOLDS_OVERFLOW_LIST]: 0,
+    },
+    flexGrow: {default: null, [HOLDS_OVERFLOW_LIST]: 1_000_000},
+    flexBasis: {default: null, [HOLDS_OVERFLOW_LIST]: '0%'},
   },
   // When only endContent, push to end
   endOnly: {
@@ -339,7 +366,9 @@ export function Toolbar({
   // A bottom divider drops a tab's indicator onto its rail through the block
   // padding. That is right only while the lanes share one line, so a wrapped
   // row keeps the indicator on its tab. The row reports a wrap after layout,
-  // in a resize observation.
+  // in a resize observation, so mounting the toolbar reads no lane box. The
+  // observation comes before paint, and its update renders at once, so the
+  // first frame already shows a wrapped row's indicator on its tab.
   const canWrap =
     hasCenterContent ||
     (hasStartContent && hasEndContent && orientation !== 'vertical');
@@ -347,10 +376,21 @@ export function Toolbar({
   const [isWrapped, setIsWrapped] = useState(false);
   useAttachment(
     listRef,
-    row =>
-      watchesWrap
-        ? observeResize(row, () => setIsWrapped(lanesHaveWrapped(row)))
-        : () => {},
+    row => {
+      if (!watchesWrap) {
+        return () => {};
+      }
+      const measure = () => setIsWrapped(lanesHaveWrapped(row));
+      const stop = observeResizeAfterLayout(row, () => {
+        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the indicator must move before the frame paints
+        flushSync(measure);
+      });
+      if (stop == null) {
+        measure();
+        return () => {};
+      }
+      return stop;
+    },
     watchesWrap,
   );
   const dropsIndicatorOnRail = hasBottomDivider && !(watchesWrap && isWrapped);
@@ -470,10 +510,10 @@ export function Toolbar({
                 <div
                   {...stylex.props(
                     styles.startSlot,
-                    hasEndContent &&
-                      orientation !== 'vertical' &&
-                      styles.twoLane,
                     !hasEndContent && styles.startOnly,
+                    hasEndContent && orientation !== 'vertical'
+                      ? styles.twoLaneStart
+                      : orientation === 'horizontal' && styles.startFolds,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
                   )}>

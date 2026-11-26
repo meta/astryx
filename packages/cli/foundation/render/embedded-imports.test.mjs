@@ -118,3 +118,32 @@ describe('resolutionCandidates', () => {
     expect(resolutionCandidates('data.json')[1]).toBe('data.json.tsx');
   });
 });
+
+describe('reachableFiles: a reference written as URL text', () => {
+  /** @param {string} p @param {string} text */
+  const file = (p, text = '') => ({path: p, base64: Buffer.from(text).toString('base64')});
+
+  it('expects back the file its percent-escapes name, from the site root and by a relative path', () => {
+    const page = 'export default () => <><img src="/pics/a%20b.png" alt="" /><img src="./c%20d.png" alt="" /></>;\n';
+    const tree = [file('src/page.tsx', page), file('public/pics/a b.png'), file('src/c d.png')];
+    const {reached, missing} = reachableFiles(tree);
+    expect(missing).toEqual([]);
+    expect(reached.has('public/pics/a b.png')).toBe(true);
+    expect(reached.has('src/c d.png')).toBe(true);
+  });
+
+  it('follows import() and require() of an image as written, with no decode', () => {
+    const page = "export default () => <button onClick={() => { import('./a%20b.png'); require('./c.png'); }} />;\n";
+    expect(reachableFiles([file('src/page.tsx', page), file('src/a%20b.png'), file('src/c.png')]).missing).toEqual([]);
+  });
+
+  it('follows an import of an image as written, with no decode', () => {
+    const page = "import shot from './Screen%20Shot.png';\nexport default () => <img src={shot} alt=\"\" />;\n";
+    expect(reachableFiles([file('src/page.tsx', page), file('src/Screen%20Shot.png')]).missing).toEqual([]);
+  });
+
+  it('reads a % that starts no escape as itself', () => {
+    const page = 'export default () => <img src="./50%.png" alt="" />;\n';
+    expect(reachableFiles([file('src/page.tsx', page), file('src/50%.png')]).missing).toEqual([]);
+  });
+});

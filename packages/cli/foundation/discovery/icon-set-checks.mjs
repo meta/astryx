@@ -24,7 +24,9 @@
  *   warnings `icon_export_name` (an export not named `<Name>Icon`);
  *            `icon_definition_unused` and `icon_definition_shadowed` (a
  *            definition the set declares that `map` leaves out, or that has
- *            an Astryx definition's name); `icon_source_version_drift`;
+ *            an Astryx definition's name); `icon_definition_replaced` (a
+ *            `map` key that names a replaced definition);
+ *            `icon_source_version_drift`;
  *            `icon_license_notice_missing`.
  * An optional (not built-in) Astryx definition the set leaves unmapped is no
  * issue: {@link iconSetCoverage} lists it, never counted, never failing.
@@ -108,6 +110,8 @@ export const ICON_NOT_COMPONENT = 'icon_not_component';
 export const ICON_DEFINITION_SHADOWED = 'icon_definition_shadowed';
 /** A definition the set declares that is missing from its `map`. */
 export const ICON_DEFINITION_UNUSED = 'icon_definition_unused';
+/** A `map` key that names a definition another definition replaced. */
+export const ICON_DEFINITION_REPLACED = 'icon_definition_replaced';
 /** Data generated from another upstream version than the package uses. */
 export const ICON_SOURCE_VERSION_DRIFT = 'icon_source_version_drift';
 /** A set with an upstream and no license notice. */
@@ -375,7 +379,16 @@ function checkDefinitions(set) {
     issues.push(
       issueError(
         ICON_BUILTIN_DEFINITION_MISSING,
-        `${label} maps no icon to the built-in icon definition "${doc.name}" (${doc.description} Words: ${doc.words.join(', ')}.). Every set maps every built-in definition: run \`astryx experimental icon map ${doc.name} <icon id> --set ${set.name}\` with the icon that draws it${findHint(set, doc)}.${hint}`,
+        `${label} maps no icon to the built-in icon meaning "${doc.name}" (${doc.description} Words: ${doc.words.join(', ')}.). Every set maps every built-in meaning: run \`astryx experimental icon map ${doc.name} <icon id> --set ${set.name}\` with the icon that draws it${findHint(set, doc)}.${hint}`,
+      ),
+    );
+  }
+  for (const {key, definition} of set.replacedKeys ?? []) {
+    const id = set.data.map?.[definition];
+    issues.push(
+      issueWarning(
+        ICON_DEFINITION_REPLACED,
+        `${label} maps "${key}", an icon meaning that "${definition}" replaced, so the entry maps "${definition}". Rename the key in ${set.name}.icons.json to "${definition}": \`astryx experimental icon map ${definition} ${id} --set ${set.name}\` writes the data file with it.`,
       ),
     );
   }
@@ -385,7 +398,7 @@ function checkDefinitions(set) {
       issues.push(
         issueWarning(
           ICON_DEFINITION_SHADOWED,
-          `${label} declares the icon definition "${doc.name}", which Astryx now has. Map your icon to Astryx's definition and remove definitions/${doc.name}.doc.mjs; Astryx's is the one templates use.`,
+          `${label} declares the icon meaning "${doc.name}", which Astryx now has. Map your icon to Astryx's meaning and remove definitions/${doc.name}.doc.mjs; Astryx's is the one templates use.`,
         ),
       );
     } else if (!mapped.has(doc.name)) {
@@ -393,7 +406,7 @@ function checkDefinitions(set) {
       issues.push(
         issueWarning(
           ICON_DEFINITION_UNUSED,
-          `${label} declares the icon definition "${doc.name}", but "map" names no icon for it. Map it with \`astryx experimental icon map ${doc.name} <icon id> --set ${set.name}\`, or remove definitions/${doc.name}.doc.mjs.${suggestion ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon} --set ${set.name}.` : ''}`,
+          `${label} declares the icon meaning "${doc.name}", but "map" names no icon for it. Map it with \`astryx experimental icon map ${doc.name} <icon id> --set ${set.name}\`, or remove definitions/${doc.name}.doc.mjs.${suggestion ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon} --set ${set.name}.` : ''}`,
         ),
       );
     }
@@ -933,7 +946,7 @@ function checkExports(set, packageDir, packageName, unchecked) {
     issues.push(
       issueError(
         ICON_THEME_MAP_MISMATCH,
-        `${label} maps the built-in icon definitions ${[...fillers.keys()].join(', ')} but names no "themeMap". Export an object keyed by exactly those names and name it in ${set.name}.icons.json.`,
+        `${label} maps the built-in icon meanings ${[...fillers.keys()].join(', ')} but names no "themeMap". Export an object keyed by exactly those names and name it in ${set.name}.icons.json.`,
       ),
     );
     return issues;
@@ -1049,7 +1062,7 @@ function checkExports(set, packageDir, packageName, unchecked) {
       issues.push(
         issueError(
           ICON_THEME_MAP_MISMATCH,
-          `${label}: its generated module ${generated} has no theme map "${name}", which draws the built-in icons in the ${variant} look an icon draws. Rewrite the module: \`${lookRewriteCommand(set, variant, sources)}\`.`,
+          `${label}: its generated module ${generated} has no theme map "${name}", which draws the built-in icons in the ${variant} variant an icon draws. Rewrite the module: \`${lookRewriteCommand(set, variant, sources)}\`.`,
         ),
       );
       continue;

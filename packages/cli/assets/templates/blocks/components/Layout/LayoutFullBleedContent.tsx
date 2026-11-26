@@ -13,8 +13,10 @@ import {Card} from '@astryxdesign/core/Card';
 import {Button} from '@astryxdesign/core/Button';
 import {Section} from '@astryxdesign/core/Section';
 import {Heading, Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function LayoutFullBleedContent() {
+  const showToast = useToast();
   return (
     <Card width="100%" style={{maxWidth: 400}}>
       <Layout
@@ -37,7 +39,12 @@ export default function LayoutFullBleedContent() {
         footer={
           <LayoutFooter hasDivider>
             <HStack gap={2} hAlign="end">
-              <Button label="Close" variant="secondary">
+              <Button
+                label="Close"
+                variant="secondary"
+                onClick={() =>
+                  showToast({body: 'Demo: this view would close here'})
+                }>
                 Close
               </Button>
             </HStack>

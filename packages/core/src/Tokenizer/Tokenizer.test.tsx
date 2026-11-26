@@ -35,6 +35,7 @@ import {InternationalizationProvider} from '../i18n';
 import type * as TokenModule from '../Token';
 import {Token} from '../Token/Token';
 import {FormLayout} from '../FormLayout/FormLayout';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // Every Token render, in order, by label.
 //
@@ -957,6 +958,26 @@ describe('Tokenizer', () => {
       expect(screen.getAllByText('Alice').length).toBeGreaterThanOrEqual(1);
     });
 
+    it('unfocusedInline: writes the overflow count with the provider catalog', () => {
+      render(
+        <InternationalizationProvider
+          locale="fr"
+          overrides={{
+            fr: {'@astryx.tokenizer.overflowCount': '+{count, number} autres'},
+          }}>
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={[users[0], users[1], users[2]]}
+            onChange={() => {}}
+            tokenOverflowBehavior="unfocusedInline"
+          />
+        </InternationalizationProvider>,
+      );
+      expect(screen.getAllByText(/^\+\d+ autres$/).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/^\+\d+ more$/)).not.toBeInTheDocument();
+    });
+
     it('unfocusedInline: removes truncation on focus', () => {
       render(
         <Tokenizer
@@ -994,8 +1015,9 @@ describe('Tokenizer', () => {
       // A popover element should exist for the top-layer expanded content
       const popover = container.querySelector('[popover]');
       expect(popover).toBeInTheDocument();
-      // Only one group role (the wrapper)
-      expect(container.querySelectorAll('[role="group"]').length).toBe(1);
+      // Two groups: the collapsed placeholder (the field's tab stop) and the
+      // wrapper in the layer.
+      expect(container.querySelectorAll('[role="group"]').length).toBe(2);
     });
 
     it('unfocusedLayer: shows expanded content in popover on focus', () => {
@@ -1019,6 +1041,53 @@ describe('Tokenizer', () => {
       expect(screen.getByText('Bob')).toBeInTheDocument();
       expect(screen.getByText('Charlie')).toBeInTheDocument();
     });
+
+    it('unfocusedLayer: the collapsed placeholder is a named tab stop that opens the field', () => {
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={() => {}}
+          tokenOverflowBehavior="unfocusedLayer"
+        />,
+      );
+      const placeholder = screen.getAllByRole('group', {name: 'Members'})[0];
+      expect(placeholder).toHaveAttribute('tabindex', '0');
+      act(() => placeholder.focus());
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+      expect(document.activeElement).toBe(
+        screen.getByRole('combobox', {name: 'Members', hidden: true}),
+      );
+      // While open, the placeholder is no tab stop.
+      expect(placeholder).toHaveAttribute('tabindex', '-1');
+    });
+
+    it.each([undefined, 'You need edit access'])(
+      'unfocusedLayer, disabled (message %s): the placeholder keeps its stop, announces disabled, and opens nothing',
+      disabledMessage => {
+        const {container} = render(
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+            tokenOverflowBehavior="unfocusedLayer"
+            isDisabled
+            disabledMessage={disabledMessage}
+          />,
+        );
+        const placeholder = screen.getAllByRole('group', {name: 'Members'})[0];
+        expect(placeholder).toHaveAttribute('tabindex', '0');
+        expect(placeholder).toHaveAttribute('aria-disabled', 'true');
+        vi.mocked(HTMLElement.prototype.showPopover).mockClear();
+        act(() => placeholder.focus());
+        fireEvent.keyDown(placeholder, {key: 'Enter'});
+        expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+        expect(document.activeElement).toBe(placeholder);
+        expect(container.querySelector('[disabled]')).toBeNull();
+      },
+    );
 
     it('unfocusedLayer: RTL emits no justify-self into the inset-positioned popover', () => {
       // The popover positions itself with explicit anchor() insets
@@ -1173,6 +1242,141 @@ describe('Tokenizer', () => {
         });
       });
       expect(await screen.findByText('Create "Kiwis"')).toBeInTheDocument();
+    });
+
+    it('creates nothing from the list of an earlier query, and creates the typed text once its own list shows', async () => {
+      const fruits = ['Apple', 'Apricot'].map(label => ({id: label, label}));
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{
+            search: (query: string) =>
+              fruits.filter(item =>
+                item.label.toLowerCase().includes(query.toLowerCase()),
+              ),
+            bootstrap: () => fruits,
+          }}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          hasEntriesOnFocus
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        input.focus();
+        fireEvent.click(input);
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      // The focus list still shows while "Zig" waits for its debounce.
+      fireEvent.change(input, {target: {value: 'Zig'}});
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith(
+        [{id: 'Zig', label: 'Zig'}],
+        expect.objectContaining({type: 'create'}),
+      );
+    });
+
+    it('creates with Enter below minQueryLength, where the rows come from the typed text', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          minQueryLength={3}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'QA'}});
+      });
+      // Text below the threshold is never searched, so Enter does not wait.
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith(
+        [expect.objectContaining({id: 'QA', label: 'QA'})],
+        expect.objectContaining({type: 'create'}),
+      );
+    });
+
+    it('creates nothing from rows for shorter text when the text grows back to the last search', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          minQueryLength={3}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Zig'}});
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      // Below the threshold, the rows come from "Zi".
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Zi'}});
+      });
+      // "Zig" again waits for its search; the "Zi" rows still show.
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Zig'}});
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith(
+        [expect.objectContaining({id: 'Zig', label: 'Zig'})],
+        expect.objectContaining({type: 'create'}),
+      );
+    });
+
+    it('creates nothing for erased text when the field is cleared and Enter is pressed at once', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          hasEntriesOnFocus
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        input.focus();
+        fireEvent.change(input, {target: {value: 'Zig'}});
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      // The "Zig" rows still show while the focus list waits.
+      await act(async () => {
+        fireEvent.change(input, {target: {value: ''}});
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).not.toHaveBeenCalled();
     });
 
     it('still offers Create below minQueryLength, and does not search', async () => {
@@ -1694,7 +1898,7 @@ describe('Tokenizer', () => {
       expect(bootstrap).toHaveBeenCalledTimes(1);
     });
 
-    it('closes after Enter on typed results while the cleared query waits for its debounce', async () => {
+    it('closes after a pick on typed results while the cleared query waits for its debounce', async () => {
       const user = userEvent.setup();
       function Debounced() {
         const [value, setValue] = useState<SearchableItem[]>([]);
@@ -1717,8 +1921,9 @@ describe('Tokenizer', () => {
         expect(option('Diana')).toBeInTheDocument();
       });
       // Clearing the text starts a focus-list reload that waits for the
-      // debounce. Enter acts before it runs.
-      await user.keyboard('{Backspace}{Enter}');
+      // debounce. A press on a row acts before it runs.
+      await user.keyboard('{Backspace}');
+      fireEvent.click(option('Diana') as HTMLElement);
       await act(async () => {
         await new Promise(r => setTimeout(r, 20));
       });
@@ -2517,24 +2722,25 @@ describe('Tokenizer', () => {
 
     it('shows the reason tooltip on hover when disabled with a reason', async () => {
       renderTokenizer();
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent(
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent(
         'You need edit access to change members',
       );
       const wrapper = screen.getByRole('group', {name: 'Members'});
       fireEvent.mouseEnter(wrapper);
-      await waitFor(() => expect(isOpen(tooltip)).toBe(true));
+      fireEvent.pointerMove(wrapper);
+      await waitFor(() => expect(isOpen(tooltip())).toBe(true));
       fireEvent.mouseLeave(wrapper);
-      await waitFor(() => expect(isOpen(tooltip)).toBe(false));
+      await waitFor(() => expect(isOpen(tooltip())).toBe(false));
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderTokenizer();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
-      await waitFor(() => expect(isOpen(tooltip)).toBe(true));
+      await waitFor(() => expect(isOpen(tooltip())).toBe(true));
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -2573,7 +2779,7 @@ describe('Tokenizer', () => {
     it('links the reason tooltip via aria-describedby', () => {
       renderTokenizer();
       const input = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -2905,7 +3111,7 @@ describe('Tokenizer', () => {
 
       const group = screen.getByRole('group', {name: 'Recipients'});
       const input = screen.getByRole('combobox', {name: 'Recipients People'});
-      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const tooltip = getTooltip();
       const describedByIDs =
         input.getAttribute('aria-describedby')?.split(' ') ?? [];
 
@@ -3081,7 +3287,7 @@ describe('Tokenizer', () => {
 
       const group = screen.getByRole('group', {name: 'Recipients'});
       const input = screen.getByRole('combobox', {name: 'Recipients People'});
-      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const tooltip = getTooltip();
 
       expect(input.getAttribute('aria-describedby')?.split(' ')).toEqual([
         ...(group.getAttribute('aria-describedby')?.split(' ') ?? []),

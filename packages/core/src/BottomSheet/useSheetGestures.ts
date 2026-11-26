@@ -71,12 +71,14 @@ import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBand} from '../motion/rubberBand';
 import {scroll} from '../motion/uikit/scroll';
 import {sheet} from '../motion/uikit/sheet';
+import {touchActionAllowsPan} from '../utils/scrollView';
 import {
   computeDetentOffsets,
   peekOffsetFor,
   resolveSettleOffset,
   scrimOpacityForOffset,
 } from './snapOffsets';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 /**
  * The stops a sheet of a given height rests at: offsets from fully-open in px,
@@ -144,14 +146,14 @@ const DRAG_PROMOTION_SLOP = 8;
 // Short haptic tick on detent settle where supported. iOS Safari doesn't
 // expose navigator.vibrate, so this is a no-op there; skipped under
 // reduced-motion.
-function hapticTick(): void {
+function hapticTick(sheet: Element | null): void {
   if (
     typeof navigator === 'undefined' ||
     typeof navigator.vibrate !== 'function'
   ) {
     return;
   }
-  if (prefersReducedMotion()) {
+  if (reducesMotion(sheet)) {
     return;
   }
   navigator.vibrate(8);
@@ -264,6 +266,26 @@ export function isInsideNestedLayer(
     }
   }
   return false;
+}
+
+/**
+ * Whether the content between `target` and the body leaves no one-finger pan
+ * to the browser, as a menu whose rows fit does with `pinch-zoom`. A pan
+ * recognizer leaves such a touch to that content. Content that allows a pan
+ * on either axis (`pan-x` on the date pickers' month scroller) does not
+ * count, nor do the body and the sheet's own surfaces above it.
+ */
+export function leavesNoPan(
+  target: EventTarget | null,
+  body: HTMLElement,
+): boolean {
+  if (!(target instanceof Element) || target === body) {
+    return false;
+  }
+  return (
+    !touchActionAllowsPan(target, 'x', body) &&
+    !touchActionAllowsPan(target, 'y', body)
+  );
 }
 
 /**
@@ -529,13 +551,6 @@ export interface UseSheetGesturesResult {
   settledLayoutOffset: number;
 }
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined' || !window.matchMedia) {
-    return false;
-  }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
 /**
  * Drag + snap machinery for the bottom sheet. Returns props to spread on the
  * grab handle and the sliding surface, plus live drag state. A slow drag
@@ -628,6 +643,12 @@ export function useSheetGestures({
   const scrollPreservationInsetRef = useRef(0);
   const settlingLayoutOffsetRef = useRef<number | null>(null);
   const pendingScrollPreservationInsetRef = useRef<number | null>(null);
+  // What a settle in flight computes its landing inset from. A resize that
+  // moves the settle's detent computes the inset again from the same basis.
+  const settleInsetBasisRef = useRef<{
+    baseLayoutOffset: number;
+    naturalEndGap: number;
+  } | null>(null);
   const offscreenBlockEndInsetRef = useRef(offscreenBlockEndInset);
   offscreenBlockEndInsetRef.current = Math.max(0, offscreenBlockEndInset);
   const recordSettledLayoutOffset = useCallback((offset: number) => {
@@ -651,6 +672,7 @@ export function useSheetGestures({
     // not start a second transition. The layouts have identical visible
     // geometry, so reconcile them with transitions disabled for one frame.
     setIsScrollAreaReconciling(true);
+    settleInsetBasisRef.current = null;
     settlingLayoutOffsetRef.current = null;
     setSettlingLayoutOffset(null);
     const pendingInset = pendingScrollPreservationInsetRef.current;
@@ -677,14 +699,16 @@ export function useSheetGestures({
       if (
         shouldAnimate &&
         Math.abs(renderedOffset - targetOffset) > 0.5 &&
-        !prefersReducedMotion()
+        !reducesMotion(sheetElRef.current)
       ) {
         pendingScrollPreservationInsetRef.current = targetInset;
+        settleInsetBasisRef.current = {baseLayoutOffset, naturalEndGap};
         settlingLayoutOffsetRef.current = layoutOffset;
         setSettlingLayoutOffset(layoutOffset);
         return;
       }
       pendingScrollPreservationInsetRef.current = null;
+      settleInsetBasisRef.current = null;
       settlingLayoutOffsetRef.current = null;
       setSettlingLayoutOffset(null);
       // Released on the detent, so there is no travel left to animate — but
@@ -920,15 +944,12 @@ export function useSheetGestures({
   // half-height sheet shows 75% of a shorter window, or a peek slides past the
   // whole window while the dialog stays modal. So re-resolve the same detent
   // by index and re-anchor without animating, because the geometry moved, not
-  // the finger.
+  // the finger. A settle in flight keeps moving, toward the same detent in the
+  // new geometry.
   const reanchorToSettledDetent = useCallback(() => {
     // A closed sheet re-anchors on its way back open; a live drag re-measures
-    // on its own, and a settle in flight owns the layout until it lands.
-    if (
-      !isOpenRef.current ||
-      dragStateRef.current != null ||
-      settlingLayoutOffsetRef.current != null
-    ) {
+    // on its own.
+    if (!isOpenRef.current || dragStateRef.current != null) {
       return;
     }
     const height = measureFullyOpenHeight();
@@ -957,15 +978,38 @@ export function useSheetGestures({
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- corrects settled geometry from a measurement
     setSheetHeight(height);
     settledDetentIndexRef.current = index;
-    prepareScrollAreaSettle(
-      baseLayoutOffset,
-      target,
-      targetLayoutOffset,
-      target,
-      baseLayoutOffset,
-      naturalEndGapFor(bodyNodeRef.current),
-      false,
-    );
+    const settleInsetBasis = settleInsetBasisRef.current;
+    const settlingLayoutOffset = settlingLayoutOffsetRef.current;
+    // The settle keeps its layout split until it lands. Below that split the
+    // sheet can rise only as far as the reserve below the screen. A target
+    // higher than that lifts the sheet off the screen's bottom edge.
+    const canRetargetSettle =
+      settlingLayoutOffset != null &&
+      settleInsetBasis != null &&
+      target - settlingLayoutOffset >= -offscreenBlockEndInsetRef.current;
+    if (canRetargetSettle) {
+      // Only the settle's end point moves. The transform turns toward the
+      // new target from where the sheet is now. The landing swaps in the new
+      // layout offset.
+      pendingScrollPreservationInsetRef.current = preservationInsetForOffset(
+        settleInsetBasis.baseLayoutOffset,
+        targetLayoutOffset,
+        settleInsetBasis.naturalEndGap,
+      );
+    } else {
+      // At rest, or when a retarget would lift the sheet, the sheet takes
+      // the new detent at once.
+      prepareScrollAreaSettle(
+        settleInsetBasis?.baseLayoutOffset ?? baseLayoutOffset,
+        target,
+        targetLayoutOffset,
+        target,
+        settlingLayoutOffset ?? baseLayoutOffset,
+        settleInsetBasis?.naturalEndGap ??
+          naturalEndGapFor(bodyNodeRef.current),
+        false,
+      );
+    }
     recordSettledLayoutOffset(targetLayoutOffset);
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- corrects settled geometry from a measurement
     setSettledOffset(target);
@@ -1007,10 +1051,11 @@ export function useSheetGestures({
     };
   }, [isOpen, reanchorToSettledDetent]);
 
-  // The other input to the same geometry: the snap points themselves. A host
-  // that swaps them while the sheet rests has moved the stops out from under
-  // it, exactly as a rotation does, so re-anchor the same way. Skipped on the
-  // first run — the sheet is already anchored to the detents it opened with.
+  // New snap points move the stops, as a rotation does, so re-anchor.
+  // The host writes the new reserve in the render after a resize. So the
+  // resize listener measures the old reserve. Re-anchor again once the new
+  // one is written. The first run does nothing: the sheet is already
+  // anchored to the detents it opened with.
   const hasAnchoredSnapHeightsRef = useRef(false);
   useLayoutEffect(() => {
     if (!hasAnchoredSnapHeightsRef.current) {
@@ -1018,7 +1063,7 @@ export function useSheetGestures({
       return;
     }
     reanchorToSettledDetent();
-  }, [reanchorToSettledDetent, snapHeights]);
+  }, [reanchorToSettledDetent, snapHeights, offscreenBlockEndInset]);
 
   // The one write a finger sample costs: the sheet's compositor transform,
   // on the element, with no render between the input and the paint. The
@@ -1187,7 +1232,7 @@ export function useSheetGestures({
           scrimOpacityForOffset(target, offsets, dismissOffset, peekOffset),
         );
         if (target !== baseOffset) {
-          hapticTick();
+          hapticTick(sheetElRef.current);
         }
       };
 
@@ -1687,7 +1732,11 @@ export function useSheetGestures({
       // content while the finger is still down (see onTouchMove). A touch
       // inside a layer this sheet hosts is that layer's, never tracked here.
       releaseContentHold(touchDragRef.current);
-      if (!touch || isInsideNestedLayer(event.target, body)) {
+      if (
+        !touch ||
+        isInsideNestedLayer(event.target, body) ||
+        leavesNoPan(event.target, body)
+      ) {
         touchDragRef.current = null;
         return;
       }

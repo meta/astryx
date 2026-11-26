@@ -12,6 +12,7 @@ export const docs = {
   name: 'share-a-page',
   placement: {parent: 'namespace:experimental', slot: 'guides', order: 18},
   stability: 'experimental',
+  searchable: true,
   title: 'Make a shareable page',
   category: 'guide',
   keywords: [
@@ -20,10 +21,6 @@ export const docs = {
     'one html file',
     'single file',
     'artifact',
-    'upload',
-    'report',
-    'status page',
-    'dashboard',
     'edit a shared page',
     'back to source',
     'render',
@@ -66,7 +63,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Find a component with `{@command search "progress bar"}` and read its props with `{@command component ProgressBar}` before you use it. Use components and tokens, not colors or CSS of your own: the page then follows the reader\u2019s light or dark setting, and a viewer that sets Astryx theme variables gives it that viewer\u2019s theme.',
+          text: 'Find a component with `{@command search "progress bar"}` and read its props with `{@command component ProgressBar}` before you use it. Use components and tokens, not colors or CSS of your own: the page then follows the reader\u2019s light or dark setting (a theme that the stylesheets the page imports draw in one mode keeps it), and a viewer that sets Astryx theme variables gives it that viewer\u2019s theme.',
         },
         {
           type: 'list',
@@ -77,9 +74,10 @@ export const docs = {
             'A VStack stretches each child to its full width, so a Badge or Token on a line of its own becomes a bar across the page. Wrap that one item in `<StackItem crossAlignSelf="start">`. Do not give the VStack `hAlign="start"`: it shrinks every child, Cards and Grids too.',
             'A ListItem `label` or `description` that is a string stays on one line and ends in an ellipsis, and the file cannot show the rest. When readers need the whole text, pass an element: `label={<Text type="body">\u2026</Text>}`.',
             'The file cannot scroll a table sideways, because that needs script: a table wider than the screen is cut off at its edge. Inside the example\u2019s `padding={6}`, a 375 px phone leaves about 327 px, so keep a table that phones must show within about 310 px, and put the other columns in a second table or in Cards. A table is as wide as its `pixel()` columns plus, for its `proportional()` columns, the largest floor divided by that column\u2019s share of all the shares: four `proportional(1)` columns at the default 120 px floor need 480 px. So make each share equal its floor, as in `proportional(148, {minWidth: 148})`, or give the columns `pixel()` widths; then the floors add up. A column with no `width` counts as `proportional(1, {minWidth: 60})`, so give every column of a phone table a width.',
-            'A column\u2019s floor includes its cells\u2019 24 px of padding. It must fit the column\u2019s longest word, because wrapped text breaks inside a word that does not fit, and its header, which stays on one line and is cut off with an ellipsis: `width: pixel(64)` holds a short number under a one-word header such as \u201cp95\u201d, and a two-word header such as \u201cError rate\u201d needs about 100 px.',
+            'A column\u2019s floor includes its cells\u2019 24 px of padding. It must fit the column\u2019s longest word, because wrapped text breaks inside a word that does not fit; the same holds for its header, which wraps like the cells: `width: pixel(64)` holds a short number under a one-word header such as \u201cp95\u201d, and a two-word header such as \u201cError rate\u201d wraps to two lines there and needs about 100 px to stay on one.',
             'Give each CodeBlock `isWrapped`, so a reader on a phone sees whole lines.',
             'Charts use recharts: install it in the page\u2019s folder first (`{@pm install recharts}`). Size a chart with `<ResponsiveContainer width="100%" aspect={2.5}>`, and color each series with a theme variable, such as `stroke="var(--color-data-categorical-blue)"`, so it follows the theme too.',
+            'Do not put text inside a hand-drawn SVG that scales to its box: on a phone the text shrinks with the drawing, so 13 px labels in a 960-wide viewBox show at about 5 px. Put the labels in HTML beside the drawing, or use recharts, which keeps its text size. The export warns when such text would show under 10 px on a phone.',
             'Controls that need a browser (buttons, filters, tabs, menus) work once the page\u2019s script runs, and do nothing in a viewer that blocks scripts. Keep what a reader must see in the first paint, not behind a click (see `astryx docs cli/experimental/export-pages interactive`).',
           ],
         },
@@ -96,7 +94,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Read what the command prints. A warning names something that can look different from what you meant, such as a component that ignores its children or a remote image the viewer cannot load, and says what to change; fix it and render again. When the command says a package is not installed, install that package in the page\u2019s folder and render again. Then check the file: open it in a browser if you have one, or run the reverse command in step 4 to see that its source comes back.',
+          text: 'Read what the command prints. A warning names something that can look different from what you meant, such as a component that ignores its children or a remote image the viewer cannot load, and says what to change; fix it and render again. When the command says a package is not installed, install that package in the page\u2019s folder and render again. Then read its Checks section: it names anything the file\u2019s markup and stylesheets load from outside it, and whether the file gives back its source exactly. When the file stands alone, it names the one file to share. To see how it looks, open the file in a browser, or add --pictures to the command: it takes a phone picture in light and dark and a desktop one with a browser on the machine, to check, not to send.',
         },
       ],
     },

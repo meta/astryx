@@ -57,6 +57,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Toast/Toast.generated';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 
@@ -100,7 +101,7 @@ const styles = stylex.create({
       'translateY(var(--_toast-swipe-y, 0px)) scale(var(--_toast-swipe-scale, 1))',
     transitionProperty: 'opacity, transform',
     transitionDuration: {
-      default: durationVars['--duration-fast'],
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor} + ${reducedMotionTransform.settle})`,
       '@media (prefers-reduced-motion: reduce)': '0.01ms',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
@@ -126,6 +127,19 @@ const styles = stylex.create({
   },
   variantError: {
     backgroundColor: colorVars['--color-background-error-inverted'],
+  },
+  // Restate the token as well as the color, so a caller's text follows the
+  // side too.
+  sideText: {
+    display: 'contents',
+  },
+  sideTextOnDark: {
+    '--color-text-primary': colorVars['--color-on-dark'],
+    color: colorVars['--color-on-dark'],
+  },
+  sideTextOnLight: {
+    '--color-text-primary': colorVars['--color-on-light'],
+    color: colorVars['--color-on-light'],
   },
   content: {
     flex: 1,
@@ -185,11 +199,6 @@ interface ToastSurfaceProps extends ToastProps {
    */
   timerKey?: string;
   /**
-   * False when the viewport announces the toast: the card then carries no
-   * live region of its own, so an update in place is announced once.
-   */
-  isLiveRegion?: boolean;
-  /**
    * True once the toast's row has started to open. The card then has no
    * starting style, so a move between modal outlets starts no transition.
    */
@@ -234,7 +243,6 @@ export function ToastSurface({
   renderContent,
   gestureDirection,
   timerKey,
-  isLiveRegion = true,
   announce,
   isRenderedBodyAnnouncement = false,
   hasEntryStarted = false,
@@ -413,13 +421,16 @@ export function ToastSurface({
   // The viewport announces a plain-text body when it dispatches the toast.
   // This reads a component body or a custom layout after commit. A body is
   // read whole, links included. A custom layout leaves out its controls.
+  // Only the viewport passes `announce`. The card never holds a live role, so
+  // a Toast rendered on its own announces nothing; its caller owns that.
   useAnnounceRenderedText(
     renderContent != null ? rootRef : bodyRef,
-    !isLiveRegion && (renderContent != null || isRenderedBodyAnnouncement),
+    announce != null && (renderContent != null || isRenderedBodyAnnouncement),
     timerKey ?? '',
     {
       politeness: isError ? 'assertive' : 'polite',
       announce,
+      isOncePerOccasion: true,
       exclude:
         renderContent != null
           ? TOAST_ANNOUNCEMENT_EXCLUDED_SELECTOR
@@ -478,14 +489,38 @@ export function ToastSurface({
     true,
     pickInvertedSide,
   );
+  const mediaMode = measuredMediaMode ?? fallbackMediaMode;
+  // On a system-mode page the server does not know the reader's scheme.
+  // If the card's two sides differ, keep the ambient text until the client
+  // knows it. With no theme, Core's defaults give the two sides.
+  const textSides = useMemo(
+    () =>
+      sides ??
+      (isSchemeUnknown
+        ? {
+            light: invertedSideIn(
+              resolveThemeTokens(null, {mode: 'light'}),
+              surfaceToken,
+            ),
+            dark: invertedSideIn(
+              resolveThemeTokens(null, {mode: 'dark'}),
+              surfaceToken,
+            ),
+          }
+        : null),
+    [sides, isSchemeUnknown, surfaceToken],
+  );
+  const isSideUnknown =
+    measuredMediaMode == null &&
+    isSchemeUnknown &&
+    textSides != null &&
+    textSides.light !== textSides.dark;
+  const textSide = isSideUnknown ? 'off' : mediaMode;
 
   return (
     <div
       {...pickDataAttributes(rest)}
       ref={rootRef}
-      role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
-      aria-live={isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined}
-      aria-atomic={isLiveRegion ? 'true' : undefined}
       onMouseEnter={pauseForPointer}
       onMouseLeave={resumeForPointer}
       onFocusCapture={pauseForFocus}
@@ -501,37 +536,44 @@ export function ToastSurface({
         ),
       )}>
       <MediaDarkPage side={measuredMediaMode == null ? darkPageSide : null}>
-        <MediaTheme mode={measuredMediaMode ?? fallbackMediaMode}>
-          {renderContent ? (
-            renderContent({
-              body,
-              endContent,
-              type,
-              isAutoHide,
-              autoHideDuration,
-              dismiss: handleDismiss,
-            })
-          ) : (
-            <div {...stylex.props(styles.inner)}>
-              <div ref={bodyRef} {...stylex.props(styles.content)}>
-                {body}
-              </div>
+        <MediaTheme mode={mediaMode}>
+          <div
+            {...stylex.props(
+              styles.sideText,
+              textSide === 'dark' && styles.sideTextOnDark,
+              textSide === 'light' && styles.sideTextOnLight,
+            )}>
+            {renderContent ? (
+              renderContent({
+                body,
+                endContent,
+                type,
+                isAutoHide,
+                autoHideDuration,
+                dismiss: handleDismiss,
+              })
+            ) : (
+              <div {...stylex.props(styles.inner)}>
+                <div ref={bodyRef} {...stylex.props(styles.content)}>
+                  {body}
+                </div>
 
-              <div {...stylex.props(styles.endContent)}>
-                {endContent}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<Icon icon="close" size="sm" color="inherit" />}
-                  className={themeProps('toast-close').className}
-                  xstyle={styles.close}
-                  label={t('@astryx.toast.dismiss')}
-                  onClick={handleDismiss}
-                  isIconOnly
-                />
+                <div {...stylex.props(styles.endContent)}>
+                  {endContent}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Icon icon="close" size="sm" color="inherit" />}
+                    className={themeProps('toast-close').className}
+                    xstyle={styles.close}
+                    label={t('@astryx.toast.dismiss')}
+                    onClick={handleDismiss}
+                    isIconOnly
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </MediaTheme>
       </MediaDarkPage>
     </div>

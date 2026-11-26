@@ -94,7 +94,7 @@ docType:   boolean
             [
               '`type_mismatch`',
               "The documented `type` differs from the code's, where both read exactly",
-              'Copy the type from the source, or fix the code. The next section says which types are judged',
+              'Copy the type from the source, or fix the code. A doc may leave out a string value the code marks `@deprecated` everywhere the type takes it from: a union member under a `@deprecated` comment, a `@deprecated` key of a `keyof` map, or a `@deprecated` overload. The next section says which types are judged',
             ],
             [
               '`default_mismatch`',

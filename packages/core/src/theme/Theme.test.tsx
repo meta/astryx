@@ -115,6 +115,20 @@ describe('Theme', () => {
     expect(declaredValue(wrapper!, 'font-size')).toMatch(/--text-body-size/);
   });
 
+  it("gives text inside that only inherits its line height the theme's body leading", () => {
+    const {container} = render(
+      <Theme theme={testTheme}>
+        <span>child</span>
+      </Theme>,
+    );
+    const wrapper = container.querySelector<HTMLElement>(
+      '[data-astryx-theme="test"]',
+    );
+    expect(declaredValue(wrapper!, 'line-height')).toMatch(
+      /--text-body-leading/,
+    );
+  });
+
   // =========================================================================
   // Root detection — data-theme on <html>
   // =========================================================================

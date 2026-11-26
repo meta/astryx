@@ -43,7 +43,10 @@
  * set's own statement of what the icon means. Word matches share one
  * score, so they keep set order first, as every equal score does; within a
  * set they rank by the weight of the words they carry, then the icon whose
- * id holds fewer parts that no query word names, then id order.
+ * id holds fewer parts that no query word names, then id order. The words
+ * after the query's last icon word that spell out a component's name say
+ * where the icon goes (`information icon popover links`), so they count only
+ * to break a tie.
  *
  * An exact match is a NAME match when the query is the icon's id, or one of
  * its words that is also a part of its id (`trash` for `trash-2`); it is a
@@ -75,7 +78,10 @@
  */
 
 import {ICON_EXPORT_NAME_RE, definitionsByIcon} from './icon-set-discovery.mjs';
-import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {
+  astryxDefinitionsByName,
+  replacedNamesOf,
+} from './icon-definition-discovery.mjs';
 import {iconIdOf} from '../text/icon-id.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
@@ -84,12 +90,16 @@ import {iconIdOf} from '../text/icon-id.mjs';
 /** @typedef {import('../../api/icon/icon.type.mjs').IconMatchEntry} IconMatchEntry */
 
 /**
- * The import line for one export.
+ * The import line for one export, under `local` when that name differs from
+ * the export's.
  * @param {string} exportName
  * @param {string} module
+ * @param {string} [local]
  */
-export function importLine(exportName, module) {
-  return `import {${exportName}} from '${module}';`;
+export function importLine(exportName, module, local = exportName) {
+  const binding =
+    local === exportName ? exportName : `${exportName} as ${local}`;
+  return `import {${binding}} from '${module}';`;
 }
 
 /**
@@ -184,6 +194,8 @@ function readyQuery(query) {
  * @property {IconSetIcon} icon
  * @property {string[]} definitions the definitions the set maps it to
  * @property {string[]} lowerDefinitions those names in lower case
+ * @property {Array<{name: string, definition: string, lower: string}>} replaced
+ *   the old names of those definitions: each answers with this icon
  * @property {Set<string>} parts its id parts
  * @property {string[]} tags its words that are neither its id nor an id part
  * @property {boolean[]} spacedWords for each word, whether it holds a space
@@ -195,14 +207,17 @@ function readyQuery(query) {
 /**
  * @param {IconSetIcon} icon
  * @param {string[]} definitions
+ * @param {Array<{name: string, definition: string}>} [replaced] the old
+ *   names of those definitions
  * @returns {ReadyIcon}
  */
-function readyIcon(icon, definitions) {
+function readyIcon(icon, definitions, replaced = []) {
   const parts = new Set(icon.id.split('-'));
   return {
     icon,
     definitions,
     lowerDefinitions: definitions.map(name => name.toLowerCase()),
+    replaced: replaced.map(each => ({...each, lower: each.name.toLowerCase()})),
     parts,
     tags: icon.words.filter(word => word !== icon.id && !parts.has(word)),
     spacedWords: icon.words.map(word => /\s/u.test(word)),
@@ -225,7 +240,19 @@ function matchReady(q, ready) {
       name: false,
       meaning: false,
       rank: 0,
-      reason: `definition "${ready.definitions[at]}"`,
+      reason: `meaning "${ready.definitions[at]}"`,
+    };
+  }
+  // The name of a definition another one replaced answers with the icon its
+  // successor draws.
+  const old = ready.replaced.find(each => each.lower === q.joined);
+  if (old) {
+    return {
+      tier: 'definition',
+      name: false,
+      meaning: false,
+      rank: 0,
+      reason: `meaning "${old.definition}" (replaced "${old.name}")`,
     };
   }
   const tagAt = tags.indexOf(query);
@@ -371,6 +398,66 @@ function featureIconWord(words, at) {
   let before = at - 1;
   while (before >= 0 && ARTICLES.has(words[before])) before--;
   return words[before] === 'with' && !GLYPH_WORDS.has(words[at + 1]);
+}
+
+/**
+ * The words of a query that say where its icon goes, not what it shows: the
+ * words after its last icon word that spell out a component's name, its last
+ * word plural or not (`information icon popover links`: `popover`, `links`;
+ * `settings icon code block`: `code`, `block`), and a component's name
+ * written as one word with the words its export name reads as
+ * (`settings icon CodeBlock`: `codeblock`, `code`, `block`). There are none
+ * unless a word that names something stands before that icon word and no
+ * `of` or `for` follows it (`an icon of a table` asks for a table), and a
+ * word also written before the icon word is never one.
+ * @param {string} query
+ * @param {() => Iterable<string>} componentNames read only when the query
+ *   has words after its icon word to check
+ * @returns {Set<string>}
+ */
+function placeWords(query, componentNames) {
+  const typed = query.trim().split(/\s+/u).filter(Boolean);
+  const words = typed.map(word => word.toLowerCase());
+  let at = words.length - 1;
+  while (at >= 0 && !ICON_WORDS.has(words[at])) at--;
+  const before = words.slice(0, Math.max(at, 0));
+  const after = words.slice(at + 1).filter(word => !before.includes(word));
+  if (
+    at < 1 ||
+    after.length === 0 ||
+    GLYPH_WORDS.has(words[at + 1]) ||
+    before.every(word => FILLER_WORDS.has(word))
+  ) {
+    return new Set();
+  }
+  const names = [...componentNames()].map(name => spokenName(name).split(' '));
+  /** @type {Set<string>} */
+  const places = new Set();
+  /** @param {string} word */
+  const place = word => {
+    if (!before.includes(word) && !FILLER_WORDS.has(word)) places.add(word);
+  };
+  for (let start = at + 1; start < words.length; start++) {
+    for (const parts of names) {
+      const spelled = parts.every((part, k) => {
+        const word = words[start + k];
+        return (
+          word !== undefined &&
+          (word === part || (k === parts.length - 1 && sameWord(part, word)))
+        );
+      });
+      if (spelled) {
+        words.slice(start, start + parts.length).forEach(place);
+        continue;
+      }
+      const joined = parts.join('');
+      if (words[start] === joined || sameWord(joined, words[start])) {
+        place(words[start]);
+        exportNameWords(typed[start]).split(' ').forEach(place);
+      }
+    }
+  }
+  return places;
 }
 
 /**
@@ -544,12 +631,18 @@ export function withDefinitionWords(icon, definitions, lookup) {
  * icon carries ({@link rankWords}), the words of both readings together:
  * the finder's own search answers and search's icons block ask for that,
  * while callers that look for a near spelling or a fitting definition do not.
+ * `componentNames` gives the names of the components the query's words may
+ * name to say where the icon goes ({@link placeWords}); without it, none do.
  * @param {DiscoveredIconSet[]} sets in tie order
  * @param {string} query
- * @param {{words?: boolean}} [options]
+ * @param {{words?: boolean, componentNames?: () => Iterable<string>}} [options]
  * @returns {IconMatchEntry[]}
  */
-export function rankIcons(sets, query, {words = false} = {}) {
+export function rankIcons(
+  sets,
+  query,
+  {words = false, componentNames = () => []} = {},
+) {
   /** @type {SearchableIcons} */
   const searchable = new Map();
   const typed = typedQuery(query);
@@ -567,7 +660,14 @@ export function rankIcons(sets, query, {words = false} = {}) {
   if (best.length > 0) return best;
   if (!words) return [];
   const asked = [...new Set([...named.split(' '), ...spelled.split(' ')])];
-  return asked.length > 1 ? rankWords(sets, asked.join(' '), searchable) : [];
+  return asked.length > 1
+    ? rankWords(
+        sets,
+        asked.join(' '),
+        searchable,
+        placeWords(query, componentNames),
+      )
+    : [];
 }
 
 /**
@@ -587,13 +687,16 @@ const WORD_MATCH_SCORE = 20;
  * many carry it, so a rare word counts more than a common one. An icon's
  * weight is the sum of the weights of the words it carries, with the words
  * that name a definition the set maps it for counted twice
- * ({@link mappedNameWords}).
+ * ({@link mappedNameWords}). The words that say where the icon goes
+ * (`places`) count only to break a tie.
  * @param {DiscoveredIconSet[]} sets in tie order
  * @param {string} term lower-case words, filler words left out
  * @param {SearchableIcons} searchable this search's worked-out sets
+ * @param {Set<string>} [places] the query's words that say where the icon
+ *   goes ({@link placeWords})
  * @returns {IconMatchEntry[]}
  */
-function rankWords(sets, term, searchable) {
+function rankWords(sets, term, searchable, places = new Set()) {
   const words = [...new Set(term.split(' '))];
   let total = 0;
   /** @type {Array<{set: DiscoveredIconSet, icon: IconSetIcon, definitions: string[], carried: string[], named: string[], setIndex: number}>} */
@@ -622,22 +725,26 @@ function rankWords(sets, term, searchable) {
   /** @param {string} word */
   const weight = word =>
     Math.log((total + 1) / ((carriers.get(word) ?? 0) + 1));
-  const ranked = hits.map(hit => ({
-    hit,
-    value: [...hit.carried, ...hit.named].reduce(
-      (sum, word) => sum + weight(word),
-      0,
-    ),
-    unasked: hit.icon.id
-      .split('-')
-      .filter(
-        part => !words.some(word => word === part || sameWord(word, part)),
-      ).length,
-  }));
+  /** @param {string[]} counted */
+  const weigh = counted => counted.reduce((sum, word) => sum + weight(word), 0);
+  const ranked = hits.map(hit => {
+    const counted = [...hit.carried, ...hit.named];
+    return {
+      hit,
+      value: weigh(counted.filter(word => !places.has(word))),
+      placeValue: weigh(counted.filter(word => places.has(word))),
+      unasked: hit.icon.id
+        .split('-')
+        .filter(
+          part => !words.some(word => word === part || sameWord(word, part)),
+        ).length,
+    };
+  });
   ranked.sort(
     (a, b) =>
       a.hit.setIndex - b.hit.setIndex ||
       b.value - a.value ||
+      b.placeValue - a.placeValue ||
       a.unasked - b.unasked ||
       (a.hit.icon.id < b.hit.icon.id
         ? -1
@@ -719,7 +826,14 @@ function searchableIcons(set, kept) {
       definitions,
       name => astryx.get(name) ?? own.get(name),
     );
-    return {icon, definitions, ready: readyIcon(searchable, definitions)};
+    const replaced = definitions.flatMap(definition =>
+      replacedNamesOf(definition, set).map(name => ({name, definition})),
+    );
+    return {
+      icon,
+      definitions,
+      ready: readyIcon(searchable, definitions, replaced),
+    };
   });
   kept.set(set, list);
   return list;

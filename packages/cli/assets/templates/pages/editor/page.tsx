@@ -3,6 +3,7 @@
 'use client';
 
 import {useState, useCallback, type CSSProperties} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {Button} from '@astryxdesign/core/Button';
 import {useToast} from '@astryxdesign/core/Toast';
@@ -18,6 +19,7 @@ import {
   LayoutContent,
   LayoutHeader,
   LayoutPanel,
+  StackItem,
 } from '@astryxdesign/core/Layout';
 import {Icon} from '@astryxdesign/core/Icon';
 import {List, ListItem} from '@astryxdesign/core/List';
@@ -35,31 +37,31 @@ import {TextArea} from '@astryxdesign/core/TextArea';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {
-  Squares2X2Icon,
-  DocumentTextIcon,
-  PhotoIcon,
-  CursorArrowRaysIcon,
+  GridViewIcon,
+  DocumentIcon,
+  ImageIcon,
+  ClickIcon,
   ViewColumnsIcon,
   SparklesIcon,
-  MegaphoneIcon,
-  TrashIcon,
+  AnnouncementIcon,
+  DeleteIcon,
   ChevronUpIcon,
   ChevronDownIcon,
-  ComputerDesktopIcon,
-  DeviceTabletIcon,
-  DevicePhoneMobileIcon,
+  DesktopIcon,
+  TabletIcon,
+  MobileIcon,
   EyeIcon,
-  AdjustmentsHorizontalIcon,
-  XMarkIcon,
-  PlusCircleIcon,
+  AdjustmentsIcon,
+  CloseIcon,
+  CreateIcon,
   ShoppingBagIcon,
-  ShoppingCartIcon,
-  BanknotesIcon,
-  ChatBubbleLeftIcon,
-  PlayCircleIcon,
-  EllipsisHorizontalIcon,
-  LockClosedIcon,
-} from '@heroicons/react/24/outline';
+  CartIcon,
+  MoneyIcon,
+  MessageIcon,
+  MediaIcon,
+  MoreHorizontalIcon,
+  LockIcon,
+} from '@astryxdesign/template-icons';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
@@ -78,13 +80,13 @@ type SidebarTab = 'blocks' | 'properties';
 type IconComponent = React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
 const BLOCK_META: Record<BlockType, {label: string; icon: IconComponent}> = {
-  hero: {label: 'Hero', icon: Squares2X2Icon},
-  text: {label: 'Text', icon: DocumentTextIcon},
-  image: {label: 'Image', icon: PhotoIcon},
-  button: {label: 'Button', icon: CursorArrowRaysIcon},
+  hero: {label: 'Hero', icon: GridViewIcon},
+  text: {label: 'Text', icon: DocumentIcon},
+  image: {label: 'Image', icon: ImageIcon},
+  button: {label: 'Button', icon: ClickIcon},
   cards: {label: 'Cards', icon: ViewColumnsIcon},
   features: {label: 'Features', icon: SparklesIcon},
-  cta: {label: 'CTA', icon: MegaphoneIcon},
+  cta: {label: 'CTA', icon: AnnouncementIcon},
 };
 
 type Transaction = {
@@ -98,10 +100,10 @@ type Transaction = {
 
 const CATEGORY_ICONS: Record<string, IconComponent> = {
   'Food & Drink': ShoppingBagIcon,
-  Groceries: ShoppingCartIcon,
-  Income: BanknotesIcon,
-  Transport: ChatBubbleLeftIcon,
-  Entertainment: PlayCircleIcon,
+  Groceries: CartIcon,
+  Income: MoneyIcon,
+  Transport: MessageIcon,
+  Entertainment: MediaIcon,
 };
 
 const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
@@ -154,7 +156,7 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
     renderCell: () => (
       <Button
         label="More"
-        icon={<Icon icon={EllipsisHorizontalIcon} size="sm" />}
+        icon={<Icon icon={MoreHorizontalIcon} size="sm" />}
         variant="ghost"
         size="sm"
         isIconOnly
@@ -303,13 +305,21 @@ function defaultProps(type: BlockType): Record<string, unknown> {
 // The layout (sidebar + scrollable canvas, full height) is all Layout +
 // LayoutPanel now. The few remaining styles are things Astryx has no prop for:
 // the responsive canvas max-width, a selection ring on the active block card,
-// and the circular icon chip's surface.
+// the circular icon chip's surface, and the side panel's phone fold.
 
 // Fill the window. Layout height="fill" is height:100%, which only resolves
 // against a definite height — and the host's <html>/<body> don't set one, so
 // the layout anchors a definite viewport height itself. No background; the
 // host owns the page surface.
 const pageStyle: CSSProperties = {height: '100dvh'};
+// The width at which the panel moves into the header slot.
+const PHONE_QUERY = '(max-width: 768px)';
+const styles = stylex.create({
+  // Before script runs, `isMobile` is false and the panel docks at the side,
+  // where its 320px pushes a phone page wider than the screen. On a phone the
+  // side panel takes no room in CSS too; with script it moves into the header.
+  sidePanel: {display: {default: null, [`@media ${PHONE_QUERY}`]: 'none'}},
+});
 // Canvas reflows to the chosen viewport width; VStack has no maxWidth prop.
 const canvasStyle = (maxWidth: number): CSSProperties => ({
   maxWidth,
@@ -522,7 +532,7 @@ function BlockPreview({
           <EmptyState
             title="Image Block"
             description="Drop an image or enter a URL"
-            icon={<Icon icon={PhotoIcon} />}
+            icon={<Icon icon={ImageIcon} />}
             isCompact
           />
         </Card>
@@ -559,7 +569,9 @@ function BlockPreview({
                 </Text>
               )}
             </VStack>
-            <Button label="View All" variant="secondary" size="sm" />
+            <StackItem>
+              <Button label="View All" variant="secondary" size="sm" />
+            </StackItem>
           </HStack>
           <Table
             data={items}
@@ -600,7 +612,7 @@ function BlockPreview({
         <Card padding={6} style={cardStyle} onClick={onSelect}>
           <HStack gap={4} vAlign="start">
             <Center width={40} height={40} style={iconCircle}>
-              <Icon icon={LockClosedIcon} color="secondary" />
+              <Icon icon={LockIcon} color="secondary" />
             </Center>
             <VStack gap={1}>
               <Text type="label" weight="semibold">
@@ -644,7 +656,7 @@ export default function EditorPage() {
   // On phones the editor stacks: the panel sits in the header slot (full width,
   // above the canvas) showing just its toolbar, so the canvas isn't crushed
   // beside a 320px sidebar. On desktop the full panel (tabs + lists) shows.
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = useMediaQuery(PHONE_QUERY);
 
   const selectedBlock = blocks.find(b => b.id === selectedId) ?? null;
 
@@ -772,7 +784,7 @@ export default function EditorPage() {
                   />
                   <Button
                     label="Delete"
-                    icon={<Icon icon={TrashIcon} size="sm" />}
+                    icon={<Icon icon={DeleteIcon} size="sm" />}
                     variant="ghost"
                     size="sm"
                     onClick={(e: React.MouseEvent) => {
@@ -827,7 +839,8 @@ export default function EditorPage() {
     <LayoutPanel
       hasDivider={!isMobile}
       padding={0}
-      width={isMobile ? '100%' : 320}>
+      width={isMobile ? '100%' : 320}
+      xstyle={isMobile ? undefined : styles.sidePanel}>
       <VStack gap={4}>
         {/* Panel Header */}
         <Section variant="transparent" padding={4}>
@@ -841,7 +854,7 @@ export default function EditorPage() {
               <HStack gap={2} vAlign="center">
                 <Button
                   label="Edit"
-                  icon={<Icon icon={AdjustmentsHorizontalIcon} size="sm" />}
+                  icon={<Icon icon={AdjustmentsIcon} size="sm" />}
                   variant="ghost"
                   isIconOnly
                   onClick={() => setIsCustomizeOpen(true)}
@@ -881,19 +894,19 @@ export default function EditorPage() {
                     <SegmentedControlItem
                       value="desktop"
                       label="Desktop"
-                      icon={<Icon icon={ComputerDesktopIcon} size="sm" />}
+                      icon={<Icon icon={DesktopIcon} size="sm" />}
                       isLabelHidden
                     />
                     <SegmentedControlItem
                       value="tablet"
                       label="Tablet"
-                      icon={<Icon icon={DeviceTabletIcon} size="sm" />}
+                      icon={<Icon icon={TabletIcon} size="sm" />}
                       isLabelHidden
                     />
                     <SegmentedControlItem
                       value="phone"
                       label="Phone"
-                      icon={<Icon icon={DevicePhoneMobileIcon} size="sm" />}
+                      icon={<Icon icon={MobileIcon} size="sm" />}
                       isLabelHidden
                     />
                   </SegmentedControl>
@@ -953,7 +966,7 @@ export default function EditorPage() {
                 <EmptyState
                   title="No blocks yet"
                   description="Add blocks from the sidebar to start building your page"
-                  icon={<Icon icon={PlusCircleIcon} />}
+                  icon={<Icon icon={CreateIcon} />}
                 />
               )}
             </VStack>
@@ -976,7 +989,7 @@ export default function EditorPage() {
                 <Heading level={3}>Customize</Heading>
                 <Button
                   label="Close"
-                  icon={<Icon icon={XMarkIcon} size="sm" />}
+                  icon={<Icon icon={CloseIcon} size="sm" />}
                   variant="ghost"
                   isIconOnly
                   onClick={() => setIsCustomizeOpen(false)}

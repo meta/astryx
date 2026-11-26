@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, afterEach} from 'vitest';
-import {spawn} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import fsMutable from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
@@ -9,9 +9,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   cachedRelease,
+  failedInstallWaitMs,
   forgetVerifiedReleases,
   ensureRelease,
   isInReleaseCache,
+  recentFailedInstall,
   releasesDir,
   resolvePublishedVersion,
   isVersionRange,
@@ -34,6 +36,7 @@ import {
   writeJson,
 } from '../../test-utils/release-fixtures.mjs';
 import {LEASE_SILENCE_MS, renewLock} from './lock-lease.mjs';
+import {UNASSIGNABLE_PID} from '../../test-utils/unassignable-pid.mjs';
 
 afterEach(cleanupFixtures);
 
@@ -343,6 +346,303 @@ describe('ensureRelease', () => {
   });
 });
 
+const MINUTE = 60_000;
+
+/**
+ * Write the record a failed install of `version` leaves in the cache: the
+ * file `recentFailedInstall` reads. A string is written as it is, to seed a
+ * record that cannot be read.
+ * @param {string} cacheDir
+ * @param {string} version
+ * @param {string | Record<string, unknown>} record
+ * @returns {string} the record's path
+ */
+function seedFailure(cacheDir, version, record) {
+  const file = path.join(releasesDir(cacheDir), `.failed-${version}.json`);
+  fs.mkdirSync(path.dirname(file), {recursive: true});
+  fs.writeFileSync(
+    file,
+    typeof record === 'string' ? record : JSON.stringify(record),
+  );
+  return file;
+}
+
+/**
+ * The npm runs that install, leaving out the `npm config get` read that
+ * checks whether the registries changed since the failure.
+ * @param {string[][]} calls
+ * @returns {string[][]}
+ */
+function installRuns(calls) {
+  return calls.filter(args => args[0] !== 'config');
+}
+
+describe('failedInstallWaitMs', () => {
+  it('waits 2 minutes after a first failure and 10 after a second in a row', () => {
+    expect(failedInstallWaitMs(1)).toBe(2 * MINUTE);
+    expect(failedInstallWaitMs(2)).toBe(10 * MINUTE);
+    expect(failedInstallWaitMs(3)).toBe(10 * MINUTE);
+    expect(failedInstallWaitMs(50)).toBe(10 * MINUTE);
+  });
+});
+
+describe('recentFailedInstall', () => {
+  const now = 1_700_000_000_000;
+
+  it('is null for a release that never failed', () => {
+    expect(recentFailedInstall('0.6.8', tempDir('cache'), now)).toBeNull();
+  });
+
+  it('holds a failure for its wait and not a moment longer', () => {
+    const cacheDir = tempDir('cache');
+    seedFailure(cacheDir, '0.6.8', {
+      at: now - (2 * MINUTE - 1),
+      reason: 'offline',
+      failures: 1,
+    });
+    expect(recentFailedInstall('0.6.8', cacheDir, now)).toEqual({
+      at: now - (2 * MINUTE - 1),
+      reason: 'offline',
+      failures: 1,
+      registries: null,
+      waitMs: 2 * MINUTE,
+    });
+    seedFailure(cacheDir, '0.6.8', {
+      at: now - 2 * MINUTE,
+      reason: 'offline',
+      failures: 1,
+    });
+    expect(recentFailedInstall('0.6.8', cacheDir, now)).toBeNull();
+  });
+
+  it('holds a second failure in a row for 10 minutes', () => {
+    const cacheDir = tempDir('cache');
+    seedFailure(cacheDir, '0.6.8', {
+      at: now - (10 * MINUTE - 1),
+      reason: 'offline',
+      failures: 2,
+    });
+    expect(recentFailedInstall('0.6.8', cacheDir, now)?.waitMs).toBe(
+      10 * MINUTE,
+    );
+    seedFailure(cacheDir, '0.6.8', {
+      at: now - 10 * MINUTE,
+      reason: 'offline',
+      failures: 2,
+    });
+    expect(recentFailedInstall('0.6.8', cacheDir, now)).toBeNull();
+  });
+
+  it('holds a failure from this very moment, but not one from the future', () => {
+    // A failure dated ahead of now means the clock was set back; waiting out
+    // an hour of it would block the release for that long.
+    const cacheDir = tempDir('cache');
+    seedFailure(cacheDir, '0.6.8', {at: now, reason: 'offline', failures: 1});
+    expect(recentFailedInstall('0.6.8', cacheDir, now)).not.toBeNull();
+    seedFailure(cacheDir, '0.6.8', {
+      at: now + 60 * MINUTE,
+      reason: 'offline',
+      failures: 1,
+    });
+    expect(recentFailedInstall('0.6.8', cacheDir, now)).toBeNull();
+  });
+
+  it('ignores a record it cannot read', () => {
+    const cacheDir = tempDir('cache');
+    for (const record of [
+      '',
+      '{not json',
+      '[]',
+      'null',
+      JSON.stringify({reason: 'offline', failures: 1}),
+      JSON.stringify({at: 'yesterday', reason: 'offline', failures: 1}),
+      // A number written as text still counts: `now - '1700...'` is a number.
+      JSON.stringify({at: String(now), reason: 'offline', failures: 1}),
+      JSON.stringify({at: now, failures: 1}),
+      JSON.stringify({at: now, reason: 5, failures: 1}),
+    ]) {
+      seedFailure(cacheDir, '0.6.8', record);
+      expect(recentFailedInstall('0.6.8', cacheDir, now), record).toBeNull();
+    }
+  });
+
+  it('reads a failure count it cannot use as one failure', () => {
+    const cacheDir = tempDir('cache');
+    for (const failures of [undefined, 0, -1, 2.5, '2', null]) {
+      seedFailure(cacheDir, '0.6.8', {
+        at: now - 30_000,
+        reason: 'offline',
+        failures,
+      });
+      const failed = recentFailedInstall('0.6.8', cacheDir, now);
+      expect(failed?.failures, String(failures)).toBe(1);
+      expect(failed?.waitMs, String(failures)).toBe(2 * MINUTE);
+    }
+  });
+
+  it('is kept for each release on its own', () => {
+    const cacheDir = tempDir('cache');
+    seedFailure(cacheDir, '0.6.8', {at: now, reason: 'offline', failures: 1});
+    expect(recentFailedInstall('0.6.8', cacheDir, now)).not.toBeNull();
+    expect(recentFailedInstall('0.6.9', cacheDir, now)).toBeNull();
+  });
+});
+
+describe('ensureRelease after a failed install (FR2)', () => {
+  it('does not install again for a release whose install just failed', () => {
+    const cacheDir = tempDir('cache');
+    const first = fakeNpm({outcome: 'offline'});
+    const failed = ensureRelease('0.6.8', {cacheDir, run: first.run});
+    expect(first.calls.length).toBeGreaterThan(0);
+
+    // Even an npm that would work is not asked: offline runs would otherwise
+    // start npm and wait for it on every run.
+    const second = fakeNpm();
+    const again = ensureRelease('0.6.8', {cacheDir, run: second.run});
+    expect(installRuns(second.calls)).toHaveLength(0);
+    expect('reason' in failed && 'reason' in again).toBe(true);
+    // The new reason keeps the old one, and says when it tried and how long
+    // until it tries again.
+    const reason = 'reason' in again ? again.reason : '';
+    expect(reason.startsWith(`${'reason' in failed && failed.reason}; `)).toBe(
+      true,
+    );
+    expect(reason).toMatch(/last tried 1 minute ago/);
+    expect(reason).toMatch(/after 2 minutes$/);
+    expect(cachedRelease('0.6.8', cacheDir)).toBeNull();
+  });
+
+  it('says how long ago it tried, in whole minutes', () => {
+    const cacheDir = tempDir('cache');
+    seedFailure(cacheDir, '0.6.8', {
+      at: Date.now() - 90_000,
+      reason: 'the registry could not be reached',
+      failures: 1,
+    });
+    const npm = fakeNpm();
+    const result = ensureRelease('0.6.8', {cacheDir, run: npm.run});
+    expect(installRuns(npm.calls)).toHaveLength(0);
+    const reason = 'reason' in result ? result.reason : '';
+    expect(reason.startsWith('the registry could not be reached; ')).toBe(true);
+    expect(reason).toMatch(/last tried 2 minutes ago/);
+    expect(reason).toMatch(/after 2 minutes$/);
+  });
+
+  it('tries again once the wait has passed', () => {
+    const cacheDir = tempDir('cache');
+    const record = seedFailure(cacheDir, '0.6.8', {
+      at: Date.now() - 3 * MINUTE,
+      reason: 'offline',
+      failures: 1,
+    });
+    const npm = fakeNpm();
+    const release = ensureRelease('0.6.8', {cacheDir, run: npm.run});
+    expect(npm.calls.length).toBeGreaterThan(0);
+    expect('bin' in release && release.version).toBe('0.6.8');
+    expect(fs.existsSync(record)).toBe(false);
+  });
+
+  it('waits longer after a second failure in a row', () => {
+    const cacheDir = tempDir('cache');
+    seedFailure(cacheDir, '0.6.8', {
+      at: Date.now() - 3 * MINUTE,
+      reason: 'offline',
+      failures: 2,
+    });
+    const held = fakeNpm();
+    const result = ensureRelease('0.6.8', {cacheDir, run: held.run});
+    expect(installRuns(held.calls)).toHaveLength(0);
+    expect('reason' in result && result.reason).toMatch(/after 10 minutes$/);
+
+    seedFailure(cacheDir, '0.6.8', {
+      at: Date.now() - 11 * MINUTE,
+      reason: 'offline',
+      failures: 2,
+    });
+    const retried = fakeNpm();
+    ensureRelease('0.6.8', {cacheDir, run: retried.run});
+    expect(retried.calls.length).toBeGreaterThan(0);
+  });
+
+  it('counts the failures in a row, so the next wait is longer', () => {
+    const cacheDir = tempDir('cache');
+    ensureRelease('0.6.8', {
+      cacheDir,
+      run: fakeNpm({outcome: 'offline'}).run,
+    });
+    const first = recentFailedInstall('0.6.8', cacheDir);
+    expect(first?.failures).toBe(1);
+    expect(first?.waitMs).toBe(2 * MINUTE);
+
+    // Let that wait pass, and fail again.
+    const record = path.join(releasesDir(cacheDir), '.failed-0.6.8.json');
+    const aged = JSON.parse(fs.readFileSync(record, 'utf-8'));
+    writeJson(record, {...aged, at: Date.now() - 3 * MINUTE});
+    const retry = fakeNpm({outcome: 'offline'});
+    ensureRelease('0.6.8', {cacheDir, run: retry.run});
+    expect(retry.calls.length).toBeGreaterThan(0);
+    const second = recentFailedInstall('0.6.8', cacheDir);
+    expect(second?.failures).toBe(2);
+    expect(second?.waitMs).toBe(10 * MINUTE);
+  });
+
+  it('forgets a failure once the release installs', () => {
+    const cacheDir = tempDir('cache');
+    const record = seedFailure(cacheDir, '0.6.8', {
+      at: Date.now() - 3 * MINUTE,
+      reason: 'offline',
+      failures: 1,
+    });
+    ensureRelease('0.6.8', {cacheDir, run: fakeNpm().run});
+    expect(fs.existsSync(record)).toBe(false);
+    expect(recentFailedInstall('0.6.8', cacheDir)).toBeNull();
+  });
+
+  it('forgets a failure when another copy installed the release meanwhile', () => {
+    const cacheDir = tempDir('cache');
+    seedRelease(cacheDir, '0.6.8');
+    const record = seedFailure(cacheDir, '0.6.8', {
+      at: Date.now(),
+      reason: 'offline',
+      failures: 1,
+    });
+    const npm = fakeNpm();
+    const release = ensureRelease('0.6.8', {cacheDir, run: npm.run});
+    expect('bin' in release && release.version).toBe('0.6.8');
+    expect(npm.calls).toHaveLength(0);
+    expect(fs.existsSync(record)).toBe(false);
+  });
+
+  it('does not remember a run that only waited on another install', () => {
+    const cacheDir = tempDir('cache');
+    fs.mkdirSync(path.join(releasesDir(cacheDir), '.lock-0.6.8'), {
+      recursive: true,
+    });
+    const result = ensureRelease('0.6.8', {
+      cacheDir,
+      run: fakeNpm().run,
+      waitMs: 300,
+    });
+    expect('reason' in result && result.reason).toMatch(/still installing/);
+    expect(recentFailedInstall('0.6.8', cacheDir)).toBeNull();
+    expect(
+      fs.existsSync(path.join(releasesDir(cacheDir), '.failed-0.6.8.json')),
+    ).toBe(false);
+  });
+
+  it('holds back only the release that failed', () => {
+    const cacheDir = tempDir('cache');
+    ensureRelease('0.6.8', {
+      cacheDir,
+      run: fakeNpm({outcome: 'offline'}).run,
+    });
+    const npm = fakeNpm();
+    const other = ensureRelease('0.6.9', {cacheDir, run: npm.run});
+    expect('bin' in other && other.version).toBe('0.6.9');
+    expect(npm.calls.length).toBeGreaterThan(0);
+  });
+});
+
 describe('cachedRelease', () => {
   it('counts a release only once it is verified', () => {
     const cacheDir = tempDir('cache');
@@ -398,7 +698,7 @@ describe.skipIf(process.platform === 'win32')(
       fs.writeFileSync(path.join(lockDir, 'npm.pid'), String(pid));
       fs.writeFileSync(
         path.join(lockDir, 'owner.json'),
-        JSON.stringify({pid: 999999, host: os.hostname(), at}),
+        JSON.stringify({pid: UNASSIGNABLE_PID, host: os.hostname(), at}),
       );
       return lockDir;
     };
@@ -535,7 +835,7 @@ describe.skipIf(process.platform === 'win32')(
       const unknown = lockFor(npm, at);
       fs.writeFileSync(
         path.join(unknown, 'owner.json'),
-        JSON.stringify({pid: 999999, host: os.hostname()}),
+        JSON.stringify({pid: UNASSIGNABLE_PID, host: os.hostname()}),
       );
       expect(endRecordedInstall(unknown)).toBe('left');
       // A lock taken after the process started: the id names an older process.
@@ -849,7 +1149,7 @@ describe('tryLock', () => {
     fs.mkdirSync(dir, {recursive: true});
     fs.writeFileSync(
       path.join(dir, 'owner.json'),
-      JSON.stringify({pid: 999999, host: os.hostname(), at: 1}),
+      JSON.stringify({pid: UNASSIGNABLE_PID, host: os.hostname(), at: 1}),
     );
     const old = new Date(Date.now() - 31 * 60_000);
     fs.utimesSync(dir, old, old);
@@ -890,7 +1190,7 @@ describe('tryLock', () => {
     const owner = path.join(dir, 'owner.json');
     fs.writeFileSync(
       owner,
-      JSON.stringify({pid: 999999, host: os.hostname(), at: 1}),
+      JSON.stringify({pid: UNASSIGNABLE_PID, host: os.hostname(), at: 1}),
     );
     const old = new Date(Date.now() - 31 * 60_000);
     fs.utimesSync(dir, old, old);
@@ -1046,7 +1346,7 @@ describe('stopped and damaged installs heal', () => {
     // A process id no run has: the holder was killed.
     fs.writeFileSync(
       path.join(lock, 'owner.json'),
-      JSON.stringify({pid: 2 ** 22 + 7, host: os.hostname()}),
+      JSON.stringify({pid: UNASSIGNABLE_PID, host: os.hostname()}),
     );
     fs.mkdirSync(path.join(root, '.tmp-0.6.8-999-abc'), {recursive: true});
     const started = Date.now();
@@ -1334,7 +1634,7 @@ describe('no install outlives its run', () => {
     await new Promise(resolve => setTimeout(resolve, 300));
     fs.writeFileSync(
       path.join(lock, 'owner.json'),
-      JSON.stringify({pid: 2 ** 22 + 7, host: os.hostname(), at}),
+      JSON.stringify({pid: UNASSIGNABLE_PID, host: os.hostname(), at}),
     );
     fs.writeFileSync(path.join(lock, 'npm.pid'), String(leftover.pid));
     expect(alive(/** @type {number} */ (leftover.pid))).toBe(true);
@@ -1344,4 +1644,63 @@ describe('no install outlives its run', () => {
       await waitFor(() => !alive(/** @type {number} */ (leftover.pid)), 5_000),
     ).toBe(true);
   }, 30_000);
+});
+
+describe('a stop signal during the install', () => {
+  const CACHE = new URL('./cache.mjs', import.meta.url).href;
+  /**
+   * Run `ensureRelease` in a child Node with a stand-in npm, at the top level
+   * or inside an I/O callback, and print what the run does after it.
+   * @param {'term-during-install' | 'npm-stopped'} what
+   * @param {'top' | 'io-callback'} where
+   */
+  const child = (what, where) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-stop-'));
+    const script = path.join(dir, 'run.mjs');
+    fs.writeFileSync(
+      script,
+      `import * as fs from 'node:fs';
+import {ensureRelease, settleSignals} from ${JSON.stringify(CACHE)};
+const run = args => {
+  if (args[0] !== 'install')
+    return {status: 0, stdout: 'https://registry.example/\\n', stderr: ''};
+  if (${JSON.stringify(what)} === 'npm-stopped')
+    return {status: null, signal: 'SIGINT', stdout: '', stderr: ''};
+  // A signal sent to this process while npm runs synchronously.
+  process.kill(process.pid, 'SIGTERM');
+  return {status: 1, stdout: '', stderr: 'npm error code ECONNREFUSED'};
+};
+const go = async () => {
+  const release = ensureRelease('0.6.8', {cacheDir: ${JSON.stringify(dir)}, run});
+  console.log('returned', 'reason' in release);
+  await settleSignals();
+  console.log('answered');
+};
+if (${JSON.stringify(where)} === 'io-callback') fs.readFile(${JSON.stringify(script)}, () => go());
+else go();
+`,
+    );
+    try {
+      return spawnSync(process.execPath, [script], {
+        encoding: 'utf-8',
+        timeout: 60_000,
+      });
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  };
+
+  for (const where of /** @type {const} */ (['top', 'io-callback'])) {
+    it(`stops the run before it answers (${where})`, () => {
+      const result = child('term-during-install', where);
+      expect(result.signal).toBe('SIGTERM');
+      expect(result.stdout).not.toContain('answered');
+    });
+  }
+
+  it('ends the run at once when the signal stopped npm', () => {
+    const result = child('npm-stopped', 'io-callback');
+    expect(result.signal).toBe('SIGINT');
+    expect(result.stdout).toBe('');
+  });
 });

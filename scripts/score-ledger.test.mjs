@@ -358,7 +358,7 @@ describe('the canonical component predicate', () => {
     expect(names).toContain('ChatComposerTokenElement');
     expect(names).toContain('ContextMenuItem');
     expect(names).toContain('TransferListSelector');
-    expect(names).toContain('TourStep');
+    expect(names).toContain('Tour');
     expect(names).not.toContain('hooks');
     expect(names).not.toContain('NavItem');
     expect(names).not.toContain('Chat');

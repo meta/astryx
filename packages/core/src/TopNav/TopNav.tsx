@@ -19,14 +19,17 @@
 import type {ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
+import {cutText} from '../utils/textDirection';
 import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {TopNavSlotContext} from './TopNavContext';
-import {useTopNavRenderMode} from './TopNavRenderContext';
+import {
+  useTopNavRenderMode,
+  useTopNavUnreadRegionStyle,
+} from './TopNavRenderContext';
 import {useTopNavMobileContent} from './TopNavMobileContentContext';
 import {Divider} from '../Divider/Divider';
-import {MobileNav} from '../MobileNav/MobileNav';
-import {MobileNavToggle} from '../MobileNav/MobileNavToggle';
+import {MobileNavDrawer, MobileNavToggle} from '../MobileNav/MobileNavToggle';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -240,6 +243,7 @@ export function TopNav({
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.topNav.landmarkLabel');
   const renderMode = useTopNavRenderMode();
+  const unreadRegionStyle = useTopNavUnreadRegionStyle() ?? undefined;
   const mobileContent = useTopNavMobileContent();
   const {hasAutoToggle} = useAppShellMobile();
   const resolvedStartContent = startContent ?? children;
@@ -271,13 +275,9 @@ export function TopNav({
         {...props}>
         {isRenderable(heading) && (
           <div {...stylex.props(styles.mobileBarHeading)}>
-            {typeof heading === 'string' || typeof heading === 'number' ? (
-              <span {...stylex.props(styles.mobileBarHeadingText)}>
-                {heading}
-              </span>
-            ) : (
-              heading
-            )}
+            {typeof heading === 'string' || typeof heading === 'number'
+              ? cutText(heading, styles.mobileBarHeadingText)
+              : heading}
           </div>
         )}
         <div {...stylex.props(styles.mobileBarEnd)}>
@@ -299,7 +299,7 @@ export function TopNav({
     }
 
     return (
-      <MobileNav header={heading}>
+      <MobileNavDrawer header={heading}>
         {hasCollapsibleContent && (
           <div {...stylex.props(styles.drawerItems)}>
             {resolvedStartContent}
@@ -314,7 +314,7 @@ export function TopNav({
             {mobileContent}
           </div>
         )}
-      </MobileNav>
+      </MobileNavDrawer>
     );
   }
 
@@ -344,7 +344,7 @@ export function TopNav({
         )}
         {hasStartContent && (
           <TopNavSlotContext value="start">
-            <div {...stylex.props(styles.startContent)}>
+            <div {...stylex.props(styles.startContent, unreadRegionStyle)}>
               {resolvedStartContent}
             </div>
           </TopNavSlotContext>
@@ -352,7 +352,9 @@ export function TopNav({
       </div>
       {hasCenterContent && (
         <TopNavSlotContext value="center">
-          <div {...stylex.props(styles.centerContent)}>{centerContent}</div>
+          <div {...stylex.props(styles.centerContent, unreadRegionStyle)}>
+            {centerContent}
+          </div>
         </TopNavSlotContext>
       )}
       {hasCenterContent ? (

@@ -32,7 +32,7 @@ const sheetModule = vi.hoisted(() => {
   };
 });
 
-vi.mock('../BottomSheet/BottomSheet', async importOriginal => {
+vi.mock('./SelectorBottomSheetFrame', async importOriginal => {
   await sheetModule.released;
   const module = await importOriginal();
   sheetModule.markReady();
@@ -45,7 +45,7 @@ import {Selector} from './Selector';
 // test transform can take seconds on a busy machine. The file loads the real
 // module before any test runs, so that load counts against no wait or time
 // limit. The mock above still holds the module until the test releases it.
-await vi.importActual('../BottomSheet/BottomSheet');
+await vi.importActual('./SelectorBottomSheetFrame');
 
 // jsdom has no modal dialogs or media queries; stand in for them the way
 // Selector.test.tsx does.
@@ -93,8 +93,9 @@ describe('Selector bottom-sheet active option', () => {
     await user.keyboard('{Enter}');
 
     // Open, but the sheet's surface has not loaded: no option exists yet, so
-    // the trigger must not point at one.
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    // the trigger reports no expanded list and points at nothing.
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).not.toHaveAttribute('aria-controls');
     expect(screen.queryByRole('option', {hidden: true})).toBeNull();
     expect(trigger).not.toHaveAttribute('aria-activedescendant');
 

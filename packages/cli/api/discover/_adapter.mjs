@@ -17,6 +17,7 @@
  *   foundation/integrations, the discovery loaders, and discover sources.
  */
 
+import {projectIntegrationSkills} from '../docs/_adapter.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -55,6 +56,10 @@ import {
   parseDiscoverCatalog,
 } from '../../authoring/discover/parse.mjs';
 import {AstryxError} from '../error.mjs';
+import {
+  OFFICIAL_LIST_FILE,
+  readOfficialList,
+} from '../../foundation/discovery/official-list.mjs';
 import {CORE_PACKAGE_NAME} from '../../foundation/release/project.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
@@ -67,13 +72,7 @@ export const OFFICIAL_SOURCE_NAME = 'Astryx';
 /** Where the official list comes from: the CLI package that carries it. */
 const OFFICIAL_SOURCE_FROM = '@astryxdesign/cli';
 
-/** The official list, generated from the repository when the CLI is built. */
-export const OFFICIAL_LIST_FILE = path.join(
-  CLI_ROOT,
-  'assets',
-  'discover',
-  'official-packages.json',
-);
+export {OFFICIAL_LIST_FILE};
 
 const DEPENDENCY_FIELDS = [
   'dependencies',
@@ -120,6 +119,7 @@ const DEPENDENCY_FIELDS = [
  *   docSections?: Record<string, string[]>,
  *   themes?: string[],
  *   codemods?: string[],
+ *   skills?: string[],
  *   iconSets?: string[],
  *   iconSetDetails?: IconSetSummary[],
  *   withdrawnIconSets?: Array<{name: string, reason: string}>,
@@ -298,6 +298,15 @@ export async function describeInstalled(project, scanned) {
 async function describeInstalledFresh(project, scanned) {
   const byName = new Map(scanned.map(pkg => [pkg.name, pkg]));
   const docs = await projectDocs(project);
+  // The skills its docs declare, as the docs tree and the skill places keep
+  // them.
+  let declaredSkills =
+    /** @type {Array<{name: string, package: string}>} */ ([]);
+  try {
+    declaredSkills = (await projectIntegrationSkills(project.cwd)).skills;
+  } catch {
+    // A docs tree that cannot be read lists no skills.
+  }
   /** @type {InstalledPackage[]} */
   const installed = [];
   for (const integration of project.loadedIntegrations) {
@@ -347,6 +356,9 @@ async function describeInstalledFresh(project, scanned) {
       ),
       themes: identities.themes.map(t => t.slug),
       codemods: identities.codemods.map(c => `${c.version}/${c.id}`),
+      skills: declaredSkills
+        .filter(each => each.package === integration.name)
+        .map(each => each.name),
       iconSets: sets.map(set => set.name),
       iconSetDetails: sets.map(set => ({
         name: set.name,
@@ -1132,13 +1144,15 @@ export function officialFirst(items, official, nameOf) {
  *   own version when the project has no Core. It is not listed beside a
  *   released or declared Core, which it cannot be installed with.
  *
- * @param {{file?: string, version?: string, project?: Project}} [options] the
+ * @param {{file?: string, root?: string, version?: string, project?: Project}} [options] the
  *   list file and the CLI version to read it for, both defaulting to this
- *   CLI's own, and the project whose Core decides the versions
+ *   CLI's own; the repository a checkout derives its own list from
+ *   ({@link readOfficialList}); and the project whose Core decides the versions
  * @returns {OfficialList}
  */
 export function officialList({
   file = OFFICIAL_LIST_FILE,
+  root,
   version,
   project,
 } = {}) {
@@ -1146,7 +1160,7 @@ export function officialList({
     const cli = version ?? packageVersion(CLI_ROOT);
     if (cli == null) throw new Error('the CLI package names no version');
     const core = project == null ? null : projectCore(project);
-    const list = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const list = readOfficialList({file, root});
     const canaryCli = /-canary\./u.test(cli);
     /** @type {(v: string | undefined) => v is string} */
     const isRelease = v => v != null && !v.includes('-');
@@ -1335,6 +1349,7 @@ export function toEntry(pkg) {
     if (Array.isArray(values) && values.length > 0) entry[field] = values;
   }
   if (pkg.docSections) entry.docSections = pkg.docSections;
+  if (pkg.skills?.length) entry.skills = pkg.skills;
   if (pkg.latest) entry.latest = pkg.latest;
   return /** @type {import('./discover.type.mjs').DiscoverListEntry} */ (entry);
 }

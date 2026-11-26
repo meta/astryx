@@ -33,6 +33,7 @@ import {BaseTable} from './BaseTable';
 import {TableContext} from './TableContext';
 import {useBaseTablePlugins} from './useBaseTablePlugins';
 import {useScrollableArea} from '../hooks/useScrollableArea';
+import {scrollEdgeFadeStyles} from '../hooks/scrollEdgeFade';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import type {
@@ -48,6 +49,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Table/Table.generated';
 import {createSharedContext} from '../utils/sharedContext';
+import {
+  NOT_BODY_ROW,
+  TableRowPlacementContext,
+} from './TableRowPlacementContext';
 
 registerEnglishFallback(english);
 
@@ -63,7 +68,7 @@ export type TableDensity = 'compact' | 'balanced' | 'spacious';
 
 export type TableDividers = 'rows' | 'columns' | 'grid' | 'none';
 
-/** How body cell text behaves when it exceeds column width */
+/** How cell text behaves when it exceeds column width; header cells follow the same mode */
 
 export type TableTextOverflow = 'wrap' | 'truncate';
 
@@ -92,13 +97,14 @@ interface TableAppearanceProps<T extends Record<string, unknown>> extends Omit<
    */
   verticalAlign?: TableVerticalAlign;
   /**
-   * How body cell text behaves when it exceeds the column width.
+   * How cell text behaves when it exceeds the column width.
    *
    * - `'wrap'` — text wraps and the row grows taller. No content is hidden.
    * - `'truncate'` — text is clipped with an ellipsis. Default-rendered cells
    *   show a tooltip on hover when truncated.
    *
-   * Header cells always truncate regardless of this setting.
+   * Header cells follow the same mode: under `'wrap'` a long heading wraps in
+   * a data-driven table, and in children mode its column grows to fit it.
    *
    * @default 'wrap'
    *
@@ -295,6 +301,7 @@ function TableScrollWrapper({
         focusOutlineStyles.focusVisible,
         scrollWrapperStyles.focusRingInset,
         hasBlockViewport && scrollWrapperStyles.blockViewport,
+        scrollEdgeFadeStyles(state.inline),
         ...(pluginStyles ?? []),
       ),
       pluginClassName,
@@ -385,18 +392,21 @@ function TableInner<T extends Record<string, unknown>>({
 
   return (
     <TableContext value={contextValue}>
-      <TableNameContext value={tableName}>
-        <BaseTable<T>
-          ref={ref}
-          data={data}
-          columns={columns}
-          plugins={mergedPlugins}
-          textOverflow={textOverflowProp}
-          virtualization={virtualization}
-          scrollWrapper={TableScrollWrapper}
-          {...rest}
-        />
-      </TableNameContext>
+      {/* A table nested in a body cell starts outside any body again. */}
+      <TableRowPlacementContext value={NOT_BODY_ROW}>
+        <TableNameContext value={tableName}>
+          <BaseTable<T>
+            ref={ref}
+            data={data}
+            columns={columns}
+            plugins={mergedPlugins}
+            textOverflow={textOverflowProp}
+            virtualization={virtualization}
+            scrollWrapper={TableScrollWrapper}
+            {...rest}
+          />
+        </TableNameContext>
+      </TableRowPlacementContext>
     </TableContext>
   );
 }
@@ -410,9 +420,11 @@ function TableInner<T extends Record<string, unknown>>({
  * design tokens in the component styles.
  *
  * @compositionHint Use renderCell on columns to compose rich cell content.
- * Combine with Badge (status labels), StatusDot (colored indicators),
- * Text (formatted values), Avatar (user cells), and HStack/VStack
- * (multi-element cell layouts). Without renderCell, cells render as plain text.
+ * Combine with StatusDot beside a Text label (status columns), Text
+ * (formatted values), Avatar (user cells), and HStack/VStack (multi-element
+ * cell layouts). Keep Badge for a rare state that needs action; a solid badge
+ * in every row competes with the data. Without renderCell, cells render as
+ * plain text.
  * Columns without width remain equally flexible with a compact 60px readability
  * floor. Set one column's floor with proportional(1, { minWidth }), weight
  * columns with proportional(n), and fix widths with pixel().
@@ -429,7 +441,10 @@ function TableInner<T extends Record<string, unknown>>({
  *       </HStack>
  *     )},
  *     { key: 'status', header: 'Status', width: proportional(1), renderCell: (u) => (
- *       <Badge variant={u.active ? 'success' : 'error'} label={u.active ? 'Active' : 'Inactive'} />
+ *       <HStack gap={2} align="center">
+ *         <StatusDot variant={u.active ? 'success' : 'neutral'} label={u.active ? 'Active' : 'Inactive'} />
+ *         <Text>{u.active ? 'Active' : 'Inactive'}</Text>
+ *       </HStack>
  *     )},
  *   ]}
  *   density="compact"

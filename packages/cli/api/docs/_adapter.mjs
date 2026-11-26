@@ -19,6 +19,9 @@
 
 import * as path from 'node:path';
 import {Project} from '../../foundation/config/project.mjs';
+import {discoverIntegrationSkills} from '../../foundation/discovery/integration-skills.mjs';
+import {renderAgentDocsBlock} from '../../foundation/agent-docs/agent-docs.mjs';
+import {resolveAgentDocsRoot} from '../../foundation/agent-docs/agent-docs-target.mjs';
 import {
   DocsCatalog,
   integrationDocsCatalog,
@@ -92,6 +95,7 @@ import {
   typedWordTest,
 } from '../../foundation/text/suggest-order.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
+import {isOutsideAnyPackage} from '../../foundation/env/project-scope.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 
 export {OVERLAY_LANGUAGES, overlayLanguages};
@@ -1660,7 +1664,7 @@ export async function packageDocTargets(integration, discovered) {
     let owner = null;
     /** @type {string | null} */
     let basePath = null;
-    /** @type {ReadonlyArray<{path: string}>} every extension of the target, in configured order */
+    /** @type {ReadonlyArray<{package: string, path: string, providerId?: string}>} every extension of the target, in configured order */
     let extensions = [];
     /** @type {string[]} */
     let guidesBelow = [];
@@ -1710,7 +1714,9 @@ export async function packageDocTargets(integration, discovered) {
         if (doc == null) break;
         const file = (await loadTopicFile(extension.path, null)).doc;
         if (file == null) continue;
-        const merged = mergeTopicReport(doc, file);
+        const merged = mergeTopicReport(doc, file, {
+          contributor: extension.providerId ?? extension.package,
+        });
         if (extension.path === record.path) {
           unplaced = merged.unplaced;
           break;
@@ -1901,10 +1907,16 @@ export async function nodeContent(catalog, tree, node) {
 function typedDocIndex(tree) {
   let index = typedDocIndexes.get(tree);
   if (!index) {
+    const nodes = [...tree.nodes.values()].filter(each => each.ref?.selfDoc);
+    /** @type {Map<string, string>} */
+    const routes = new Map();
+    for (const each of nodes) {
+      const key = `${each.ref.selfDoc.type}:${each.ref.selfDoc.name}`;
+      if (!routes.has(key)) routes.set(key, each.route);
+    }
     index = cliDocIndex(
-      [...tree.nodes.values()].flatMap(each =>
-        each.ref?.selfDoc ? [each.ref.selfDoc] : [],
-      ),
+      nodes.map(each => each.ref.selfDoc),
+      (kind, name) => routes.get(`${kind}:${name}`) ?? null,
     );
     typedDocIndexes.set(tree, index);
   }
@@ -2446,18 +2458,71 @@ function fewerWordMatches(topic, everyDoc, byWords, taken) {
 }
 
 /**
+ * The one page below `route`, at any depth, whose last route segment or
+ * title has the words of `rest` (nameWords): `authoring/define-the-theme`
+ * finds `authoring/building-blocks/themes/define-the-theme`. None when no page or more than one has them.
+ * An experimental page is never found.
+ * @param {DocsTree} tree
+ * @param {string} route
+ * @param {string} rest the typed segments after `route`
+ * @returns {Array<{name: string, reason: string}>}
+ */
+function pageBelow(tree, route, rest) {
+  const words = nameWords(rest).join(' ');
+  if (words === '') return [];
+  const found = [...tree.nodes.values()].filter(
+    node =>
+      node.route.startsWith(`${route}/`) &&
+      [node.route.slice(node.route.lastIndexOf('/') + 1), node.title].some(
+        name => name != null && nameWords(name).join(' ') === words,
+      ) &&
+      !isExperimentalTreeNode(tree, node),
+  );
+  return found.length === 1
+    ? [{name: found[0].route, reason: found[0].summary}]
+    : [];
+}
+
+/**
+ * A namespace's ordered children with the page further down placed as
+ * spec:AST-046 FR6 says: right after the child that route words alone put
+ * first, when the typed text names that child, and first otherwise. A page
+ * that is that child is listed once, first.
+ * @template {{name: string}} T
+ * @param {string} topic
+ * @param {T[]} byRoute the children as route words order them
+ * @param {T[]} ordered the children as {@link namedFirst} orders them
+ * @param {T[]} deeper the page further down ({@link pageBelow}), or none
+ * @returns {T[]}
+ */
+export function withPageBelow(topic, byRoute, ordered, deeper) {
+  const kept = namesRoute(topic, byRoute[0]?.name ?? '') ? 1 : 0;
+  const lead = ordered.slice(0, kept);
+  const below = deeper.filter(
+    page => !lead.some(entry => entry.name === page.name),
+  );
+  const rest = ordered
+    .slice(kept)
+    .filter(entry => !below.some(page => page.name === entry.name));
+  return [...lead, ...below, ...rest];
+}
+
+/**
  * The error for a docs argument that names nothing. For a route, it suggests
  * every child of the deepest namespace the route reaches, closest first by
  * each child's route, title and keywords, with a child the route names kept
- * first. Otherwise it suggests the docs whose own name it is, or whose route
- * it spells with hyphens; failing that, the topics and top-level namespaces,
+ * first; the one page further down that the rest of the route names
+ * ({@link pageBelow}) comes right after that child, or first. Otherwise it
+ * suggests the docs whose own name it is, or whose route it spells with
+ * hyphens; failing that, the topics and top-level namespaces,
  * closest first and cut where the matches get weaker (every one of them when
  * none shares a word with the argument, with the names a slip or two from it
- * first). When the argument matches a component, hook or template
- * (exact, folded or last segment), the command that reads that entry joins the list as
- * foundation/suggest/other-command.mjs places it, and the list keeps its
- * length; when no suggested doc
- * shares a word with the argument, that command is the only suggestion.
+ * first). When the argument matches a component, hook or template (exact,
+ * folded or last segment, or a Core component or hook its last path segment
+ * names, unless a stable doc has that name), the command that reads that
+ * entry joins the list as foundation/suggest/other-command.mjs places it, and
+ * the list keeps its length; when no suggested doc shares a word with the
+ * argument, that command is the only suggestion.
  * When no command joins, the docs whose route, title or declared keywords
  * carry a typed word ({@link wordMatches}) take the place of the topics and
  * namespaces, the named route that list leads with first, in a list no
@@ -2473,6 +2538,8 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
   let suggestions = [];
   // Route children stay whole (spec:AST-046); only the other lists are cut.
   let routeChildren = false;
+  /** @type {Array<{name: string, reason: string}>} */
+  let deeper = [];
   if (typeof topic === 'string' && topic.includes('/')) {
     const parts = topic.split('/');
     for (
@@ -2483,6 +2550,7 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       const near = tree.get(parts.slice(0, depth).join('/'));
       if (near) {
         routeChildren = true;
+        deeper = pageBelow(tree, near.route, parts.slice(depth).join('/'));
         suggestions = near.slots.flatMap(slot =>
           slot.children.map(route => ({
             name: route,
@@ -2516,11 +2584,20 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       ...catalog.names().map(name => ({name, reason: 'available topic'})),
     ];
   }
+  // A child the route names stays first, ahead of another command's entry.
+  let namedChild = 0;
   if (typeof topic === 'string' && routeChildren) {
-    suggestions = namedFirst(
+    const byRoute = orderRouteSuggestions(topic, suggestions, {closest: false});
+    namedChild = namesRoute(topic, byRoute[0]?.name ?? '') ? 1 : 0;
+    suggestions = withPageBelow(
       topic,
-      orderRouteSuggestions(topic, suggestions, {closest: false}),
-      orderDocPages(tree, topic, suggestions, false),
+      byRoute,
+      namedFirst(
+        topic,
+        byRoute,
+        orderDocPages(tree, topic, suggestions, false),
+      ),
+      deeper,
     );
   } else if (typeof topic === 'string') {
     // Every topic and namespace is listed, so a near name (`tokns` for
@@ -2571,6 +2648,7 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
           // Kept with the project's one name index (the docs catalog itself
           // is not asked from here).
           docsRoutes: routes.docsRoutesLazily,
+          tail: componentTail(String(topic), hint.tailForms, tree, catalog),
         })
       : null;
   if (hint && elsewhere) {
@@ -2582,6 +2660,7 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       hint.withOtherCommand(suggestions, elsewhere, String(topic), {
         from: 'docs',
         alone: !sharesAWord,
+        pinned: namedChild,
       }) ?? [];
   } else if (byWords.length > 0) {
     suggestions = fewerWordMatches(String(topic), suggestions, byWords, 0);
@@ -2591,6 +2670,31 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
     suggestions,
     ERROR_CODES.ERR_UNKNOWN_TOPIC,
   );
+}
+
+/**
+ * The names a typed last route segment may give a Core component or hook by,
+ * or none when a stable doc or topic name, as typed or with its words
+ * singular, is one of them: a doc wins (`icons` is a topic, so `guides/icon`
+ * names no component), while an experimental doc changes no stable answer.
+ * @param {string} topic
+ * @param {(name: string) => string[]} formsOf other-command.mjs tailForms
+ * @param {DocsTree} tree
+ * @param {DocsCatalog} catalog
+ * @returns {string[]}
+ */
+function componentTail(topic, formsOf, tree, catalog) {
+  const forms = formsOf(topic);
+  const docNames = [
+    ...[...tree.nodes.values()]
+      .filter(node => !isExperimentalTreeNode(tree, node))
+      .map(node => node.name),
+    ...catalog.names(),
+  ];
+  const namesADoc = docNames.some(name =>
+    formsOf(name).some(form => forms.includes(form)),
+  );
+  return namesADoc ? [] : forms;
 }
 
 /**
@@ -2665,6 +2769,7 @@ export async function integrationDocTypes(integration, cwd) {
   const checked = await checkDocTypes(files, {
     packageDir: packageDir ?? cwd,
     resolveFrom: [cwd, packageDir],
+    outsideAnyPackage: isOutsideAnyPackage(cwd),
   });
   // Test fixtures no reader serves don't ship as docs: only counted.
   const report =
@@ -2685,4 +2790,106 @@ export async function integrationDocTypes(integration, cwd) {
       ...unread.map(entry => ({doc: rel(entry.path), reason: entry.reason})),
     ].sort((a, b) => compareText(a.doc, b.doc)),
   };
+}
+
+/**
+ * The skills the project's integrations declare, each with the route `astryx
+ * docs` reads its doc by, and why each skill left out was left out.
+ * `complete` is false when an integration's docs could not be read (its
+ * docs folder, a doc that did not load, or, for a package that declares a
+ * skill, a doc the catalog withdrew the package's docs for): its skills are unknown, so no copy is removed as a
+ * leftover.
+ * @param {string} cwd
+ * @returns {Promise<{skills: Array<import('../../foundation/discovery/integration-skills.mjs').IntegrationSkill & {route: string}>, problems: Array<{package: string, message: string, unread?: true}>, complete: boolean, unread: string[]}>}
+ */
+export async function projectIntegrationSkills(cwd) {
+  const catalog = await loadDocsCatalog(cwd);
+  const project = projectOfCatalog.get(catalog);
+  if (!project) return {skills: [], problems: [], complete: true, unread: []};
+  const {skills, problems, unread} = await discoverIntegrationSkills(
+    project.loadedIntegrations,
+  );
+  // A package with a doc that did not load has all its docs withdrawn, so
+  // its skills have no doc to read; they count as unread, not as left out.
+  const named = new Set(unread);
+  const withdrawn = new Set(catalog.issues.map(issue => issue.package));
+  for (const pkg of withdrawn) {
+    if (skills.some(each => each.package === pkg) && !unread.includes(pkg))
+      unread.push(pkg);
+  }
+  const complete = unread.length === 0;
+  if (skills.length === 0) return {skills: [], problems, complete, unread};
+  const tree = await projectTree(catalog);
+  // Each skill reads its own doc: the node whose file it is, as a topic or as
+  // a guide's replacement. A doc the tree withdrew (a name another doc
+  // holds, or a CLI topic's name taken without `replaces`) has no node, and
+  // its skill is left out.
+  /** @type {Map<string, string>} */
+  const routes = new Map();
+  for (const node of tree.nodes.values()) {
+    const ref = /** @type {any} */ (node.ref);
+    const file =
+      node.guideOverlay?.replacement?.path ??
+      ref?.topicFile ??
+      (ref?.flatTopic != null
+        ? catalog.resolve(ref.flatTopic)?.path
+        : undefined);
+    if (typeof file === 'string') routes.set(path.resolve(file), node.route);
+  }
+  /** @type {Array<import('../../foundation/discovery/integration-skills.mjs').IntegrationSkill & {route: string}>} */
+  const kept = [];
+  // A package already named as unread has its note.
+  const noted = new Set(named);
+  for (const each of skills) {
+    if (withdrawn.has(each.package)) {
+      if (!noted.has(each.package)) {
+        noted.add(each.package);
+        problems.push({
+          package: each.package,
+          message:
+            'a doc did not load, so its docs are withdrawn; its skills are left out, and the copies already written stay until it loads.',
+          unread: true,
+        });
+      }
+      continue;
+    }
+    const route = routes.get(path.resolve(each.file));
+    if (route == null) {
+      problems.push({
+        package: each.package,
+        message: `${path.basename(each.file)}: skill "${each.name}" is left out because its doc "${each.doc}" is not in the docs tree (another doc holds that name; use \`replaces\` to take its place).`,
+      });
+      continue;
+    }
+    kept.push({...each, route});
+  }
+  return {skills: kept, problems, complete, unread};
+}
+
+/**
+ * The project root the project skill belongs to, or null outside a project.
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function skillsProjectRoot(cwd) {
+  return resolveAgentDocsRoot(cwd);
+}
+
+/**
+ * The agent-docs block for the project at `root`, pointing to the
+ * integration skills the docs tree keeps, so the block, `docs skills` and
+ * the skill places name the same skills.
+ * @param {string} root
+ * @param {{installedVersion?: string, fresh?: boolean}} [options]
+ * @returns {Promise<string>}
+ */
+export async function renderProjectAgentDocsBlock(root, options = {}) {
+  /** @type {Array<{package: string, name: string, description: string}>} */
+  let skills = [];
+  try {
+    skills = (await projectIntegrationSkills(root)).skills;
+  } catch {
+    // A project that cannot load is reported by the block's own render.
+  }
+  return renderAgentDocsBlock(root, {...options, skills});
 }

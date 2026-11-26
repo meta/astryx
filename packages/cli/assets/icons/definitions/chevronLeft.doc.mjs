@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'chevronLeft',
+  group: 'chevrons',
   description: 'Go back or to the previous item.',
   words: ['back', 'previous'],
   builtIn: true,

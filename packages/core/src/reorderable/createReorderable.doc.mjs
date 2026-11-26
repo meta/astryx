@@ -35,6 +35,12 @@ export const docs = {
       description:
         'Whether the item with this key can move. An item it rejects shows no handle and cannot be picked up; one at either end of the collection also bounds the others, so nothing drops beyond it and a keyboard move into it is refused. Every item moves without it.',
     },
+    {
+      name: 'handle',
+      type: "{placement?: 'start' | 'end'; revealBehavior?: 'always' | 'adaptive'}",
+      description:
+        "Where each item's handle sits and when it shows. `placement` is the item edge it sits at: 'end' (default), after the item's content, or 'start', before it. With `revealBehavior: 'always'`, the handle takes its own place in the item and its grip always shows. With `revealBehavior: 'adaptive'`, the handle shows while its item is hovered or holds the focus where the primary pointer is fine, and always where it is coarse; where it shows only on hover or focus, it takes no space and hangs outside the item's content, so the content keeps its place. The collection takes that room from its container's padding, and moves its items in by any room the padding lacks. Without it, the collection decides: List and TransferList use 'always', and ListInput uses 'adaptive'. The same options serve all three.",
+    },
   ],
   returns: [
     {
@@ -46,7 +52,7 @@ export const docs = {
   ],
   usage: {
     description:
-      "Makes a collection's rows reorderable. On a touch screen a finger held still on a row's handle for a moment picks it up (a flick on the handle still scrolls): the row stays in its place, dimmed, while a copy of it follows the finger and an accent line marks where it would land; the other rows stay still, the page scrolls near its edges, and on release the rows rearrange. A pen held still on a handle where the primary pointer is coarse picks the row up as a finger does. A mouse, or a pen where the primary pointer is fine, drags a handle at once the same way, and the rows take their places without motion; a cancelled drag puts everything back at once. Without a drag, the handle toggles reorder mode for its row (a click, Space or Enter): each arrow key moves the row a place at once, and Escape or another activation ends the mode, keeping the moves; screen readers hear each move with the row's place and neighbours, and a hint shows the moves and Done as buttons, for taps alone. The reorder code ships with this function: a collection without the prop loads none of it.",
+      "Makes a collection's rows reorderable. On a touch screen a finger held still on a row's handle for a moment picks it up (a flick on the handle still scrolls): the row stays in its place, dimmed, while a copy of it follows the finger and an accent line marks where it would land; the other rows stay still, the page scrolls near its edges, and on release the rows rearrange. A pen held still on a handle where the primary pointer is coarse picks the row up as a finger does. A mouse, or a pen where the primary pointer is fine, drags a handle at once the same way, and on release the rows glide to their places as under a finger; a cancelled drag puts everything back at once. Without a drag, the handle toggles reorder mode for its row (a click, Space or Enter): each arrow key moves the row a place at once, and Escape or another activation ends the mode, keeping the moves; screen readers hear each move with the row's place and neighbours, and a hint shows the moves and Done as buttons, for taps alone. The reorder code ships with this function: a collection without the prop loads none of it.",
     bestPractices: [
       {
         guidance: true,
@@ -62,6 +68,11 @@ export const docs = {
         guidance: true,
         description:
           "Offer reorder mode from your own UI too, such as a row's context menu, with `reorderable.start(item.id)`.",
+      },
+      {
+        guidance: true,
+        description:
+          "Set `handle: {revealBehavior: 'adaptive'}` where reordering is occasional and rows should stay quiet until hovered; keep handles shown where people must find them at a glance, such as a list whose only purpose is ordering.",
       },
       {
         guidance: false,
@@ -84,6 +95,8 @@ export const docsDense = {
       '({key, to}) once per committed move; to is the index after the move.',
     isReorderable:
       '(key) => boolean; a rejected row has no handle, and at an end bounds the drop.',
+    handle:
+      "{placement: 'start' | 'end', revealBehavior: 'always' | 'adaptive'}; the end by default; List and TransferList default to 'always', ListInput to 'adaptive'.",
   },
   returnDescriptions: {
     reorderable:

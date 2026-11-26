@@ -17,7 +17,53 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import {useAttachment} from '../hooks/useAttachment';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+
+/**
+ * Calls `onChange` when the menu resizes, its DOM changes, an image in it
+ * loads, or the viewport resizes. Window and visual-viewport resizes in one
+ * frame call `onChange` once. Returns the function that stops it.
+ */
+function observeMenu(menu: HTMLElement, onChange: () => void): () => void {
+  const resizeObserver =
+    typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(onChange);
+  const mutationObserver =
+    typeof MutationObserver === 'undefined'
+      ? null
+      : new MutationObserver(onChange);
+  resizeObserver?.observe(menu);
+  mutationObserver?.observe(menu, {
+    childList: true,
+    characterData: true,
+    subtree: true,
+  });
+  menu.addEventListener('load', onChange, true);
+  // A viewport change fires `resize` on the window and on the visual
+  // viewport in the same frame. One frame request merges them into one
+  // measurement. The resize steps run before the frame callbacks, so the
+  // measurement waits no frame.
+  let resizeFrame = 0;
+  const onResize = () => {
+    if (resizeFrame !== 0) {
+      return;
+    }
+    resizeFrame = window.requestAnimationFrame(() => {
+      resizeFrame = 0;
+      onChange();
+    });
+  };
+  window.addEventListener('resize', onResize);
+  window.visualViewport?.addEventListener('resize', onResize);
+  return () => {
+    resizeObserver?.disconnect();
+    mutationObserver?.disconnect();
+    menu.removeEventListener('load', onChange, true);
+    window.removeEventListener('resize', onResize);
+    window.visualViewport?.removeEventListener('resize', onResize);
+    window.cancelAnimationFrame(resizeFrame);
+  };
+}
 
 /**
  * Detect block-axis overflow without making a fitting menu a scroll container.
@@ -63,42 +109,17 @@ export function useMenuOverflow(
     );
   }, [menuRef]);
 
-  // Syncs the overflow measurement with the open menu. It measures, then
-  // observes resize, DOM changes and window resize.
-  useIsomorphicLayoutEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    const menu = menuRef.current;
-    if (!menu) {
-      return;
-    }
-    measureOverflow();
-    const resizeObserver =
-      typeof ResizeObserver === 'undefined'
-        ? null
-        : new ResizeObserver(measureOverflow);
-    const mutationObserver =
-      typeof MutationObserver === 'undefined'
-        ? null
-        : new MutationObserver(measureOverflow);
-    resizeObserver?.observe(menu);
-    mutationObserver?.observe(menu, {
-      childList: true,
-      characterData: true,
-      subtree: true,
-    });
-    menu.addEventListener('load', measureOverflow, true);
-    window.addEventListener('resize', measureOverflow);
-    window.visualViewport?.addEventListener('resize', measureOverflow);
-    return () => {
-      resizeObserver?.disconnect();
-      mutationObserver?.disconnect();
-      menu.removeEventListener('load', measureOverflow, true);
-      window.removeEventListener('resize', measureOverflow);
-      window.visualViewport?.removeEventListener('resize', measureOverflow);
-    };
-  }, [isOpen, measureOverflow, menuRef]);
+  // Syncs the overflow measurement with the open menu element. The owner can
+  // remount the element without a change this hook sees (a header or footer
+  // wraps it in a new frame), so the observers follow the element.
+  useAttachment(
+    () => (isOpen ? menuRef.current : null),
+    menu => {
+      measureOverflow();
+      return observeMenu(menu, measureOverflow);
+    },
+    measureOverflow,
+  );
 
   // Measures overflow again after the content changes while the menu is open.
   useIsomorphicLayoutEffect(() => {

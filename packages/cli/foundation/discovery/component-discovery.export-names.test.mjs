@@ -706,8 +706,7 @@ describe('integration components a family doc lists in components', () => {
   });
 
   it('reads members through the source condition, the same with or without built output', () => {
-    // The family's member is exported only from the root entry, as Lab's
-    // TourStep is.
+    // The family's member is exported only from the root entry.
     const loaded = writePackage(
       {
         exports: {

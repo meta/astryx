@@ -6,8 +6,9 @@
  *   theme's move curve and duration (themeTiming.ts), the Reduce Motion
  *   cross-fade clock (uikit/timing.ts) and the block measure (frameBlock.ts)
  * @output Exports `createAnimatedLayout`, the opaque `AnimatedLayout` handle,
- *   `reportLayoutChange`, `playLayoutChange` and `layoutStartFor`. It also
- *   exports the exit hold (`holdLayoutExit`, `releaseLayoutExit`), the
+ *   `reportLayoutChange`, `playLayoutChange`, `layoutStartFor` and
+ *   `layoutStartReaderFor`. It also exports the exit hold (`holdLayoutExit`,
+ *   `releaseLayoutExit`), the
  *   in-place swap (`holdLayoutSwap`, `playLayoutSwap`), the edge reveal's
  *   two-state form (`holdLayoutEdge`, `playLayoutEdge`), `playLayoutFrames`
  *   and `applyLayoutChangeTransition`. It exports `glideOf` and the glide
@@ -33,6 +34,12 @@
  * - `animate()` runs after the commit (a layout effect). Every change in the
  *   same area reported in one frame is measured together after the commit,
  *   once, in a microtask, so each element moves once, by its total change.
+ * - A change made from rest holds each motion it makes at its first keyframe,
+ *   the content's old place. The first frame drawn after its task starts them
+ *   all. So the rest of that task, however long it runs, delays the motion
+ *   instead of skipping into its curve. A change made while one of this
+ *   module's motions runs starts at the change instead, so the running motion
+ *   carries on unbroken.
  * - An element moves only when its rectangle changed and it is in the area's
  *   visible part, before or after. Absolute, fixed, top-layer, hidden and
  *   zero-size elements are skipped (an absolute child rides with its moving
@@ -105,7 +112,7 @@ import {
   toSpring,
   type SpringDescription,
 } from './spring';
-import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {reducedMotionCrossFade} from './uikit/timing';
 import {
   batchPresented,
@@ -224,10 +231,7 @@ function releaseGlideFor(area: Element): GlideProgress | undefined {
 
 /** The motion a change in `area` plays now. */
 function layoutMotion(area: Element): LayoutMotion {
-  if (
-    matches(area, '(prefers-reduced-motion: reduce)') ||
-    themeReducesMotion(area)
-  ) {
+  if (reducesMotion(area)) {
     if (!matches(area, '(pointer: coarse)')) {
       return {kind: 'instant'};
     }
@@ -737,14 +741,12 @@ function safeAnimate(
     return null;
   }
   ours.add(animation);
-  // The animation starts on the document timeline's current time, not on the
-  // next frame. So a retargeted glide keeps moving through the frame it is
-  // replaced in. After a block since that frame, Chromium's timeline still
-  // reads the frame before the block. A motion started there would skip into
-  // its curve, or past all of it. So it starts at the moment of the change
-  // instead, and the block delays the motion (startFor). Every animation of
-  // one change, in one document, shares that start.
   const doc = element.ownerDocument;
+  // Every animation of one change, in one document, shares one start. A
+  // change made while another of this module's motions runs starts on the
+  // document timeline's current time. So a retargeted glide keeps moving
+  // through the frame it is replaced in, and a part keeps the clock of the
+  // glide it rides. A change made from rest waits (holdForFirstFrame).
   const now = doc.timeline?.currentTime;
   if (now != null) {
     // The start of the change it is part of, captured when that change made
@@ -754,17 +756,16 @@ function safeAnimate(
         ? change
         : startFor(doc, Number(now));
     start.last = clockOf(doc);
-    animation.startTime = start.at;
-    if (start.at !== Number(now)) {
-      // Started after the frame time the timeline still reads: until the
-      // timeline gets there it shows its first keyframe, not the element at
-      // rest.
-      const fill = animation.effect?.getTiming().fill;
-      animation.effect?.updateTiming({
-        fill: fill === 'forwards' || fill === 'both' ? 'both' : 'backwards',
-      });
+    if (start.waiting != null) {
+      holdForFirstFrame(animation, Number(now));
+      start.waiting.add(animation);
+    } else {
+      startAt(animation, start.at, Number(now));
     }
   }
+  // Only after its change took its start: this animation is not a motion
+  // that change continues.
+  trackRunning(doc, animation);
   const onResolve =
     options.pseudoElement == null
       ? presentGlide(element, animation, keyframes, options, scale)
@@ -779,15 +780,164 @@ function safeAnimate(
  * of them was made. Then they start at the moment the first of them is made.
  * The frame time is from before the block, so a motion started on it would
  * skip into its curve, or past all of it. Chromium holds the timeline at the
- * frame before a long task once anything in the task reads it.
+ * frame before a long task once anything in the task reads it. startWaiting
+ * applies the same rule at the first frame of a change made from rest.
  */
 interface ChangeStart {
   /** The frame time the timeline read. */
   readonly frame: number;
   /** When the change's animations start. */
-  readonly at: number;
+  at: number;
   /** When the last of them was made, on the document's clock. */
   last: number;
+  /**
+   * The animations a change made from rest holds (holdForFirstFrame). Null
+   * once they start, and for a change made while a motion runs.
+   */
+  waiting: Set<Animation> | null;
+}
+
+/**
+ * Each document's animations from this module that can still run, so a
+ * change can tell whether it is made from rest.
+ */
+const runningIn = sharedWeakMap<Document, Set<Animation>>(
+  'motion/animated-layout/running',
+  1,
+);
+
+/** Record `animation` as one of `doc`'s motions until it ends. */
+function trackRunning(doc: Document, animation: Animation): void {
+  let running = runningIn.get(doc);
+  if (running == null) {
+    running = new Set();
+    runningIn.set(doc, running);
+  }
+  const motions = running;
+  motions.add(animation);
+  const end = () => {
+    motions.delete(animation);
+  };
+  animation.addEventListener?.('finish', end);
+  animation.addEventListener?.('cancel', end);
+}
+
+/**
+ * Whether one of this module's motions runs in `doc`. A change made now then
+ * continues motion on the screen. A motion that holds its first keyframe has
+ * not moved yet, so it does not count.
+ */
+function isMotionRunning(doc: Document): boolean {
+  const running = runningIn.get(doc);
+  if (running == null) {
+    return false;
+  }
+  for (const animation of running) {
+    if (holds.has(animation)) {
+      continue;
+    }
+    if (animation.playState === 'running') {
+      return true;
+    }
+    if (animation.playState === 'finished' || animation.playState === 'idle') {
+      running.delete(animation);
+    }
+  }
+  return false;
+}
+
+/**
+ * Start `animation` at `at` on the document timeline, which reads `frame`.
+ * Started after the frame time the timeline still reads: until the timeline
+ * gets there it shows its first keyframe, not the element at rest.
+ */
+function startAt(animation: Animation, at: number, frame: number): void {
+  animation.startTime = at;
+  if (at !== frame) {
+    const fill = animation.effect?.getTiming?.().fill;
+    animation.effect?.updateTiming?.({
+      fill: fill === 'forwards' || fill === 'both' ? 'both' : 'backwards',
+    });
+  }
+}
+
+/**
+ * How far ahead of the timeline a waiting animation's start time is held, ms.
+ * A start that far ahead shows the first keyframe for days.
+ */
+const HOLD_AHEAD_MS = 1e9;
+
+/** Each waiting animation's held start time and the fill it had before. */
+const holds = sharedWeakMap<
+  Animation,
+  {readonly startTime: number; readonly fill: FillMode | undefined}
+>('motion/animated-layout/holds', 1);
+
+/**
+ * Hold `animation` at its first keyframe until the first frame drawn after
+ * its change's task. A start time far ahead of `now`, the timeline's time,
+ * holds it. A set start time also cancels the animation's pending play task.
+ * An engine can run that task before the frame, on a clock from before a long
+ * task, and the motion then skips ahead.
+ */
+function holdForFirstFrame(animation: Animation, now: number): void {
+  const fill = animation.effect?.getTiming?.().fill;
+  const startTime = now + HOLD_AHEAD_MS;
+  holds.set(animation, {startTime, fill});
+  animation.startTime = startTime;
+  animation.effect?.updateTiming?.({
+    fill: fill === 'forwards' || fill === 'both' ? 'both' : 'backwards',
+  });
+}
+
+/**
+ * Whether `animation` still holds the start time `held`. Code that paused,
+ * sought, finished or cancelled it since then changed that start time. An
+ * engine can round a start time it keeps, so a difference under 1 ms counts
+ * as the same.
+ */
+function isStillHeld(animation: Animation, held: number): boolean {
+  const {startTime} = animation;
+  return (
+    animation.playState !== 'idle' &&
+    startTime != null &&
+    Math.abs(Number(startTime) - held) < 1
+  );
+}
+
+/**
+ * Start the animations a change made from rest holds, all at one moment: the
+ * first frame's time. After a long task, a frame can carry the time of a
+ * frame scheduled before it. Then the moment is when the frame runs.
+ */
+function startWaiting(doc: Document, start: ChangeStart): void {
+  const {waiting} = start;
+  start.waiting = null;
+  if (waiting == null) {
+    return;
+  }
+  // Its animations start now, so no later change joins it.
+  if (changeStarts.get(doc) === start) {
+    changeStarts.delete(doc);
+  }
+  const timeline = doc.timeline?.currentTime;
+  const frame = timeline == null ? start.at : Number(timeline);
+  const now = clockOf(doc);
+  start.at = now - frame <= LATE_START_MS ? frame : now;
+  for (const animation of waiting) {
+    const hold = holds.get(animation);
+    holds.delete(animation);
+    if (hold == null || !isStillHeld(animation, hold.startTime)) {
+      continue;
+    }
+    animation.startTime = start.at;
+    // A start on the frame's own time needs the fill no longer. A later
+    // start keeps it, so the first keyframe shows until the timeline gets
+    // there.
+    if (start.at === frame && hold.fill != null) {
+      animation.effect?.updateTiming?.({fill: hold.fill});
+    }
+  }
 }
 
 /**
@@ -811,23 +961,33 @@ function clockOf(doc: Document): number {
  * rest of a commit or a slow swap. The start holds while the timeline reads
  * the same frame: through the task that made it and the microtasks after it.
  * A change that begins after a block takes a start of its own (beginChange).
+ * A change made from rest waits for its first frame (startWaiting), and a
+ * change made before that frame joins it.
  */
 function startFor(doc: Document, frame: number): ChangeStart {
   const now = clockOf(doc);
   const held = changeStarts.get(doc);
-  if (held != null && held.frame === frame) {
+  // A start that waits for its first frame takes every animation made before
+  // that frame. None of them has moved yet, so they all start together.
+  if (held != null && (held.frame === frame || held.waiting != null)) {
     held.last = now;
     return held;
   }
+  const view = doc.defaultView;
+  const isFromRest =
+    typeof view?.requestAnimationFrame === 'function' && !isMotionRunning(doc);
   const start: ChangeStart = {
     frame,
     at: now - frame <= LATE_START_MS ? frame : now,
     last: now,
+    waiting: isFromRest ? new Set() : null,
   };
   changeStarts.set(doc, start);
+  if (isFromRest) {
+    view?.requestAnimationFrame(() => startWaiting(doc, start));
+  }
   // Let go in a later task: every microtask of this one, where the glides
   // flush and the parts riding them play, has run by then.
-  const view = doc.defaultView;
   (view?.setTimeout ?? setTimeout)(() => {
     if (changeStarts.get(doc) === start) {
       changeStarts.delete(doc);
@@ -844,7 +1004,13 @@ function startFor(doc: Document, frame: number): ChangeStart {
  */
 function beginChange(doc: Document): void {
   const held = changeStarts.get(doc);
-  if (held != null && clockOf(doc) - held.last > LATE_START_MS) {
+  // A start that waits for its first frame takes its moment there, so a
+  // block before that frame does not make it late.
+  if (
+    held != null &&
+    held.waiting == null &&
+    clockOf(doc) - held.last > LATE_START_MS
+  ) {
     changeStarts.delete(doc);
   }
 }
@@ -859,6 +1025,20 @@ function beginChange(doc: Document): void {
 export function layoutStartFor(document: Document): number {
   const now = document.timeline?.currentTime;
   return now == null ? 0 : startFor(document, Number(now)).at;
+}
+
+/**
+ * Reads, when called, the start `layoutStartFor` gives now. Code that keeps
+ * the start of a change, to measure a later change against, keeps this
+ * reader. A change made from rest takes its start later (startWaiting).
+ */
+export function layoutStartReaderFor(document: Document): () => number {
+  const now = document.timeline?.currentTime;
+  if (now == null) {
+    return () => 0;
+  }
+  const start = startFor(document, Number(now));
+  return () => start.at;
 }
 
 /**
@@ -3535,9 +3715,13 @@ export function playLayoutEdge(
   const clip = (hidden: number) => pxClip(edge, hidden, rtl);
   const now = () => Number(element.ownerDocument.timeline?.currentTime ?? 0);
   // The start this change's animations share, which after a block is later
-  // than the frame time the timeline still reads (startFor).
-  const startedAt =
-    changeStartIn(areaOf(handle, element), element.ownerDocument)?.at ?? 0;
+  // than the frame time the timeline still reads. It can still move
+  // (startWaiting), so it is read when needed.
+  const changeStart = changeStartIn(
+    areaOf(handle, element),
+    element.ownerDocument,
+  );
+  const startedAt = () => changeStart?.at ?? 0;
   const durationMs =
     motion.kind === 'glide' ? motion.progress.durationMs : motion.durationMs;
   const progressAt = (ms: number) =>
@@ -3545,7 +3729,7 @@ export function playLayoutEdge(
       ? 1 - motion.progress.remaining(Math.min(ms, durationMs))
       : 0;
   const shown = (): {extent: number; progress: number} | null => {
-    const elapsed = Math.max(0, now() - startedAt);
+    const elapsed = Math.max(0, now() - startedAt());
     if (elapsed >= durationMs) {
       return null;
     }
@@ -3553,7 +3737,7 @@ export function playLayoutEdge(
     // carries on. The extent stays on the timeline's frame, the frame a ride
     // is measured from.
     const progress = progressAt(
-      Math.max(elapsed, layoutStartFor(element.ownerDocument) - startedAt),
+      Math.max(elapsed, layoutStartFor(element.ownerDocument) - startedAt()),
     );
     let extent = from + (to - from) * progressAt(elapsed);
     if (rides && rideWith != null) {
