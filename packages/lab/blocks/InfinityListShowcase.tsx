@@ -40,7 +40,7 @@ export default function InfinityListShowcase() {
         />
       </HStack>
       <InfinityList
-        ref={list}
+        handleRef={list}
         label="Archive records"
         itemCount={COUNT}
         itemHeight={32}
