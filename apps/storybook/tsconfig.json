@@ -6,9 +6,7 @@
     // dist-only `./vite` export in an unbuilt worktree (#5128).
     "allowImportingTsExtensions": true,
     "paths": {
-      "@astryxdesign/core": [
-        "../../packages/core/src/index.ts"
-      ],
+      "@astryxdesign/core": ["../../packages/core/src/index.ts"],
       "@astryxdesign/core/*": [
         "../../packages/core/src/*/index.ts",
         "../../packages/core/src/*"
@@ -17,24 +15,48 @@
         "../../packages/theme/src/*/index.ts",
         "../../packages/theme/src/*"
       ],
-      "@astryxdesign/lab": [
-        "../../packages/lab/src/index.ts"
-      ],
+      "@astryxdesign/lab": ["../../packages/lab/src/index.ts"],
       "@astryxdesign/lab/*": [
         "../../packages/lab/src/*/index.ts",
         "../../packages/lab/src/*"
       ],
-      "@astryxdesign/richtext": [
-        "../../packages/richtext/src/index.ts"
-      ],
+      "@astryxdesign/richtext": ["../../packages/richtext/src/index.ts"],
       "@astryxdesign/richtext/*": [
         "../../packages/richtext/src/*/index.ts",
         "../../packages/richtext/src/*"
-      ]
+      ],
+      // Charts, Vega and the themes resolve to source too, as main.ts's
+      // workspaceAliases do for Vite. Their package types point at dist/,
+      // which an unbuilt worktree does not have.
+      "@astryxdesign/charts": ["../../packages/charts/src/index.ts"],
+      "@astryxdesign/charts/*": [
+        "../../packages/charts/src/*/index.ts",
+        "../../packages/charts/src/*"
+      ],
+      "@astryxdesign/vega": ["../../packages/vega/src/index.ts"],
+      "@astryxdesign/theme-butter": [
+        "../../packages/themes/butter/src/source.ts"
+      ],
+      "@astryxdesign/theme-chocolate": [
+        "../../packages/themes/chocolate/src/source.ts"
+      ],
+      "@astryxdesign/theme-gothic": [
+        "../../packages/themes/gothic/src/source.ts"
+      ],
+      "@astryxdesign/theme-matcha": [
+        "../../packages/themes/matcha/src/source.ts"
+      ],
+      "@astryxdesign/theme-neutral": [
+        "../../packages/themes/neutral/src/source.ts"
+      ],
+      "@astryxdesign/theme-probe": [
+        "../../packages/themes/probe/src/source.ts"
+      ],
+      "@astryxdesign/theme-stone": [
+        "../../packages/themes/stone/src/source.ts"
+      ],
+      "@astryxdesign/theme-y2k": ["../../packages/themes/y2k/src/source.ts"]
     }
   },
-  "include": [
-    ".storybook/**/*",
-    "stories/**/*"
-  ]
+  "include": [".storybook/**/*", "stories/**/*"]
 }
