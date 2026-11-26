@@ -118,7 +118,7 @@ export interface RichTextViewProps extends BaseProps {
   nodes?: ReadonlyArray<Klass<LexicalNode>>;
   /**
    * Markdown plugins whose nodes this surface draws, each adopted with
-   * `createRichTextExtension` (spec:AST-064). A plugin node renders exactly as
+   * `createRichTextExtension`. A plugin node renders exactly as
    * core `Markdown` renders it, and one whose plugin is not given here shows
    * its source. Pass the extensions the content was converted with. Create
    * them in a client module: they hold the plugins' functions, so they are not
@@ -130,7 +130,7 @@ export interface RichTextViewProps extends BaseProps {
    * such as `graphql` from `@astryxdesign/core/CodeBlock/languages/graphql`,
    * or made with `createCodeLanguage`. Pass the same list as `Markdown`'s
    * `codeLanguages`, so reading and editing paint and label the same
-   * languages (spec:AST-061).
+   * languages.
    */
   codeLanguages?: ReadonlyArray<CodeLanguage>;
   /**
@@ -185,10 +185,10 @@ export interface RichTextViewProps extends BaseProps {
  */
 function SyncValuePlugin({value}: {value: string}): null {
   const [editor] = useLexicalComposerContext();
-  const isFirstRun = useRef(true);
+  const isFirstRunRef = useRef(true);
   useEffect(() => {
-    if (isFirstRun.current) {
-      isFirstRun.current = false;
+    if (isFirstRunRef.current) {
+      isFirstRunRef.current = false;
       return;
     }
     editor.setEditorState(editor.parseEditorState(value));
@@ -203,7 +203,7 @@ function SyncValuePlugin({value}: {value: string}): null {
  * The output is document content, not a form field: headings, lists and links
  * keep their own roles for assistive technology, and the view takes no label.
  * For a labelled, read-only field, use `<RichTextEditor isReadOnly />`. A
- * table wider than the view scrolls inside a region named "Table" that takes a
+ * table wider than the view scrolls inside a group named "Table" that takes a
  * tab stop while it overflows, as core `Table` does.
  *
  * @example

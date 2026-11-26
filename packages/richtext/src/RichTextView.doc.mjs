@@ -69,7 +69,8 @@ export const docs = {
     {
       name: 'xstyle',
       type: 'StyleXStyles',
-      description: 'StyleX styles for the view root.',
+      description:
+        'StyleX styles for the view root. Must be a stylex.create() value, not an inline style object.',
     },
   ],
   usage: {
@@ -95,6 +96,11 @@ export const docs = {
         guidance: false,
         description:
           'Use RichTextView to render Markdown source; use core Markdown for that.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use RichTextView where people need a labelled, read-only field. The view is document content and takes no label; use RichTextEditor with isReadOnly instead.',
       },
     ],
   },

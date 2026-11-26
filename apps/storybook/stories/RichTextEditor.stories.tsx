@@ -762,3 +762,19 @@ export const CodeLanguageModules: Story = {
     </div>
   ),
 };
+
+const DIGIT_TASKS = markdownToEditorStateJSON('- [ ] 2026\n- [x] 2027');
+
+/**
+ * A read-only view whose task items hold only digits. Text with no strongly
+ * directional character follows the document direction, so the checkboxes
+ * sit at the inline start in both directions.
+ */
+export const ViewDigitTasks: Story = {
+  name: 'View: digit-only task items',
+  render: () => (
+    <div style={{maxWidth: 520}}>
+      <RichTextView value={DIGIT_TASKS} />
+    </div>
+  ),
+};
