@@ -4,7 +4,7 @@
 
 /**
  * @file DateInput.tsx
- * @input Uses React, useId, useCallback, useRef, useTypedDateField, useEntryErrorBehavior, Field, Icon, LazyCalendar, usePopover, InputGroupContext
+ * @input Uses React, useId, useCallback, useRef, useTypedDateField, useEntryErrorBehavior, Field, Icon, Calendar, usePopover, InputGroupContext
  * @output Exports DateInput component, DateInputProps, DateInputEntryError, and EntryErrorBehavior
  * @position Core implementation; consumed by index.ts, tested by DateInput.test.tsx
  *
@@ -51,15 +51,14 @@ import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
-import type {
-  ISODateString,
-  CalendarHandle,
-  DayOfWeek,
-  DayOfWeekName,
+import {
+  Calendar,
+  type ISODateString,
+  type CalendarHandle,
+  type DayOfWeek,
+  type DayOfWeekName,
 } from '../Calendar';
 import {useCalendarConstraints} from '../Calendar/hooks';
-import {LazyCalendar} from '../Calendar/LazyCalendar';
-import {useLazyCalendarOpen} from '../Calendar/useLazyCalendarOpen';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMediaQuery} from '../hooks/useMediaQuery';
@@ -833,29 +832,23 @@ function PointerDateField({
     },
   });
 
-  const lazyCalendar = useLazyCalendarOpen({
-    fieldRef: fieldElementRef,
-    isDisabled: isEffectivelyDisabled,
-    show: popover.show,
-  });
-
   // Handle toggling the popover from button click (focus calendar)
   const handleToggle = useCallback(() => {
     if (!isEffectivelyDisabled) {
       if (popover.isOpen) {
         popover.hide();
       } else {
-        lazyCalendar.open();
+        popover.show();
       }
     }
-  }, [isEffectivelyDisabled, lazyCalendar, popover]);
+  }, [isEffectivelyDisabled, popover]);
 
   // Handle opening the popover from input click (keep focus in input)
   const handleInputClick = useCallback(() => {
     if (!isEffectivelyDisabled && !popover.isOpen) {
-      lazyCalendar.open({skipAutoFocus: true});
+      popover.show({skipAutoFocus: true});
     }
-  }, [isEffectivelyDisabled, lazyCalendar, popover]);
+  }, [isEffectivelyDisabled, popover]);
 
   // Handle clear button click
   const handleClear = useCallback(
@@ -938,7 +931,7 @@ function PointerDateField({
         // popover from the keyboard, keeping focus in the input (forms-13).
         e.preventDefault();
         if (!isEffectivelyDisabled) {
-          lazyCalendar.open({skipAutoFocus: true});
+          popover.show({skipAutoFocus: true});
         }
       } else if (e.key === 'Enter' && (isPending || isEffectivelyDisabled)) {
         // Typed text holds Enter back, or a form would submit the value from
@@ -948,13 +941,7 @@ function PointerDateField({
         commitPendingInput();
       }
     },
-    [
-      popover,
-      lazyCalendar,
-      commitPendingInput,
-      isEffectivelyDisabled,
-      isPending,
-    ],
+    [popover, commitPendingInput, isEffectivelyDisabled, isPending],
   );
 
   const inputWrapper = (
@@ -967,14 +954,7 @@ function PointerDateField({
         // compose, so attaching unconditionally is safe.
         disabledMessageTooltip.ref(el);
       }}
-      onPointerEnter={lazyCalendar.fieldProps.onPointerEnter}
-      onPointerDown={lazyCalendar.fieldProps.onPointerDown}
-      onFocus={lazyCalendar.fieldProps.onFocus}
-      onBlur={chainEventHandlers(
-        handleFieldBlur,
-        lazyCalendar.fieldProps.onBlur,
-      )}
-      onKeyDown={lazyCalendar.fieldProps.onKeyDown}
+      onBlur={handleFieldBlur}
       {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('date-input', {
@@ -1114,7 +1094,7 @@ function PointerDateField({
         // The layer renders its children open or closed, so mount the
         // calendar only while it is open; it opens on the current value.
         !popover.isOpen ? null : (
-          <LazyCalendar
+          <Calendar
             handleRef={calendarRef}
             calendar={typedDate.calendar}
             mode="single"

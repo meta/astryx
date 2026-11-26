@@ -65,7 +65,7 @@ import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
-import {useCalendarConstraints} from '../Calendar/hooks/useCalendarConstraints';
+import {useCalendarConstraints} from '../Calendar';
 import type {DateInputProps} from './DateInput';
 import {
   Field,

@@ -110,6 +110,7 @@
     "../utils"
   ],
   "packages/core/src/DateInput/DateInput.tsx": [
+    "../Calendar",
     "../Calendar/hooks",
     "../Field",
     "../Icon",
@@ -120,6 +121,7 @@
     "../utils"
   ],
   "packages/core/src/DateInput/NativeDateField.tsx": [
+    "../Calendar",
     "../Field",
     "../Icon",
     "../InputGroup",
@@ -134,6 +136,7 @@
   "packages/core/src/DateInput/TouchDateField.tsx": [
     "../BottomSheet",
     "../Button",
+    "../Calendar",
     "../Field",
     "../Icon",
     "../IconButton",

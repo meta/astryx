@@ -2,16 +2,15 @@
 
 /**
  * @file lazyCalendarFields.test.tsx
- * @input vitest (jsdom), Testing Library, DateInput and DateTimeInput with
- *   the shared Calendar host mocked so each case controls when the load lands
- * @output Tests that each field's popover Calendar loads on the field's first
+ * @input vitest (jsdom), Testing Library, DateTimeInput with the shared
+ *   Calendar host mocked so each case controls when the load lands
+ * @output Tests that DateTimeInput's popover Calendar loads on the field's first
  *   intent, not with the page: no load before an intent; a mouse entry, a
  *   focus or a press starts it and a finger's entry does not; an open asked
  *   for before the load is held and opens once, with focus kept in the input
  *   for an open from the input; Escape or a failed load drops the hold; the
  *   native picker loads nothing
- * @position Testing for useLazyCalendarOpen.ts with DateInput.tsx and
- *   DateTimeInput.tsx
+ * @position Testing for useLazyCalendarOpen.ts with DateTimeInput.tsx
  */
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
@@ -45,16 +44,11 @@ vi.mock('./LazyCalendar', () => ({
   LazyCalendar: () => <div data-testid="lazy-calendar" />,
 }));
 
-import {DateInput} from '../DateInput/DateInput';
 import {DateTimeInput} from '../DateTimeInput/DateTimeInput';
 
 const noop = () => {};
 
 const FIELDS: Array<{name: string; element: () => ReactElement}> = [
-  {
-    name: 'DateInput',
-    element: () => <DateInput label="Due" onChange={noop} />,
-  },
   {
     name: 'DateTimeInput',
     element: () => <DateTimeInput label="Starts" onChange={noop} />,
@@ -156,10 +150,12 @@ describe.each(FIELDS)('$name Calendar on first intent', ({element}) => {
   });
 });
 
-describe('DateInput with the native picker', () => {
+describe('DateTimeInput with the native picker', () => {
   it('loads no Calendar on an intent', () => {
-    render(<DateInput label="Due" onChange={noop} presentation="native" />);
-    const input = screen.getByLabelText('Due');
+    render(
+      <DateTimeInput label="Starts" onChange={noop} presentation="native" />,
+    );
+    const input = screen.getAllByLabelText(/Starts/)[0];
     act(() => {
       input.focus();
     });
