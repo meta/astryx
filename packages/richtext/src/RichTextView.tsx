@@ -66,8 +66,8 @@ const styles = stylex.create({
     // content.
     position: 'relative',
     // The document's body text, as core Markdown and the editor set it.
-    // Without it, blocks the theme leaves unsized —
-    // list items, quotes, table cells — take the host page's font.
+    // Without it, blocks the theme leaves unsized — list items, quotes,
+    // table cells — take the host page's font.
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-body-size'],
     lineHeight: typeScaleVars['--text-body-leading'],
@@ -174,10 +174,9 @@ export interface RichTextViewProps extends BaseProps {
  * This mirrors the canonical Lexical pattern for applying externally-sourced
  * serialized state after mount: the Lexical Playground's ActionsPlugin does the
  * same `editor.setEditorState(editor.parseEditorState(...))` from inside a
- * plugin. It is
- * necessary because the composer builds the editor once and reads the initial
- * state exactly once at that point, so a changed prop cannot re-seed the editor
- * on its own. A read-only view has no history, so we skip the Playground's
+ * plugin. It is necessary because the composer builds the editor once and
+ * reads the initial state exactly once at that point, so a changed prop cannot
+ * re-seed the editor on its own. A read-only view has no history, so we skip the Playground's
  * accompanying CLEAR_HISTORY_COMMAND.
  *
  * `parseEditorState` / `setEditorState` are methods on the editor instance, so
