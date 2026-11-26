@@ -1,0 +1,322 @@
+{
+  "main": "157be7986869420526a967be2a7893ff235ad023",
+  "head": "ae246ce8078b98491f3be95dd58afa9351dc5174",
+  "browser": "Chromium 149.0.7827.55 (Playwright 1.61.1, headless)",
+  "text200": "documentElement font-size 200%",
+  "hitTest": "elementFromPoint at the Remove center and 11 px left, right, up and down",
+  "gap": "clipEdgeToRemoveBoxPx: from the value clip edge to the Remove button box; visibleInkGapToXPx: background columns between the last value pixel and the X glyph in the still, in CSS px",
+  "pairs": [
+    {
+      "pair": "powersearch-title-*-200pct-390.png",
+      "story": "local test story: PowerSearch with a date filter and a long Title filter",
+      "viewport": "390x844, DPR 2",
+      "text": "200%",
+      "main": [
+        {
+          "name": "Remove Created: is between date range",
+          "labelWidthPx": 98.63,
+          "tokenBox": {
+            "x": 24,
+            "y": 24,
+            "w": 276,
+            "h": 24
+          },
+          "removeBox": {
+            "x": 276,
+            "y": 28,
+            "w": 16,
+            "h": 16
+          },
+          "removeInsideToken": true,
+          "removeVisibleFraction": 1,
+          "hitTestPointsOnRemove": "5/5",
+          "valueCut": false,
+          "clipEdgeToRemoveBoxPx": 8,
+          "visibleInkGapToXPx": null,
+          "mouseClick": "removed"
+        },
+        {
+          "name": "Remove Title: contains quarterly infrastructure pl...",
+          "labelWidthPx": 0,
+          "tokenBox": {
+            "x": 24,
+            "y": 63,
+            "w": 276,
+            "h": 24
+          },
+          "removeBox": {
+            "x": 369.41,
+            "y": 67,
+            "w": 16,
+            "h": 16
+          },
+          "removeInsideToken": false,
+          "removeVisibleFraction": 0,
+          "hitTestPointsOnRemove": "0/5",
+          "valueCut": true,
+          "clipEdgeToRemoveBoxPx": null,
+          "visibleInkGapToXPx": null,
+          "mouseClick": "not removed (the press hit a div)"
+        }
+      ],
+      "head": [
+        {
+          "name": "Remove Created: is between date range",
+          "labelWidthPx": 140.25,
+          "tokenBox": {
+            "x": 24,
+            "y": 24,
+            "w": 276,
+            "h": 24
+          },
+          "removeBox": {
+            "x": 276,
+            "y": 28,
+            "w": 16,
+            "h": 16
+          },
+          "removeInsideToken": true,
+          "removeVisibleFraction": 1,
+          "hitTestPointsOnRemove": "5/5",
+          "valueCut": true,
+          "clipEdgeToRemoveBoxPx": 3,
+          "visibleInkGapToXPx": 4,
+          "mouseClick": "removed"
+        },
+        {
+          "name": "Remove Title: contains quarterly infrastructure pl...",
+          "labelWidthPx": 70.3,
+          "tokenBox": {
+            "x": 24,
+            "y": 63,
+            "w": 276,
+            "h": 24
+          },
+          "removeBox": {
+            "x": 276,
+            "y": 67,
+            "w": 16,
+            "h": 16
+          },
+          "removeInsideToken": true,
+          "removeVisibleFraction": 1,
+          "hitTestPointsOnRemove": "5/5",
+          "valueCut": true,
+          "clipEdgeToRemoveBoxPx": 3,
+          "visibleInkGapToXPx": 4,
+          "mouseClick": "removed"
+        }
+      ]
+    },
+    {
+      "pair": "token-long-end-*-200pct-390.png",
+      "story": "Core/Token: Long End Content In Narrow Space (four rows; the fourth row Remove does nothing in the story)",
+      "viewport": "390x844, DPR 2",
+      "text": "200%",
+      "main": [
+        {
+          "name": "Remove Static range:",
+          "labelWidthPx": 0,
+          "tokenBox": {
+            "x": 16,
+            "y": 16,
+            "w": 200,
+            "h": 24
+          },
+          "removeBox": {
+            "x": 346.91,
+            "y": 20,
+            "w": 16,
+            "h": 16
+          },
+          "removeInsideToken": false,
+          "removeVisibleFraction": 0,
+          "hitTestPointsOnRemove": "0/5",
+          "valueCut": true,
+          "clipEdgeToRemoveBoxPx": null,
+          "visibleInkGapToXPx": null,
+          "mouseClick": "not removed (the press hit a div)",
+          "touchTap": "missed (no element at that point: it is outside the page)"
+        },
+        {
+          "name": "Remove Clickable range:",
+          "labelWidthPx": 0,
+          "tokenBox": {
+            "x": 16,
+            "y": 48,
+            "w": 200,
+            "h": 24
+          },
+          "removeBox": {
+            "x": 346.91,
+            "y": 52,
+            "w": 16,
+            "h": 16
+          },
+          "removeInsideToken": false,
+          "removeVisibleFraction": 0,
+          "hitTestPointsOnRemove": "0/5",
+          "valueCut": true,
+          "clipEdgeToRemoveBoxPx": null,
+          "visibleInkGapToXPx": null,
+          "mouseClick": "not removed (the press hit a div)",
+          "touchTap": "missed (no element at that point: it is outside the page)"
+        },
+        {
+          "name": "Remove Link range:",
+          "labelWidthPx": 0,
+          "tokenBox": {
+            "x": 16,
+            "y": 80,
+            "w": 200,
+            "h": 24
+          },
+          "removeBox": {
+            "x": 346.91,
+            "y": 84,
+            "w": 16,
+            "h": 16
+          },
+          "removeInsideToken": false,
+          "removeVisibleFraction": 0,
+          "hitTestPointsOnRemove": "0/5",
+          "valueCut": true,
+          "clipEdgeToRemoveBoxPx": null,
+          "visibleInkGapToXPx": null,
+          "mouseClick": "not removed (the press hit a div)",
+          "touchTap": "missed (no element at that point: it is outside the page)"
+        },
+        {
+          "name": "Remove With a control:",
+          "labelWidthPx": 138.66,
+          "tokenBox": {
+            "x": 16,
+            "y": 112,
+            "w": 200,
+            "h": 24
+          },
+          "removeBox": {
+            "x": 192,
+            "y": 116,
+            "w": 16,
+            "h": 16
+          },
+          "removeInsideToken": true,
+          "removeVisibleFraction": 1,
+          "hitTestPointsOnRemove": "5/5",
+          "valueCut": false,
+          "clipEdgeToRemoveBoxPx": 8,
+          "visibleInkGapToXPx": null,
+          "mouseClick": "not removed (the press hit a button, the Remove itself)",
+          "touchTap": "not removed (the press hit a button, the Remove itself)"
+        }
+      ],
+      "head": [
+        {
+          "name": "Remove Static range:",
+          "labelWidthPx": 44.75,
+          "tokenBox": {
+            "x": 16,
+            "y": 16,
+            "w": 200,
+            "h": 24
+          },
+          "removeBox": {
+            "x": 192,
+            "y": 20,
+            "w": 16,
+            "h": 16
+          },
+          "removeInsideToken": true,
+          "removeVisibleFraction": 1,
+          "hitTestPointsOnRemove": "5/5",
+          "valueCut": true,
+          "clipEdgeToRemoveBoxPx": 3,
+          "visibleInkGapToXPx": 5,
+          "mouseClick": "removed",
+          "touchTap": "removed"
+        },
+        {
+          "name": "Remove Clickable range:",
+          "labelWidthPx": 52.61,
+          "tokenBox": {
+            "x": 16,
+            "y": 48,
+            "w": 200,
+            "h": 24
+          },
+          "removeBox": {
+            "x": 192,
+            "y": 52,
+            "w": 16,
+            "h": 16
+          },
+          "removeInsideToken": true,
+          "removeVisibleFraction": 1,
+          "hitTestPointsOnRemove": "5/5",
+          "valueCut": true,
+          "clipEdgeToRemoveBoxPx": 3,
+          "visibleInkGapToXPx": 4,
+          "mouseClick": "removed",
+          "touchTap": "removed"
+        },
+        {
+          "name": "Remove Link range:",
+          "labelWidthPx": 40.94,
+          "tokenBox": {
+            "x": 16,
+            "y": 80,
+            "w": 200,
+            "h": 24
+          },
+          "removeBox": {
+            "x": 192,
+            "y": 84,
+            "w": 16,
+            "h": 16
+          },
+          "removeInsideToken": true,
+          "removeVisibleFraction": 1,
+          "hitTestPointsOnRemove": "5/5",
+          "valueCut": true,
+          "clipEdgeToRemoveBoxPx": 3,
+          "visibleInkGapToXPx": 4,
+          "mouseClick": "removed",
+          "touchTap": "removed"
+        },
+        {
+          "name": "Remove With a control:",
+          "labelWidthPx": 139.16,
+          "tokenBox": {
+            "x": 16,
+            "y": 112,
+            "w": 200,
+            "h": 24
+          },
+          "removeBox": {
+            "x": 192,
+            "y": 116,
+            "w": 16,
+            "h": 16
+          },
+          "removeInsideToken": true,
+          "removeVisibleFraction": 1,
+          "hitTestPointsOnRemove": "5/5",
+          "valueCut": false,
+          "clipEdgeToRemoveBoxPx": 7.5,
+          "visibleInkGapToXPx": null,
+          "mouseClick": "not removed (the press hit a button, the Remove itself)",
+          "touchTap": "not removed (the press hit a button, the Remove itself)"
+        }
+      ]
+    },
+    {
+      "pair": "token-with-end-content-*-100pct-1280-light.png",
+      "story": "Core/Token: With End Content",
+      "viewport": "1280x800, DPR 2",
+      "text": "100%",
+      "mode": "light",
+      "pixelDifferenceMainVsHead": 0
+    }
+  ]
+}
