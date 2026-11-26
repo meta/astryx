@@ -130,7 +130,8 @@ describe('PowerSearch popover token text', () => {
     );
     expect(screen.getByText('a, b und c')).toBeInTheDocument();
     expect(screen.getByText('3 Einträge')).toBeInTheDocument();
-    expect(screen.getByText('Zeitraum')).toBeInTheDocument();
+    // The range reads its two days in the locale's own range form (FR25).
+    expect(screen.getByText('1.–10. März 2024')).toBeInTheDocument();
     expect(screen.getByText('1 Filter')).toBeInTheDocument();
     expect(screen.getByText('vor 3 Tagen')).toBeInTheDocument();
     expect(screen.getByText('2,5')).toBeInTheDocument();
@@ -148,7 +149,7 @@ describe('PowerSearch popover token text', () => {
     );
     expect(screen.getByText('a, b, c')).toBeInTheDocument();
     expect(screen.getByText('3 items')).toBeInTheDocument();
-    expect(screen.getByText('date range')).toBeInTheDocument();
+    expect(screen.getByText('Mar 1 – 10, 2024')).toBeInTheDocument();
     expect(screen.getByText('1 filter')).toBeInTheDocument();
     expect(screen.getByText('3 days ago')).toBeInTheDocument();
     expect(screen.getByText('2.5')).toBeInTheDocument();
