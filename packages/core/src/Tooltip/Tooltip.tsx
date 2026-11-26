@@ -185,11 +185,29 @@ function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
   return tokens.size > 0 ? [...tokens].join(' ') : undefined;
 }
 
+/** The text a screen reader reads in `element`: hidden descendants left out. */
+function visibleTextOf(element: Element): string {
+  let text = '';
+  for (const node of Array.from(element.childNodes)) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent ?? '';
+    } else if (
+      node instanceof Element &&
+      !node.hasAttribute('hidden') &&
+      node.getAttribute('aria-hidden') !== 'true'
+    ) {
+      text += visibleTextOf(node);
+    }
+  }
+  return text;
+}
+
 /**
  * The trigger's accessible name as Button's `tooltip` reads it: its
- * `aria-label`, else its text content. Null when `aria-labelledby` names it
- * from other elements: that name is not compared, so the tooltip still
- * describes the trigger.
+ * `aria-label`, else its text content without hidden descendants (such as
+ * this tooltip's own hidden copy). Null when `aria-labelledby` names it from
+ * other elements: that name is not compared, so the tooltip still describes
+ * the trigger.
  */
 function nameOf(element: Element): string | null {
   if (element.hasAttribute('aria-labelledby')) {
@@ -199,14 +217,10 @@ function nameOf(element: Element): string | null {
   if (label != null && label.trim() !== '') {
     return label.trim();
   }
-  return element.textContent?.trim() ?? '';
+  return visibleTextOf(element).replace(/\s+/g, ' ').trim();
 }
 
-/**
- * Whether the tooltip's text repeats the trigger's name. A tooltip that does
- * adds no description, so a screen reader does not read the same words
- * twice, as with Button's `tooltip`.
- */
+/** A tooltip that repeats its trigger's name adds no description. */
 function repeatsName(element: Element, contentText: string | null): boolean {
   const text = contentText?.trim() ?? '';
   return text !== '' && text === nameOf(element);

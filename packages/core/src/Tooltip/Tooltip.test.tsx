@@ -305,6 +305,27 @@ describe('Tooltip', () => {
       );
     });
 
+    it('compares only text a screen reader reads, not hidden text inside the trigger', async () => {
+      function Anchored() {
+        const anchorRef = useRef<HTMLButtonElement>(null);
+        return (
+          <button ref={anchorRef} type="button">
+            <TestIcon />
+            <Tooltip anchorRef={anchorRef} content="Archive" />
+          </button>
+        );
+      }
+      render(<Anchored />);
+      // The tooltip's hidden copy sits inside the button but is not its
+      // name, so the tooltip still describes it. A tooltip inside its own anchor attaches once the
+      // commit has attached the anchor's ref.
+      await waitFor(() =>
+        expect(screen.getByRole('button')).toHaveAccessibleDescription(
+          'Archive',
+        ),
+      );
+    });
+
     it('still describes a trigger named by aria-labelledby, as Button does', () => {
       render(
         <>

@@ -219,7 +219,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   is its element's own content adds no description. A Tooltip on an element child or
   an `anchorRef` target whose string or number `content`, trimmed, equals that
   element's accessible name (its
-  `aria-label`, else its text content) adds no description either, as
+  `aria-label`, else its text content without hidden text) adds no description either, as
   `component:Button` FR12 does, so the name is not read twice; other content
   still describes the trigger, and a name from `aria-labelledby` still gets the
   description, as in `component:Button` FR12. The Tooltip reads the name when it
