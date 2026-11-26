@@ -239,6 +239,112 @@ describe('Tooltip', () => {
     });
   });
 
+  describe("a tooltip that repeats its trigger's name", () => {
+    it("adds no description when its text equals the trigger's aria-label", () => {
+      render(
+        <Tooltip content="Delete">
+          <IconButton label="Delete" icon={<TestIcon />} />
+        </Tooltip>,
+      );
+      expect(screen.getByRole('button', {name: 'Delete'})).not.toHaveAttribute(
+        'aria-describedby',
+      );
+    });
+
+    it('still describes the trigger when its text differs from the name', () => {
+      render(
+        <Tooltip content="Delete the file for good">
+          <IconButton label="Delete" icon={<TestIcon />} />
+        </Tooltip>,
+      );
+      expect(
+        screen.getByRole('button', {name: 'Delete'}),
+      ).toHaveAccessibleDescription('Delete the file for good');
+    });
+
+    it('adds and removes the description as the text stops and starts repeating the name', () => {
+      const {rerender} = render(
+        <Tooltip content="Delete the file for good">
+          <IconButton label="Delete" icon={<TestIcon />} />
+        </Tooltip>,
+      );
+      const button = () => screen.getByRole('button', {name: 'Delete'});
+      expect(button()).toHaveAccessibleDescription('Delete the file for good');
+      rerender(
+        <Tooltip content="Delete">
+          <IconButton label="Delete" icon={<TestIcon />} />
+        </Tooltip>,
+      );
+      expect(button()).not.toHaveAttribute('aria-describedby');
+      rerender(
+        <Tooltip content="Delete it">
+          <IconButton label="Delete" icon={<TestIcon />} />
+        </Tooltip>,
+      );
+      expect(button()).toHaveAccessibleDescription('Delete it');
+    });
+
+    it('adds no description to an anchorRef trigger whose text is the tooltip text', () => {
+      function Anchored() {
+        const anchorRef = useRef<HTMLButtonElement>(null);
+        return (
+          <>
+            <button ref={anchorRef} type="button" aria-describedby="hint">
+              Archive
+            </button>
+            <span id="hint">Moves it out of the inbox</span>
+            <Tooltip anchorRef={anchorRef} content=" Archive " />
+          </>
+        );
+      }
+      render(<Anchored />);
+      // The trigger's own description stays; the tooltip adds none.
+      expect(screen.getByRole('button', {name: 'Archive'})).toHaveAttribute(
+        'aria-describedby',
+        'hint',
+      );
+    });
+
+    it('compares only text a screen reader reads, not hidden text inside the trigger', async () => {
+      function Anchored() {
+        const anchorRef = useRef<HTMLButtonElement>(null);
+        return (
+          <button ref={anchorRef} type="button">
+            <TestIcon />
+            <Tooltip anchorRef={anchorRef} content="Archive" />
+          </button>
+        );
+      }
+      render(<Anchored />);
+      // The tooltip's hidden copy sits inside the button but is not its
+      // name, so the tooltip still describes it. A tooltip inside its own anchor attaches once the
+      // commit has attached the anchor's ref.
+      await waitFor(() =>
+        expect(screen.getByRole('button')).toHaveAccessibleDescription(
+          'Archive',
+        ),
+      );
+    });
+
+    it('still describes a trigger named by aria-labelledby, as Button does', () => {
+      render(
+        <>
+          <span id="save-name">Save</span>
+          <Tooltip content="Save">
+            <IconButton
+              label="Save"
+              aria-labelledby="save-name"
+              icon={<TestIcon />}
+            />
+          </Tooltip>
+        </>,
+      );
+      expect(
+        screen.getByRole('button', {name: 'Save'}),
+      ).toHaveAccessibleDescription('Save');
+    });
+  });
+
   describe('invoker', () => {
     // A popover takes its invoker's place in the focus order. A tooltip has
     // nothing to focus, and a popover its trigger opens needs that place.
