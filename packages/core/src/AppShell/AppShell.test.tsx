@@ -297,7 +297,7 @@ describe('AppShell', () => {
     ['Ctrl', {ctrlKey: true}],
     ['Shift', {shiftKey: true}],
   ])(
-    'keeps the browser action for a %s-click on the skip link',
+    'keeps the browser action for a %s-click on the skip link, and still moves focus to main',
     (_, modifier) => {
       render(
         <AppShell>
@@ -307,6 +307,7 @@ describe('AppShell', () => {
       expect(
         fireEvent.click(screen.getByTestId('skip-to-content'), modifier),
       ).toBe(true);
+      expect(document.activeElement).toBe(screen.getByRole('main'));
     },
   );
 
