@@ -321,7 +321,7 @@ describe('native contracts', () => {
     );
   });
 
-  it('builds every contract with no warnings, Selector included', async () => {
+  it('builds every shipped contract with no warnings', async () => {
     const {warnings} = await buildContracts(loadCoreDoc);
     expect(warnings.map(issue => issue.message)).toEqual([]);
   });
