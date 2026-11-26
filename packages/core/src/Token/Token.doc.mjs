@@ -46,6 +46,13 @@ export const docs = {
         'Callback fired when the remove button is clicked. When provided, an X button is rendered inside the token.',
     },
     {
+      name: 'removeButtonLabel',
+      type: 'string',
+      description:
+        'Fully translated accessible name for the remove button. Use it when several tokens share a label and each remove button needs context, for example "Remove Morning from Tuesday".',
+      default: "'Remove {label}'",
+    },
+    {
       name: 'onClick',
       type: '(e: React.MouseEvent) => void',
       description:
@@ -155,6 +162,13 @@ export const docsZh = {
         '点击移除按钮时触发的回调。提供时，标记内会渲染一个 X 按钮。',
     },
     {
+      name: 'removeButtonLabel',
+      type: 'string',
+      description:
+        '完整翻译后的移除按钮无障碍名称。当多个标记共享同一标签且每个移除按钮需要上下文时使用，例如“Remove Morning from Tuesday”。',
+      default: "'Remove {label}'",
+    },
+    {
       name: 'onClick',
       type: '(e: React.MouseEvent) => void',
       description:
@@ -243,6 +257,7 @@ export const docsDense = {
     icon: 'Optional icon before label.',
     isDisabled: 'Reduces opacity, blocks interactions.',
     onRemove: 'Fired on remove button click. Renders X button when provided.',
+    removeButtonLabel: 'Fully translated accessible name for the remove button; defaults to "Remove {label}".',
     onClick: 'Click handler. Renders <span> w/ invisible <button> inside for a11y.',
     href: 'Link URL. Renders as <a> element. Follows the shared navigation rule (see Link href).',
     description: 'A11y description via aria-description on root.',
