@@ -15,10 +15,10 @@
  * - /packages/core/src/hooks/index.ts
  */
 
-import {useState, useCallback, useEffect, useRef} from 'react';
+import {useState, useCallback, useEffect, useMemo, useRef} from 'react';
 import {flushSync} from 'react-dom';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
-import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
+import {useCommittedRef} from './useCommittedRef';
 
 /**
  * Where the content is shown while something other than scrolling moves it:
@@ -92,9 +92,9 @@ function isOwnClassWrite(
 /**
  * Observes what changes `el`'s overflow besides its scroll: its own size,
  * each child's size, the children added or removed, and its class or style.
- * Returns the teardown, which ends every observation, and `settle`, which
- * drops the class writes still waiting to be observed that only add or remove
- * the caller's own classes, given by `getOwnClassNames`.
+ * Returns the teardown, which ends every observation. A class write that
+ * only adds or removes the caller's own classes, given by `getOwnClassNames`,
+ * is not measured.
  *
  * The container attaches in React's commit, where a read forces a style and
  * layout pass before the browser's own. So the first measurement waits for
@@ -112,7 +112,7 @@ function observeContent(
   measure: () => void,
   measureFirst: () => void,
   getOwnClassNames: () => ReadonlySet<string>,
-): {readonly stop: () => void; readonly settle: () => void} {
+): () => void {
   let isActive = true;
   let isLaidOut = false;
   // While the first measurement waits for its microtask, the other reports
@@ -164,9 +164,33 @@ function observeContent(
   }
   const mutations =
     typeof MutationObserver === 'function'
-      ? new MutationObserver(() => {
-          followChildren();
-          measure();
+      ? new MutationObserver(records => {
+          const own = getOwnClassNames();
+          let changed = false;
+          let childrenChanged = false;
+          records.forEach((record, index) => {
+            if (record.type === 'childList') {
+              childrenChanged = true;
+              changed = true;
+            } else if (record.attributeName === 'class') {
+              // The class after this write is what the next class write found.
+              const next = records
+                .slice(index + 1)
+                .find(r => r.attributeName === 'class');
+              const after = next ? next.oldValue : el.getAttribute('class');
+              if (!isOwnClassWrite(record.oldValue, after, own)) {
+                changed = true;
+              }
+            } else {
+              changed = true;
+            }
+          });
+          if (childrenChanged) {
+            followChildren();
+          }
+          if (changed) {
+            measure();
+          }
         })
       : null;
   mutations?.observe(el, {
@@ -175,7 +199,7 @@ function observeContent(
     attributeFilter: ['class', 'style'],
     attributeOldValue: true,
   });
-  const stop = () => {
+  return () => {
     isActive = false;
     mutations?.disconnect();
     for (const unobserve of unobserveChildren.values()) {
@@ -183,47 +207,6 @@ function observeContent(
     }
     unobserveChildren.clear();
     unobserveContainer?.();
-  };
-  return {
-    stop,
-    // Called in a layout effect, after a commit changed the edges. A caller
-    // that styles the container from those edges (a fade mask, by class) has
-    // written them by now, and measuring that write reads layout again for
-    // edges this hook just measured. Only a class write that adds or removes
-    // the caller's own classes is dropped. Any other class or style write, and
-    // children added or removed, are measured as usual.
-    settle: () => {
-      const records = mutations?.takeRecords() ?? [];
-      if (records.length === 0) {
-        return;
-      }
-      const own = getOwnClassNames();
-      let changed = false;
-      let childrenChanged = false;
-      records.forEach((record, index) => {
-        if (record.type === 'childList') {
-          childrenChanged = true;
-          changed = true;
-        } else if (record.attributeName === 'class') {
-          // The class after this write is what the next class write found.
-          const next = records
-            .slice(index + 1)
-            .find(r => r.attributeName === 'class');
-          const after = next ? next.oldValue : el.getAttribute('class');
-          if (!isOwnClassWrite(record.oldValue, after, own)) {
-            changed = true;
-          }
-        } else {
-          changed = true;
-        }
-      });
-      if (childrenChanged) {
-        followChildren();
-      }
-      if (changed) {
-        measure();
-      }
-    },
   };
 }
 
@@ -267,13 +250,11 @@ export function useShownScrollOverflow(
   } = {},
 ) {
   const ownClassNames = options.ownClassNames ?? NO_CLASS_NAMES;
-  const ownSetRef = useRef<ReadonlySet<string>>(new Set(ownClassNames));
-  useIsomorphicLayoutEffect(() => {
-    ownSetRef.current = new Set(ownClassNames);
-  }, [ownClassNames]);
+  const ownSetRef = useCommittedRef(
+    useMemo(() => new Set(ownClassNames), [ownClassNames]),
+  );
   const elRef = useRef<HTMLElement | null>(null);
   const unobserveRef = useRef<(() => void) | null>(null);
-  const settleRef = useRef<(() => void) | null>(null);
   const shownRef = useRef<ShownPosition | null>(null);
   const releaseFrameRef = useRef(0);
 
@@ -382,20 +363,11 @@ export function useShownScrollOverflow(
     [measure, measureNow],
   );
 
-  // A commit that changed the edges is also the commit that restyles the
-  // container from them. A class write that only sets the caller's own
-  // classes is this hook's own result, so it is not observed as a change to
-  // the content.
-  useIsomorphicLayoutEffect(() => {
-    settleRef.current?.();
-  }, [state]);
-
   const scrollRef = useCallback(
     (el: HTMLElement | null) => {
       if (elRef.current) {
         unobserveRef.current?.();
         unobserveRef.current = null;
-        settleRef.current = null;
         elRef.current.removeEventListener('scroll', measureOnScroll);
         cancelAnimationFrame(releaseFrameRef.current);
         shownRef.current = null;
@@ -405,17 +377,15 @@ export function useShownScrollOverflow(
 
       if (el) {
         el.addEventListener('scroll', measureOnScroll, {passive: true});
-        const observation = observeContent(
+        unobserveRef.current = observeContent(
           el,
           measure,
           measureFirst,
           () => ownSetRef.current,
         );
-        unobserveRef.current = observation.stop;
-        settleRef.current = observation.settle;
       }
     },
-    [measure, measureFirst, measureOnScroll],
+    [measure, measureFirst, measureOnScroll, ownSetRef],
   );
 
   useEffect(() => {
@@ -424,7 +394,6 @@ export function useShownScrollOverflow(
       if (elRef.current) {
         unobserveRef.current?.();
         unobserveRef.current = null;
-        settleRef.current = null;
         elRef.current.removeEventListener('scroll', measureOnScroll);
       }
     };

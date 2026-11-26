@@ -443,6 +443,7 @@ describe('useScrollOverflow', () => {
     }
 
     const baseline = await readsAfterSettling(false);
+    expect(baseline).toBe(3);
     expect(await readsAfterSettling(true)).toBe(baseline);
   });
 
