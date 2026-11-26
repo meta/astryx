@@ -121,10 +121,11 @@ async function mountState(
   await subjectFor(page).waitFor({state: 'attached'});
   await expect(subjectFor(page)).toHaveCount(1);
   if ('focusSelector' in state) {
-    await expect(page.locator(state.focusSelector)).toHaveAttribute(
-      'aria-describedby',
-      /\S+/,
-    );
+    // The mark's Tooltip loads lazily. Its hidden text copy proves that the
+    // trigger has replaced the Suspense fallback without adding a description.
+    await expect(
+      page.locator('[hidden]').filter({hasText: 'Target'}).first(),
+    ).toBeAttached();
   }
 }
 
