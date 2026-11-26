@@ -138,6 +138,11 @@ describe('MultiSelector bottom-sheet load', () => {
     fireEvent.click(trigger);
     fireEvent.keyDown(trigger, {key: 'Enter'});
     fireEvent.keyDown(trigger, {key: ' '});
+    // The keys that move the highlight have no list to move across.
+    for (const key of ['ArrowDown', 'End', 'PageDown', 'ArrowUp', 'Home']) {
+      fireEvent.keyDown(trigger, {key});
+    }
+    fireEvent.keyDown(trigger, {key: 'End'});
     expect(onChange).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -152,10 +157,13 @@ describe('MultiSelector bottom-sheet load', () => {
       'role',
       'listbox',
     );
-    const active = trigger.getAttribute('aria-activedescendant');
-    if (active != null) {
-      expect(document.getElementById(active)).not.toBeNull();
-    }
+    // The sheet opens at its opening option, not where the keys would have
+    // taken the highlight.
+    expect(
+      document.getElementById(
+        trigger.getAttribute('aria-activedescendant') ?? '',
+      ),
+    ).toHaveTextContent('Bug');
     expect(screen.getAllByRole('dialog', {hidden: true})).toHaveLength(1);
     expect(onChange).not.toHaveBeenCalled();
   });

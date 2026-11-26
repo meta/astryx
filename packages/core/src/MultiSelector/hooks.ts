@@ -59,12 +59,22 @@ interface UseMultiComboboxOptions {
 interface UseMultiComboboxInternalOptions extends UseMultiComboboxOptions {
   /**
    * Whether the open list is in the document. False while an open waits for
-   * its surface to load: the open is held, so a second press or Enter repeats
-   * it instead of closing the list or toggling an option no one can see.
+   * its surface to load, so a press or key can neither close the list nor act
+   * on an option no one can see.
    * Defaults to `isOpen`.
    */
   isListShown?: boolean;
 }
+
+/** The keys that move the highlight across the options of an open list. */
+const HIGHLIGHT_KEYS: ReadonlySet<string> = new Set([
+  'ArrowDown',
+  'ArrowUp',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+]);
 
 /** Which cell of the highlighted row the highlight is on. */
 export type MultiComboboxCell = 'option' | 'action';
@@ -241,6 +251,14 @@ export function useMultiComboboxInternal({
       // Space stays the toggle: after a letter jumps to an option, Space picks
       // it, so Space never extends the typed prefix here.
       if (!hasSearch && e.key !== ' ' && typeahead.onKeyDown(e)) {
+        e.preventDefault();
+        return;
+      }
+
+      // While an open waits for its list, there is no option to move across.
+      // The keys that move the highlight are held back, and the list opens at
+      // its opening option.
+      if (isOpen && !isListShown && HIGHLIGHT_KEYS.has(e.key)) {
         e.preventDefault();
         return;
       }

@@ -398,12 +398,22 @@ interface UseComboboxInternalOptions<
 > extends UseComboboxOptions<T> {
   /**
    * Whether the open list is in the document. False while an open waits for
-   * its surface to load: the open is held, so a second press or Enter repeats
-   * it instead of closing the list or picking an option no one can see.
+   * its surface to load, so a press or key can neither close the list nor act
+   * on an option no one can see.
    * Defaults to `isOpen`.
    */
   isListShown?: boolean;
 }
+
+/** The keys that move the highlight across the options of an open list. */
+const HIGHLIGHT_KEYS: ReadonlySet<string> = new Set([
+  'ArrowDown',
+  'ArrowUp',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+]);
 
 /** Spread onto the caller's field. */
 interface ComboboxFieldProps {
@@ -591,6 +601,14 @@ export function useComboboxInternal<
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (isDisabled) {
+        return;
+      }
+
+      // While an open waits for its list, there is no option to move across.
+      // The keys that move the highlight are held back, and the list opens at
+      // its opening option.
+      if (isOpen && !isListShown && HIGHLIGHT_KEYS.has(e.key)) {
+        e.preventDefault();
         return;
       }
 
