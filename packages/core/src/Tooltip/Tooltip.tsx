@@ -185,6 +185,33 @@ function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
   return tokens.size > 0 ? [...tokens].join(' ') : undefined;
 }
 
+/**
+ * The trigger's accessible name as Button's `tooltip` reads it: its
+ * `aria-label`, else its text content. Null when `aria-labelledby` names it
+ * from other elements: that name is not compared, so the tooltip still
+ * describes the trigger.
+ */
+function nameOf(element: Element): string | null {
+  if (element.hasAttribute('aria-labelledby')) {
+    return null;
+  }
+  const label = element.getAttribute('aria-label');
+  if (label != null && label.trim() !== '') {
+    return label.trim();
+  }
+  return element.textContent?.trim() ?? '';
+}
+
+/**
+ * Whether the tooltip's text repeats the trigger's name. A tooltip that does
+ * adds no description, so a screen reader does not read the same words
+ * twice, as with Button's `tooltip`.
+ */
+function repeatsName(element: Element, contentText: string | null): boolean {
+  const text = contentText?.trim() ?? '';
+  return text !== '' && text === nameOf(element);
+}
+
 /** Sets `aria-describedby`, or removes it when no id is left. */
 function setDescribedBy(element: Element, ids: string | undefined): void {
   if (ids == null) {
@@ -226,6 +253,11 @@ export function Tooltip({
 }: TooltipProps): ReactElement {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textOnly = children != null ? isTextOnly(children) : false;
+  // Plain-text content, the only content that can repeat the trigger's name.
+  const contentText =
+    typeof content === 'string' || typeof content === 'number'
+      ? String(content)
+      : null;
 
   // Determine if hover indication should be shown
   const showHoverIndication =
@@ -266,7 +298,9 @@ export function Tooltip({
 
       // Set aria-describedby, merging with existing
       const existingDescribedBy = el.getAttribute('aria-describedby');
-      setDescribedBy(el, mergeIds(existingDescribedBy, tooltip.describedBy));
+      if (!repeatsName(el, contentText)) {
+        setDescribedBy(el, mergeIds(existingDescribedBy, tooltip.describedBy));
+      }
 
       return () => {
         tooltip.ref(null);
@@ -303,7 +337,7 @@ export function Tooltip({
       cancelled = true;
       detach?.();
     };
-  }, [anchorRef, tooltip.ref, tooltip.describedBy]);
+  }, [anchorRef, contentText, tooltip.ref, tooltip.describedBy]);
 
   // For element children with display:contents, attach ref to first child
   useIsomorphicLayoutEffect(() => {
@@ -329,10 +363,12 @@ export function Tooltip({
 
     // Set aria-describedby, merging with existing
     const existingDescribedBy = firstChild.getAttribute('aria-describedby');
-    setDescribedBy(
-      firstChild,
-      mergeIds(existingDescribedBy, tooltip.describedBy),
-    );
+    if (!repeatsName(firstChild, contentText)) {
+      setDescribedBy(
+        firstChild,
+        mergeIds(existingDescribedBy, tooltip.describedBy),
+      );
+    }
 
     return () => {
       tooltip.ref(null);
@@ -342,7 +378,7 @@ export function Tooltip({
         firstChild.removeAttribute('aria-describedby');
       }
     };
-  }, [anchorRef, textOnly, tooltip.ref, tooltip.describedBy]);
+  }, [anchorRef, contentText, textOnly, tooltip.ref, tooltip.describedBy]);
 
   // Sibling mode: render only the tooltip (no wrapper needed)
   if (anchorRef && children == null) {

@@ -239,6 +239,69 @@ describe('Tooltip', () => {
     });
   });
 
+  describe("a tooltip that repeats its trigger's name", () => {
+    it("adds no description when its text equals the trigger's aria-label", () => {
+      render(
+        <Tooltip content="Delete">
+          <IconButton label="Delete" icon={<TestIcon />} />
+        </Tooltip>,
+      );
+      expect(screen.getByRole('button', {name: 'Delete'})).not.toHaveAttribute(
+        'aria-describedby',
+      );
+    });
+
+    it('still describes the trigger when its text differs from the name', () => {
+      render(
+        <Tooltip content="Delete the file for good">
+          <IconButton label="Delete" icon={<TestIcon />} />
+        </Tooltip>,
+      );
+      expect(
+        screen.getByRole('button', {name: 'Delete'}),
+      ).toHaveAccessibleDescription('Delete the file for good');
+    });
+
+    it('adds no description to an anchorRef trigger whose text is the tooltip text', () => {
+      function Anchored() {
+        const anchorRef = useRef<HTMLButtonElement>(null);
+        return (
+          <>
+            <button ref={anchorRef} type="button" aria-describedby="hint">
+              Archive
+            </button>
+            <span id="hint">Moves it out of the inbox</span>
+            <Tooltip anchorRef={anchorRef} content=" Archive " />
+          </>
+        );
+      }
+      render(<Anchored />);
+      // The trigger's own description stays; the tooltip adds none.
+      expect(screen.getByRole('button', {name: 'Archive'})).toHaveAttribute(
+        'aria-describedby',
+        'hint',
+      );
+    });
+
+    it('still describes a trigger named by aria-labelledby, as Button does', () => {
+      render(
+        <>
+          <span id="save-name">Save</span>
+          <Tooltip content="Save">
+            <IconButton
+              label="Save"
+              aria-labelledby="save-name"
+              icon={<TestIcon />}
+            />
+          </Tooltip>
+        </>,
+      );
+      expect(
+        screen.getByRole('button', {name: 'Save'}),
+      ).toHaveAccessibleDescription('Save');
+    });
+  });
+
   describe('invoker', () => {
     // A popover takes its invoker's place in the focus order. A tooltip has
     // nothing to focus, and a popover its trigger opens needs that place.
