@@ -320,11 +320,13 @@ export const AllVariations: Story = {
 function RemovableRow({
   label,
   value,
-  isClickable,
+  isClickable = false,
+  href,
 }: {
   label: string;
   value: string;
-  isClickable: boolean;
+  isClickable?: boolean;
+  href?: string;
 }) {
   const [isRemoved, setIsRemoved] = useState(false);
   if (isRemoved) {
@@ -334,6 +336,7 @@ function RemovableRow({
     <Token
       label={label}
       onClick={isClickable ? () => {} : undefined}
+      href={href}
       endContent={<span style={{fontWeight: 700}}>{value}</span>}
       onRemove={() => setIsRemoved(true)}
     />
@@ -354,15 +357,25 @@ export const LongEndContentInNarrowSpace: Story = {
         alignItems: 'flex-start',
         gap: '8px',
       }}>
-      <RemovableRow
-        label="Static range:"
-        value="Dec 30, 2024 – Jan 2, 2025"
-        isClickable={false}
-      />
+      <RemovableRow label="Static range:" value="Dec 30, 2024 – Jan 2, 2025" />
       <RemovableRow
         label="Clickable range:"
         value="Dec 30, 2024 – Jan 2, 2025"
         isClickable
+      />
+      <RemovableRow
+        label="Link range:"
+        value="Dec 30, 2024 – Jan 2, 2025"
+        href="#link-range"
+      />
+      <Token
+        label="With a control:"
+        endContent={
+          <button type="button" aria-label="Range details">
+            i
+          </button>
+        }
+        onRemove={() => {}}
       />
     </div>
   ),

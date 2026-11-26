@@ -8,8 +8,9 @@
  * @output Real-engine proof that a token cut by its width keeps its Remove
  *   button inside the token, visible and hit-testable across a 24 by 24 CSS
  *   pixel target, that its label keeps a width, and that keyboard removal
- *   still works, for the static and the clickable structures
- *   (spec:AST-020 FR1, WCAG 2.2 1.4.4).
+ *   still works, for the static, clickable and link structures
+ *   (spec:AST-020 FR1, WCAG 2.2 1.4.4); and that a focused control in a
+ *   token's end content keeps its focus ring.
  * @position Run with `pnpm test:a11y-contract`. jsdom has no layout or hit
  *   testing, so the cut is only observable here.
  */
@@ -35,17 +36,21 @@ test.afterAll(async () => {
 
 const STORY = 'core-token--long-end-content-in-narrow-space';
 
-async function openAtLargeText(page: Page) {
+async function open(page: Page) {
   await page.setViewportSize({width: 390, height: 700});
   await page.goto(`${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`);
-  // 200% root text, as a browser's text-size setting applies it.
-  await page.addStyleTag({content: 'html { font-size: 200% !important; }'});
   await expect(
     page.locator('#storybook-root button[aria-label^="Remove "]'),
-  ).toHaveCount(2);
+  ).toHaveCount(4);
 }
 
-for (const label of ['Static range:', 'Clickable range:']) {
+async function openAtLargeText(page: Page) {
+  await open(page);
+  // 200% root text, as a browser's text-size setting applies it.
+  await page.addStyleTag({content: 'html { font-size: 200% !important; }'});
+}
+
+for (const label of ['Static range:', 'Clickable range:', 'Link range:']) {
   test(`${label} keeps its Remove button visible and hit-testable at 200% text`, async ({
     page,
   }) => {
@@ -113,3 +118,55 @@ for (const label of ['Static range:', 'Clickable range:']) {
     ).toBeVisible();
   });
 }
+
+test('a focused control in the end content keeps its focus ring', async ({
+  page,
+}) => {
+  await open(page);
+  const control = page.getByRole('button', {name: 'Range details'});
+  // Keyboard focus, so the ring shows as it does for a keyboard user.
+  for (let i = 0; i < 20; i += 1) {
+    await page.keyboard.press('Tab');
+    if (await control.evaluate(el => el === document.activeElement)) {
+      break;
+    }
+  }
+  await expect(control).toBeFocused();
+  // The ring's box, cut to the token's own clip, must lie inside the end
+  // content's clip: the end content clips no part of the ring that the token
+  // shows.
+  const result = await control.evaluate(el => {
+    const style = getComputedStyle(el);
+    const reach =
+      parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+    const box = el.getBoundingClientRect();
+    const ring = {
+      left: box.left - reach,
+      top: box.top - reach,
+      right: box.right + reach,
+      bottom: box.bottom + reach,
+    };
+    const slot = el.parentElement?.getBoundingClientRect();
+    const token = el.parentElement?.parentElement?.getBoundingClientRect();
+    if (slot == null || token == null) {
+      return null;
+    }
+    const shown = {
+      left: Math.max(ring.left, token.left),
+      top: Math.max(ring.top, token.top),
+      right: Math.min(ring.right, token.right),
+      bottom: Math.min(ring.bottom, token.bottom),
+    };
+    return {
+      reach,
+      inside:
+        shown.left >= slot.left - 0.5 &&
+        shown.top >= slot.top - 0.5 &&
+        shown.right <= slot.right + 0.5 &&
+        shown.bottom <= slot.bottom + 0.5,
+    };
+  });
+  expect(result).not.toBeNull();
+  expect(result?.reach).toBeGreaterThan(0);
+  expect(result?.inside).toBe(true);
+});
