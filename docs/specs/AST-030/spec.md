@@ -1509,8 +1509,7 @@ access, as FR12's labels are (an applier who cannot be looked up counts as absen
 for the release pull request, a fix forward for a regression in the current
 release range, and a change that unblocks a consumer's upgrade. Such pull
 requests are rare, so admitting them at once costs little room, and a release
-or a fix forward never waits behind ordinary pull requests. The owner's words:
-"What is release critical? CI should just allow them they’re not that common".
+or a fix forward never waits behind ordinary pull requests.
 
 Rejected: queueing release-critical pull requests ahead of others inside
 DEC-16's wait (a full CI still delays them), and running a reduced suite for
