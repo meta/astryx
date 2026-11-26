@@ -548,10 +548,8 @@ they are separately named.
   the last, beside only light files that pack nothing, so their pictures never
   run beside the packing and conformance suites; the other legs take every
   heavier file. A real-Chrome file that marks itself (`// node-leg: own`)
-  takes a Node leg of its own instead, with only the lightest non-packing
-  files beside it where they fill that leg (otherwise the same light files
-  as the shared leg), while a leg is left for the other files, and starts
-  after them. In the Node legs, a file with no recorded time counts as the ninetieth
+  takes a Node leg of its own instead, with the same light files beside it,
+  while a leg is left for the other files, and starts after them. In the Node legs, a file with no recorded time counts as the ninetieth
   percentile of the recorded times, and which files run never depends on the
   times. No pull-request check fails on the record's coverage or on a
   recorded time's drift. After each successful full unit run of `main`, and
