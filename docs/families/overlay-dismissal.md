@@ -262,8 +262,6 @@ this record's current membership snapshot must be updated with it.
 
 FR3 gap: a platform close request does not reach a `usePopover` popover with
 `tabBehavior: 'pageOrder'`.
-FR9 gap: a Popover's focus return to a control is a plain focus, which can
-scroll the control into view.
 
 ## Allowed component variation
 
@@ -320,7 +318,10 @@ scroll the control into view.
 
 FR9 gap: Dialog, BottomSheet, BottomSheetSwitcher, Lightbox and DropdownMenu return focus with
 `preventScroll: true`, so a Tab-stop return target that fits the visible area
-but is not wholly inside it is not revealed.
+but is not wholly inside it is not revealed. Popover and ContextMenu return
+focus with a plain focus, which the browser scrolls into view as it chooses:
+also a return target that is not a Tab stop, such as a `tabindex="-1"` region,
+and a target larger than the visible area.
 
 The rows marked partial or local are current adoption gaps against FR1, and the
 rows naming an implementation gap are gaps against FR8 or FR9. They are not
