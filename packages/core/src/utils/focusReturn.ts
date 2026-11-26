@@ -7,7 +7,8 @@
  * @output Focus ownership and availability through shadow hosts and frames
  *   (`ownsFocus`, `isFocusUnclaimed`); whether focus would be lost if a
  *   surface hid now; a focus move whose ring follows the last input; an
- *   overlay's focus return that never scrolls the page; the path that moves
+ *   overlay's focus return that scrolls only a hidden Tab-stop opener just
+ *   into view (`revealReturnTarget`); the path that moves
  *   focus out of removed or hidden content; and the focus return that
  *   Popover, Dialog and DropdownMenu run as they close (`trackLayerFocus`,
  *   `restoreLayerFocus`).
@@ -35,6 +36,7 @@ import {
   isShadowRoot,
 } from './nodeType';
 import {devWarn} from './devWarning';
+import {SCROLLABLE_OVERFLOW} from './scrollView';
 
 function focusRoot(node: Node): Document | ShadowRoot | null {
   const root = node.getRootNode();
@@ -259,20 +261,15 @@ function isTabStop(element: HTMLElement): boolean {
   return element.tabIndex >= 0 && element.matches(FOCUSABLE_SELECTOR);
 }
 
-/** Whether an `overflow` value lets a person scroll the box. */
-function scrollsForPerson(overflow: string): boolean {
-  return overflow === 'auto' || overflow === 'scroll' || overflow === 'overlay';
-}
-
 /**
  * Whether one scroll can show all of the element without moving content that
  * a person cannot scroll back. The element fits inside the viewport and inside
- * each scroller a person can scroll. A box with `overflow: hidden` (such as a
- * carousel track or a truncation wrapper) must already show, along that axis,
- * what the scroll leaves visible inside it: the element itself, or the nearest
- * scroller a person can scroll between them (a dialog's scrolling body inside
- * its clipped frame), since that scroller shows the element after the scroll.
- * `scrollIntoView` scrolls a hidden box too.
+ * each scroller a person can scroll. `scrollIntoView` also scrolls a box with
+ * `overflow: hidden`, such as a carousel track or a truncation wrapper. So
+ * such a box must already show, along that axis, what stays visible inside it
+ * after the scroll. That is the element itself, or the nearest scroller a
+ * person can scroll between them, such as a dialog's scrolling body inside its
+ * clipped frame.
  */
 function fitsVisibleArea(element: HTMLElement): boolean {
   const doc = element.ownerDocument;
@@ -295,8 +292,8 @@ function fitsVisibleArea(element: HTMLElement): boolean {
     scroller = scroller.parentElement
   ) {
     const style = view.getComputedStyle(scroller);
-    const scrollsX = scrollsForPerson(style.overflowX);
-    const scrollsY = scrollsForPerson(style.overflowY);
+    const scrollsX = SCROLLABLE_OVERFLOW.has(style.overflowX);
+    const scrollsY = SCROLLABLE_OVERFLOW.has(style.overflowY);
     if (
       (scrollsX && box.width > scroller.clientWidth) ||
       (scrollsY && box.height > scroller.clientHeight)
