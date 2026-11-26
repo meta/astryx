@@ -4,7 +4,7 @@
 
 /**
  * @file DateTimeInput.tsx
- * @input Uses React, Field, Calendar, NativeDateSegment, NativeTimeSegment, TouchDateTimeField, usePopover, useAnnounce, time parsing utilities, StyleX intrinsic flex layout
+ * @input Uses React, Field, LazyCalendar, NativeDateSegment, NativeTimeSegment, TouchDateTimeField, usePopover, useAnnounce, time parsing utilities, StyleX intrinsic flex layout
  * @output Exports DateTimeInput component, DateTimeInputProps, DateInputEntryError, EntryErrorBehavior, and native picker type; cleared values keep the pointer Calendar controlled-empty; typed date rejections reach onEntryErrorChange
  * @position Core implementation; consumed by index.ts, tested by DateTimeInput.test.tsx
  *
@@ -57,14 +57,15 @@ import {
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {Spinner} from '../Spinner';
-import {
-  Calendar,
-  type ISODateString,
-  type CalendarHandle,
-  type DayOfWeek,
-  type DayOfWeekName,
+import type {
+  ISODateString,
+  CalendarHandle,
+  DayOfWeek,
+  DayOfWeekName,
 } from '../Calendar';
 import {useCalendarConstraints} from '../Calendar/hooks';
+import {LazyCalendar} from '../Calendar/LazyCalendar';
+import {useLazyCalendarOpen} from '../Calendar/useLazyCalendarOpen';
 import {usePopover} from '../Popover';
 import {
   isFocusInsideOwnedLayer,
@@ -1009,21 +1010,28 @@ function PointerDateTimeField({
     },
   });
 
+  const dateSegmentRef = useRef<HTMLDivElement | null>(null);
+  const lazyCalendar = useLazyCalendarOpen({
+    fieldRef: dateSegmentRef,
+    isDisabled: isEffectivelyDisabled,
+    show: popover.show,
+  });
+
   const handleCalendarToggle = useCallback(() => {
     if (!isEffectivelyDisabled) {
       if (popover.isOpen) {
         popover.hide();
       } else {
-        popover.show();
+        lazyCalendar.open();
       }
     }
-  }, [isEffectivelyDisabled, popover]);
+  }, [isEffectivelyDisabled, lazyCalendar, popover]);
 
   const handleDateInputClick = useCallback(() => {
     if (!isEffectivelyDisabled && !popover.isOpen) {
-      popover.show({skipAutoFocus: true});
+      lazyCalendar.open({skipAutoFocus: true});
     }
-  }, [isEffectivelyDisabled, popover]);
+  }, [isEffectivelyDisabled, lazyCalendar, popover]);
 
   // --- Date handlers ---
   const handleDateChange = useCallback(
@@ -1221,7 +1229,7 @@ function PointerDateTimeField({
         // popover from the keyboard, keeping focus in the input (forms-13).
         e.preventDefault();
         if (!isEffectivelyDisabled) {
-          popover.show({skipAutoFocus: true});
+          lazyCalendar.open({skipAutoFocus: true});
         }
       } else if (
         e.key === 'Enter' &&
@@ -1234,7 +1242,13 @@ function PointerDateTimeField({
         commitDatePendingInput();
       }
     },
-    [popover, commitDatePendingInput, isEffectivelyDisabled, isDatePending],
+    [
+      popover,
+      lazyCalendar,
+      commitDatePendingInput,
+      isEffectivelyDisabled,
+      isDatePending,
+    ],
   );
 
   // --- Time-option popover (#2727) ---
@@ -1776,7 +1790,15 @@ function PointerDateTimeField({
         )}>
         {/* Date input */}
         <div
-          ref={usesNativePicker ? undefined : popover.triggerRef}
+          ref={
+            usesNativePicker
+              ? undefined
+              : el => {
+                  dateSegmentRef.current = el;
+                  popover.triggerRef(el);
+                }
+          }
+          {...(usesNativePicker ? undefined : lazyCalendar.fieldProps)}
           {...mergeProps(
             themeProps('date-time-input-date-segment', {
               size,
@@ -2071,7 +2093,7 @@ function PointerDateTimeField({
           // Mounted only while open, like the time list below; the calendar
           // opens on the current value.
           !popover.isOpen ? null : (
-            <Calendar
+            <LazyCalendar
               handleRef={calendarRef}
               calendar={typedDate.calendar}
               mode="single"
