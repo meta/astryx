@@ -10,7 +10,7 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {fireEvent, render, screen} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
 import type {ReactNode} from 'react';
@@ -838,5 +838,17 @@ describe('Link names and native attributes', () => {
     const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent('Configure settings');
     expect(link.getAttribute('aria-describedby')).toBe(tooltip.id);
+  });
+
+  it('adds no description when its tooltip repeats the link text', async () => {
+    render(
+      <Link href="/settings" tooltip="Settings">
+        Settings
+      </Link>,
+    );
+    const link = screen.getByRole('link', {name: 'Settings'});
+    // The tooltip wires its trigger once the commit has run.
+    await waitFor(() => expect(getTooltip()).toHaveTextContent('Settings'));
+    expect(link).not.toHaveAttribute('aria-describedby');
   });
 });
