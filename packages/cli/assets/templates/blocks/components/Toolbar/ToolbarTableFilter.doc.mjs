@@ -27,5 +27,4 @@ export const doc = {
     'Table',
     'EmptyState',
   ],
-  icons: {Columns3Cog: 'viewColumns', Search: 'search'},
 };

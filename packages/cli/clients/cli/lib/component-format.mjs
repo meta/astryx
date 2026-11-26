@@ -12,6 +12,11 @@ import {
 import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
+import {
+  buildSignature,
+  formatHookParameters,
+  formatHookReturns,
+} from './hook-format.mjs';
 
 /**
  * Derive the `defineTheme` component-override key from a theming target.
@@ -105,6 +110,18 @@ function formatPropsList(props, {whole = false} = {}) {
 }
 
 /**
+ * Whether a family doc's sub-component entry is the read's own component. A
+ * read scoped to one member keeps that member's entry under `components`, and
+ * its props already print under `## Props`.
+ * @param {any} docs
+ * @param {any} comp
+ * @returns {boolean}
+ */
+function isOwnEntry(docs, comp) {
+  return 'props' in docs && comp.name === docs.name;
+}
+
+/**
  * How a read prints prop descriptions: each one's first sentence, under one
  * line that names the command printing them whole, or every one whole. A read
  * prints them whole when it has no such command, or when the cut would save
@@ -119,7 +136,9 @@ function propsPlan(docs, propsCommand) {
   /** @type {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} */
   const props = [
     ...(docs.props ?? []),
-    ...(docs.components ?? []).flatMap((/** @type {any} */ c) => c.props ?? []),
+    ...(docs.components ?? [])
+      .filter((/** @type {any} */ c) => !isOwnEntry(docs, c))
+      .flatMap((/** @type {any} */ c) => c.props ?? []),
   ];
   let saved = 0;
   for (const p of props) {
@@ -184,14 +203,17 @@ export function formatAccessibility(accessibility, heading = '##') {
  * reader at the sub-component's own docs instead of a blank/`undefined` block.
  * @param {any} comp
  * @param {boolean} [whole] - print prop descriptions whole
+ * @param {boolean} [ownProps] - the entry is the read's own component, whose
+ *   props print under `## Props`: print no props list
  * @returns {string[]}
  */
-function formatSubComponent(comp, whole = true) {
+function formatSubComponent(comp, whole = true, ownProps = false) {
   const out = [`### ${comp.name}\n`];
   if (comp.description) {
     out.push(comp.description + '\n');
   }
   out.push(...formatAccessibility(comp.usage?.accessibility, '####'));
+  if (ownProps) return out;
   const list = formatPropsList(comp.props, {whole});
   if (list) {
     out.push(list + '\n');
@@ -225,9 +247,10 @@ function isBareReference(comp) {
  * @param {any[]} components
  * @param {string} [exampleHashes] - heading level for inline examples; none when omitted
  * @param {boolean} [whole] - print prop descriptions whole
+ * @param {any} [docs] - the doc being read, so its own entry prints no props again
  * @returns {string[]}
  */
-function formatSubComponents(components, exampleHashes, whole = true) {
+function formatSubComponents(components, exampleHashes, whole = true, docs) {
   /** @type {string[]} */
   const out = [];
   /** @type {string[]} */
@@ -250,7 +273,13 @@ function formatSubComponents(components, exampleHashes, whole = true) {
       continue;
     }
     flush();
-    out.push(...formatSubComponent(comp, whole));
+    out.push(
+      ...formatSubComponent(
+        comp,
+        whole,
+        docs != null && isOwnEntry(docs, comp),
+      ),
+    );
     if (exampleHashes && comp.examples?.length) {
       for (const ex of comp.examples) {
         out.push(...formatExample(ex, exampleHashes));
@@ -439,11 +468,21 @@ export function formatFull(docs, options = {}) {
   // Multi-component
   if ('components' in docs) {
     sections.push('## Components\n');
-    if (docs.components.some((/** @type {any} */ c) => c.props?.length)) {
+    if (
+      docs.components.some(
+        (/** @type {any} */ c) => c.props?.length && !isOwnEntry(docs, c),
+      )
+    ) {
       sections.push(...pointer);
     }
-    sections.push(...formatSubComponents(docs.components, '####', plan.whole));
+    sections.push(
+      ...formatSubComponents(docs.components, '####', plan.whole, docs),
+    );
   }
+
+  // A read that resolves to a hook prints what it takes and returns, as
+  // `hook <name>` does.
+  sections.push(...formatHookParameters(docs), ...formatHookReturns(docs));
 
   if (docs.examples?.length) {
     sections.push('## Examples\n');
@@ -564,106 +603,158 @@ export function formatFull(docs, options = {}) {
   return sections.join('\n');
 }
 
+/** Longest doc example the short answer prints; a longer one stays in `--detail full`. */
+const SHORT_EXAMPLE_MAX_LINES = 20;
+
 /**
- * Format compact docs for LLM consumption (replaces extractCompact + ensureImportStatement).
- * Includes: import, best practices, props, theming.
+ * The common-use code for the short answer: the doc's first example when it
+ * runs on its own and is short, else one element built from the required
+ * props, or nothing when it has none. `...` marks each value the caller
+ * fills in.
+ * @param {any} docs
+ * @param {string} name - the component's export name
+ * @returns {string | null}
+ */
+export function shortUsage(docs, name) {
+  const example = (docs.examples ?? []).find(
+    (/** @type {any} */ ex) =>
+      ex.kind !== 'setup' && typeof ex.code === 'string',
+  );
+  if (example) {
+    const code = example.code.trim();
+    if (code.split('\n').length <= SHORT_EXAMPLE_MAX_LINES) return code;
+  }
+  if (!/^[A-Z]/.test(name) || !Array.isArray(docs.props)) return null;
+  /** @type {string[]} */
+  const attrs = [];
+  let hasChildren = false;
+  for (const p of docs.props) {
+    if (!p.required) continue;
+    if (p.name === 'children') {
+      hasChildren = true;
+      continue;
+    }
+    attrs.push(
+      /^'|^string$/.test(String(p.type ?? '').trim())
+        ? `${p.name}="..."`
+        : `${p.name}={...}`,
+    );
+  }
+  // A line with no required prop and no children shows nothing the import
+  // does not, so the answer prints no usage.
+  if (!attrs.length && !hasChildren) return null;
+  const open = [name, ...attrs].join(' ');
+  return hasChildren ? `<${open}>...</${name}>` : `<${open} />`;
+}
+
+/**
+ * Format the short answer that a component read prints by default
+ * (`--detail compact`): what the component is, its import, the common use,
+ * every prop with its description's first sentence, and its pieces. It ends with the commands that
+ * print the rest, so nothing the doc holds is out of reach.
+ *
+ * Every part comes from fields each component doc already has, so a new
+ * component or an integration's component gets the same answer.
  * @param {any} docs
  * @param {string} componentName
  * @param {string} [importHint]
- * @param {{propsCommand?: string|null}} [options] - `propsCommand` is the
- *   `component … --props` command that prints this read's props whole
+ * @param {{propsCommand?: string | null, fullCommand?: string | null}} [options]
  * @returns {string}
  */
 export function formatCompact(docs, componentName, importHint, options = {}) {
-  // Bare name (un-prefix migration P5a): the CLI now presents component names
-  // without the Astryx prefix. componentName is already bare post-P4.
-  const displayName = componentName.startsWith('XDS')
-    ? componentName.slice(3)
-    : componentName;
-
+  const run = getCliInvocation();
+  const name = docs.name ?? componentName;
   /** @type {string[]} */
   const sections = [];
 
-  sections.push(`# ${docs.name}\n`);
+  sections.push(`# ${name}\n`);
   const desc = docs.usage?.description || docs.description || '';
-  sections.push(desc + '\n');
+  const firstParagraph = desc.split(/\n\s*\n/)[0].trim();
+  if (firstParagraph) sections.push(firstParagraph + '\n');
 
-  if (docs.usage?.anatomy?.length) {
-    sections.push(
-      'Anatomy: ' +
-        docs.usage.anatomy
-          .map((/** @type {any} */ el) => {
-            const req = el.required ? '' : ' (optional)';
-            return `${el.name}${req}`;
-          })
-          .join(', ') +
-        '\n',
-    );
-  }
-
+  // A replacement prints the export its package has (componentName), not
+  // the Core name it answers to.
+  const displayName = componentName.startsWith('XDS')
+    ? componentName.slice(3)
+    : componentName;
   if (importHint) {
-    sections.push('## Import\n');
     sections.push(
-      `\`\`\`tsx\nimport { ${displayName} } from '${importHint}';\n\`\`\`\n`,
+      `**Import:** \`import { ${displayName} } from '${importHint}';\`\n`,
     );
   }
 
-  sections.push(...formatBestPractices(docs.usage?.bestPractices));
+  const setup = (docs.examples ?? []).filter(
+    (/** @type {any} */ ex) =>
+      ex.kind === 'setup' &&
+      typeof ex.code === 'string' &&
+      ex.code.trim().split('\n').length <= SHORT_EXAMPLE_MAX_LINES,
+  );
+  const usage = shortUsage(docs, displayName);
+  if (setup.length || usage) {
+    sections.push('## Usage\n');
+    for (const ex of setup) sections.push(...formatExample(ex, '###'));
+    if (usage) sections.push('```tsx\n' + usage + '\n```\n');
+  }
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
+  // Each prop prints its description's first sentence (INV4); the More
+  // list names the `--props` read that prints them whole.
   const plan = propsPlan(docs, options.propsCommand);
-  // The pointer prints once, above the first props list.
-  let pointer = plan.pointer;
-
-  // Props
-  if ('props' in docs) {
+  if ('props' in docs && docs.props?.length) {
     sections.push('## Props\n');
-    sections.push(...pointer);
-    pointer = [];
     sections.push(formatPropsList(docs.props, {whole: plan.whole}) + '\n');
   }
 
-  if ('components' in docs) {
-    if (docs.components.some((/** @type {any} */ c) => c.props?.length)) {
-      sections.push(...pointer);
+  if ('components' in docs && docs.components?.length) {
+    /** @type {string[]} */
+    const pieces = [];
+    /** @type {string[]} */
+    const bare = [];
+    for (const comp of docs.components) {
+      // A family doc can list its own entry again; its props are above.
+      if (isOwnEntry(docs, comp)) continue;
+      if (comp.props?.length) {
+        pieces.push(
+          `### ${comp.name}\n`,
+          formatPropsList(comp.props, {whole: plan.whole}) + '\n',
+        );
+      } else {
+        bare.push(comp.name);
+      }
     }
-    sections.push(
-      ...formatSubComponents(docs.components, undefined, plan.whole),
-    );
+    if (pieces.length || bare.length) sections.push('## Components\n');
+    sections.push(...pieces);
+    if (bare.length) {
+      sections.push(
+        `${bare.join(', ')}: read ${bare.length === 1 ? 'it' : 'them in one call'} with \`${run} component ${bare.join(' ')}\`.\n`,
+      );
+    }
   }
 
-  // Limited examples (max 3)
-  const examples = docs.examples?.slice(0, 3) || [];
-  if (examples.length) {
-    sections.push('## Usage\n');
-    for (const ex of examples) {
-      sections.push(...formatExample(ex, '###'));
-    }
+  // A hook's parameters print as its props do: one line each, with the
+  // description's first sentence; `--detail full` prints them whole.
+  if (docs.params?.length) {
+    sections.push('## Parameters\n');
+    sections.push(formatPropsList(docs.params) + '\n');
   }
-
-  // Derived theming properties (compact includes these for theme consumers)
-  if (docs.theming?.derived?.length) {
-    sections.push('## Derived Theme Properties\n');
-    sections.push('Standard CSS properties that also set internal vars:\n');
-    const propLines = [];
-    propLines.push('| CSS Property | Sets |');
-    propLines.push('|---|---|');
-    for (const d of docs.theming.derived) {
-      const target =
-        d.expand === 'container'
-          ? 'container layout tokens'
-          : (d.vars || [])
-              .map((/** @type {any} */ v) => `\`${mdCell(v)}\``)
-              .join(', ');
-      propLines.push(`| \`${mdCell(d.property)}\` | ${target} |`);
-    }
-    sections.push(propLines.join('\n') + '\n');
-  }
+  sections.push(...formatHookReturns(docs));
 
   if (docs.theming?.componentIcons?.length) {
     sections.push('## Component Icon Slots\n');
     sections.push(formatComponentIconSlots(docs.theming.componentIcons));
+  }
+
+  if (options.propsCommand && !plan.whole) {
+    sections.push(
+      `Each prop's whole description: \`${run} ${options.propsCommand}\`\n`,
+    );
+  }
+  // The last line says how to get the full output.
+  if (options.fullCommand) {
+    sections.push(
+      `Full output, with anatomy, best practices, examples and theming (classes, data attributes, CSS variables): \`${run} ${options.fullCommand}\`\n`,
+    );
   }
 
   return sections.join('\n');
@@ -749,8 +840,10 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
   const output = [];
 
   // Signature line
-  const sigStr =
-    signatureProps.length > 0
+  // A hook's signature names what it returns, as `hook <name>` prints it.
+  const sigStr = Array.isArray(docs.returns)
+    ? buildSignature({...docs, name: displayName})
+    : signatureProps.length > 0
       ? `${displayName}(${signatureProps.join(', ')})`
       : displayName;
   output.push(importHint ? `${sigStr}  <- from '${importHint}'` : sigStr);

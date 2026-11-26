@@ -16,17 +16,7 @@ export const doc = {
     'spreadsheet',
     'roster',
   ],
-  isReady: false,
+  isReady: true,
   category: 'Table - Basic',
   isHiddenFromOverview: true,
-  icons: {
-    ArrowDownTrayIcon: 'download',
-    DocumentDuplicateIcon: 'copy',
-    EllipsisHorizontalIcon: 'moreHorizontal',
-    EnvelopeIcon: 'mail',
-    NoSymbolIcon: 'error',
-    PencilIcon: 'edit',
-    TrashIcon: 'delete',
-    UserPlusIcon: 'userAdd',
-  },
 };

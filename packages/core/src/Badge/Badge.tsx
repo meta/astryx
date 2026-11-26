@@ -27,7 +27,7 @@ import {
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {isRenderable} from '../utils/isRenderable';
-import {textDirectionProps} from '../utils/textDirection';
+import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
 import type {BadgeVariantMap} from './index';
 
 /**
@@ -91,9 +91,12 @@ const styles = stylex.create({
  */
 const variants = stylex.create({
   // Semantic variants
+  // In a primary or destructive Button, the neutral tint over the fill misses
+  // 4.5:1. There the badge paints the Button's colour pair inverted, which
+  // keeps its contrast.
   neutral: {
-    backgroundColor: colorVars['--color-neutral'],
-    color: colorVars['--color-text-primary'],
+    backgroundColor: `var(--_button-on-fill, ${colorVars['--color-neutral']})`,
+    color: `var(--_button-fill, ${colorVars['--color-text-primary']})`,
   },
   info: {
     backgroundColor: colorVars['--color-info'],
@@ -259,6 +262,9 @@ export function Badge({
   // Whether the label renders anything, which is when the badge grows with it.
   const hasLabel = isRenderable(label);
 
+  // The label cuts its own text, so a label in one script takes its direction.
+  const labelDirection = cutTextDirection(label);
+
   return (
     <span
       ref={ref}
@@ -276,7 +282,12 @@ export function Badge({
       title={labelTitle}
       {...props}>
       {icon}
-      <span {...textDirectionProps(label)} {...stylex.props(styles.label)}>
+      <span
+        {...labelDirection}
+        {...stylex.props(
+          styles.label,
+          labelDirection.dir != null && truncatedTextStyles.pageAlign,
+        )}>
         {label}
       </span>
     </span>

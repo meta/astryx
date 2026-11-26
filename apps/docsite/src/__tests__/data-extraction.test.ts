@@ -23,6 +23,7 @@ import {
   DEMO_CONTENT_MODULE,
   replaceDemoContent,
 } from '../../../../packages/cli/foundation/discovery/template-adapter.mjs';
+import {fillTemplatePlaceholders} from '../../../../packages/cli/foundation/discovery/template-placeholders.mjs';
 import {packages} from '../generated/packageRegistry';
 import {
   components,
@@ -222,38 +223,6 @@ describe('packageRegistry', () => {
     const names = packages.map(p => p.name);
     expect(new Set(names).size).toBe(names.length);
   });
-
-  it('packages with READMEs have readme content', () => {
-    for (const pkg of packages) {
-      if (pkg.hasReadme) {
-        expect(pkg.readme).toBeTruthy();
-        expect(typeof pkg.readme).toBe('string');
-        expect(pkg.readme!.length).toBeGreaterThan(50);
-      } else {
-        expect(pkg.readme).toBeNull();
-      }
-    }
-  });
-
-  it('packages with CHANGELOGs have changelog content', () => {
-    for (const pkg of packages) {
-      if (pkg.hasChangelog) {
-        expect(pkg.changelog).toBeTruthy();
-        expect(typeof pkg.changelog).toBe('string');
-        expect(pkg.changelog!.length).toBeGreaterThan(
-          pkg.name === '@astryxdesign/richtext' ? 0 : 50,
-        );
-      } else {
-        expect(pkg.changelog).toBeNull();
-      }
-    }
-  });
-
-  it('CLI package has a substantial README', () => {
-    const cli = packages.find(p => p.name === '@astryxdesign/cli');
-    expect(cli?.readme).toBeTruthy();
-    expect(cli!.readme!.length).toBeGreaterThan(1000);
-  });
 });
 
 // ── Component Registry ─────────────────────────────────────────────────
@@ -347,7 +316,10 @@ describe('componentRegistry', () => {
       ([packageName, entries]) =>
         packageName === '@astryxdesign/core'
           ? []
-          : entries.map(component => component.name),
+          : entries
+              // Hook entries carry `params` and have no preview.
+              .filter(component => component.params == null)
+              .map(component => component.name),
     );
     expect(Object.keys(externalComponentPreviews).sort()).toEqual(
       externalNames.sort(),
@@ -1033,7 +1005,7 @@ describe('blockRegistry', () => {
     }
   });
 
-  it('shows each core block as a copy writes it, with no demo content (spec:AST-033 FR23)', () => {
+  it('shows each core block as a copy writes it, with no demo content or icon placeholders (spec:AST-033 FR23)', () => {
     const blocksDir = path.join(
       REPO_ROOT,
       'packages/cli/assets/templates/blocks',
@@ -1041,9 +1013,12 @@ describe('blockRegistry', () => {
     for (const block of blocks.filter(b => b.sourcePackage == null)) {
       const file = path.join(blocksDir, block.category, `${block.dirName}.tsx`);
       expect(block.source).toBe(
-        replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+        fillTemplatePlaceholders(
+          replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+        ).source,
       );
       expect(block.source).not.toContain(DEMO_CONTENT_MODULE);
+      expect(block.source).not.toContain('@astryxdesign/template-icons');
     }
     for (const entry of Object.values(exampleRegistry).flat()) {
       expect(entry.source).not.toContain(DEMO_CONTENT_MODULE);
@@ -1064,7 +1039,9 @@ describe('blockRegistry', () => {
     for (const template of templates) {
       const file = path.join(pagesDir, template.slug, 'page.tsx');
       expect(template.source).toBe(
-        replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+        fillTemplatePlaceholders(
+          replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+        ).source,
       );
     }
   });

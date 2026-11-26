@@ -4,7 +4,7 @@
  * @file Tells whether the visitor's connection asks the site to send less data.
  * @input The browser's Network Information hints, where it has them.
  * @output True in a data-saving mode or on a 2G connection.
- * @position Shared by code that downloads ahead of need: the template thumbnail prefetch (components/templatePrefetch.ts) and the theme showcase photo warm-up (components/themeShowcaseWarmup.ts).
+ * @position Shared by code that downloads ahead of need: the template thumbnail prefetch (components/templatePrefetch.ts), the theme showcase photo warm-up (components/themeShowcaseWarmup.ts), and the home hero reel on a narrow screen (app/(site)/_landing/hero/HeroThemeReel.tsx).
  */
 
 type NetworkInformation = {saveData?: boolean; effectiveType?: string};

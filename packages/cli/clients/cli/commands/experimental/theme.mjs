@@ -81,6 +81,7 @@ import {
   showSections,
   describe,
   namesSetting,
+  needsPart,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
@@ -113,6 +114,11 @@ import {doc as previewListFn} from '../../../../api/theme-edit/themeEditPreviewL
 import {doc as previewRemoveFn} from '../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs';
 import {doc as howFn} from '../../../../api/theme-edit/themeEditHow.doc.mjs';
 import {quoteCommandArgument} from '../../../../foundation/env/package-manager.mjs';
+import {
+  commandAvailable,
+  exampleAvailable,
+  helpBase,
+} from '../../lib/base-gate.mjs';
 
 const PREFIX = 'astryx experimental theme';
 const EDITOR = `${PREFIX} editor`;
@@ -361,7 +367,9 @@ async function run(program, call, render, answer) {
 const changeOptions = o => ({
   cwd: process.cwd(),
   on: o.on,
-  when: o.when,
+  // (--when given for several props, a ghost small button: all at once,
+  // joined as Core's own keys join them.)
+  when: flagValues('when').length > 1 ? flagValues('when').join('+') : o.when,
   state: o.state,
   mode: o.mode,
   only: o.only ?? false,
@@ -574,19 +582,46 @@ function changeBlocks(r) {
             c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
           ),
   };
+  // A change that leaves the setting as it was says so, never "x -> x".
+  const unchanged = /** @type {any} */ (d.notes ?? []).some(
+    (/** @type {string} */ n) => n.startsWith('no change: '),
+  );
+  const drawnAlready = /** @type {any} */ (d.notes ?? []).some(
+    (/** @type {string} */ n) =>
+      n.startsWith('no change: ') && n.includes(' already draws '),
+  );
+  // A dial step on a part (`corners large --on card`) says what it drew
+  // there, when that is a value or two: a part's own scale can give a step
+  // another size than the dial's help names for the whole theme.
+  const stepOn = d.action === 'set' && s.source === 'dial' ? s.on : null;
+  const drawnOn = stepOn
+    ? /** @type {string[]} */ (/** @type {any} */ (d).styled ?? [])
+        .filter(x => x.startsWith(`${stepOn}: `))
+        .map(x => x.slice(stepOn.length + 2))
+    : [];
+  const drawnAs = drawnOn.length <= 2 ? drawnOn : [];
   const done =
-    d.was != null
-      ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
+    unchanged && d.action === 'set'
+      ? drawnAlready
+        ? `[no change] ${d.theme}: ${describe(s)} already shows; nothing written`
+        : `[ok] ${d.theme}: ${d.asSides ? `${describe({...s, thing: d.asSides.thing, value: d.asSides.value})} (${d.asSides.sides.map(x => `${x.thing} ${x.value}`).join(', ')})` : describe(s)} was already set; nothing changed`
+      : d.was != null
+        ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
+        : `[ok] ${d.theme}: ${d.action === 'set' ? (d.asSides ? `${describe({...s, thing: d.asSides.thing, value: d.asSides.value})} (${d.asSides.sides.map(x => `${x.thing} ${x.value}`).join(', ')})` : `${describe(s)}${drawnAs.length ? ` (drawn as ${drawnAs.join(', ')})` : ''}`) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // A problem the change made leads the result, right under the status
   // line, which counts them: a tail-cut or head-cut output still shows it.
   // What a whole-theme change leaves out comes next, with the lines that
   // reach it, before the rest a head-cut output drops.
   const {
     newProblems = [],
+    leftProblems = [],
     leftOut = [],
-    missed = 0,
-    missedParts = missed,
+    fontNotLoaded = [],
+    missed: _missed,
+    missedParts: _missedParts,
+    missedOn: _missedOn,
+    missedWhere: _missedWhere,
+    missedNew: _missedNew,
     ...rest
   } = /** @type {any} */ (d);
   const status = newProblems.length
@@ -597,6 +632,25 @@ function changeBlocks(r) {
   return [
     status,
     ...(newProblems.length ? problemList(newProblems) : []),
+    // Problems it moved but left failing: said under the new ones.
+    ...(leftProblems.length
+      ? [
+          `still failing after this change (${leftProblems.length}):`,
+          ...problemList(leftProblems),
+        ]
+      : []),
+    ...(fontNotLoaded.length
+      ? [
+          list(
+            fontNotLoaded.map(
+              (/** @type {{family: string, run: string[]}} */ x) => [
+                `${x.family} is not installed, so the pictures and the app draw the next font in the stack until it is`,
+                ...x.run,
+              ],
+            ),
+          ),
+        ]
+      : []),
     ...(leftOut.length
       ? [
           list(
@@ -607,16 +661,34 @@ function changeBlocks(r) {
           ),
         ]
       : []),
-    // The parts the theme's own changes still do not reach, counted near
-    // the top, so a head of the output keeps it; show lists each.
-    ...(missed
-      ? [
-          record({
-            missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach (show lists each with its line)`,
-          }),
-        ]
-      : []),
+    ...missedLine(d),
     ...changeFields(rest),
+  ];
+}
+
+/**
+ * The parts the theme's own changes still do not reach, counted and
+ * named, near the top of a change or a new theme, so a head of the
+ * output keeps it; show names the first ones with their lines, and show
+ * --json lists each.
+ * A change says them only when it brought some (`missedNew`): the ones it
+ * found are show's to list, not every change's to repeat.
+ * @param {{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[], missedNew?: number}} d
+ */
+function missedLine(d) {
+  const {
+    missed = 0,
+    missedParts = missed,
+    missedOn = [],
+    missedWhere = [],
+    missedNew,
+  } = d;
+  const named = missedWhere.length ? missedWhere : missedOn;
+  if (!missed || missedNew === 0) return [];
+  return [
+    record({
+      missed: `${missedNew ? `this change left ${missedNew} new miss${missedNew > 1 ? 'es' : ''}; ` : ''}${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${named.length ? ` (${named.slice(0, 6).join(', ')}${named.length > 6 ? `, and ${named.length - 6} more` : ''})` : ''}: each still shows the base theme's own look there. Keep each one, or bring it in line with your changes: show lists the first misses with their lines, and show --json has every one`,
+    }),
   ];
 }
 
@@ -658,6 +730,96 @@ function changeFields(data) {
     ...project(rest),
     ...(Array.isArray(problems) && problems.length
       ? [section('problems:'), ...cappedList(problems)]
+      : []),
+  ];
+}
+
+/** How many variant lines the text of `show --on` gives before it counts the rest. */
+const VARIANT_LINES = 4;
+
+/**
+ * A part value's final value as one short text.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditPartValue['value']} v
+ */
+function valueText(v) {
+  if (v == null) return 'no value';
+  if (typeof v === 'string') return v;
+  // (A mode left out is not shown yet; a mode given as null has no value.)
+  return /** @type {const} */ (['light', 'dark'])
+    .filter(m => v[m] !== undefined)
+    .map(m => `${m} ${v[m] ?? 'no value'}`)
+    .join(', ');
+}
+
+/**
+ * The text of `show --on`: the part at rest, one line per property, then
+ * the variants' values that differ from rest, a few, counted; the JSON
+ * carries every value.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditShowPartResponse['data']} d
+ */
+function partValueBlocks(d) {
+  // (A token a rule sets on the part is in the JSON; the text gives the
+  // properties the part draws.)
+  const drawn = d.values.filter(v => !v.property.startsWith('--'));
+  const rest = drawn.filter(v => v.when == null && v.state == null);
+  const restOf = new Map(rest.map(v => [v.property, valueText(v.value)]));
+  const variants = drawn.filter(
+    v =>
+      (v.when != null || v.state != null) &&
+      valueText(v.value) !== restOf.get(v.property),
+  );
+  // A combined condition that draws what one of its conditions draws alone
+  // (`variant:blue+selected:true` as `variant:blue`) says nothing more.
+  const alone = new Set(
+    variants.map(
+      v => `${v.when}|${v.state}|${v.property}|${valueText(v.value)}`,
+    ),
+  );
+  // A condition set cannot name (two variants at once) that draws what
+  // one of its variants draws alone says nothing more either.
+  const wordsOf = (/** @type {any} */ v) =>
+    v.notSettable
+      ? (v.when ?? '')
+          .split(' ')
+          .map((/** @type {string} */ w) => w.replace('=', ':'))
+      : (v.when ?? '').split('+');
+  const shown = variants.filter(
+    v =>
+      !wordsOf(v).some(
+        (/** @type {string} */ w) =>
+          w !== v.when &&
+          alone.has(`${w}|${v.state}|${v.property}|${valueText(v.value)}`),
+      ),
+  );
+  /** @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditPartValue} v */
+  const row = v => ({
+    ...(v.when != null || v.state != null
+      ? {
+          when:
+            [v.when, v.state].filter(Boolean).join(' ') +
+            (v.notSettable ? ' (not settable)' : ''),
+        }
+      : {}),
+    property: v.property,
+    value: valueText(v.value),
+    tokens: (Array.isArray(v.tokens)
+      ? v.tokens
+      : [...new Set([...(v.tokens.light ?? []), ...(v.tokens.dark ?? [])])]
+    ).join(' '),
+    source: v.source,
+  });
+  return [
+    section(
+      `${d.part} in ${d.theme} (${d.kind} theme), at rest: ${rest.length} value${rest.length === 1 ? '' : 's'}`,
+    ),
+    records(rest.map(row), {layout: 'inline'}),
+    ...(shown.length
+      ? [
+          section(
+            `in variants: ${shown.length} value${shown.length === 1 ? '' : 's'} that differ${shown.length > VARIANT_LINES ? `, the first ${VARIANT_LINES} here (--json lists every value)` : ''}`,
+          ),
+          records(shown.slice(0, VARIANT_LINES).map(row), {layout: 'inline'}),
+        ]
       : []),
   ];
 }
@@ -756,7 +918,16 @@ function showBlocks(d) {
     openProblems.length
       ? [
           section(
-            `openProblems: ${openProblems.length} the theme has now; each fix line fixes one`,
+            `openProblems: ${openProblems.length} the theme has now${(() => {
+              const fixable = openProblems.filter(
+                (/** @type {any} */ p) => p.fix,
+              ).length;
+              return fixable === openProblems.length
+                ? '; each fix line fixes one'
+                : fixable
+                  ? `; ${fixable} with a fix line that fixes it, the rest with none (no one line fixes those alone)`
+                  : '; none has a fix line (no one line fixes these alone)';
+            })()}`,
           ),
           ...problemList(openProblems),
         ]
@@ -863,8 +1034,11 @@ function lookupBlocks(d) {
  */
 function strayOption(command, doc, rest) {
   // A scope flag given twice would keep only the last one without a word.
+  // (--when takes one value per prop: those are joined, all at once.)
   for (const flag of ['on', 'when', 'state', 'mode']) {
     const all = flagValues(flag);
+    const props = all.map(w => String(w).split(':')[0].trim().toLowerCase());
+    if (flag === 'when' && new Set(props).size === all.length) continue;
     if (new Set(all).size > 1)
       return cliError(
         `--${flag} was given twice (${all.join(', ')}); give it once.`,
@@ -1432,9 +1606,30 @@ function previewExtraWords(sub, doc, head) {
  * there is none.
  * @param {string} name
  * @param {unknown[]} rest the words after the theme
- * @param {{png?: boolean, section?: string}} o the options read
+ * @param {{png?: boolean, section?: string, on?: string}} o the options read
  */
 function showStray(name, rest, o) {
+  // (Beside --on, the refusal offers no other show: a show without --on
+  // writes the pages, and the lookup's own line is not offered yet.)
+  const offer = (/** @type {string} */ line) => (o.on ? null : line);
+  // The theme typed as an option (`show --theme t`), as set and undo read
+  // it: the show on that theme, never its help alone.
+  const asOption = /^--?(?:theme|name)$/i.test(String(name));
+  if (asOption && rest.length) {
+    const theme = String(rest[0]);
+    return strayRefusal(
+      'show',
+      showDoc,
+      `${EDITOR} show`,
+      {
+        option: String(name),
+        note: "the theme is show's first word",
+      },
+      offer(
+        `${EDITOR} show ${quoteCommandArgument(theme)}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+      ),
+    );
+  }
   const stray = rest.map(String).find(w => w.startsWith('-'));
   if (stray == null) return null;
   // An option the one reader names never comes here (readOptions reads
@@ -1445,7 +1640,9 @@ function showStray(name, rest, o) {
     showDoc,
     `${EDITOR} show`,
     {option: stray},
-    `${EDITOR} show ${name}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+    offer(
+      `${EDITOR} show ${name}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+    ),
   );
 }
 
@@ -1518,6 +1715,7 @@ function defineGroup(parent, doc) {
         const word = String(extras[0]).toLowerCase();
         const group = doc.name.split(' ').at(-1) ?? '';
         const ranked = (cmd.commands ?? [])
+          .filter(command => commandAvailable(command, helpBase()))
           .map(command => command.name())
           .sort(
             (a, b) =>
@@ -1557,10 +1755,12 @@ function defineGroup(parent, doc) {
             type: 'help',
             data: {
               command: words.join(' '),
-              commands: (cmd.commands ?? []).map(command => ({
-                name: command.name(),
-                summary: command.summary() || command.description(),
-              })),
+              commands: (cmd.commands ?? [])
+                .filter(command => commandAvailable(command, helpBase()))
+                .map(command => ({
+                  name: command.name(),
+                  summary: command.summary() || command.description(),
+                })),
             },
           }),
         );
@@ -1615,12 +1815,29 @@ export function registerExperimentalTheme(group, program) {
   setUnknownOptionReader(unknownThemeOption);
   const theme = defineGroup(group, groupDoc);
   explained(theme, groupDoc);
+  // The run's base may not serve a line's command; help then leaves it out.
+  const overrides = [
+    [
+      'experimental theme targets',
+      `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n`,
+    ],
+    [
+      'experimental theme editor how',
+      `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n`,
+    ],
+    [
+      'component <Name>',
+      `  ${getCliInvocation()} component <Name>                    One component's theming table\n`,
+    ],
+  ];
   theme.addHelpText(
     'after',
-    `\nComponent style overrides:\n` +
-      `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n` +
-      `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n` +
-      `  ${getCliInvocation()} component <Name>                    One component's theming table\n`,
+    () =>
+      `\nComponent style overrides:\n` +
+      overrides
+        .filter(([cli]) => exampleAvailable(program, cli, helpBase()))
+        .map(([, line]) => line)
+        .join(''),
   );
 
   const editor = defineGroup(theme, editorDoc);
@@ -1658,38 +1875,6 @@ export function registerExperimentalTheme(group, program) {
                 (/** @type {string} */ w) =>
                   /^-/.test(w) && !takes.has(w.split('=')[0]),
               );
-            // `--base` is the dial new takes as --like.
-            if (stray && stray.split('=')[0] === '--base') {
-              const args = (cmd?.args ?? []).slice(1).map(String);
-              const at = args.indexOf(stray);
-              const value = stray.includes('=')
-                ? stray.slice(stray.indexOf('=') + 1)
-                : args[at + 1];
-              // Thrown, as every refusal inside run is: run prints it once
-              // (a refusal printed here and then caught again by run would
-              // print twice where exit does not end the process).
-              // The line with --like is checked as new checks it (an
-              // install first, other flags' repairs folded in), as the
-              // option reader's lines are.
-              const lines = value
-                ? await checkedOptionLines(
-                    'editor',
-                    'new',
-                    `${EDITOR} new ${quoteCommandArgument(name)}${newFlagLine({...o, like: value})}`,
-                  )
-                : [];
-              throw new AstryxError(
-                `new takes the base theme as --like, not --base.`,
-                [
-                  ...lines,
-                  {
-                    name: `${EDITOR} new --help`,
-                    reason: 'every option it takes',
-                  },
-                ],
-                ERROR_CODES.ERR_INVALID_OPTION,
-              );
-            }
             if (stray)
               throw new AstryxError(
                 `unknown option '${stray}'.`,
@@ -1932,13 +2117,29 @@ export function registerExperimentalTheme(group, program) {
                     c => `-${c.toLowerCase()}`,
                   );
                 /**
+                 * A key, a value or a word without the quotes around it
+                 * (`"accent"`, `'base neutral'`); a text that holds a quote
+                 * of its own (`"like": "neutral"`) keeps them, since its
+                 * ends are two quotes, not one pair.
+                 * @param {string} x
+                 */
+                const unquote = x => {
+                  const t = String(x).trim();
+                  const m = /^(["'])([\s\S]*)\1$/.exec(t);
+                  return m && !m[2].includes(m[1]) ? m[2] : t;
+                };
+                /**
                  * The settings one typed word holds, each `[dial, value]`: a
                  * JSON object, `key=value` or `key: value` pairs, or `dial
                  * value` items, apart at `;` or `,`; null when it holds none.
-                 * @param {string} w
+                 * @param {string} rawWord
                  * @returns {Array<[string, string]> | null}
                  */
-                const pairsIn = w => {
+                const pairsIn = (/** @type {string} */ rawWord) => {
+                  // A word with its own quotes around it (`'base neutral'`,
+                  // `"accent"`) is that word, as the shell would have given
+                  // it: the quotes are no part of a name.
+                  const w = unquote(rawWord);
                   /** @type {unknown} */
                   let json;
                   try {
@@ -1951,17 +2152,20 @@ export function registerExperimentalTheme(group, program) {
                       ? Object.entries(json)
                       : [];
                   if (entries.length)
-                    return entries.every(([k]) => dialOf(k))
+                    return entries.every(
+                      ([k]) => dialOf(k) || namesSetting(unquote(k)),
+                    )
                       ? entries.map(([k, v]) => [k, String(v)])
                       : null;
                   // `key=value`, `key: value`, keys and values in quotes or
                   // not (`"like": "neutral"`), in either order (`red=accent`,
                   // `stone=like`), as set reads a pair swapped; `like` is
                   // never a value (`neutral=like` is the base neutral).
-                  const unquote = (/** @type {string} */ x) =>
-                    x.trim().replace(/^(["'])(.*)\1$/, '$2');
+                  // Pairs apart at `;`, or at a comma when a key comes next
+                  // (`like: neutral, corners: pill`); a comma inside a value
+                  // (`font: Inter, Arial`) is the value's.
                   const byColon = w
-                    .split(/\s*;\s*/)
+                    .split(/\s*;\s*|\s*,\s*(?=["']?[a-z][a-z-]*["']?\s*[=:])/i)
                     .map(x =>
                       /^((["'])[a-z-]+\2|[a-z0-9#(][^=:]*?)\s*[=:]\s*(.+)$/i.exec(
                         x.trim(),
@@ -1975,20 +2179,25 @@ export function registerExperimentalTheme(group, program) {
                     const [k, v] = [unquote(m[1]), unquote(m[3])];
                     if (dialOf(v) === 'like' && !dialOf(k)?.startsWith('like'))
                       read.push([v, k]);
-                    else if (dialOf(k)) read.push([k, v]);
+                    else if (dialOf(k) || namesSetting(k)) read.push([k, v]);
                     else if (dialOf(v) && !/\s/.test(v)) read.push([v, k]);
                     else return null;
                   }
                   if (read.length) return read;
-                  // `'accent red'`, `'accent red, corners pill'`.
+                  // `'accent red'`, `'accent red, corners pill'`, `'base
+                  // neutral'`.
                   if (!/\s/.test(w.trim())) return null;
                   const items = w
                     .split(/\s*[;,]\s*/)
                     .map(x => x.trim().split(/\s+/))
                     .filter(x => x[0]);
                   return items.length &&
-                    items.every(x => x.length > 1 && dialOf(x[0]))
-                    ? items.map(x => [x[0], x.slice(1).join(' ')])
+                    items.every(
+                      x =>
+                        x.length > 1 &&
+                        (dialOf(x[0]) || namesSetting(unquote(x[0]))),
+                    )
+                    ? items.map(x => [unquote(x[0]), x.slice(1).join(' ')])
                     : null;
                 };
                 /** @type {string[]} */
@@ -2011,7 +2220,8 @@ export function registerExperimentalTheme(group, program) {
                     continue;
                   }
                   pasted = -1;
-                  kept.push(w);
+                  // A word quoted on its own (`"accent"`) keeps no quotes.
+                  kept.push(unquote(w));
                 }
                 // `accent red`: a dial word, and its value up to the next
                 // setting; `red accent`: a value, then the dial it is for (as
@@ -2032,16 +2242,25 @@ export function registerExperimentalTheme(group, program) {
                     i += 1;
                     continue;
                   }
+                  const builtIn = (/** @type {string} */ w) =>
+                    builtInThemes().includes(String(w).toLowerCase());
+                  // A built-in theme's name is the base, whatever word is
+                  // beside it (`theme neutral`, `neutral stone`): the base
+                  // reader below takes it, never a dial of the same name.
+                  if (builtIn(kept[i])) {
+                    rest.push(kept[i]);
+                    continue;
+                  }
                   if (dialOf(kept[i])) {
                     const value = [];
                     let j = i + 1;
-                    while (j < kept.length && !isSetting(kept[j]))
+                    while (
+                      j < kept.length &&
+                      !isSetting(kept[j]) &&
+                      !builtIn(kept[j])
+                    )
                       value.push(kept[j++]);
                     if (value.length) pairs.push([kept[i], value.join(' ')]);
-                    // (A built-in theme's name, `neutral`, is the base the
-                    // reader below takes, not a bare dial.)
-                    else if (builtInThemes().includes(kept[i].toLowerCase()))
-                      rest.push(kept[i]);
                     else bare.push(kept[i]);
                     i = j - 1;
                     continue;
@@ -2050,6 +2269,7 @@ export function registerExperimentalTheme(group, program) {
                     !isSetting(kept[i]) &&
                     kept[i + 1] != null &&
                     dialOf(kept[i + 1]) &&
+                    !builtIn(kept[i + 1]) &&
                     (kept[i + 2] == null || isSetting(kept[i + 2]))
                   ) {
                     pairs.push([kept[i + 1], kept[i]]);
@@ -2059,6 +2279,13 @@ export function registerExperimentalTheme(group, program) {
                   rest.push(kept[i]);
                 }
                 for (const [k, v] of pairs) {
+                  // A setting new has no option for (`padding: 8px`) is a
+                  // set after the theme is made, as the space form is.
+                  if (!dialOf(k)) {
+                    later.push([unquote(k), v]);
+                    intoValues.push(`${unquote(k)} ${v}`);
+                    continue;
+                  }
                   const key = /** @type {string} */ (dialOf(k));
                   if (given[key] == null) given[key] = v;
                   intoValues.push(`${dialName(k)} ${v}`);
@@ -2069,7 +2296,12 @@ export function registerExperimentalTheme(group, program) {
                 const named = [];
                 for (let i = 0; i < rest.length; i++) {
                   const thing = rest[i].replace(/[:=]+$/, '');
-                  if (namesSetting(thing) && rest[i + 1] != null) {
+                  // (A built-in theme's name is the base, read below.)
+                  if (
+                    namesSetting(thing) &&
+                    !builtInThemes().includes(thing.toLowerCase()) &&
+                    rest[i + 1] != null
+                  ) {
                     const value = [];
                     let j = i + 1;
                     while (j < rest.length && !isSetting(rest[j]))
@@ -2100,14 +2332,20 @@ export function registerExperimentalTheme(group, program) {
               );
               if (baseAt >= 0 && given.like == null)
                 given.like = all[baseAt].toLowerCase();
-              // (`base stone` is the base as `like stone` is.)
+              // (`base stone` and `theme stone` are the base as `like
+              // stone` is; a second base typed is no word of the name.)
               const nameWords = all.filter(
                 (w, i) =>
                   i !== baseAt &&
                   !(
                     baseAt >= 0 &&
-                    /^(like|base)$/i.test(w) &&
+                    /^(like|base|theme)[:=]?$/i.test(w) &&
                     i === baseAt - 1
+                  ) &&
+                  !(
+                    baseAt >= 0 &&
+                    i > baseAt &&
+                    builtInThemes().includes(w.toLowerCase())
                   ),
               );
               const fixed = nameWords
@@ -2150,10 +2388,19 @@ export function registerExperimentalTheme(group, program) {
                   : `new takes one theme name; "${(nameWord ? [...intoValues, ...words] : extra).join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
                 [
                   ...lines,
-                  ...later.map(([thing, value]) => ({
-                    name: `${EDITOR} set ${quoteCommandArgument(fixed)} ${quoteCommandArgument(thing)} ${quoteCommandArgument(value)}`,
-                    reason: `then this: new takes no ${thing}; set gives it`,
-                  })),
+                  // A CSS property is written on a part: the ask that
+                  // names the parts, never a set line set itself refuses.
+                  ...later.map(([thing, value]) =>
+                    needsPart(thing)
+                      ? {
+                          name: `${HOW} ${quoteCommandArgument(`${value} ${thing}`)}`,
+                          reason: `then this: new takes no ${thing}, and set writes it on a part (--on)`,
+                        }
+                      : {
+                          name: `${EDITOR} set ${quoteCommandArgument(fixed)} ${quoteCommandArgument(thing)} ${quoteCommandArgument(value)}`,
+                          reason: `then this: new takes no ${thing}; set gives it`,
+                        },
+                  ),
                 ],
                 ERROR_CODES.ERR_INVALID_ARGUMENT,
               );
@@ -2167,9 +2414,20 @@ export function registerExperimentalTheme(group, program) {
           },
           r => [
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
-            ...changeFields(/** @type {any} */ (r.data)),
+            ...missedLine(/** @type {any} */ (r.data)),
+            ...changeFields(
+              /** @type {any} */ (
+                (({
+                  missed: _m,
+                  missedParts: _p,
+                  missedOn: _o,
+                  missedWhere: _w,
+                  ...x
+                }) => x)(/** @type {any} */ (r.data))
+              ),
+            ),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
-            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png (a sample page), sheet-overlays.png (every menu, tooltip, popover and list, open) and sheet.png (every component) from real components; open preview.png and sheet-overlays.png and check them against the request`,
+            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png (a sample page), sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, open) and a picture of each family of components the theme sets a part of (sheet-actions.png, the buttons, while it sets none) from real components, and --section <family> --png pictures any other family (actions, inputs, selection, navigation, feedback, data, containers); open the family pictures, preview.png and sheet-overlays.png and check them against the request`,
           ],
         ),
     }),
@@ -2257,12 +2515,33 @@ export function registerExperimentalTheme(group, program) {
           ? cliError(
               `--section limits the sheet to one section, and was given ${flagValues('section').length} (${flagValues('section').join(', ')}); give one, or none for the whole sheet.`,
               {
+                // (Beside --on no other show is offered: a show without
+                // --on writes the pages.)
+                suggestions: o.on
+                  ? []
+                  : [
+                      {
+                        // The first section given that `show` takes, else the
+                        // whole sheet.
+                        name: cmd(
+                          `${EDITOR} show ${name}${(sec => (sec ? ` --section ${sec}` : ''))(flagValues('section').find(v => showSections().includes(v)))}`,
+                        ),
+                        reason: 'do this instead',
+                      },
+                    ],
+                code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+              },
+            )
+          : null) ??
+        // One part's values: a lookup of one part.
+        (new Set(flagValues('on')).size > 1
+          ? cliError(
+              `--on looks up one part, and was given ${flagValues('on').length} (${flagValues('on').join(', ')}); give one.`,
+              {
                 suggestions: [
                   {
-                    // The first section given that `show` takes, else the
-                    // whole sheet.
                     name: cmd(
-                      `${EDITOR} show ${name}${(sec => (sec ? ` --section ${sec}` : ''))(flagValues('section').find(v => showSections().includes(v)))}`,
+                      `${EDITOR} show ${name} --on ${flagValues('on')[0]}`,
                     ),
                     reason: 'do this instead',
                   },
@@ -2278,8 +2557,12 @@ export function registerExperimentalTheme(group, program) {
               cwd: process.cwd(),
               png: o.png ?? false,
               section: o.section,
+              ...(o.on != null ? {on: o.on} : {}),
             }),
-          r => showBlocks(r.data),
+          r =>
+            r.type === 'themeEdit.showPart'
+              ? partValueBlocks(r.data)
+              : showBlocks(/** @type {any} */ (r).data),
         ),
     }),
     showDoc,

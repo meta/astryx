@@ -14,6 +14,8 @@
  * SYNC: useSwitchTouch.ts, switchTouch.ts, motion/uikit/switch.ts.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
   expect,
   test,
@@ -22,6 +24,7 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  FRAME_STARVATION_MS,
   BUSY_PROOF_LOOKAROUND_MS,
   castStoryboard,
   animationStoryboard,
@@ -984,11 +987,11 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
           radius: style.borderTopLeftRadius,
         };
       });
-    // Off: the md thumb is 16 × 16, as with a mouse.
+    // Off: the md thumb is 16 × 16, as with a mouse, and round at 50%.
     expect(await read()).toEqual({
       width: THUMB_OFF,
       height: THUMB_OFF,
-      radius: expect.stringMatching(/px$/),
+      radius: '50%',
     });
     await driver.play(tap(center, {holdMs: 50}));
     await expect(input).toBeChecked();
@@ -2161,10 +2164,137 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     };
   }
 
+  /** A gap between two frames longer than three frames: a frame stall. */
+  const STALL_GAP_MS = FRAME_STARVATION_MS;
+  /** The time around a scripted block whose frame gaps that block explains. */
+  const BLOCK_MARGIN_MS = 50;
+
+  /**
+   * The run's Switch frame-stall tally, one file per engine in the project's
+   * output folder, which Playwright empties when a run starts: one line per
+   * checked cast, its test, its cast and its stalls. One worker runs this file top to
+   * bottom (`fullyParallel: false`), so a check reads only the casts above
+   * it, and the run's whole reading is the last `Switch frame stalls:` line.
+   */
+  function runStallTally(): string {
+    // Both engines share the output folder in a local run: a file each.
+    return path.join(
+      test.info().project.outputDir,
+      `switch-frame-stalls-${test.info().project.name}.tsv`,
+    );
+  }
+
+  /**
+   * The stalls in a screencast's frame times that no scripted block of the
+   * proof explains: gaps longer than three frames that do not meet a block
+   * (its `blockMainThread` window, widened by `BLOCK_MARGIN_MS`).
+   */
+  function unscriptedStalls(
+    times: ReadonlyArray<number>,
+    blocks: ReadonlyArray<{readonly from: number; readonly to: number}> = [],
+  ): number {
+    const sorted = [...times].sort((a, b) => a - b);
+    return sorted.slice(1).filter((t, i) => {
+      const before = sorted[i];
+      return (
+        t - before > STALL_GAP_MS &&
+        !blocks.some(
+          block =>
+            before < block.to + BLOCK_MARGIN_MS &&
+            t > block.from - BLOCK_MARGIN_MS,
+        )
+      );
+    }).length;
+  }
+
+  /**
+   * Adds this check's stalls to the run's tally and names them beside the
+   * neighbours': the Switch casts above it in this run (a proof's own earlier
+   * casts included), their stalls, and how many tests saw one. Stalls in many
+   * neighbours read as a starved runner; stalls in one test with quiet
+   * neighbours, as a freeze.
+   * P14's two page cases run first, so their own lines name no other scene:
+   * the run's reading is the last `Switch frame stalls:` line. A check on
+   * recorded samples passes its own `tally`, and prints nothing. `toTally`
+   * is what the neighbours read: the stalls no scripted step explains.
+   */
+  function reportStalls(
+    stalls: number,
+    {
+      label = 'Switch frame stalls',
+      tally,
+      toTally = stalls,
+      cast,
+    }: {
+      label?: string;
+      tally?: string;
+      toTally?: number;
+      cast?: string;
+    } = {},
+  ): string {
+    const file = tally ?? runStallTally();
+    // A test that casts more than once names each cast in a column of its
+    // own, so each later cast reads the earlier ones as neighbours, and a test
+    // counts once.
+    const me = [test.info().project.name, ...test.info().titlePath]
+      .join(' › ')
+      .replaceAll('\t', ' ');
+    const myCast = cast ?? '';
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    fs.appendFileSync(file, `${me}\t${myCast}\t${toTally}\n`);
+    const neighbours = fs
+      .readFileSync(file, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map(line => {
+        const [name = '', castName = '', count = '0'] = line.split('\t');
+        return {test: name, cast: castName, stalls: Number(count)};
+      })
+      .filter(row => row.test !== me || row.cast !== myCast);
+    const total = neighbours.reduce((sum, row) => sum + row.stalls, 0);
+    const tests = new Set(
+      neighbours.filter(row => row.stalls > 0).map(row => row.test),
+    ).size;
+    const counts = `this test ${stalls}, neighbours ${total} across ${tests} ${tests === 1 ? 'test' : 'tests'} so far`;
+    if (tally == null) {
+      test.info().annotations.push({type: label, description: counts});
+      console.warn(`${label}: ${counts} (${test.info().title})`);
+    }
+    return counts;
+  }
+
+  /** The frozen catch's point on the scene clock, which `onSceneClock` keeps. */
+  function frozenCatchWindow(scene: FrozenCatch): {from: number; to: number} {
+    return {from: scene.at + CATCH_AT_MS, to: scene.at + CATCH_AT_MS};
+  }
+
   function expectCaughtWithoutAJump(
     samples: [number, number][],
     read: [number, number][] = samples,
+    {
+      tally,
+      scripted = [],
+    }: {
+      tally?: string;
+      scripted?: ReadonlyArray<{readonly from: number; readonly to: number}>;
+    } = {},
   ): void {
+    // The stall count is recorded before any check, so a failing run reports
+    // it too. The log line is what CI's job log shows; the annotation is for
+    // the HTML report.
+    const MAX_STALLS = 2;
+    const gaps = samples.slice(1).map(([time], i) => time - samples[i][0]);
+    const stalls = gaps.filter(gap => gap > STALL_GAP_MS).length;
+    // The scene's own frozen catch is scripted: its gap is not a stall the
+    // neighbours read.
+    const counts = reportStalls(stalls, {
+      label: 'P14 frame stalls',
+      tally,
+      toTally: unscriptedStalls(
+        samples.map(([time]) => time),
+        scripted,
+      ),
+    });
     const xs = samples.map(([, x]) => x);
     const farthest = Math.max(...xs) - xs[0];
     // It turned around mid-travel, short of the on end...
@@ -2172,17 +2302,205 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     expect(farthest).toBeLessThan(TRAVEL_PX - 1);
     // ...from where it was: no frame moves it more than a few px. Each step is
     // measured against the time its frames span. So a frame read late, two
-    // vsyncs of motion in one sample, is not a jump.
+    // vsyncs of motion in one sample, is not a jump. One more case is motion,
+    // not a jump: a moving thumb that a frame stall (more than three frames)
+    // painted where it was. The step after the stall shows motion that ran
+    // during the stall, so it spans the stall too.
     const FRAME_MS = 1000 / 60;
-    const perFrame = read
-      .slice(1)
-      .map(
-        ([time, x], i) =>
-          (Math.abs(x - read[i][1]) * FRAME_MS) /
-          Math.max(time - read[i][0], FRAME_MS),
-      );
+    const STALL_MS = 3 * FRAME_MS;
+    const HELD_PX = 0.5;
+    const perFrame = read.slice(1).map(([time, x], i) => {
+      const before = read[i - 1];
+      const stall = before == null ? 0 : read[i][0] - before[0];
+      const wasMoving =
+        i > 1 && Math.abs(read[i - 1][1] - read[i - 2][1]) > HELD_PX;
+      const heldThrough =
+        before != null && Math.abs(read[i][1] - before[1]) <= HELD_PX;
+      const span =
+        time -
+        read[i][0] +
+        (stall > STALL_MS && wasMoving && heldThrough ? stall : 0);
+      return (Math.abs(x - read[i][1]) * FRAME_MS) / Math.max(span, FRAME_MS);
+    });
     expect(Math.max(...perFrame), JSON.stringify(read)).toBeLessThan(4);
+    if (stalls > MAX_STALLS) {
+      // One CI hiccup beside the scene's own frozen catch stays tolerated.
+      // More is a starved machine or a freeze in the product: either way the
+      // run proves nothing about the catch, so it fails and says which.
+      throw new FrameStarvationError({
+        by: 'the P14 stall count',
+        during: 'the thumb travelled and turned',
+        frames: samples.length,
+        min: samples.length,
+        longestGapMs: Math.max(...gaps),
+        cause: `${stalls} frame gaps longer than three frames in one run, where at most ${MAX_STALLS} pass: a loaded machine, or a freeze in the product (stalls: ${counts})`,
+      });
+    }
   }
+
+  /**
+   * A tally of its own for a check on recorded samples, with no page, in
+   * the test's output folder, which Playwright empties.
+   */
+  function scratchTally(name = 'p14-stalls.tsv'): string {
+    return test.info().outputPath(name);
+  }
+
+  // The jump check on recorded samples, with no page. A frame stall that
+  // holds a moving thumb still, then the frame that catches up, is motion.
+  // A jump between ordinary frames, a snap back after the frozen catch's
+  // gap, and a jump after a frame read just over three frames late still
+  // fail.
+  test('P14 · the jump check reads the catch-up after a frame stall as motion, not a jump', () => {
+    const tally = scratchTally();
+    const steps: [number, number][] = [];
+    for (let i = 0; i < 12; i++) {
+      const previous = steps[i - 1]?.[1] ?? 98;
+      steps.push([(i * 1000) / 60, previous + (i <= 5 ? 2.7 : -2.7)]);
+    }
+    const [lastTime, lastX] = steps[11];
+    // The recorded failure: a 302 ms stall paints the thumb where it was,
+    // and 2.8 ms later the frame catches up 8 px.
+    expectCaughtWithoutAJump(
+      [...steps, [lastTime + 302, lastX], [lastTime + 304.8, lastX - 8]],
+      undefined,
+      {tally},
+    );
+    // 8 px in one ordinary frame.
+    expect(() =>
+      expectCaughtWithoutAJump(
+        [...steps, [lastTime + 1000 / 60, lastX - 8]],
+        undefined,
+        {tally},
+      ),
+    ).toThrow();
+    // The frozen catch: a 60 ms gap in which the thumb moved, then a 5.7 px
+    // snap in one frame.
+    expect(() =>
+      expectCaughtWithoutAJump(
+        [
+          ...steps,
+          [lastTime + 60, lastX - 2.7],
+          [lastTime + 60 + 1000 / 60, lastX + 3],
+        ],
+        undefined,
+        {tally},
+      ),
+    ).toThrow();
+    // One frame in three, read 1 ms late, then 13 px in one frame.
+    expect(() =>
+      expectCaughtWithoutAJump(
+        [
+          [0, 100],
+          [51, 104],
+          [51 + 1000 / 60, 91],
+        ],
+        undefined,
+        {tally},
+      ),
+    ).toThrow();
+  });
+
+  // The stall count on recorded samples, with no page. One stall that holds
+  // a moving thumb still passes; three stalls in one run fail, even when each
+  // catch-up alone reads as motion.
+  test('P14 · the jump check tolerates one frame stall and fails on three', () => {
+    const tally = scratchTally();
+    const FRAME = 1000 / 60;
+    const run = (stallAt: number[]): [number, number][] => {
+      const samples: [number, number][] = [];
+      let time = 0;
+      let x = 98;
+      for (let i = 0; i < 30; i++) {
+        const stalled = stallAt.includes(i);
+        time += stalled ? 120 : FRAME;
+        // Out for 15 frames, then back: a turn short of the on end.
+        x += (i < 15 ? 1 : -1) * (stalled ? 0 : 1);
+        samples.push([time, x]);
+      }
+      return samples;
+    };
+    expectCaughtWithoutAJump(run([8]), undefined, {tally});
+    expect(() =>
+      expectCaughtWithoutAJump(run([5, 12, 20]), undefined, {tally}),
+    ).toThrow(FrameStarvationError);
+  });
+
+  // The stall count names this test's stalls and its neighbours' so far, so a
+  // starved runner (stalls in many tests) reads apart from a freeze (stalls in
+  // one test, quiet neighbours). It adds no rule: the per-test limit decides.
+  test('P14 · the stall count reports this test and its neighbours, apart', () => {
+    const FRAME = 1000 / 60;
+    const run = (stallAt: number[]): [number, number][] => {
+      const samples: [number, number][] = [];
+      let time = 0;
+      let x = 98;
+      for (let i = 0; i < 30; i++) {
+        const stalled = stallAt.includes(i);
+        time += stalled ? 120 : FRAME;
+        x += (i < 15 ? 1 : -1) * (stalled ? 0 : 1);
+        samples.push([time, x]);
+      }
+      return samples;
+    };
+    // Starvation: two other tests already stalled in this run.
+    const starved = scratchTally('starved.tsv');
+    fs.writeFileSync(
+      starved,
+      'Switch › P14 · one\t\t2\nSwitch › P14 · two\t\t3\n',
+    );
+    expect(() =>
+      expectCaughtWithoutAJump(run([5, 12, 20]), undefined, {tally: starved}),
+    ).toThrow(/stalls: this test 3, neighbours 5 across 2 tests so far/);
+    // A freeze: the neighbours ran without a stall.
+    const quiet = scratchTally('quiet.tsv');
+    fs.writeFileSync(
+      quiet,
+      'Switch › P14 · one\t\t0\nSwitch › P14 · two\t\t0\n',
+    );
+    expect(() =>
+      expectCaughtWithoutAJump(run([5, 12, 20]), undefined, {tally: quiet}),
+    ).toThrow(/stalls: this test 3, neighbours 0 across 0 tests so far/);
+    // A test that casts more than once names each cast: a later cast reads
+    // the earlier ones, and their test counts once.
+    const twice = scratchTally('twice.tsv');
+    reportStalls(1, {tally: twice, cast: 'cast 1'});
+    reportStalls(2, {tally: twice, cast: 'cast 2'});
+    expect(reportStalls(0, {tally: twice, cast: 'cast 3'})).toBe(
+      'this test 0, neighbours 3 across 1 test so far',
+    );
+    // A passing run is counted as well, and still passes. Its own earlier
+    // rows are not neighbours.
+    expectCaughtWithoutAJump(run([8]), undefined, {tally: quiet});
+    expect(fs.readFileSync(quiet, 'utf8').trim().split('\n').at(-1)).toMatch(
+      /\t1$/,
+    );
+  });
+
+  // A neighbour's stall counts only outside its scripted blocks: a gap that
+  // meets a block, or its margin, is the block's own.
+  test('a screencast counts its stalls outside its scripted blocks', () => {
+    const FRAME = 1000 / 60;
+    // Frames every frame, then a 700 ms block, then a 200 ms gap later on.
+    const times = [
+      ...Array.from({length: 10}, (_, i) => i * FRAME),
+      9 * FRAME + 700,
+      ...Array.from({length: 5}, (_, i) => 9 * FRAME + 700 + (i + 1) * FRAME),
+    ];
+    const last = times.at(-1) ?? 0;
+    times.push(last + 200, last + 200 + FRAME);
+    const block = {from: 9 * FRAME + 10, to: 9 * FRAME + 690};
+    expect(unscriptedStalls(times)).toBe(2);
+    expect(unscriptedStalls(times, [block])).toBe(1);
+    // The margin covers a gap that starts up to 50 ms after the block ends,
+    // and no later.
+    expect(unscriptedStalls(times, [{from: block.from, to: last - 40}])).toBe(
+      0,
+    );
+    expect(unscriptedStalls(times, [{from: block.from, to: last - 60}])).toBe(
+      1,
+    );
+  });
 
   test('P14 · a second tap mid-travel catches the thumb where it is and sends it back, without a jump', async ({
     page,
@@ -2197,7 +2515,9 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const samples = await record.stop(scene);
     await expect(input).not.toBeChecked();
     expect(await thumbOffset(page)).toBeCloseTo(0, 0);
-    expectCaughtWithoutAJump(samples);
+    expectCaughtWithoutAJump(samples, samples, {
+      scripted: [frozenCatchWindow(scene)],
+    });
   });
 
   test('P14 · with frames read late (one frame in three) the catch still shows no jump', async ({
@@ -2218,6 +2538,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     expectCaughtWithoutAJump(
       samples,
       samples.filter((_, index) => index % 3 === 0),
+      {scripted: [frozenCatchWindow(scene)]},
     );
   });
 
@@ -2534,6 +2855,9 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     // page busy, and the second lift waits, until 100 ms after the first frame
     // the page draws unfrozen. Meanwhile the compositor moves the travel on.
     // Only the lift's one event races the hold.
+    // The scripted freeze lies between these two readings: its gap is not a
+    // stall the neighbours read.
+    const freezeFrom = Date.now();
     await freezePageOn(page, 'pointerup');
     await driver.play([
       {t: 0, fingers: [{id: 0, ...center}]},
@@ -2557,6 +2881,12 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     await expect(input).not.toBeChecked();
     await waitForSwitchRest(page, thumb);
     const castFrames = await cast.stop();
+    reportStalls(
+      unscriptedStalls(
+        castFrames.map(f => f.t),
+        [{from: freezeFrom, to: afterResume}],
+      ),
+    );
     // The hold's marks are on the page's clock, which stands still while the
     // page is frozen: the real time less the frozen span. The cast stamps the
     // real time.
@@ -2828,6 +3158,13 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       () =>
         (window as unknown as {__block?: {from: number; to: number}}).__block,
     );
+    // The page's own busy loop on the lift is this proof's scripted block.
+    reportStalls(
+      unscriptedStalls(
+        castFrames.map(f => f.t),
+        block == null ? [] : [block],
+      ),
+    );
     expect(block, 'the page was busy after the lift').toBeDefined();
     const samples = await thumbOnControlClock(page, castFrames, controls);
     expect(samples.length).toBeGreaterThan(10);
@@ -2948,7 +3285,9 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const evidence: unknown[] = [];
     const directions = [true, false, true, false];
     const landings: {inBlock: boolean; gap: number}[] = [];
+    let castNumber = 0;
     for (const on of directions) {
+      castNumber += 1;
       const cast = await startScreencast(page);
       // The page waits for the travel one frame into its curve, not for the
       // lift's scale, and blocks from a task queued in that frame. So the
@@ -2981,6 +3320,13 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
         await page.waitForTimeout(16);
       }
       const castFrames = await cast.stop();
+      reportStalls(
+        unscriptedStalls(
+          castFrames.map(f => f.t),
+          [block],
+        ),
+        {cast: `cast ${castNumber}`},
+      );
       // Only the frames the proof reads are decoded.
       const read = castFrames.filter(
         f =>
@@ -3171,6 +3517,12 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const block = await blockMainThread(page, 700);
     await page.waitForTimeout(150);
     const frames = await cast.stop();
+    reportStalls(
+      unscriptedStalls(
+        frames.map(f => f.t),
+        [block],
+      ),
+    );
     await expect(input).not.toBeChecked();
     const lumas = await sampleLuma(page, frames, probe);
     const rest = lumas[0].luma;
@@ -3268,7 +3620,9 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const runs: BusyRun[] = [];
     const evidence: unknown[] = [];
     const landings: {inBlock: boolean; gap: number}[] = [];
+    let castNumber = 0;
     for (const on of [true, false]) {
+      castNumber += 1;
       const cast = await startScreencast(page);
       // The page waits for the track's own fade one frame into its curve, and
       // blocks from a task queued in that frame. A round trip from here would
@@ -3301,6 +3655,13 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
         await page.waitForTimeout(16);
       }
       const castFrames = await cast.stop();
+      reportStalls(
+        unscriptedStalls(
+          castFrames.map(f => f.t),
+          [block],
+        ),
+        {cast: `cast ${castNumber}`},
+      );
       // Only the frames the proof reads are decoded.
       const read = castFrames.filter(
         f =>

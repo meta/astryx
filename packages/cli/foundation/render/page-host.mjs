@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Host process for `astryx experimental render`: runs page-worker.mjs
+ * @file Host process for `astryx experimental export`: runs page-worker.mjs
  * in a worker thread and sends its one answer to the CLI.
  *
  * A crash of Node itself ends only this process, never the CLI. The page runs

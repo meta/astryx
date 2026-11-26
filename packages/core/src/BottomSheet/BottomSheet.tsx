@@ -127,11 +127,18 @@ import {
   type BottomSheetSwitcherContextValue,
   type BottomSheetSwitcherPhase,
 } from './BottomSheetSwitcherContext';
+import {devMissingCallback} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 export type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
+import {useBackdropPress} from '../Layer/useBackdropPress';
 
 const styles = stylex.create({
   dialog: {
@@ -242,7 +249,7 @@ const styles = stylex.create({
   positionerStackMotion: {
     transformOrigin: '50% 0',
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-medium'],
+    transitionDuration: `calc(${durationVars['--duration-medium']} * ${reducedMotionTransform.factor} + ${reducedMotionTransform.settle})`,
     transitionTimingFunction: easeVars['--ease-standard'],
     '@media (prefers-reduced-motion: reduce)': {
       transitionDuration: '0.01s',
@@ -434,6 +441,16 @@ function StandaloneBottomSheet({
   xstyle,
   ...props
 }: StandaloneBottomSheetProps) {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    typeof onOpenChange !== 'function'
+  ) {
+    onOpenChange = devMissingCallback(
+      'BottomSheet',
+      'onOpenChange',
+      'is required to close the bottom sheet, for example onOpenChange={setIsOpen}. BottomSheet has no onClose prop.',
+    );
+  }
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
@@ -857,13 +874,14 @@ function StandaloneBottomSheet({
     },
     [dismissOnEscape, shouldDismissOnCloseRequest],
   );
-  const handleClick = useCallback(
-    (event: React.MouseEvent<HTMLDialogElement>) => {
-      if (hasScrim && event.target === event.currentTarget) {
-        dismissOnLightInteraction();
-      }
-    },
-    [dismissOnLightInteraction, hasScrim],
+  // A press on the ::backdrop targets the <dialog> itself. The press must
+  // start and end there.
+  const handleBackdropPress = useCallback(() => {
+    dismissOnLightInteraction();
+  }, [dismissOnLightInteraction]);
+  const backdropPress = useBackdropPress(
+    handleBackdropPress,
+    hasScrim && isOpen && purpose === 'info',
   );
 
   const isExiting = !isOpen && isPresented;
@@ -928,7 +946,10 @@ function StandaloneBottomSheet({
       onCancel={handleCancel}
       // Presses inside the sheet do not reach handlers around where it is
       // written. The dialog, not the panel, is the root, as in a switcher.
-      {...layerClickBoundary({onClick: handleClick})}>
+      {...layerClickBoundary({onClick: backdropPress.onClick})}
+      onPointerDownCapture={backdropPress.onPointerDownCapture}
+      onPointerUpCapture={backdropPress.onPointerUpCapture}
+      onPointerCancelCapture={backdropPress.onPointerCancelCapture}>
       <BottomSheetPanel
         {...props}
         ref={ref}
@@ -1002,6 +1023,7 @@ function SwitcherBottomSheetItem({
     registerSheetDialog,
     registerSheetPurpose,
     onBeforeSheetPresent,
+    onBeforeSheetShow,
     isCoveredInTopLayer,
     onSheetEnterStart,
     onSheetTransitionComplete,
@@ -1011,6 +1033,9 @@ function SwitcherBottomSheetItem({
     onDialogCancel,
     onDialogClick,
     onDialogKeyDown,
+    onDialogPointerDownCapture,
+    onDialogPointerUpCapture,
+    onDialogPointerCancelCapture,
     settledSheet,
     releaseSettledSheet,
   } = switcher;
@@ -1166,6 +1191,7 @@ function SwitcherBottomSheetItem({
           presentWithClearScrim(dialog);
         }
       } else {
+        onBeforeSheetShow();
         dialog.show();
       }
     }
@@ -1177,6 +1203,7 @@ function SwitcherBottomSheetItem({
     isInteractive,
     isPresented,
     onBeforeSheetPresent,
+    onBeforeSheetShow,
     ownsScrim,
     sheetId,
   ]);
@@ -1281,7 +1308,10 @@ function SwitcherBottomSheetItem({
       {...layerClickBoundary({
         ...switcherDialogProps,
         onClick: onDialogClick,
-      })}>
+      })}
+      onPointerDownCapture={onDialogPointerDownCapture}
+      onPointerUpCapture={onDialogPointerUpCapture}
+      onPointerCancelCapture={onDialogPointerCancelCapture}>
       <div
         {...stylex.props(
           styles.positioner,

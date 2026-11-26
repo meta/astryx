@@ -5,8 +5,9 @@
  *
  * The browser-specs job runs its selection on one worker, and the files'
  * recorded times assume one browser per core, so more workers on one runner
- * only stretch each file. A plan job instead splits the selection into up
- * to five legs by recorded time, each about ten minutes or less, inside a
+ * only stretch each file. A plan job instead splits the selection into as
+ * many legs as keep each at ten minutes or less of recorded time, up to ten,
+ * inside a
  * leg's fifteen minutes, after the Storybook download (a changed
  * multi-component folder resolves its components through its story index).
  * Only the legs it plans start. A plan whose longest leg is still over twelve
@@ -38,6 +39,15 @@ const job = jobs['pr-a11y-specs'];
 const plan = jobs['pr-a11y-plan'];
 const step = name => job.steps.find(s => s.name === name);
 const planStep = name => plan.steps.find(s => s.name === name);
+
+/** The most browser-spec legs the plan starts for a pull request. */
+function pullRequestMaxLegs() {
+  return Number(
+    /--count-legs \$\{\{ github\.event_name == 'workflow_dispatch' && 1 \|\| (\d+) \}\}/.exec(
+      planStep("Count this run's accessibility legs").run,
+    )[1],
+  );
+}
 const scratch = [];
 afterAll(() => {
   for (const dir of scratch) fs.rmSync(dir, {recursive: true, force: true});
@@ -93,12 +103,12 @@ describe('the opt-in accessibility specs split into legs', () => {
 });
 
 describe('the browser-specs job', () => {
-  it('starts only the legs the plan needs, up to five for a pull request, and one job for a release check', () => {
+  it('starts only the legs the plan needs, up to ten for a pull request, and one job for a release check', () => {
     expect(job.strategy.matrix.leg).toBe(
       "${{ fromJSON(needs.pr-a11y-plan.outputs.legs || '[1]') }}",
     );
     expect(planStep("Count this run's accessibility legs").run).toContain(
-      "--count-legs ${{ github.event_name == 'workflow_dispatch' && 1 || 5 }}",
+      "--count-legs ${{ github.event_name == 'workflow_dispatch' && 1 || 10 }}",
     );
     expect(job.strategy['fail-fast']).toBe(false);
     expect(job.needs).toContain('pr-a11y-plan');
@@ -246,6 +256,75 @@ describe('the browser-specs job', () => {
     for (const entry of share.run)
       expect(Object.keys(entry).sort()).toEqual(['file', 'reason']);
   }, 180_000);
+});
+
+describe('a wide opt-in selection', () => {
+  // One pull request's opt-in selection: 141 spec files, at the recorded
+  // times then. On five legs its longest leg was 12.3 minutes, so the plan
+  // failed before any leg started.
+  const wide = JSON.parse(
+    fs.readFileSync(
+      path.join(root, '.github/scripts/fixtures/a11y-selection-11916.json'),
+      'utf8',
+    ),
+  );
+
+  it('gets as many legs as keep each at ten minutes or less', () => {
+    expect(planLegs(wide.files, wide.seconds, 5).longestMs).toBeGreaterThan(
+      LEG_LIMIT_MS,
+    );
+    const legs = planLegs(wide.files, wide.seconds, pullRequestMaxLegs());
+    expect(legs.count).toBeGreaterThanOrEqual(6);
+    // One file alone takes just over ten minutes. It runs in a leg of its own,
+    // and the other legs keep to ten minutes.
+    const longestFileMs = Math.max(
+      ...wide.files.map(file => (wide.seconds[file] ?? 0) * 1000),
+    );
+    expect(longestFileMs).toBeGreaterThan(LEG_BUDGET_MS);
+    expect(legs.longestMs).toBeLessThanOrEqual(longestFileMs);
+    expect(legs.count).toBeLessThan(pullRequestMaxLegs());
+    for (const share of legs.shares) {
+      const shareMs =
+        share.reduce((sum, file) => sum + (wide.seconds[file] ?? 0), 0) * 1000;
+      if (!share.some(file => wide.seconds[file] * 1000 > LEG_BUDGET_MS))
+        expect(shareMs).toBeLessThanOrEqual(LEG_BUDGET_MS);
+    }
+    expect(planOverLimit(legs, true)).toBe('');
+    expect(legs.shares.flat().sort()).toEqual([...wide.files].sort());
+  });
+
+  it('adds a leg while a split by whole files leaves one over ten minutes', () => {
+    // Three files of 6.5 minutes: two legs by total time, but one of them
+    // would hold two files, 13 minutes.
+    const files = ['a.spec.ts', 'b.spec.ts', 'c.spec.ts'];
+    const seconds = {'a.spec.ts': 390, 'b.spec.ts': 390, 'c.spec.ts': 390};
+    const legs = planLegs(files, seconds, pullRequestMaxLegs());
+    expect(legs.count).toBe(3);
+    expect(legs.longestMs).toBe(390 * 1000);
+    // A file over ten minutes runs alone, and the others still fit.
+    const long = {
+      'long.spec.ts': 660,
+      'a.spec.ts': 330,
+      'b.spec.ts': 330,
+      'c.spec.ts': 330,
+    };
+    const apart = planLegs(Object.keys(long), long, pullRequestMaxLegs());
+    expect(apart.shares).toContainEqual(['long.spec.ts']);
+    for (const share of apart.shares.filter(s => !s.includes('long.spec.ts')))
+      expect(
+        share.reduce((sum, file) => sum + long[file], 0),
+      ).toBeLessThanOrEqual(600);
+  });
+
+  it('keeps a small selection at five legs or fewer', () => {
+    const small = planLegs(
+      wide.files.slice(0, 5),
+      wide.seconds,
+      pullRequestMaxLegs(),
+    );
+    expect(small.count).toBeLessThanOrEqual(5);
+    expect(small.longestMs).toBeLessThanOrEqual(LEG_BUDGET_MS);
+  });
 });
 
 describe('a plan over twelve minutes', () => {

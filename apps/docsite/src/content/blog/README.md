@@ -121,6 +121,10 @@ coverImage: '/blog/<slug>/cover.png'
 coverAlt: 'Short description of the image'
 ```
 
+The site loads a PNG or JPEG cover through the image optimizer, no wider than
+1920 pixels, so commit the full-size file. A cover in another format, such as
+an animated GIF, loads as the file itself, so keep it small.
+
 **Release posts** get their cover automatically: when a post title carries a
 version (e.g. "Astryx v0.1.3: …"), the version is rendered on a solid
 Astryx-blue field with the Astryx mark as the separator between segments and
@@ -225,7 +229,7 @@ excluded from production builds.
 ## 7. Validate before you push
 
 ```bash
-pnpm generate       # discovers + validates posts into src/generated/blogRegistry.ts
+pnpm generate       # discovers + validates posts into src/generated/ (blogRegistry.ts, blogPostBodies.json)
 pnpm test           # runs blog discovery/validation tests
 pnpm typecheck
 ```

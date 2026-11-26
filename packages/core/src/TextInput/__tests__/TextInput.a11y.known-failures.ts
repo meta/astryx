@@ -9,32 +9,35 @@
 
 import type {KnownFailure} from '@astryxdesign/a11y-spec';
 
-const ERROR_WITHOUT_TEXT =
-  'the binding declares this text control invalid but supplies no textual error description';
+const FALLBACK_NOT_VISIBLE =
+  'the binding identifies the error as "Invalid value", but no visibly rendered aria-errormessage or aria-describedby target contains that text';
 
+// An error without a message links a hidden translated fallback, so
+// assistive technology hears the error; sighted users still see no text
+// (component:TextInput AR4 gap, component:TextArea FR8 gap).
 export const TEXT_INPUT_KNOWN_FAILURES: ReadonlyArray<KnownFailure> = [
   {
-    expectation: 'text-input.error.identified-in-text',
+    expectation: 'text-input.error.related-text-visible',
     binding: 'TextInput',
     state: 'input-error-without-message',
-    evidenceLayer: 'dom',
-    failureEquals: ERROR_WITHOUT_TEXT,
+    evidenceLayer: 'real-browser',
+    failureEquals: FALLBACK_NOT_VISIBLE,
     standardsReference: 'WCAG 2.2 3.3.1 Error Identification (Level A)',
     userImpact:
-      'A person receives an invalid field state with only visual styling and an icon; no text identifies what is wrong.',
+      'A sighted person sees an invalid field marked only by colour and an icon; no visible text says what is wrong. Assistive technology hears the fallback text.',
     reason:
-      'TextInput permits an error status without a message. This migration records the existing failure without changing component behavior.',
+      'TextInput permits an error status without a message. Visible default error text is pending the input-fields FR16 proposal.',
   },
   {
-    expectation: 'text-input.error.identified-in-text',
+    expectation: 'text-input.error.related-text-visible',
     binding: 'TextArea',
     state: 'textarea-error-without-message',
-    evidenceLayer: 'dom',
-    failureEquals: ERROR_WITHOUT_TEXT,
+    evidenceLayer: 'real-browser',
+    failureEquals: FALLBACK_NOT_VISIBLE,
     standardsReference: 'WCAG 2.2 3.3.1 Error Identification (Level A)',
     userImpact:
-      'A person receives an invalid field state with only visual styling and an icon; no text identifies what is wrong.',
+      'A sighted person sees an invalid field marked only by colour and an icon; no visible text says what is wrong. Assistive technology hears the fallback text.',
     reason:
-      'TextArea permits an error status without a message. This migration records the existing failure without changing component behavior.',
+      'TextArea permits an error status without a message. Visible default error text is pending the input-fields FR16 proposal.',
   },
 ];

@@ -19,7 +19,7 @@ const {search} = require('./search.mjs');
 const {loadSearchData} = require('./_adapter.mjs');
 
 /** A query whose answer the fit pass changes. */
-const QUERY = 'table with row selection';
+const QUERY = 'table with sortable columns';
 
 // The child imports these, so they stay file URLs: a Windows path such as
 // `D:\...` reads to the ESM loader as a URL with the scheme `d:`.

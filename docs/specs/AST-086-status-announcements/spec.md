@@ -149,8 +149,9 @@ announcement channel.
   FR4 applies inside a mounted live container, and FR6 governs repeats. FR11
   covers components that announce their own rendered content;
   `component:FieldStatus`, a grouped field's status message (as in TimeInput
-  inside an input group), and `component:Banner` keep their own announcement
-  rules.
+  inside an input group), `component:Banner`, and `component:Toast` (once per
+  showing: a text change while a toast shows is not announced again) keep their
+  own announcement rules.
 - **FR12 — Own-content announcements behave the same everywhere.** Every
   component FR11 covers announces the element's
   rendered text, or its accessible name when it renders no text, leaving out

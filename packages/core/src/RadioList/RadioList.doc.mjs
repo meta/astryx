@@ -89,7 +89,8 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Whether all radio items are disabled.',
+      description:
+        'Whether all radio items are disabled. The radios stay focusable via aria-disabled, so keyboard users can still reach the group, and selection is blocked.',
       default: 'false',
     },
     {
@@ -102,7 +103,7 @@ export const docs = {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the group is disabled. Applies to the whole-group disabled state (isDisabled), not per item. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the radios focusable via aria-disabled (selection stays blocked). Use this instead of wrapping a disabled RadioList in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the group is disabled. Applies to the whole-group disabled state (isDisabled), not per item. With isDisabled, shows a tooltip on hover/keyboard focus. Use this instead of wrapping a disabled RadioList in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
     },
     {
       name: 'isRequired',
@@ -161,17 +162,22 @@ export const docs = {
       name: 'controlXstyle',
       type: 'StyleXStyles',
       description:
-        'StyleX styles for the visual control box: the element that paints the border and background and holds icons and end controls. Never the native input.',
+        'StyleX styles for the role="radiogroup" element that lays out the options. Never a native radio.',
     },
     {
       name: 'controlClassName',
       type: 'string',
-      description: 'Class name for the visual control box.',
+      description: 'Class name for the role="radiogroup" element.',
     },
     {
       name: 'controlStyle',
       type: 'CSSProperties',
-      description: 'Inline styles for the visual control box.',
+      description: 'Inline styles for the role="radiogroup" element.',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: 'Ref forwarded to the role="radiogroup" element.',
     },
   ],
   components: [{name: 'RadioListItem'}],
@@ -228,19 +234,27 @@ export const docs = {
     ],
     anatomy: [
       {
-        name: 'Header',
+        name: 'Group label',
+        required: true,
+        description:
+          'Names the radio group. Screen readers still read it when isLabelHidden hides it.',
+      },
+      {
+        name: 'Description',
         required: false,
-        description: 'Optional heading above the radio list.',
+        description: 'Optional text below the group label.',
       },
       {
-        name: 'Children',
+        name: 'Options',
         required: true,
-        description: 'The radio list items rendered as selectable options.',
+        description:
+          'The RadioListItem rows, one radio each, in a column or a row.',
       },
       {
-        name: 'Label/Value',
-        required: true,
-        description: 'The text label and associated value for each radio item.',
+        name: 'Status message',
+        required: false,
+        description:
+          'Optional message below the options for an error, warning, or success status.',
       },
     ],
   },
@@ -290,19 +304,27 @@ export const docsZh = {
     ],
     anatomy: [
       {
-        name: 'Header',
+        name: 'Group label',
+        required: true,
+        description:
+          'Names the radio group. Screen readers still read it when isLabelHidden hides it.',
+      },
+      {
+        name: 'Description',
         required: false,
-        description: 'Optional heading above the radio list.',
+        description: 'Optional text below the group label.',
       },
       {
-        name: 'Children',
+        name: 'Options',
         required: true,
-        description: 'The radio list items rendered as selectable options.',
+        description:
+          'The RadioListItem rows, one radio each, in a column or a row.',
       },
       {
-        name: 'Label/Value',
-        required: true,
-        description: 'The text label and associated value for each radio item.',
+        name: 'Status message',
+        required: false,
+        description:
+          'Optional message below the options for an error, warning, or success status.',
       },
     ],
   },
@@ -354,19 +376,27 @@ export const docsDense = {
     ],
     anatomy: [
       {
-        name: 'Header',
+        name: 'Group label',
+        required: true,
+        description:
+          'Names the radio group. Screen readers still read it when isLabelHidden hides it.',
+      },
+      {
+        name: 'Description',
         required: false,
-        description: 'Optional heading above the radio list.',
+        description: 'Optional text below the group label.',
       },
       {
-        name: 'Children',
+        name: 'Options',
         required: true,
-        description: 'The radio list items rendered as selectable options.',
+        description:
+          'The RadioListItem rows, one radio each, in a column or a row.',
       },
       {
-        name: 'Label/Value',
-        required: true,
-        description: 'The text label and associated value for each radio item.',
+        name: 'Status message',
+        required: false,
+        description:
+          'Optional message below the options for an error, warning, or success status.',
       },
     ],
   },

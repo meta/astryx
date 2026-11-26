@@ -26,6 +26,7 @@ import {
   __resetInteractionModalityForTest,
   getInteractionModality,
 } from '../utils/interactionModality';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // Mock showPopover/hidePopover (not implemented in jsdom) so the tooltip layer
 // reflects its open state via a `popover-open` attribute the tests can assert.
@@ -101,6 +102,21 @@ describe('Slider', () => {
     const sliders = screen.getAllByRole('slider');
     expect(sliders[0]).toHaveAccessibleName('Valeur minimale');
     expect(sliders[1]).toHaveAccessibleName('Valeur maximale');
+  });
+
+  it('writes a range text value through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.slider.rangeValue': 'de {start} à {end}'}}}>
+        <Slider
+          label="Prix"
+          value={[20, 80] as [number, number]}
+          valueDisplay="text"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('de 20 à 80')).toBeInTheDocument();
   });
 
   it('sets aria-valuetext with formatValue', () => {
@@ -329,6 +345,19 @@ describe('Slider', () => {
   });
 
   // --- Required state ---
+
+  it('describes required state with the provider catalog', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.slider.required': 'Obligatoire'}}}>
+        <Slider label="Volume" value={50} isRequired />
+      </InternationalizationProvider>,
+    );
+    const slider = screen.getByRole('slider');
+    expect(slider).toHaveAccessibleDescription(/Obligatoire/);
+    expect(slider).not.toHaveAccessibleDescription(/Required/);
+  });
 
   it('conveys required state through the accessible description', () => {
     render(<Slider label="Volume" value={50} isRequired />);
@@ -1157,14 +1186,21 @@ describe('Slider', () => {
           disabledMessage="Volume is locked while sharing your screen"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent(
         'Volume is locked while sharing your screen',
       );
       fireEvent.mouseEnter(getTrack());
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      fireEvent.pointerMove(getTrack());
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
       fireEvent.mouseLeave(getTrack());
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        ),
+      );
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
@@ -1178,10 +1214,11 @@ describe('Slider', () => {
           disabledMessage="Volume is locked while sharing your screen"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('slider')).toHaveFocus();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -1229,7 +1266,7 @@ describe('Slider', () => {
         />,
       );
       const thumb = screen.getByRole('slider');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(thumb.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -2146,6 +2183,7 @@ describe('coincident range thumbs', () => {
       document.getElementById(
         (thumb.getAttribute('aria-describedby') ?? '')
           .split(' ')
+          .map(id => id.replace(/-description$/, ''))
           .find(
             id =>
               document.getElementById(id)?.getAttribute('role') === 'tooltip',
@@ -2302,5 +2340,51 @@ describe('Slider after a render React discards', () => {
     pressTrackAtMiddle();
 
     expect(onChangeEnd).toHaveBeenLastCalledWith(50);
+  });
+});
+
+describe('Slider text value', () => {
+  it('reserves room for a max that lies off the step grid, which End shows', () => {
+    render(
+      <Slider
+        label="Off grid"
+        min={0}
+        max={10.25}
+        step={1}
+        value={0}
+        valueDisplay="text"
+      />,
+    );
+    const text = screen.getByText('0');
+    // "10.25" is the longest text: five characters plus one.
+    expect(text.getAttribute('style') ?? '').toContain('6ch');
+  });
+
+  it("reserves a range's room through its catalog message", () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.slider.rangeValue': 'de {start} à {end}'}}}>
+        <Slider
+          label="Prix"
+          value={[20, 80] as [number, number]}
+          valueDisplay="text"
+        />
+      </InternationalizationProvider>,
+    );
+    const text = screen.getByText('de 20 à 80');
+    // "de 100 à 100" is the longest text: twelve characters plus one.
+    expect(text.getAttribute('style') ?? '').toContain('13ch');
+  });
+
+  it('renders without a duplicate-key warning when both ends format alike', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(
+      <Slider label="Fixed" min={5} max={5} value={5} valueDisplay="text" />,
+    );
+    expect(
+      error.mock.calls.some(call => String(call[0]).includes('same key')),
+    ).toBe(false);
+    error.mockRestore();
   });
 });

@@ -229,6 +229,33 @@ export const SYSTEM_FONTS_BY_PLATFORM = {
 };
 
 /**
+ * Older names of a system family, on the family that replaced them: a
+ * theme that names the older one ("MS Sans Serif") reaches the family a
+ * machine has now, written right after it.
+ * @type {Readonly<Record<string, {name: string, aliases: readonly string[]}>>}
+ */
+export const SYSTEM_FONT_ALIASES = {
+  'microsoft sans serif': {
+    name: 'Microsoft Sans Serif',
+    aliases: ['ms sans serif'],
+  },
+};
+
+/**
+ * The system family that replaced a family's older name, as the system
+ * names it, or null.
+ * @param {string} family without quotes
+ * @returns {string | null}
+ */
+export function systemFontSuccessor(family) {
+  const low = family.trim().toLowerCase();
+  return (
+    Object.values(SYSTEM_FONT_ALIASES).find(f => f.aliases.includes(low))
+      ?.name ?? null
+  );
+}
+
+/**
  * Apple's own interface faces, by lowercase name, with the generic family
  * that reaches each. Apple systems hide them from a lookup by family name,
  * so a page reaches them only through these generics: by name, every
@@ -254,10 +281,11 @@ export const APPLE_FACE_GENERICS = /** @type {Record<string, string>} */ ({
  * @returns {string | null}
  */
 export function appleFaceGeneric(family) {
-  return (
-    APPLE_FACE_GENERICS[family.trim().replace(/\s+/g, ' ').toLowerCase()] ??
-    null
-  );
+  const key = family.trim().replace(/\s+/g, ' ').toLowerCase();
+  // Only the table's own names: a word such as constructor is no face.
+  return Object.hasOwn(APPLE_FACE_GENERICS, key)
+    ? APPLE_FACE_GENERICS[key]
+    : null;
 }
 
 /**

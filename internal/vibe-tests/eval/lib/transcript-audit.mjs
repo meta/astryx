@@ -3,13 +3,44 @@
 /**
  * @file Reads an agent transcript and lists every path outside the workspace.
  * @input stream JSON transcript lines and the workspace's real path
- * @output tool counts, docs commands, violations and warnings
+ * @output tool counts, docs commands, violations, warnings and temp-folder paths
  * @position Called by run.mjs after each agent run
  */
 
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {isInside} from './workspace.mjs';
+import {givenAndRealPaths, isInside} from './workspace.mjs';
+
+/**
+ * A plain backup: only `cp`, `mv` and `mkdir -p`, joined by ` && `, on literal
+ * paths, with single spaces. A copy can go into or out of the temp folder. Any
+ * other text can make the shell reach a path the audit does not see, so only
+ * such a command lists its temp paths apart.
+ */
+export function isPlainBackup(command) {
+  if (/[^\S ]/.test(command)) return false;
+  return command.split(' && ').every(stage => {
+    const [program, ...args] = stage.split(' ');
+    if (program === 'mkdir') {
+      return args[0] === '-p' && args.length > 1 && args.slice(1).every(isLiteralPath);
+    }
+    if (program !== 'cp' && program !== 'mv') return false;
+    const paths = args.filter(arg => !/^-[a-zA-Z]+$/.test(arg));
+    return paths.length >= 2 && paths.every(isLiteralPath);
+  });
+}
+
+function isLiteralPath(arg) {
+  return /^[\w./+-]+$/.test(arg) && !arg.startsWith('-') && !arg.split('/').includes('..');
+}
+
+/** Where a path leads after links: the real path of its nearest existing folder, plus the rest. */
+function linkTarget(file) {
+  let existing = file;
+  while (!fs.existsSync(existing) && path.dirname(existing) !== existing) existing = path.dirname(existing);
+  return path.join(fs.realpathSync(existing), path.relative(existing, file));
+}
 
 /** System locations an agent may name without reading project data. */
 const ALLOWED_PREFIXES = ['/dev/null', '/dev/stdout', '/dev/stderr', '/usr/', '/bin/', '/etc/', '/lib', '/proc/self/'];
@@ -296,21 +327,39 @@ export function resolveCommandPaths(command, workspace, startCwd = workspace, ho
  * probes, other runs) is a violation, and so is a recursive read (`grep -r`,
  * `rg`, `find -exec`, the Grep tool) of a root or a folder that holds one.
  * Only naming a root or such a folder (`ls ~`, `find / -name`) is a warning. Any other outside path is a
- * warning to review: a command can name a path without reading it.
+ * warning to review: a command can name a path without reading it. In a plain
+ * `cp` or `mv` backup only, a path in the system temp folder outside every run
+ * is listed apart as a temp path, because the agents that run at the same time
+ * share that folder. The agent's own temp folder (`ownTemp`, its TMPDIR) is its own.
  * @param {string[]} lines
  * @param {string} workspace real path of the workspace
  * @param {string[]} sensitiveRoots
+ * @param {string} [home]
+ * @param {{ownTemp?: string, tempRoots?: string[]}} [options]
  */
-export function auditTranscript(lines, workspace, sensitiveRoots = [], home = os.homedir()) {
+export function auditTranscript(
+  lines,
+  workspace,
+  sensitiveRoots = [],
+  home = os.homedir(),
+  {ownTemp, tempRoots = givenAndRealPaths([os.tmpdir(), '/tmp'])} = {},
+) {
   const violations = [];
   const warnings = [];
+  const tempPaths = [];
   const docsCommands = [];
   const tools = {};
   // The agent saves long tool output in its own session folder and reads it back.
   const ownSession = path.join(home, '.claude', 'projects', workspace.replace(/[^A-Za-z0-9]/g, '-'));
   let shellCwd = workspace;
-  const check = (raw, tool, resolved = resolveRaw(raw, workspace, home), {relative = false, recursive = false} = {}) => {
+  const check = (
+    raw,
+    tool,
+    resolved = resolveRaw(raw, workspace, home),
+    {relative = false, recursive = false, plainBackup = false} = {},
+  ) => {
     if (isInside(resolved, ownSession) || isInside(resolved, workspace)) return;
+    if (ownTemp && isInside(resolved, ownTemp)) return;
     // A recursive reader of a root, or of a folder above one, reads the files inside it.
     const holds = root => isInside(root, resolved);
     const reads = sensitiveRoots.some(root => (resolved !== root && isInside(resolved, root)) || (recursive && holds(root)));
@@ -326,6 +375,12 @@ export function auditTranscript(lines, workspace, sensitiveRoots = [], home = os
       return;
     }
     if (ALLOWED_PREFIXES.some(prefix => resolved.startsWith(prefix))) return;
+    // A link the agent made can point a temp path into a run, so the path's target decides.
+    const isTempPath = tempRoots.some(root => resolved !== root && isInside(resolved, root));
+    if (plainBackup && isTempPath && !sensitiveRoots.some(root => isInside(linkTarget(resolved), root))) {
+      tempPaths.push({tool, path: raw});
+      return;
+    }
     warnings.push({tool, path: raw});
   };
 
@@ -346,12 +401,12 @@ export function auditTranscript(lines, workspace, sensitiveRoots = [], home = os
       const {found, cwd} = resolveCommandPaths(input.command, workspace, shellCwd, home);
       for (const {raw, resolved, relative, recursive, unknown} of found) {
         if (unknown) warnings.push({tool: use.name, path: raw});
-        else check(raw, use.name, resolved, {relative, recursive});
+        else check(raw, use.name, resolved, {relative, recursive, plainBackup: isPlainBackup(input.command)});
       }
       shellCwd = cwd;
       if (/\b(astryx|shadcn)\b/.test(input.command)) docsCommands.push(input.command.slice(0, 200));
     }
   }
   const toolCalls = Object.values(tools).reduce((a, b) => a + b, 0);
-  return {tools, toolCalls, violations, warnings, docsCommands};
+  return {tools, toolCalls, violations, warnings, tempPaths, docsCommands};
 }

@@ -92,7 +92,7 @@ export const docs = {
       name: 'isDisabled',
       type: 'boolean',
       description:
-        'Disables the input and all token interactions. The input keeps its tab stop: it is announced as disabled (aria-disabled), is read-only, and opens and picks nothing. With tokenOverflowBehavior="unfocusedLayer" and no disabledMessage, the input is natively disabled and out of the tab order.',
+        'Disables the input and all token interactions. The input keeps its tab stop: it is announced as disabled (aria-disabled), is read-only, and opens and picks nothing. With tokenOverflowBehavior="unfocusedLayer", the placeholder of the collapsed field keeps that tab stop.',
       default: 'false',
     },
     {
@@ -218,7 +218,7 @@ export const docs = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        'Icon to display at the start of the input, before any tokens. Accepts a semantic icon name, an SVG icon component, or a ReactNode directly.',
+        'Icon to display at the start of the input, before any tokens; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
       slotElements: [{__element: 'Icon', props: {icon: 'search', size: 'sm'}}],
     },
     {
@@ -416,6 +416,12 @@ export const docs = {
         description:
           'A button that removes all selected tokens at once. Shown when hasClear is true and tokens are present.',
       },
+      {
+        name: 'Status icon',
+        required: false,
+        description:
+          'Error, warning, or success icon at the end of the field. With statusVariant tooltip it is a button that reveals the status message.',
+      },
     ],
   },
 };
@@ -612,7 +618,7 @@ export const docsZh = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        '\u5728\u8f93\u5165\u6846\u5f00\u5934\uff08token \u4e4b\u524d\uff09\u663e\u793a\u7684\u56fe\u6807\u3002\u63a5\u53d7\u8bed\u4e49\u56fe\u6807\u540d\u79f0\u3001SVG \u56fe\u6807\u7ec4\u4ef6\u6216\u76f4\u63a5\u4f20\u5165 ReactNode\u3002',
+        '在输入框开头（token 之前）显示的图标；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'endContent',
@@ -779,6 +785,12 @@ export const docsZh = {
         required: false,
         description:
           'A button that removes all selected tokens at once. Shown when hasClear is true and tokens are present.',
+      },
+      {
+        name: 'Status icon',
+        required: false,
+        description:
+          'Error, warning, or success icon at the end of the field. With statusVariant tooltip it is a button that reveals the status message.',
       },
     ],
   },

@@ -85,6 +85,69 @@ describe('spec-only change scope', () => {
     expect(readme.specOnly).toBe(false);
   });
 
+  it('gives a change only to the recorded Node test times the knowledge lane: the leg plan check and the tests that read the times', () => {
+    for (const files of [
+      ['scripts/vitest-node-durations.json'],
+      [
+        'scripts/vitest-node-durations.json',
+        'scripts/vitest-node-durations.min-node.json',
+      ],
+      // The recorded interaction test times: planning data the same way.
+      ['.github/playwright-leg-durations.json'],
+      [
+        '.github/playwright-leg-durations.json',
+        'scripts/vitest-node-durations.json',
+      ],
+    ]) {
+      const result = classifyChanges(
+        files.map(filename => ({filename, status: 'M'})),
+      );
+      expect(result.surfaces).toEqual(['node-times']);
+      expect(result.specOnly).toBe(true);
+      // Named apart, so the test join still requires every owner's outcome.
+      expect(result.timesOnly).toBe(true);
+      expect(result.fullSuite).toBe(false);
+      expect(result.vitestFullSuite).toBe(false);
+      expect(result.touchesKnowledgeRecords).toBe(false);
+    }
+  });
+
+  it.each([
+    'packages/core/src/Button/Button.tsx',
+    'docs/specs/AST-030/spec.md',
+    'scripts/vitest-node-legs.mjs',
+    '.github/workflows/ci.yml',
+  ])(
+    'runs the recorded Node test times beside %s as today: the full suite',
+    other => {
+      const result = classifyChanges([
+        {filename: 'scripts/vitest-node-durations.json', status: 'M'},
+        {filename: other, status: 'M'},
+      ]);
+      expect(result.specOnly).toBe(false);
+      expect(result.timesOnly).toBe(false);
+      expect(result.fullSuite).toBe(true);
+      expect(result.vitestFullSuite).toBe(true);
+    },
+  );
+
+  it.each([
+    'packages/core/src/Button/Button.tsx',
+    'docs/specs/AST-030/spec.md',
+    '.github/scripts/playwright-legs.mjs',
+  ])(
+    'runs the recorded interaction test times beside %s as test configuration: the full suite',
+    other => {
+      const result = classifyChanges([
+        {filename: '.github/playwright-leg-durations.json', status: 'M'},
+        {filename: other, status: 'M'},
+      ]);
+      expect(result.timesOnly).toBe(false);
+      expect(result.fullSuite).toBe(true);
+      expect(result.vitestFullSuite).toBe(true);
+    },
+  );
+
   it('owner-gates architecture records without granting the spec-only fast path', () => {
     const result = classifyChanges([
       {filename: 'docs/architecture/knowledge-contracts.md'},
@@ -685,7 +748,7 @@ describe('Lab entry files (spec:AST-030 FR26)', () => {
     isLabEntryChange,
     labRouteSlug,
     ROUTES_LOCK,
-    OFFICIAL_PACKAGES,
+    classifyChanges,
   } = require('./change-scope.cjs');
   const names = new Set(['CommentPin']);
   const route = lines => `@@ -556,6 +556,11 @@\n${lines.join('\n')}`;
@@ -700,8 +763,8 @@ describe('Lab entry files (spec:AST-030 FR26)', () => {
     change: {filename: ROUTES_LOCK, status: 'M'},
     patches: {[ROUTES_LOCK]: patch},
   });
-  const entry = ({change, patches}, base = null) =>
-    isLabEntryChange(change, {names, patches, officialPackagesBase: base});
+  const entry = ({change, patches}) =>
+    isLabEntryChange(change, {names, patches});
 
   it('accepts a carried component route', () => {
     expect(entry(routes(route(ownRoute)))).toBe(true);
@@ -803,103 +866,68 @@ describe('Lab entry files (spec:AST-030 FR26)', () => {
     ).toBe(false);
   });
 
-  const base = [
-    '{',
-    '  "packages": [',
-    '    {',
-    '      "package": "@astryxdesign/charts",',
-    '      "contributions": [',
-    '        {',
-    '          "kind": "component",',
-    '          "name": "Chart"',
-    '        }',
-    '      ]',
-    '    },',
-    '    {',
-    '      "package": "@astryxdesign/lab",',
-    '      "contributions": [',
-    '        {',
-    '          "kind": "component",',
-    '          "name": "ChartArea"',
-    '        }',
-    '      ]',
-    '    }',
-    '  ]',
-    '}',
-  ].join('\n');
-  const discovery = (added, at = 15) => ({
-    change: {filename: OFFICIAL_PACKAGES, status: 'M'},
-    patches: {
-      [OFFICIAL_PACKAGES]: `@@ -${at},2 +${at},${2 + added.length} @@\n${added.join('\n')}`,
-    },
-  });
-  const ownEntry = [
+  // The CLI derives its official package list when it is packed, so a Lab
+  // component no longer edits it. A branch cut while the list was committed
+  // may still carry an edit to it.
+  const OLD_OFFICIAL_LIST =
+    'packages/cli/assets/discover/official-packages.json';
+  const oldListEdit = [
     '+        {',
     '+          "kind": "component",',
     '+          "name": "CommentPin"',
     '+        },',
   ];
+  const component = [
+    'packages/lab/src/CommentPin/CommentPin.tsx',
+    'packages/lab/src/CommentPin/CommentPin.doc.mjs',
+  ];
 
-  it("accepts a carried component's entry inside Lab's part of the base", () => {
-    expect(entry(discovery(ownEntry), base)).toBe(true);
-  });
-
-  it('refuses an entry for a component the change does not carry', () => {
+  it('counts no edit to the old official list as a Lab entry', () => {
     expect(
-      entry(
-        discovery(ownEntry.map(line => line.replace('CommentPin', 'Drawer'))),
-        base,
-      ),
+      entry({
+        change: {filename: OLD_OFFICIAL_LIST, status: 'M'},
+        patches: {
+          [OLD_OFFICIAL_LIST]: `@@ -15,2 +15,6 @@\n${oldListEdit.join('\n')}`,
+        },
+      }),
     ).toBe(false);
   });
 
-  it("refuses an edit in the package that follows Lab's part of the base", () => {
-    const baseWithNext = base.replace(
-      '    }\n  ]\n}',
-      [
-        '    },',
-        '    {',
-        '      "package": "@astryxdesign/richtext",',
-        '      "contributions": [',
-        '        {',
-        '          "kind": "component",',
-        '          "name": "RichText"',
-        '        }',
-        '      ]',
-        '    }',
-        '  ]',
-        '}',
-      ].join('\n'),
-    );
-    expect(baseWithNext.split('\n')[21]).toContain('@astryxdesign/richtext');
-    // Inside Lab's part: accepted; inside the next package's part: refused.
-    expect(entry(discovery(ownEntry), baseWithNext)).toBe(true);
-    expect(entry(discovery(ownEntry, 25), baseWithNext)).toBe(false);
-    // A hunk that starts in Lab's last lines but runs into the next package.
-    const crossing = {
-      change: {filename: OFFICIAL_PACKAGES, status: 'M'},
-      patches: {
-        [OFFICIAL_PACKAGES]: `@@ -19,4 +19,8 @@\n${ownEntry.join('\n')}`,
-      },
-    };
-    expect(entry(crossing, baseWithNext)).toBe(false);
-  });
-
-  it("refuses the discovery list when the base's copy is missing", () => {
-    expect(entry(discovery(ownEntry), null)).toBe(false);
-  });
-
-  it('refuses a line that is not a component entry', () => {
+  it('keeps a new Lab component with its route Lab-only, with no CLI file', () => {
+    const changes = [
+      ...component.map(filename => ({filename, status: 'A'})),
+      {filename: ROUTES_LOCK, status: 'M'},
+    ];
     expect(
-      entry(
-        discovery(ownEntry.map(line => line.replace('"component"', '"hook"'))),
-        base,
-      ),
+      classifyChanges(changes, {
+        patches: {[ROUTES_LOCK]: route(ownRoute)},
+      }).labOnly,
+    ).toBe(true);
+  });
+
+  it('runs full CI for a branch that still edits the old official list', () => {
+    const changes = [
+      ...component.map(filename => ({filename, status: 'A'})),
+      {filename: ROUTES_LOCK, status: 'M'},
+      {filename: OLD_OFFICIAL_LIST, status: 'M'},
+    ];
+    expect(
+      classifyChanges(changes, {
+        patches: {
+          [ROUTES_LOCK]: route(ownRoute),
+          [OLD_OFFICIAL_LIST]: `@@ -15,2 +15,6 @@\n${oldListEdit.join('\n')}`,
+        },
+      }).labOnly,
     ).toBe(false);
   });
 
-  it("refuses an edit outside Lab's part of the base", () => {
-    expect(entry(discovery(ownEntry, 6), base)).toBe(false);
+  it('runs full CI for a CLI change beside a new Lab component', () => {
+    expect(
+      classifyChanges([
+        ...component.map(filename => ({filename, status: 'A'})),
+        {filename: 'packages/cli/api/discover/_adapter.mjs', status: 'M'},
+      ]).labOnly,
+    ).toBe(false);
   });
 
   it('derives the same route slug as the registry for every Lab folder', async () => {

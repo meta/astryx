@@ -3,6 +3,7 @@
 import {render, cleanup, act, screen} from '@testing-library/react';
 import {useTableSelection} from './plugins/selection/useTableSelection';
 import {useTableRowStatus} from './plugins/rowStatus/useTableRowStatus';
+import {useTableRowIndex} from './plugins/rowIndex/useTableRowIndex';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {Table} from './Table';
 import {useTableRowsVirtualization} from './plugins/virtualization/useTableRowsVirtualization';
@@ -223,6 +224,52 @@ describe('Table windowing admission diagnostics', () => {
       expect(warning).toHaveBeenCalledTimes(1);
     },
   );
+  it('names the column with a custom renderCell and what keeps rows windowed', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<Fixture reason="renderer" />);
+    const message = warning.mock.calls[0].join(' ');
+    expect(message).toContain(
+      'column "name" has a custom renderCell, which Table cannot check keeps the fixed row height',
+    );
+    expect(message).toContain(
+      'Columns without renderCell, the selection column and a row-number column that counts from 1 stay windowed',
+    );
+    expect(message).toContain('Rendering all rows.');
+  });
+  it("names a plugin's own column, not a renderCell the caller never wrote", () => {
+    function PluginFixture({plugin}: {plugin: 'status' | 'index'}) {
+      const virtualization = useTableRowsVirtualization({
+        rowHeight: 56,
+        initialViewportHeight: 240,
+      });
+      const rowStatus = useTableRowStatus<Item>({
+        getStatus: () => ({status: 'success', label: 'Ready'}),
+      });
+      const rowIndex = useTableRowIndex<Item>({startFrom: 0});
+      return (
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          virtualization={virtualization}
+          plugins={plugin === 'status' ? {rowStatus} : {rowIndex}}
+        />
+      );
+    }
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const status = render(<PluginFixture plugin="status" />);
+    expect(warning.mock.calls[0].join(' ')).toContain(
+      'the useTableRowStatus column is not one Table checks for a fixed row height, so row virtualization is off for this table',
+    );
+    expect(warning.mock.calls[0].join(' ')).not.toContain('renderCell');
+    status.unmount();
+    render(<PluginFixture plugin="index" />);
+    const index = warning.mock.calls.at(-1)!.join(' ');
+    expect(index).toContain(
+      'the useTableRowIndex column counts from 0, and only a row-number column that counts from 1 stays windowed',
+    );
+    expect(index).not.toContain('renderCell');
+  });
   it('reports invalid identity once without a duplicate error for the same fallback', () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
