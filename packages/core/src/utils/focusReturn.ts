@@ -21,6 +21,7 @@
 import {
   FOCUSABLE_SELECTOR,
   getFocusableElements,
+  isTabStop,
   isVisiblyFocusable,
 } from '../hooks/focusableSelector';
 import {sharedState, sharedWeakMap} from './sharedRealm';
@@ -256,11 +257,6 @@ export function focusForLastInput(
   element.focus({...options, focusVisible: false});
 }
 
-/** Whether Tab reaches the element: it takes focus and is in the Tab order. */
-function isTabStop(element: HTMLElement): boolean {
-  return element.tabIndex >= 0 && element.matches(FOCUSABLE_SELECTOR);
-}
-
 /**
  * Whether one scroll can show all of the element without moving content that
  * a person cannot scroll back. The element fits inside the viewport and inside
@@ -333,6 +329,10 @@ function fitsVisibleArea(element: HTMLElement): boolean {
 export function revealReturnTarget(element: HTMLElement): void {
   if (
     element.ownerDocument.activeElement !== element ||
+    // Tab reaches it: it takes focus and no negative tabindex takes it out of
+    // the order. A contenteditable or a media element with controls has a
+    // negative tabIndex property while it is still a Tab stop.
+    !element.matches(FOCUSABLE_SELECTOR) ||
     !isTabStop(element) ||
     typeof element.scrollIntoView !== 'function' ||
     !fitsVisibleArea(element)

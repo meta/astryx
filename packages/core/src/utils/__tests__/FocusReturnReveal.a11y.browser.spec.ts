@@ -379,3 +379,57 @@ test('an opener inside a scroller that a box with overflow hidden frames is show
   expect(await body.evaluate(node => node.scrollTop)).toBeLessThan(900);
   expect(await frame.evaluate(node => node.scrollTop)).toBe(0);
 });
+
+for (const [kind, markup] of [
+  ['a contenteditable region', '<div contenteditable="true">Notes</div>'],
+  ['a video with controls', '<video controls width="160" height="90"></video>'],
+] as const) {
+  test(`a Dialog close shows ${kind} the page scrolled out of view`, async ({
+    page,
+  }) => {
+    const member = MEMBERS[0];
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=${member.story}&viewMode=story`,
+    );
+    await expect(member.opener(page)).toBeVisible();
+    // Tab reaches this element, though its tabIndex property is -1 where it
+    // has no tabindex attribute. It is the return target when it holds focus
+    // as the Dialog opens.
+    await page.evaluate(html => {
+      const root = document.getElementById('storybook-root');
+      if (root?.parentNode == null) {
+        throw new Error('no story root');
+      }
+      const spacer = (height: number) => {
+        const node = document.createElement('div');
+        node.style.height = `${height}px`;
+        return node;
+      };
+      const holder = document.createElement('div');
+      holder.id = 'return-target';
+      holder.innerHTML = html;
+      root.parentNode.insertBefore(spacer(400), root);
+      root.parentNode.insertBefore(holder, root);
+      root.after(spacer(3000));
+    }, markup);
+    const target = page.locator('#return-target > *');
+    await target.evaluate(node => (node as HTMLElement).focus());
+    await expect(target).toBeFocused();
+    await target.evaluate(node => {
+      const top = node.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo(0, top + 600);
+    });
+    // A programmatic click moves no focus, so the element stays the recorded
+    // return target.
+    await member.opener(page).evaluate(node => (node as HTMLElement).click());
+    await expect(member.surface(page)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(member.surface(page)).toBeHidden();
+    await expect(target).toBeFocused();
+    await expect
+      .poll(async () =>
+        target.evaluate(node => Math.round(node.getBoundingClientRect().top)),
+      )
+      .toBe(0);
+  });
+}
