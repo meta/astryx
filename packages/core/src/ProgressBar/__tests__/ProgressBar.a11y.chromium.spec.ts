@@ -143,6 +143,11 @@ test('ProgressBar marks keep their names when tabbed to or hovered', async ({
 
   for (const [index, label] of labels.entries()) {
     const mark = marks.nth(index);
+    // The mark's Tooltip loads lazily. Once it has attached, its hidden text
+    // copy is in the document.
+    await expect(
+      page.locator('[hidden]').filter({hasText: label}).first(),
+    ).toBeAttached();
     const subject = await createChromiumHarness({
       page,
       cdp,
