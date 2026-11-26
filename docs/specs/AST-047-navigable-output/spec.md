@@ -110,10 +110,10 @@ This record owns the moves a read offers and how they appear in text and JSON.
   every link when it reads a doc, and Doctor MUST warn on a link that is
   unresolved or ambiguous. A link names a doc identity, not a provider instance,
   so it survives version changes.
-- **FR10 — Phase 1 covers docs and search.** `astryx docs` and `astryx search`
+- **FR10 — Docs and search are in scope.** `astryx docs` and `astryx search`
   MUST meet FR1–FR9, FR11, and FR12. A command a doc shows as an example, in a code
   block or in prose, is not a link: FR11 keeps it true. Other commands adopt
-  this record in later phases, each as its own change.
+  this record each in its own change.
 - **FR11 — Nothing a read shows can go stale.** A move or a cross-link MUST be
   derived when the read is made, never stored in a doc. Every other `astryx`
   command that a doc, a hint line, or the repository's agent prompt shows MUST
@@ -140,7 +140,7 @@ that name.
 Before this record, only docs-tree namespaces and typed docs offered a way up,
 and only in text; a section, a topic, and a topic's index were dead ends.
 
-Phase 1 changes:
+This record changes:
 
 - in text, a bare topic read lists the topic's sections when it has more than
   one; `--full` and `--dense` print it whole; `docs(topic)` and `--json` still
