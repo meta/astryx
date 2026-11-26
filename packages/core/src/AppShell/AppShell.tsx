@@ -715,9 +715,19 @@ export function AppShell({
   // Hash navigation alone does not move focus in every browser, so the skip
   // link focuses main itself (main has tabIndex={-1}). It does not follow its
   // href: a hash router reads the new hash as a route and leaves the page.
-  // The href stays for a page without script.
+  // The href stays for a page without script, and a modified click keeps
+  // the browser's own action, such as opening a new tab.
   const handleSkipLinkClick = useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
       event.preventDefault();
       document.getElementById(mainContentId)?.focus();
     },

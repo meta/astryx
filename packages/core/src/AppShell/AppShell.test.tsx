@@ -292,6 +292,24 @@ describe('AppShell', () => {
     }
   });
 
+  it.each([
+    ['Cmd', {metaKey: true}],
+    ['Ctrl', {ctrlKey: true}],
+    ['Shift', {shiftKey: true}],
+  ])(
+    'keeps the browser action for a %s-click on the skip link',
+    (_, modifier) => {
+      render(
+        <AppShell>
+          <div>Content</div>
+        </AppShell>,
+      );
+      expect(
+        fireEvent.click(screen.getByTestId('skip-to-content'), modifier),
+      ).toBe(true);
+    },
+  );
+
   it('gives a second shell its own main id; the first keeps the fixed id', () => {
     const view = render(
       <div>
