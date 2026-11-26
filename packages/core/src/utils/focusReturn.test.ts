@@ -251,6 +251,22 @@ describe('returnFocusForLastInput reveal', () => {
     ]);
   });
 
+  it('scrolls a contenteditable opener, which Tab reaches', () => {
+    const element = opener(
+      '<div data-opener contenteditable="true">Note</div>',
+    );
+    returnFocusForLastInput(element);
+    expect(document.activeElement).toBe(element);
+    expect(reveal).toHaveBeenCalledOnce();
+  });
+
+  it('never scrolls to a button taken out of the Tab order', () => {
+    const element = opener('<button data-opener tabindex="-1">Open</button>');
+    returnFocusForLastInput(element);
+    expect(document.activeElement).toBe(element);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
   it('never scrolls to an opener that is not a Tab stop', () => {
     const element = opener('<div data-opener tabindex="-1">Region</div>');
     returnFocusForLastInput(element);
