@@ -440,7 +440,7 @@ export const docsDense = {
     children: 'optional visible override; label is still required for a11y. Prefer <Button label="Save" /> over using children',
     endContent: 'trailing icon/badge after label; ignored when isIconOnly; color inherited',
     tooltip:
-      'tooltip text on hover, shown above; other side, rich content or open control: wrap in Tooltip (placement, content, isOpen)',
+      'tooltip text on hover, shown above; other side, rich content or open control: wrap in Tooltip instead, without this prop (placement, content, isOpen)',
     onClick: 'standard click handler; fires before clickAction',
     clickAction: 'async click handler; shows loading while promise pending',
     isDisabled: 'disables button; uses aria-disabled instead of native disabled',

@@ -493,7 +493,8 @@ export interface ButtonProps extends BaseProps<HTMLButtonElement> {
   endContent?: ReactNode;
   /**
    * Tooltip text shown on hover, above the button. For another side, rich
-   * content, or control over when it shows, wrap the button in `Tooltip`.
+   * content, or control over when it shows, wrap the button in `Tooltip`
+   * instead, without this prop.
    */
   tooltip?: string;
   /**

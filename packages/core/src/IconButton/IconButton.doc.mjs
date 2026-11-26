@@ -251,7 +251,7 @@ export const docsDense = {
       'shows loading spinner, blocks re-activation but stays focusable (aria-disabled, not native disabled)',
     isDisabled: 'disables button; uses aria-disabled instead of native disabled',
     tooltip:
-      'tooltip text on hover + keyboard focus, shown above; also describes the button unless it repeats the accessible name; other side, rich content or open control: wrap in Tooltip (placement, content, isOpen)',
+      'tooltip text on hover + keyboard focus, shown above; also describes the button unless it repeats the accessible name; other side, rich content or open control: wrap in Tooltip instead, without this prop (placement, content, isOpen)',
     onClick: 'standard click handler',
     clickAction: 'async click handler w/ automatic loading state',
     isInterruptible:
