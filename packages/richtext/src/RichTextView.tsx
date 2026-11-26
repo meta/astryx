@@ -174,10 +174,9 @@ export interface RichTextViewProps extends BaseProps {
  * This mirrors the canonical Lexical pattern for applying externally-sourced
  * serialized state after mount: the Lexical Playground's ActionsPlugin does the
  * same `editor.setEditorState(editor.parseEditorState(...))` from inside a
- * plugin. It is necessary because the composer builds the editor once and
- * reads the initial state exactly once at that point, so a changed prop cannot
- * re-seed the editor on its own. A read-only view has no history, so we skip the Playground's
- * accompanying CLEAR_HISTORY_COMMAND.
+ * plugin. The composer reads the initial state once, when it builds the
+ * editor. A changed `value` cannot re-seed it, so this plugin applies the new
+ * state. The view keeps no history, so it sends no `CLEAR_HISTORY_COMMAND`.
  *
  * `parseEditorState` / `setEditorState` are methods on the editor instance, so
  * this plugin needs no module-level Lexical imports of its own.
