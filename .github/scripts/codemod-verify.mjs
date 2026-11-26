@@ -42,32 +42,46 @@ function run(command, args, {cwd} = {}) {
 }
 
 /**
+ * Runs git with its arguments as given, as `run` does. Git's stderr stays in
+ * the error a failure throws, so the log shows it once.
+ * @param {string[]} args
+ * @param {{cwd?: string}} [options]
+ */
+function git(args, {cwd} = {}) {
+  return execFileSync('git', args, {
+    encoding: 'utf-8',
+    cwd,
+    stdio: 'pipe',
+  });
+}
+
+/**
  * The files the branch changed since `base`, read NUL-separated so git
  * neither quotes nor escapes a path.
  * @param {string} base
  * @param {{cwd?: string}} [options]
  */
 export function changedFiles(base, options = {}) {
-  return run('git', ['diff', '--name-only', '-z', base, 'HEAD'], options)
+  return git(['diff', '--name-only', '-z', base, 'HEAD'], options)
+    .trim()
     .split('\0')
     .filter(Boolean);
 }
 
 /**
- * A file's content at `base`, or null when the file is new since then.
+ * A file's content at `base`, or null when the file is new since then: the
+ * base has no file at its path. Any other git failure, such as an unknown
+ * `base`, throws with git's message.
  * @param {string} base
  * @param {string} file
  * @param {{cwd?: string}} [options]
  */
 export function baseVersion(base, file, options = {}) {
-  try {
-    return execFileSync('git', ['show', `${base}:${file}`], {
-      encoding: 'utf-8',
-      cwd: options.cwd,
-    });
-  } catch {
+  // An absent path lists nothing, and a directory then lists as a tree.
+  if (!/^\d+ blob /.test(git(['ls-tree', base, '--', file], options))) {
     return null;
   }
+  return git(['show', `${base}:${file}`], options);
 }
 
 /**
@@ -90,7 +104,7 @@ export function formatFiles(files, options = {}) {
 }
 
 function getChangedFiles() {
-  const base = run('git', ['merge-base', 'HEAD', 'origin/main']);
+  const base = git(['merge-base', 'HEAD', 'origin/main']).trim();
   return {base, files: changedFiles(base)};
 }
 
