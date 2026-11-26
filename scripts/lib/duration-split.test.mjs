@@ -105,6 +105,47 @@ describe('splitting test files by recorded time', () => {
     expect(leg).not.toContain('h2');
   });
 
+  it('gives each `alone` item a leg of its own, with only the items `besideTogether` accepts beside it', () => {
+    // c1, c2 share the last leg; o (alone) takes the leg before it; heavy h
+    // and m join neither.
+    const seconds = {c1: 6, c2: 5, o: 9, h: 20, m: 4, l1: 1, l2: 1};
+    const cost = costOf(Object.keys(seconds), seconds);
+    const apart = {
+      together: item => item.startsWith('c') || item === 'o',
+      alone: item => item === 'o',
+      besideTogether: item => cost(item) <= 1,
+    };
+    const legs = splitByDuration(Object.keys(seconds), 4, cost, [], apart);
+    expect(legs[3].filter(item => item.startsWith('c')).sort()).toEqual([
+      'c1',
+      'c2',
+    ]);
+    expect(legs[3]).not.toContain('o');
+    expect(legs[2]).toContain('o');
+    for (const item of legs[2]) expect(['o', 'l1', 'l2']).toContain(item);
+    for (const item of legs[3])
+      expect(['c1', 'c2', 'l1', 'l2']).toContain(item);
+    expect(legs.slice(0, 2).flat().sort()).toEqual(
+      expect.arrayContaining(['h', 'm']),
+    );
+    expect(legs.flat().sort()).toEqual(Object.keys(seconds).sort());
+    // With no leg left for the other items, it joins the `together` leg.
+    const two = splitByDuration(Object.keys(seconds), 2, cost, [], apart);
+    expect(two[1]).toEqual(expect.arrayContaining(['c1', 'c2', 'o']));
+    expect(two[0]).toEqual(expect.arrayContaining(['h', 'm']));
+    // Through a budget fit, too.
+    const plan = fitLegsToBudget(Object.keys(seconds), cost, {
+      budget: 21,
+      maxLegs: 6,
+      start: 4,
+      ...apart,
+    });
+    const own = plan.shares.find(share => share.includes('o'));
+    expect(
+      own.filter(item => item !== 'o').every(item => cost(item) <= 1),
+    ).toBe(true);
+  });
+
   it('refuses a split that lost, repeated or added an item', () => {
     expect(() => assertEachOnce(['a', 'b'], [['a'], []])).toThrow(
       'lost or repeated',

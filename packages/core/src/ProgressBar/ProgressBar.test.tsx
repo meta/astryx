@@ -669,7 +669,7 @@ describe('ProgressBar', () => {
       expect(mark).toHaveAttribute('aria-label', 'Goal');
     });
 
-    it('reveals a labeled mark via a focusable Tooltip trigger', async () => {
+    it('reveals a labeled mark via a focusable Tooltip trigger that reads its label once', async () => {
       const {container} = render(
         <ProgressBar
           value={50}
@@ -678,22 +678,22 @@ describe('ProgressBar', () => {
         />,
       );
       // Focusable so keyboard users can reveal the label visually; the tick
-      // itself owns its name independently of the Tooltip's description.
-      // The Tooltip loads lazily (Suspense), so re-query the live element and
-      // wait for it to attach aria-describedby.
+      // owns its name, and the Tooltip shows the same text.
       const mark0 = container.querySelector<HTMLElement>(MARK)!;
       expect(mark0).toHaveAttribute('tabindex', '0');
       expect(mark0).not.toHaveAttribute('aria-hidden');
+      // The Tooltip loads lazily (Suspense). Once it has attached, its text
+      // copy is in the document.
       await waitFor(() =>
-        expect(container.querySelector(MARK)).toHaveAttribute(
-          'aria-describedby',
-        ),
+        expect(
+          screen.getAllByText('Goal', {selector: '[hidden]', ignore: false}),
+        ).not.toHaveLength(0),
       );
       const mark = container.querySelector<HTMLElement>(MARK)!;
-      const tip = document.getElementById(
-        mark.getAttribute('aria-describedby')!,
-      );
-      expect(tip).toHaveTextContent('Goal');
+      expect(mark).toHaveAccessibleName('Goal');
+      // The tooltip text repeats the name, so it adds no description and the
+      // label is read once.
+      expect(mark).not.toHaveAttribute('aria-describedby');
     });
 
     it('keeps the progressbar element free of role="img"/aria-label children', () => {

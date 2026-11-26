@@ -5,17 +5,21 @@
  * @input A rendered element
  * @output The name an assistive technology reads for it, as far as the DOM
  *   gives it: `aria-labelledby` targets, `aria-label`, its own labels, an
- *   input button's value, its visible text (`aria-hidden` left out, an inner
- *   image's alt, `aria-label` or svg title counted), then `title`
+ *   input button's value, its visible text (`aria-hidden` and `hidden` content
+ *   left out, an inner image's alt, `aria-label` or svg title counted), then
+ *   `title`
  * @position Internal utility, not exported from the package: DropdownMenu
- *   names a menu after a custom trigger and a level after a node label, and SideNav finds a re-rendered
- *   header or footer control again by name (`component:SideNav` AR3)
+ *   names a menu after a custom trigger and a level after a node label, SideNav finds a re-rendered
+ *   header or footer control again by name (`component:SideNav` AR3), and
+ *   Tooltip compares its text with its trigger's name
  */
 
-/** Text an assistive technology reads from `element`, `aria-hidden` left out. */
+/** Text an assistive technology reads from `element`: `aria-hidden` and `hidden` content left out. */
 export function visibleText(element: Element): string {
   const copy = element.cloneNode(true) as Element;
-  for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) {
+  for (const hidden of copy.querySelectorAll(
+    '[aria-hidden="true"], [hidden]',
+  )) {
     hidden.remove();
   }
   // An icon-only control is named by its image's alt, an inner aria-label, or

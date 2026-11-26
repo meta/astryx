@@ -157,6 +157,19 @@ describe('Thumbnail', () => {
     warnSpy.mockRestore();
   });
 
+  it('describes a label-only thumbnail with nothing, since the label is its whole name', () => {
+    render(<Thumbnail src="/img.jpg" label="file.png" />);
+    const group = screen.getByRole('group', {name: 'file.png'});
+    expect(group).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('describes a thumbnail with a label and alt with its label', () => {
+    render(<Thumbnail src="/img.jpg" alt="Cover" label="file.png" />);
+    expect(
+      screen.getByRole('group', {name: 'file.png — Cover'}),
+    ).toHaveAccessibleDescription('file.png');
+  });
+
   it('label is shown via tooltip, not as inline text', () => {
     render(<Thumbnail label="photo.png" data-testid="thumb" />);
     // Label should exist in DOM (tooltip) but not as a direct child text node
