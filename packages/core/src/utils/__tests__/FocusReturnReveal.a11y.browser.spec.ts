@@ -136,16 +136,31 @@ async function openFromKeyboard(page: Page, member: Member): Promise<void> {
     .toBe(0);
 }
 
-/** The opener holds focus and is wholly in view, at the viewport's top edge. */
-async function expectRevealedAtTop(page: Page, member: Member): Promise<void> {
+/**
+ * The opener holds focus and is wholly in view. With `atNearestEdge`, it is
+ * at the viewport's top edge, the nearest edge for an opener scrolled above.
+ */
+async function expectRevealed(
+  page: Page,
+  member: Member,
+  {atNearestEdge}: {atNearestEdge: boolean},
+): Promise<void> {
   const opener = member.opener(page);
   await expect(opener).toBeFocused();
   // A reveal scroll lands a rendering update after the focus move.
-  await expect
-    .poll(async () =>
-      opener.evaluate(node => Math.round(node.getBoundingClientRect().top)),
-    )
-    .toBe(0);
+  if (atNearestEdge) {
+    await expect
+      .poll(async () =>
+        opener.evaluate(node => Math.round(node.getBoundingClientRect().top)),
+      )
+      .toBe(0);
+  } else {
+    await expect
+      .poll(async () =>
+        opener.evaluate(node => node.getBoundingClientRect().top),
+      )
+      .toBeGreaterThanOrEqual(0);
+  }
   const bottom = await opener.evaluate(
     node => node.getBoundingClientRect().bottom,
   );
@@ -154,17 +169,30 @@ async function expectRevealedAtTop(page: Page, member: Member): Promise<void> {
   );
 }
 
+/**
+ * WebKit restores focus itself when a menu's popover hides with focus inside
+ * it, as on an Escape or an outside press, and it centres the opener. The
+ * opener is then wholly in view, so nothing is left to reveal, but it is not
+ * at its nearest edge.
+ */
+function browserCentres(member: Member, browserName: string): boolean {
+  return member.name === 'DropdownMenu' && browserName === 'webkit';
+}
+
 for (const member of MEMBERS) {
   test.describe(`${member.name} focus return`, () => {
     test('an Escape close shows an opener the page scrolled out of view', async ({
       page,
+      browserName,
     }) => {
       await mountTall(page, member, 400);
       await scrollOpenerAbove(page, member.opener(page), 600);
       await openFromKeyboard(page, member);
       await page.keyboard.press('Escape');
       await expect(member.surface(page)).toBeHidden();
-      await expectRevealedAtTop(page, member);
+      await expectRevealed(page, member, {
+        atNearestEdge: !browserCentres(member, browserName),
+      });
     });
 
     test('a close from a control inside shows an opener the page scrolled partly out of view', async ({
@@ -179,11 +207,12 @@ for (const member of MEMBERS) {
       await openFromKeyboard(page, member);
       await member.closeInside(page);
       await expect(member.surface(page)).toBeHidden();
-      await expectRevealedAtTop(page, member);
+      await expectRevealed(page, member, {atNearestEdge: true});
     });
 
     test('a press outside shows an opener the page scrolled out of view', async ({
       page,
+      browserName,
     }) => {
       await mountTall(page, member, 400);
       await scrollOpenerAbove(page, member.opener(page), 600);
@@ -200,7 +229,9 @@ for (const member of MEMBERS) {
           : 10;
       await page.mouse.click(10, y);
       await expect(member.surface(page)).toBeHidden();
-      await expectRevealedAtTop(page, member);
+      await expectRevealed(page, member, {
+        atNearestEdge: !browserCentres(member, browserName),
+      });
     });
   });
 }
