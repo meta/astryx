@@ -137,6 +137,11 @@ async function readControls(page: Page) {
         size: group.getAttribute('data-size'),
         disabled: group.getAttribute('aria-disabled'),
         describedBy: group.getAttribute('aria-describedby'),
+        description: (group.getAttribute('aria-describedby') ?? '')
+          .split(' ')
+          .filter(Boolean)
+          .map(id => document.getElementById(id)?.textContent?.trim() ?? '')
+          .join(' '),
         opacity: getComputedStyle(group).opacity,
         box: box(group),
         container: box(parent),
@@ -302,11 +307,8 @@ for (const mode of ['light', 'dark'] as const) {
       );
       check(reason != null, `reason tooltip ${JSON.stringify(focused.layers)}`);
       check(
-        reason != null &&
-          (focused.controls[0].describedBy ?? '')
-            .split(' ')
-            .includes(reason.id),
-        `reason not in aria-describedby: ${focused.controls[0].describedBy}`,
+        focused.controls[0].description.includes('Choose a project'),
+        `the reason does not describe the control: ${focused.controls[0].describedBy} "${focused.controls[0].description}"`,
       );
       await page.keyboard.press('ArrowRight');
       await settle(page);
@@ -474,9 +476,22 @@ async function runCase(page: Page, item: AuditCase) {
     sha256: string;
   }[] = [];
   const frame: FrameSink = async (state, observed) => {
-    const screenshot = await page
-      .locator('#storybook-root')
-      .screenshot({animations: 'disabled'});
+    // The hint and the reason tooltip render in the top layer below the
+    // control, outside the story root, so the frame covers both.
+    const clip = await page.evaluate(() => {
+      const boxes = [
+        document.querySelector('#storybook-root'),
+        ...document.querySelectorAll('[popover]:popover-open'),
+      ]
+        .filter(element => element != null)
+        .map(element => element.getBoundingClientRect());
+      const left = Math.max(0, Math.min(...boxes.map(box => box.left)));
+      const top = Math.max(0, Math.min(...boxes.map(box => box.top)));
+      const right = Math.max(...boxes.map(box => box.right));
+      const bottom = Math.max(...boxes.map(box => box.bottom));
+      return {x: left, y: top, width: right - left, height: bottom - top};
+    });
+    const screenshot = await page.screenshot({clip, animations: 'disabled'});
     const file = `${item.key}__${state}.png`;
     fs.writeFileSync(path.join(OUTPUT, file), screenshot);
     frames.push({
