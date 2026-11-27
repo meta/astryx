@@ -47,6 +47,7 @@
  */
 
 import {resolveImportedStyleProperties} from './stylex-style-source.js';
+import ts from 'typescript';
 import {inputFieldFamilyMembers} from './input-field-family-members.js';
 
 /**
@@ -250,9 +251,11 @@ const rule = {
 
     /**
      * Whether the child can take the wrapper's style itself. With types,
-     * whether its props have an `xstyle`; a type it cannot read counts as
-     * yes, so the rule still reports. Without types, every component except
-     * a family:input-fields member.
+     * whether its props have an `xstyle`. A props type that names no
+     * properties it can read (`any`, `unknown`, an index signature, or a
+     * union with any such member or an `xstyle` member) counts as yes, so the
+     * rule still reports. Without types, every component except a
+     * family:input-fields member.
      */
     function childTakesXstyle(child) {
       if (checker != null) {
@@ -267,11 +270,24 @@ const rule = {
           propsSymbol,
           tsNode,
         );
-        return propsType.getProperty('xstyle') != null;
+        return propsTakeXstyle(propsType);
       }
       return !inputFieldFamilyMembers().has(
         jsxNameRoot(child.openingElement.name),
       );
+    }
+
+    function propsTakeXstyle(type) {
+      if ((type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) !== 0) {
+        return true;
+      }
+      if (type.isUnion()) {
+        return type.types.some(propsTakeXstyle);
+      }
+      if (type.getStringIndexType() != null) {
+        return true;
+      }
+      return type.getProperty('xstyle') != null;
     }
 
     function isAstryxComponent(nameNode) {

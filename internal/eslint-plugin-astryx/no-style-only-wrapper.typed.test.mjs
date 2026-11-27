@@ -39,6 +39,7 @@ import * as stylex from '@stylexjs/stylex';
 import {Selector} from './Selector';
 import {ValueEditor} from './ValueEditor';
 import {Button} from './Button';
+import {LooseAny, LooseIndex} from './Loose';
 const styles = stylex.create({
   column: {flexGrow: 1, flexShrink: 1, minWidth: 0},
   offset: {marginInlineStart: 4},
@@ -79,6 +80,20 @@ tester.run('no-style-only-wrapper (typed)', noStyleOnlyWrapperRule, {
           ],
         },
       ],
+    },
+    // Props typed `any` name no readable property: fail closed and report.
+    {
+      ...file(
+        `const a = <div style={{marginInlineStart: 4}}><LooseAny label="Go" /></div>;`,
+      ),
+      errors: [{messageId: 'styleOnlyWrapper'}],
+    },
+    // An index signature takes any prop: fail closed and report.
+    {
+      ...file(
+        `const a = <div style={{marginInlineStart: 4}}><LooseIndex label="Go" /></div>;`,
+      ),
+      errors: [{messageId: 'styleOnlyWrapper'}],
     },
     // A plain style attribute around a child that takes xstyle: still reported.
     {

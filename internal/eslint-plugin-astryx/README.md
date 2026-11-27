@@ -417,9 +417,11 @@ and nothing else. `@astryx/no-raw-color` covers the rest.
 ### `@astryx/no-style-only-wrapper`
 
 Flags a `<div>`/`<span>` that exists only to style a single Astryx component.
-Every component extends `BaseProps`, so it takes `xstyle` — the wrapper adds a
-DOM node that takes the component out of its parent's flex/grid child
+A component that extends `BaseProps` takes `xstyle`, so the wrapper adds a DOM
+node that takes the component out of its parent's flex/grid child
 relationship (this is what knocked the pagination carets off-center in #4752).
+A Field-composed input omits root `xstyle`, so a wrapper around one is not
+reported.
 
 **Bad:**
 
@@ -438,13 +440,14 @@ relationship (this is what knocked the pagination carets off-center in #4752).
 The rule only fires when dropping the wrapper preserves behavior, so it stays
 quiet on wrappers that do real work:
 
-| Wrapper                                                               | Reported? |
-| --------------------------------------------------------------------- | --------- |
-| Only style attributes (`stylex.props`, `className`)                   | ✅ yes    |
-| `role`, `aria-*`, `data-*`, `ref`, a handler, `{...rest}`             | ❌ no     |
-| More than one child, or a non-Astryx / host child                     | ❌ no     |
-| Styles include `display`, flex/grid container props, `gap`, `padding` | ❌ no     |
-| Child renders no root element (`Tooltip`, providers)                  | ❌ no     |
+| Wrapper                                                                                           | Reported? |
+| ------------------------------------------------------------------------------------------------- | --------- |
+| Only style attributes (`stylex.props`, `className`)                                               | ✅ yes    |
+| `role`, `aria-*`, `data-*`, `ref`, a handler, `{...rest}`                                         | ❌ no     |
+| More than one child, or a non-Astryx / host child                                                 | ❌ no     |
+| Styles include `display`, flex/grid container props, `gap`, `padding`                             | ❌ no     |
+| Child renders no root element (`Tooltip`, providers)                                              | ❌ no     |
+| Child's props take no root `xstyle` (with types), or a family:input-fields member (without types) | ❌ no     |
 
 Style objects imported from another module are read from that module, so
 `import {rtlStyles} from '../utils'` is classified as accurately as a local
