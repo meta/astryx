@@ -199,8 +199,11 @@ function componentIndexRef(pkg, componentName) {
 function getChangedFiles() {
   const threeDot = `${baseBranch}...${headRef}`;
   const tryThreeDot = () => {
+    // An explicit stdio keeps git's stderr in the error, so the warning
+    // below prints it once.
     const output = execSync(`git diff --name-only ${threeDot}`, {
       encoding: 'utf8',
+      stdio: 'pipe',
     });
     return output.trim().split('\n').filter(Boolean);
   };
@@ -241,6 +244,7 @@ function getChangedFiles() {
   try {
     const output = execSync(`git diff --name-only ${twoDot}`, {
       encoding: 'utf8',
+      stdio: 'pipe',
     });
     return {
       files: output.trim().split('\n').filter(Boolean),
@@ -1200,7 +1204,10 @@ function writeMainRecord() {
   }
   const record = {
     schema: 1,
-    sha: execSync('git rev-parse HEAD', {encoding: 'utf8'}).trim(),
+    sha: execSync('git rev-parse HEAD', {
+      encoding: 'utf8',
+      stdio: 'pipe',
+    }).trim(),
     modules,
     components,
     componentStats,

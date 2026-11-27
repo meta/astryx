@@ -851,3 +851,48 @@ describe('analyze-pr folder membership oracle', () => {
     }
   });
 });
+
+describe('analyze-pr shallow-clone recovery output', () => {
+  it("names git's failed three-dot diff once, in the warning's detail", () => {
+    const {base, clone} = buildFixture();
+    try {
+      const run = spawnSync(
+        process.execPath,
+        [SCRIPT, '--base', 'origin/main', '--head', 'HEAD', '--output', 'analysis.json'],
+        {cwd: clone, encoding: 'utf8'},
+      );
+      expect(run.status, run.stderr).toBe(0);
+      const warning = run.stderr.indexOf(
+        '::warning::three-dot diff origin/main...HEAD failed - attempting to deepen the clone and retry',
+      );
+      const fatal = "fatal: ambiguous argument 'origin/main...HEAD'";
+      expect(warning, run.stderr).toBeGreaterThanOrEqual(0);
+      expect(run.stderr.split(fatal).length - 1, run.stderr).toBe(1);
+      expect(run.stderr.indexOf(fatal)).toBeGreaterThan(warning);
+    } finally {
+      fs.rmSync(base, {recursive: true, force: true});
+    }
+  }, 60_000);
+
+  it("names git's failed two-dot diff once, in the error, when no step finds the base", () => {
+    const {base, clone} = buildFixture();
+    try {
+      // No such branch upstream, so the deepen and the two-dot diff fail too.
+      const run = spawnSync(
+        process.execPath,
+        [SCRIPT, '--base', 'origin/no-such-branch', '--head', 'HEAD', '--output', 'analysis.json'],
+        {cwd: clone, encoding: 'utf8'},
+      );
+      expect(run.status, run.stderr).toBe(1);
+      const error = run.stderr.indexOf(
+        '::error::git diff origin/no-such-branch..HEAD failed',
+      );
+      const fatal = "fatal: ambiguous argument 'origin/no-such-branch..HEAD'";
+      expect(error, run.stderr).toBeGreaterThanOrEqual(0);
+      expect(run.stderr.split(fatal).length - 1, run.stderr).toBe(1);
+      expect(run.stderr.indexOf(fatal)).toBeGreaterThan(error);
+    } finally {
+      fs.rmSync(base, {recursive: true, force: true});
+    }
+  }, 60_000);
+});
