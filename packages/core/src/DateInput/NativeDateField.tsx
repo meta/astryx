@@ -717,7 +717,7 @@ export function NativeDateField({
         {showsOverlay && (
           <span
             aria-hidden="true"
-            dir={textDirection}
+            dir={controlProps.dir ?? textDirection}
             {...stylex.props(
               styles.overlay,
               localeTextStyles.pageAlign,
