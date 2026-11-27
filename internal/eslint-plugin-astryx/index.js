@@ -467,7 +467,7 @@ plugin.configs.strict = {
     // A component-level light-dark() is a light/dark decision no theme can
     // override; the pair belongs in the theme layer. Core is clean after the
     // sticky-column fix in this commit, so it errors in both tiers. (Lab
-    // warns — see the lab block in eslint.config.js.)
+    // warns — see the lab block in eslint.config.mjs.)
     '@astryx/no-light-dark-outside-theme': 'error',
     // A colour a theme cannot reach is the colour every theme gets. This is
     // the whole of T1 where `no-hardcoded-styles` only reaches literals sitting
@@ -542,7 +542,7 @@ plugin.configs.recommended = {
     // A component-level light-dark() is a light/dark decision no theme can
     // override; the pair belongs in the theme layer. Core is clean after the
     // sticky-column fix in this commit, so it errors in both tiers. (Lab
-    // warns — see the lab block in eslint.config.js.)
+    // warns — see the lab block in eslint.config.mjs.)
     '@astryx/no-light-dark-outside-theme': 'error',
     // A colour a theme cannot reach is the colour every theme gets. This is
     // the whole of T1 where `no-hardcoded-styles` only reaches literals sitting
