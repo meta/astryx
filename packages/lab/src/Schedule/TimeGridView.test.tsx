@@ -196,7 +196,7 @@ describe('time grid initial position', () => {
     expect(viewport().scrollTop).toBe(852);
   });
 
-  it('opens in the commit that mounts it, from one measurement, before the scroll state is measured', () => {
+  it('opens in the commit that mounts it, before any resize notification, and is a tab stop there', () => {
     // A browser's ResizeObserver notifies after the first frame's layout.
     // This one never does, so the measured scroll state never arrives.
     vi.stubGlobal(
@@ -230,9 +230,10 @@ describe('time grid initial position', () => {
       // The viewport scrolls from its first frame, and it is already open.
       expect(grid.getAttribute('style')).toContain('--x-overflowY: auto');
       expect(grid.scrollTop).toBe(1302);
-      // The tab stop arrives with the measured scroll state.
-      expect(grid).not.toHaveAttribute('tabindex');
-      expect(reads).toEqual({scrollHeight: 1, clientHeight: 1});
+      // The viewport scrolls from its first frame, so the shared hook
+      // measures it in that commit too, and the keyboard reaches it there.
+      expect(grid).toHaveAttribute('tabindex', '0');
+      expect(reads.scrollHeight).toBeGreaterThan(0);
       unmount();
     } finally {
       vi.unstubAllGlobals();

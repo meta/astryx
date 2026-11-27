@@ -417,6 +417,7 @@ export function useScrollableArea({
       measuredOverflow = nextOverflow;
       // Measured DOM geometry decides whether the viewport becomes a CSS
       // scroll container.
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- a viewport that scrolls from its first frame measures in the layout effect, so its tab stop renders before that frame paints
       setOverflow(current =>
         overflowEqual(current, nextOverflow) ? current : nextOverflow,
       );
@@ -430,6 +431,7 @@ export function useScrollableArea({
       hasContentInvalidation = false;
       hasLayoutInvalidation = false;
       // A writing-mode change remaps the behavior-owned physical CSS.
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- as setOverflow above
       setMapping(current =>
         mappingsEqual(current, nextMapping) ? current : nextMapping,
       );
@@ -562,6 +564,14 @@ export function useScrollableArea({
     }, scheduleLayoutMeasure);
     registerScrollOwner(viewport, stateRef.current);
     measureRef.current = measureNow;
+    // A viewport that keeps its sticky containment scrolls from its first
+    // frame, and a scroller must be a tab stop while it overflows. So it
+    // measures here, once, before that frame paints. Every other viewport
+    // clips until it is measured, and reads nothing here.
+    if (stickyContainment === 'always') {
+      isLaidOut = true;
+      measureNow();
+    }
     const stopObservingViewport = observeResizeAfterLayout(viewport, onResize);
     // A content box that another observer already watches sends no first
     // notification; the viewport's own registration covers that.
@@ -639,7 +649,7 @@ export function useScrollableArea({
         window.cancelAnimationFrame(frame);
       }
     };
-  }, [axis, content, viewport]);
+  }, [axis, content, stickyContainment, viewport]);
 
   // The first measure runs before an overflowing axis can scroll (it is
   // `clip` until then). So when an axis gains overflow, or the axis mapping

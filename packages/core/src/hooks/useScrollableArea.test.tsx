@@ -499,6 +499,31 @@ describe('useScrollableArea', () => {
     expect(frames).toHaveLength(1);
   });
 
+  it('measures before the first frame paints when it keeps its sticky containment, so an overflowing viewport is a tab stop in its first commit', () => {
+    mockOwnedComputedStyle();
+    const geometry = spyOnOverflowingGeometry();
+
+    render(<Fixture stickyContainment="always" />);
+    const viewport = screen.getByTestId('viewport');
+    // No resize notification and no animation frame has run.
+    expect(frames).toHaveLength(0);
+    expect(window.getComputedStyle).toHaveBeenCalledWith(viewport);
+    expect(geometry.some(read => read.mock.calls.length > 0)).toBe(true);
+    expect(state().inline.isScrollable).toBe(true);
+    expect(viewport).toHaveAttribute('tabindex', '0');
+  });
+
+  it('measures once more at the first resize notification when it keeps its sticky containment, and keeps its tab stop', () => {
+    mockOwnedComputedStyle();
+    spyOnOverflowingGeometry();
+
+    render(<Fixture stickyContainment="always" />);
+    const viewport = screen.getByTestId('viewport');
+    act(() => notifyFirstLayout());
+    expect(state().inline.isScrollable).toBe(true);
+    expect(viewport).toHaveAttribute('tabindex', '0');
+  });
+
   it('is a tab stop from the first frame its content overflows, before any animation frame (AST-025 FR12)', () => {
     mockOwnedComputedStyle();
     // Content that is already taller than the viewport when it mounts, such
