@@ -63,12 +63,17 @@ test('real mouse and keyboard input selects nothing while the control is disable
   const before = await checked();
   expect(before).toHaveLength(1);
 
-  for (const radio of await group.getByRole('radio').all()) {
-    await radio.click({force: true});
-  }
+  // Keyboard first: a mouse press can focus a segment, and a Tab from there
+  // would leave the group's one Tab stop.
   await page.keyboard.press('Tab');
+  await expect(group.getByRole('radio', {checked: true})).toBeFocused();
   for (const key of ['ArrowRight', 'ArrowLeft', 'End', 'Home', 'ArrowDown']) {
     await page.keyboard.press(key);
+  }
+  expect(await checked()).toEqual(before);
+
+  for (const radio of await group.getByRole('radio').all()) {
+    await radio.click({force: true});
   }
 
   expect(await checked()).toEqual(before);

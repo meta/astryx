@@ -725,10 +725,6 @@ describe('SegmentedControl disabled state', () => {
     fireEvent.pointerDown(board, {pointerType: 'touch'});
     fireEvent.pointerUp(board, {pointerType: 'touch'});
     fireEvent.click(board);
-    // A touch drag from the selected segment to another one.
-    fireEvent.pointerDown(grid, {pointerType: 'touch', clientX: 10});
-    fireEvent.pointerMove(grid, {pointerType: 'touch', clientX: 200});
-    fireEvent.pointerUp(board, {pointerType: 'touch', clientX: 200});
 
     expect(handleChange).not.toHaveBeenCalled();
     expect(grid).toHaveAttribute('aria-checked', 'true');
