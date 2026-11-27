@@ -25,7 +25,7 @@ const getColumn = (index: number): TableColumn<Row> => ({
 });
 
 export default function InfinityTableShowcase({
-  direction = 'ltr',
+  direction,
 }: {
   direction?: 'ltr' | 'rtl';
 }) {

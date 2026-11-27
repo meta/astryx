@@ -11,4 +11,12 @@ const meta = {
 
 export default meta;
 export const Archive: StoryObj<typeof meta> = {};
-export const Rtl: StoryObj<typeof meta> = {args: {direction: 'rtl'}};
+export const Rtl: StoryObj<typeof meta> = {
+  decorators: [
+    Story => (
+      <div dir="rtl">
+        <Story />
+      </div>
+    ),
+  ],
+};
