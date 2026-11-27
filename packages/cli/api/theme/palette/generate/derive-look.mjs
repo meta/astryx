@@ -1062,10 +1062,9 @@ export function deriveStatusColors({
       // standing out from the page first, then standing apart from the
       // accent. Text that reads on no stop keeps the role at the base
       // theme's colors.
-      for (const keep of [[standsOut, apart], [apart], []])
-      // The role's usual text first: the nearest stop it reads on, before
-      // the other text on a nearer stop.
-      {
+      for (const keep of [[standsOut, apart], [apart], []]) {
+        // The role's usual text first: the nearest stop it reads on, before
+        // the other text on a nearer stop.
         for (const ink of choices) {
           for (const s of allowed) {
             const c = at(m, s).color;
