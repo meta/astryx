@@ -193,6 +193,13 @@ export function TimeGridView({
     positioning.current = latestPositioning;
   });
   const isBlockScrollable = scrollState.block.isScrollable;
+  const isInlineScrollable = scrollState.inline.isScrollable;
+  // The viewport scrolls from its first frame, but its measured scroll state,
+  // and with it the tab stop, renders after that frame paints. Until then the
+  // reading in the commit decides the tab stop, so an overflowing viewport is
+  // never a scroller that the keyboard cannot reach.
+  const [isOverflowingBeforeMeasure, setIsOverflowingBeforeMeasure] =
+    useState(false);
   // The clock is 0 only in the server snapshot; wait for the client's.
   const hasClock = currentTime !== 0;
   useLayoutEffect(() => {
@@ -200,6 +207,16 @@ export function TimeGridView({
     if (viewport == null || !hasClock) {
       return;
     }
+    // The measured scroll state renders after the first frame paints, and
+    // the viewport must open before that frame. So this one read measures
+    // it here. A viewport with no box yet opens when the state arrives.
+    const {scrollHeight, clientHeight} = viewport;
+    setIsOverflowingBeforeMeasure(
+      !isBlockScrollable &&
+        !isInlineScrollable &&
+        (scrollHeight > clientHeight ||
+          viewport.scrollWidth > viewport.clientWidth),
+    );
     const memory = scrollMemory.current;
     if (
       memory != null &&
@@ -211,10 +228,6 @@ export function TimeGridView({
       }
       return;
     }
-    // The measured scroll state renders after the first frame paints, and
-    // the viewport must open before that frame. So this one read measures
-    // it here. A viewport with no box yet opens when the state arrives.
-    const {scrollHeight, clientHeight} = viewport;
     if (!isBlockScrollable && scrollHeight <= clientHeight) {
       return;
     }
@@ -232,7 +245,14 @@ export function TimeGridView({
       memory.key = rangeKey;
       memory.offset = offset;
     }
-  }, [hasClock, isBlockScrollable, rangeKey, scrollMemory, timezoneID]);
+  }, [
+    hasClock,
+    isBlockScrollable,
+    isInlineScrollable,
+    rangeKey,
+    scrollMemory,
+    timezoneID,
+  ]);
   const rememberScroll = (event: UIEvent<HTMLDivElement>) => {
     const memory = scrollMemory.current;
     if (
@@ -306,11 +326,15 @@ export function TimeGridView({
     }
   });
 
-  const viewportProps = getViewportProps<HTMLDivElement>({
+  const scrollViewportProps = getViewportProps<HTMLDivElement>({
     ref: viewportRef,
     onScroll: rememberScroll,
     ...stylex.props(styles.timeGridViewport, timeGridViewportScope),
   });
+  const viewportProps =
+    scrollViewportProps.tabIndex == null && isOverflowingBeforeMeasure
+      ? {...scrollViewportProps, tabIndex: 0}
+      : scrollViewportProps;
   const contentProps = getContentProps<HTMLDivElement>(
     stylex.props(styles.timeGridContent(days.length)),
   );

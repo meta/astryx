@@ -196,7 +196,7 @@ describe('time grid initial position', () => {
     expect(viewport().scrollTop).toBe(852);
   });
 
-  it('opens in the commit that mounts it, from one measurement, before the scroll state is measured', () => {
+  it('opens in the commit that mounts it, from one measurement, and is a tab stop before the scroll state is measured', () => {
     // A browser's ResizeObserver notifies after the first frame's layout.
     // This one never does, so the measured scroll state never arrives.
     vi.stubGlobal(
@@ -230,9 +230,30 @@ describe('time grid initial position', () => {
       // The viewport scrolls from its first frame, and it is already open.
       expect(grid.getAttribute('style')).toContain('--x-overflowY: auto');
       expect(grid.scrollTop).toBe(1302);
-      // The tab stop arrives with the measured scroll state.
-      expect(grid).not.toHaveAttribute('tabindex');
+      // It scrolls, so the keyboard reaches it from that frame too.
+      expect(grid).toHaveAttribute('tabindex', '0');
       expect(reads).toEqual({scrollHeight: 1, clientHeight: 1});
+      unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('is no tab stop before the scroll state is measured when its content fits', () => {
+    restoreViewportGeometry();
+    mockViewportGeometry(VIEWPORT.clientHeight);
+    vi.stubGlobal(
+      'ResizeObserver',
+      vi.fn(function () {
+        return {observe: () => {}, unobserve: () => {}, disconnect: () => {}};
+      }),
+    );
+    try {
+      vi.setSystemTime(Date.UTC(2026, 4, 13, 14, 0));
+      const {unmount} = render(
+        <Harness initialDate={Date.UTC(2026, 4, 13, 14, 0) as Instant} />,
+      );
+      expect(viewport()).not.toHaveAttribute('tabindex');
       unmount();
     } finally {
       vi.unstubAllGlobals();
@@ -337,6 +358,56 @@ describe('time grid initial position', () => {
     const loadedViewport = viewport();
     expect(loadedViewport).not.toBe(fallbackViewport);
     expect(loadedViewport.scrollTop).toBe(700);
+  });
+
+  it('is a tab stop in the commit where loaded content replaces the suspended fallback, before the scroll state is measured', async () => {
+    // A browser's ResizeObserver notifies after the frame's layout. This one
+    // never does, so neither viewport's measured scroll state arrives.
+    vi.stubGlobal(
+      'ResizeObserver',
+      vi.fn(function () {
+        return {observe: () => {}, unobserve: () => {}, disconnect: () => {}};
+      }),
+    );
+    try {
+      vi.setSystemTime(Date.UTC(2026, 4, 13, 14, 0));
+      let resolveEvents: (
+        value: ReadonlyArray<CalendarEvent>,
+      ) => void = () => {};
+      const loader = vi.fn(
+        () =>
+          new Promise<ReadonlyArray<CalendarEvent>>(resolve => {
+            resolveEvents = resolve;
+          }),
+      );
+      const {unmount} = render(
+        <Harness
+          initialDate={Date.UTC(2026, 4, 13, 14, 0) as Instant}
+          eventSource={loader}
+        />,
+      );
+      const fallbackViewport = viewport();
+      expect(fallbackViewport).toHaveAttribute('tabindex', '0');
+      await waitFor(() => {
+        expect(loader).toHaveBeenCalled();
+      });
+      await act(async () => {
+        resolveEvents(events);
+        await Promise.resolve();
+      });
+      await waitFor(() => {
+        expect(screen.getByText('Visible sync')).toBeInTheDocument();
+      });
+      const loadedViewport = viewport();
+      expect(loadedViewport).not.toBe(fallbackViewport);
+      expect(loadedViewport.getAttribute('style')).toContain(
+        '--x-overflowY: auto',
+      );
+      expect(loadedViewport).toHaveAttribute('tabindex', '0');
+      unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
