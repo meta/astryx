@@ -1073,16 +1073,16 @@ const PLACE = {
 /**
  * A caller can make a control static, with no transform, so that its
  * `::after` covers a row as its tap target. Its press layers then have the
- * row as their containing block too: the row is its nearest positioned
- * ancestor. A press that starts on the row presses the row, so the row tints
- * as one surface. The control then shows no tint of its own. A press that
- * starts on the control's own box presses the control, so only that box
- * tints. The box is measured once, at the press's start, against the row's
+ * row as their containing block too: the row is their nearest containing
+ * block. A press that starts on the row presses the row, so the row tints as
+ * one surface. The control then shows no tint of its own. A press that starts
+ * on the control's own box presses the control, so only that box tints. The
+ * box is measured once, at the press's start, against the containing block's
  * padding box. Script places the layer because CSS anchor positioning ran
- * Layout during the release. The reads change no layout and no hit-testing. A
- * positioned surface, or one that holds its own layers, is its own layers'
- * containing block, so it is not placed. A key's press (`at` null) is on the
- * control's own box. Returns whether the press is on the row.
+ * Layout during the release. A positioned surface, or one that holds its own
+ * layers, is its own layers' containing block, so it is not placed. A key's
+ * press (`at` null) is on the control's own box. Returns whether the press is
+ * on the row.
  */
 function placePress(
   element: HTMLElement,
@@ -1090,28 +1090,32 @@ function placePress(
 ): boolean {
   unplacePress(element);
   const style = getComputedStyle(element);
-  const row =
-    style.getPropertyValue(PLACE_OPT_IN).trim() === 'control' &&
-    style.position === 'static' &&
-    !holdsItsLayers(element)
-      ? element.offsetParent
-      : null;
-  if (!(row instanceof HTMLElement)) {
+  if (
+    style.getPropertyValue(PLACE_OPT_IN).trim() !== 'control' ||
+    style.position !== 'static'
+  ) {
     return false;
   }
-  const box = at == null ? null : element.getBoundingClientRect();
+  const block = layerBlock(element);
+  if (block == null) {
+    return false;
+  }
+  const {box, rect, width, height} = block;
   if (
     at != null &&
-    box != null &&
     (at.x < box.left || at.x > box.right || at.y < box.top || at.y > box.bottom)
   ) {
     element.style.setProperty(PLACE.ownTint, 'none');
     return true;
   }
-  const top = element.offsetTop;
-  const left = element.offsetLeft;
-  const bottom = row.clientHeight - top - element.offsetHeight;
-  const right = row.clientWidth - left - element.offsetWidth;
+  // The rects are in the viewport. A scale on an ancestor scales them, so
+  // each difference is turned back into the block's own CSS pixels.
+  const scaleX = rect.width > 0 ? width / rect.width : 1;
+  const scaleY = rect.height > 0 ? height / rect.height : 1;
+  const top = (box.top - rect.top) * scaleY;
+  const left = (box.left - rect.left) * scaleX;
+  const bottom = (rect.bottom - box.bottom) * scaleY;
+  const right = (rect.right - box.right) * scaleX;
   element.style.setProperty(
     PLACE.inset,
     `${top}px ${right}px ${bottom}px ${left}px`,
@@ -1120,18 +1124,37 @@ function placePress(
 }
 
 /**
- * Whether a static control is still its own layers' containing block, as a
- * transform, a filter or layout containment makes it. The engine answers: a
- * rendered child's offset parent is then the control. With no rendered child
- * to ask, the control counts as holding them.
+ * The padding box of the containing block that a static control's press
+ * layers have, and the control's own box, or null when the control holds its
+ * own layers, as a transform, a filter or layout containment makes it. The
+ * engine answers: a hidden, absolutely placed probe in the control has that
+ * containing block as its offset parent, and the probe's box is its padding
+ * box. The control's own offset parent can stop short, at a table cell or a
+ * table that holds no layers. The probe is out of flow and hidden, so it
+ * moves no other box and takes no hit, and it is gone before anything paints.
+ * For that one layout, the probe can change what `:empty` or `:last-child`
+ * matches in the control, and a mutation observer records it twice.
+ * Every read happens while the probe is in place, so they share one layout.
  */
-function holdsItsLayers(element: HTMLElement): boolean {
-  for (const child of element.children) {
-    if (child instanceof HTMLElement && child.offsetParent != null) {
-      return child.offsetParent === element;
-    }
-  }
-  return true;
+function layerBlock(
+  element: HTMLElement,
+): {box: DOMRect; rect: DOMRect; width: number; height: number} | null {
+  const probe = element.ownerDocument.createElement('span');
+  probe.style.cssText =
+    'position:absolute;inset:0;visibility:hidden;pointer-events:none';
+  element.append(probe);
+  const block = probe.offsetParent;
+  const result =
+    block == null || block === element
+      ? null
+      : {
+          box: element.getBoundingClientRect(),
+          rect: probe.getBoundingClientRect(),
+          width: probe.offsetWidth,
+          height: probe.offsetHeight,
+        };
+  probe.remove();
+  return result;
 }
 
 /**

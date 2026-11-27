@@ -9,12 +9,12 @@
  *   `::after` where the caller put it. Points on the row outside the Button
  *   hit the Button at rest, while the press is on and while it fades (both
  *   engines). A press on the row tints the row as one surface. One on the
- *   Button's own box tints only the Button. Both hold for a finger and a mouse
- *   under a coarse primary pointer and under a fine one (both engines). A tap
- *   on the line under the Button activates it once, through the engine's own
- *   tap path (both engines). A held press there does too (Chromium, which also
- *   clicks from a raw touch sequence), and so does a mouse click (both
- *   engines)
+ *   Button's own box tints only the Button, in a table row's cell too. Both
+ *   hold for a finger and a mouse under a coarse primary pointer and under a
+ *   fine one (both engines). A tap on the line under the Button activates it
+ *   once, through the engine's own tap path (both engines). A held press
+ *   there does too (Chromium, which also clicks from a raw touch sequence),
+ *   and so does a mouse click (both engines)
  * @position Interaction evidence for privateAttributes/press.stylex.ts
  *   (`control`, `rowTint`) and the press controller (utils/pressFeedback.ts)
  *   as Button uses them
@@ -290,7 +290,8 @@ for (const [property, declarations, holds] of [
   ['transform', 'transform: scale(1)', true],
   ['filter', 'filter: opacity(1)', true],
   ['transform-style', 'transform-style: preserve-3d', true],
-  // A ray from the Button's own position, not turned: the Button stays put.
+  // The ray starts at the row's centre, so the Button moves there. The press
+  // reads its new box.
   ['offset-path', 'offset-path: ray(0deg); offset-rotate: 0deg', true],
   ['will-change', 'will-change: position', true],
   // Inline-size containment is not layout containment: the row still holds
@@ -333,6 +334,68 @@ for (const [property, declarations, holds] of [
     }
   });
 }
+
+test("a finger on a row-target Button in a table row's second cell tints only the Button", async ({
+  page,
+}) => {
+  const {driver, button} = await openRow(page);
+  // The Button moves into the second cell of a positioned table row. The row
+  // holds the press layers, but the Button's own offset parent is its cell.
+  const cellIsOffsetParent = await button.evaluate(el => {
+    const table = document.createElement('table');
+    const row = table.insertRow();
+    row.style.position = 'relative';
+    const first = row.insertCell();
+    first.style.padding = '12px';
+    first.textContent = 'Earlier cell with some text';
+    const second = row.insertCell();
+    second.style.padding = '12px';
+    el.parentElement?.before(table);
+    second.append(el);
+    return (el as HTMLElement).offsetParent === second;
+  });
+  expect(cellIsOffsetParent, 'the cell is the offset parent').toBe(true);
+  const at = await buttonCenter(button);
+  const {states, log} = await pressAndRead(
+    page,
+    button,
+    [at],
+    at,
+    fingerHold(driver, at),
+  );
+  // The layer's box reads against its containing block, so both boxes are
+  // turned into the viewport: the block's padding box comes from a hidden,
+  // absolutely placed marker in the Button.
+  const frame = await button.evaluate(el => {
+    const marker = document.createElement('span');
+    marker.style.cssText =
+      'position:absolute;inset:0;visibility:hidden;pointer-events:none';
+    el.append(marker);
+    const block = marker.getBoundingClientRect();
+    const isRow = marker.offsetParent === el.closest('tr');
+    marker.remove();
+    const own = el.getBoundingClientRect();
+    return {
+      isRow,
+      origin: [block.left, block.top],
+      buttonBox: [own.left, own.top, own.width, own.height].map(Math.round),
+    };
+  });
+  expect(frame.isRow, log).toBe(true);
+  for (const state of states) {
+    expect(state.layer, log).toBe('""');
+    const [left, top, width, height] = state.layerBox;
+    expect(
+      [
+        Math.round(frame.origin[0] + left),
+        Math.round(frame.origin[1] + top),
+        width,
+        height,
+      ],
+      log,
+    ).toEqual(frame.buttonBox);
+  }
+});
 
 test('a tap on the line under the Button activates the Button once', async ({
   page,
