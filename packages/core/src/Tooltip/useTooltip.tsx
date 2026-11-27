@@ -34,7 +34,7 @@ import type {
 import type {LayerTouchTrigger} from '../Layer/useTouchTrigger';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {warnOnce} from '../utils/devWarning';
-import {createModuleLoader} from '../utils/moduleLoader';
+import {afterNextPaint, createModuleLoader} from '../utils/moduleLoader';
 import {sharedState, sharedStore, sharedWeakMap} from '../utils/sharedRealm';
 import {isElement} from '../utils/nodeType';
 import {
@@ -331,17 +331,14 @@ function scheduleTooltipLoad(view: Window | null): void {
     return;
   }
   loader.scheduledViews.add(view);
-  // The timers belong to the trigger's window, so they end with its document.
-  // A frame callback runs before the frame paints. The task it queues runs
-  // after that paint.
-  view.requestAnimationFrame(() => {
-    view.setTimeout(() => {
-      if (typeof view.requestIdleCallback === 'function') {
-        view.requestIdleCallback(startLoad, {timeout: LOAD_CAP_MS});
-      } else {
-        view.setTimeout(startLoad, 0);
-      }
-    }, 0);
+  // The wait and the timers belong to the trigger's window, so they end with
+  // its document.
+  void afterNextPaint(view).then(() => {
+    if (typeof view.requestIdleCallback === 'function') {
+      view.requestIdleCallback(startLoad, {timeout: LOAD_CAP_MS});
+    } else {
+      view.setTimeout(startLoad, 0);
+    }
   });
 }
 
@@ -389,8 +386,12 @@ export interface TooltipBridge {
    * reports its ids when it exists, and null when it goes.
    */
   readonly reportLayer: (ids: TooltipLayerIds | null) => void;
-  /** Schedules the page's load for an attached trigger, if enabled. */
-  readonly scheduleLoad: () => void;
+  /**
+   * Follows a change of `isEnabled` for an attached trigger: counts it as a
+   * described trigger only while enabled, and schedules the page's load once
+   * it is enabled.
+   */
+  readonly syncEnabled: () => void;
 }
 
 function attach(
@@ -524,18 +525,21 @@ function createTooltipBridge(
     }
   };
   let uncountTrigger: (() => void) | null = null;
+  const recountTrigger = () => {
+    uncountTrigger?.();
+    uncountTrigger = null;
+    if (interactionElement != null && isEnabled() && describes()) {
+      uncountTrigger = countDescribedTrigger(interactionElement);
+    }
+  };
   const setInteraction = (element: HTMLElement | null) => {
     detachInteraction?.();
     detachInteraction = null;
-    uncountTrigger?.();
-    uncountTrigger = null;
-    if (element != null && isEnabled() && describes()) {
-      uncountTrigger = countDescribedTrigger(element);
-    }
     interactionElement?.removeEventListener('pointerenter', noteEntry);
     interactionElement?.removeEventListener('pointerdown', notePress);
     interactionElement?.removeEventListener('focusin', retryIfEnabled);
     interactionElement = element;
+    recountTrigger();
     hoverStartedAt = undefined;
     wasTapped = false;
     if (element == null) {
@@ -597,7 +601,8 @@ function createTooltipBridge(
     positionRef,
     interactionRef,
     reportLayer,
-    scheduleLoad: () => {
+    syncEnabled: () => {
+      recountTrigger();
       scheduleFor(positionElement ?? interactionElement);
     },
     show: () => {
@@ -699,13 +704,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     ),
   );
   const isEnabled = options.isEnabled !== false;
-  // Syncs the page's tooltip load with this tooltip becoming enabled while
-  // its trigger is attached. The trigger's ref callback schedules it for a
-  // trigger that attaches enabled.
+  // Syncs the page's tooltip load, and the described-trigger count that
+  // `isTooltipTriggerBeforeLoad` reads, with `isEnabled` while the trigger is
+  // attached. The trigger's ref callback covers a trigger that attaches.
   useEffect(() => {
-    if (isEnabled) {
-      bridge.scheduleLoad();
-    }
+    bridge.syncEnabled();
   }, [bridge, isEnabled]);
   // Set only by a Core component that mounts the tooltip on interaction.
   const heldInterestRef = use(TooltipPresentInterestContext);

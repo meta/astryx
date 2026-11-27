@@ -635,6 +635,16 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     }
   });
 
+  it('counts a trigger as described only while its tooltip is enabled, also when isEnabled changes after it attaches', async () => {
+    const {isTooltipTriggerBeforeLoad} = await import('./useTooltip');
+    const {rerender} = render(<Harness isEnabled={false} />);
+    expect(isTooltipTriggerBeforeLoad(trigger())).toBe(false);
+    rerender(<Harness isEnabled />);
+    expect(isTooltipTriggerBeforeLoad(trigger())).toBe(true);
+    rerender(<Harness isEnabled={false} />);
+    expect(isTooltipTriggerBeforeLoad(trigger())).toBe(false);
+  });
+
   it('the load waits for a trigger to attach: a tooltip whose trigger never attaches starts none', async () => {
     function Detached() {
       const tooltip = useTooltip();
