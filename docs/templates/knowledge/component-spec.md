@@ -12,6 +12,7 @@ owners: [<owner>]
 review_triggers: [public-api, behavior, layout, theming, accessibility]
 verified_by: [<test-or-check>]
 modules: [module:<Name>/<PublicModule>]
+# families: the families whose rules bind this component; membership is the family's own members: list.
 families: [family:<family-name>]
 design_specs: [design:<surface>]
 architecture: [architecture:<surface>]

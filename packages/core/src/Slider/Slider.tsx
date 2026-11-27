@@ -45,6 +45,7 @@ import {
 } from '../theme/tokens.stylex';
 import {Field} from '../Field/Field';
 import {useTooltip} from '../Tooltip';
+import {tooltipIdOf} from '../Tooltip/tooltipPresentInterest';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {InputStatus} from '../Field/types';
 import {mergeProps, rtlStyles} from '../utils';
@@ -506,6 +507,8 @@ const styles = stylex.create({
     cursor: 'default',
   },
   textValue: {
+    display: 'inline-block',
+    textAlign: 'end',
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
     lineHeight: typeScaleVars['--text-label-leading'],
@@ -513,6 +516,8 @@ const styles = stylex.create({
     whiteSpace: 'nowrap',
     flexShrink: 0,
   },
+  // A floor wider than any text a step shows, so the box keeps one width.
+  textValueReserve: (minInlineSize: string) => ({minInlineSize}),
   marksContainer: {
     position: 'absolute',
   },
@@ -708,7 +713,10 @@ function SliderValueTooltip({
       if (element == null) {
         anchors.current.delete(index);
       } else {
-        anchors.current.set(index, {element, tooltipId: describedBy});
+        anchors.current.set(index, {
+          element,
+          tooltipId: tooltipIdOf(describedBy),
+        });
       }
     },
     [anchors, index, describedBy],
@@ -906,7 +914,7 @@ export function Slider({ref, ...props}: SliderProps) {
   if (conveysRequired) {
     describedByParts.push(requiredID);
   }
-  if (showsDisabledMessage) {
+  if (showsDisabledMessage && disabledMessageTooltip.describedBy) {
     describedByParts.push(disabledMessageTooltip.describedBy);
   }
   const ariaDescribedBy =
@@ -1673,10 +1681,44 @@ export function Slider({ref, ...props}: SliderProps) {
   const fillEnd = getPercent(values[isRange ? 1 : 0], min, max) / 100;
   const fillStyle: FillStyle = {[FILL_START]: fillStart, [FILL_END]: fillEnd};
 
-  // Text value display
-  const textDisplay =
-    valueDisplay === 'text' ? (
-      <span {...stylex.props(styles.textValue)}>
+  const longestText = useMemo(() => {
+    if (valueDisplay !== 'text') {
+      return 0;
+    }
+    const format = formatValue ?? String;
+    const count = step > 0 ? Math.floor((max - min) / step) : 0;
+    const shown =
+      count <= 200
+        ? Array.from({length: count + 1}, (_, i) => min + i * step)
+        : [min, min + step, max - step];
+    // End shows `max` itself, which can lie off the step grid.
+    return Math.max(
+      format(max).length,
+      ...shown.map(
+        value => format(clamp(snapToStep(value, min, step), min, max)).length,
+      ),
+    );
+  }, [valueDisplay, formatValue, min, max, step]);
+
+  // Text value display. The box has a floor of one ch per character of the
+  // longest text a value shows, plus one ch, and the text sits at its end. The
+  // track then keeps one length while the value changes and while a thumb is
+  // dragged, so the thumb stays under the pointer. Up to 200 steps, every
+  // value is formatted to find the longest text; above that, the ends and the
+  // values one step in from them. A range counts its catalog message with
+  // both values at that longest length.
+  let textDisplay = null;
+  if (valueDisplay === 'text') {
+    const longest = '0'.repeat(longestText);
+    const reservedText = isRange
+      ? t('@astryx.slider.rangeValue', {start: longest, end: longest})
+      : longest;
+    textDisplay = (
+      <span
+        {...stylex.props(
+          styles.textValue,
+          styles.textValueReserve(`${reservedText.length + 1}ch`),
+        )}>
         {isRange
           ? t('@astryx.slider.rangeValue', {
               start: displayValue(values[0]),
@@ -1684,7 +1726,8 @@ export function Slider({ref, ...props}: SliderProps) {
             })
           : displayValue(values[0])}
       </span>
-    ) : null;
+    );
+  }
 
   return (
     <Field

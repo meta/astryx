@@ -9,8 +9,8 @@
  *   `PART_BOXES_PREFIX`, the line prefix a picture script prints it after.
  * @position run by picture-chrome.mjs and picture-playwright.mjs for a job
  *   that names parts to measure, once the page is drawn as the picture shows
- *   it; read back by `screenshots` in api/theme-edit/_preview.mjs from the
- *   script's stdout. The theme editor compares two pictures' boxes to name
+ *   it; read back by `takePictures` in foundation/pictures/pictures.mjs from
+ *   the script's stdout. The theme editor compares two pictures' boxes to name
  *   what a change of size moves on the page.
  */
 

@@ -25,6 +25,10 @@ import React, {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {
+  notePopoverSource,
+  popoverSourceOptions,
+} from '../hooks/focusableSelector';
 import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
@@ -568,6 +572,31 @@ export interface FixedLayerReturn {
    * Pass x and y coordinates for fixed positioning.
    */
   render: (children: ReactNode, props: FixedRenderProps) => ReactNode;
+}
+
+/**
+ * Context-mode render props a core component may pass through
+ * `useLayerInternal`; they are not part of `useLayer`'s public API.
+ */
+interface InternalContextRenderProps extends ContextRenderProps {
+  /**
+   * Rendered where the layer is written while no layer is mounted, and
+   * removed in the commit that mounts the layer: content that stands in for
+   * the layer until then, such as a tooltip's description before its first
+   * show.
+   */
+  whileUnmounted?: ReactNode;
+}
+
+/** What `useLayerInternal` returns in context mode. */
+interface InternalContextLayerReturn extends Omit<
+  ContextLayerReturn,
+  'render'
+> {
+  render: (
+    children: ReactNode,
+    props?: InternalContextRenderProps,
+  ) => ReactNode;
 }
 
 /**
@@ -1170,10 +1199,12 @@ function ContextLayerSlot({
   mountStore,
   renderLayer,
   sentinelRef,
+  whileUnmounted,
 }: {
   readonly mountStore: ContextLayerMountStore;
   readonly renderLayer: (mount: ContextLayerMount) => ReactNode;
   readonly sentinelRef: RefCallback<HTMLTemplateElement>;
+  readonly whileUnmounted?: ReactNode;
 }) {
   const mount = useSyncExternalStore(
     mountStore.subscribe,
@@ -1184,14 +1215,17 @@ function ContextLayerSlot({
   // us the real JSX parent on first show, this lets its ref report when a
   // persistent hook's render call moves to a different host.
   const sentinel = <template ref={sentinelRef} />;
-  if (mount === null) {
-    return <>{sentinel}</>;
-  }
-  const layer = renderLayer(mount);
+  // The stand-in and the layer share this render, so the commit that mounts
+  // the layer also removes the stand-in, and the reverse. Each child keeps
+  // its own position, so the marker never remounts.
+  const layer = mount === null ? null : renderLayer(mount);
   return (
     <>
+      {mount === null ? whileUnmounted : null}
       {sentinel}
-      {mount.portalTarget ? createPortal(layer, mount.portalTarget) : layer}
+      {mount !== null && mount.portalTarget
+        ? createPortal(layer, mount.portalTarget)
+        : layer}
     </>
   );
 }
@@ -1222,6 +1256,22 @@ function readPortalWritingContext(
         sourceStyle.writingMode as React.CSSProperties['writingMode'],
     }),
   };
+}
+
+/**
+ * The `dir` for a portalled layer whose writing context copies a direction the
+ * host lacks. A direction set in the caller's own `style` wins. The layer then
+ * gets no `dir`.
+ */
+function portalDir(
+  portalStyle: React.CSSProperties | null,
+  callerStyle: React.CSSProperties | undefined,
+): 'ltr' | 'rtl' | undefined {
+  const direction = portalStyle?.direction;
+  if (callerStyle?.direction != null) {
+    return undefined;
+  }
+  return direction === 'ltr' || direction === 'rtl' ? direction : undefined;
 }
 
 /**
@@ -1422,6 +1472,46 @@ function useLayerImplementation(
       setIsAnchorInView(inView);
     }
   }, []);
+  // Anchor visibility (FR5). The first read is synchronous, against the
+  // visual viewport, so the frame that shows the layer is already right
+  // (FR8). IntersectionObserver then tracks changes; with no root it reports
+  // against the viewport and through every ancestor clip, so an anchor
+  // scrolled out of a panel reads as out of view too. `null` stops the watch.
+  const inViewObserverRef = useRef<IntersectionObserver | null>(null);
+  const watchAnchorInView = useCallback(
+    (anchor: Element | null) => {
+      inViewObserverRef.current?.disconnect();
+      inViewObserverRef.current = null;
+      if (anchor == null) {
+        return;
+      }
+      const view = anchor.ownerDocument.defaultView;
+      if (view) {
+        // Edge-adjacent counts as in view, as IntersectionObserver reports
+        // it; an engine with no layout (a zero rect) therefore reads as in
+        // view too.
+        const rect = anchor.getBoundingClientRect();
+        updateAnchorInView(
+          rect.bottom >= 0 &&
+            rect.right >= 0 &&
+            rect.top <= view.innerHeight &&
+            rect.left <= view.innerWidth,
+        );
+      }
+      if (typeof IntersectionObserver === 'undefined') {
+        return;
+      }
+      const observer = new IntersectionObserver(entries => {
+        const latest = entries[entries.length - 1];
+        if (latest) {
+          updateAnchorInView(latest.isIntersecting);
+        }
+      });
+      observer.observe(anchor);
+      inViewObserverRef.current = observer;
+    },
+    [updateAnchorInView],
+  );
   // The inset the app declared on LayerProvider (FR6). Read through context
   // and written inline on the layer, so a corrective portal cannot escape it
   // and no measurement is needed to apply it.
@@ -1576,13 +1666,16 @@ function useLayerImplementation(
                 ? getInvokerRef.current()
                 : triggerRef.current;
             const invokerView = invoker?.ownerDocument.defaultView;
-            popover.showPopover({
-              source:
-                invokerView != null &&
-                invoker instanceof invokerView.HTMLElement
-                  ? invoker
-                  : undefined,
-            });
+            const source =
+              invokerView != null && invoker instanceof invokerView.HTMLElement
+                ? invoker
+                : null;
+            // A browser that orders the popover after its source reads the
+            // option. A focus region then finds its first and last control
+            // in that order.
+            const {options, wasRead} = popoverSourceOptions(source);
+            popover.showPopover(options);
+            notePopoverSource(popover, wasRead() ? source : null);
           });
         } catch (error) {
           // The name, not the constructor: a popover in another document throws
@@ -1597,6 +1690,7 @@ function useLayerImplementation(
         }
       } else {
         popover.style.display = 'block';
+        notePopoverSource(popover, null);
       }
       openedPopoverRef.current = popover;
       return true;
@@ -1681,6 +1775,7 @@ function useLayerImplementation(
       );
       if (portalStyle.direction != null && popover.style.direction === '') {
         popover.style.direction = portalStyle.direction;
+        popover.setAttribute('dir', portalStyle.direction);
       }
       if (portalStyle.writingMode != null && popover.style.writingMode === '') {
         popover.style.writingMode = portalStyle.writingMode;
@@ -2192,6 +2287,11 @@ function useLayerImplementation(
 
       const previous = triggerRef.current;
       triggerRef.current = el;
+      // The in-view watch follows a trigger replaced while the layer is
+      // open.
+      if (mode === 'context' && isOpenRef.current && el !== previous) {
+        watchAnchorInView(el);
+      }
       // A trigger in another document (a frame, a pop-out window) has its
       // presses counted there too, before its first press.
       listenForGestures(el.ownerDocument);
@@ -2239,8 +2339,10 @@ function useLayerImplementation(
       anchorId,
       cancelPendingAnchorWait,
       keepsAnchorClear,
+      mode,
       onPlacedAfreshRef,
       waitsForAnchorRef,
+      watchAnchorInView,
     ],
   );
 
@@ -2542,44 +2644,16 @@ function useLayerImplementation(
     };
   }, [handleToggle, bindToggleListener, handleBeforeToggle]);
 
-  // Anchor visibility (FR5). The first frame must already be right (FR8), so
-  // the opening read is synchronous — a layout effect runs before paint, and a
-  // state change inside it re-renders before paint — against the visual
-  // viewport. IntersectionObserver then tracks changes while open; with no
-  // root it reports against the viewport and through every ancestor clip, so
-  // an anchor scrolled out of a panel reads as out of view too.
+  // Syncs the in-view watch (IntersectionObserver) with the open layer's
+  // anchor. A layout effect runs before paint, and a state change inside it
+  // re-renders before paint, so the opening read reaches the first frame.
   useIsomorphicLayoutEffect(() => {
     if (!isOpen || mode !== 'context') {
       return;
     }
-    const anchor = triggerRef.current;
-    if (!anchor) {
-      return;
-    }
-    const view = anchor.ownerDocument.defaultView;
-    if (view) {
-      // Edge-adjacent counts as in view, as IntersectionObserver reports it;
-      // an engine with no layout (a zero rect) therefore reads as in view too.
-      const rect = anchor.getBoundingClientRect();
-      const inView =
-        rect.bottom >= 0 &&
-        rect.right >= 0 &&
-        rect.top <= view.innerHeight &&
-        rect.left <= view.innerWidth;
-      updateAnchorInView(inView);
-    }
-    if (typeof IntersectionObserver === 'undefined') {
-      return;
-    }
-    const observer = new IntersectionObserver(entries => {
-      const latest = entries[entries.length - 1];
-      if (latest) {
-        updateAnchorInView(latest.isIntersecting);
-      }
-    });
-    observer.observe(anchor);
-    return () => observer.disconnect();
-  }, [isOpen, mode, updateAnchorInView]);
+    watchAnchorInView(triggerRef.current);
+    return () => watchAnchorInView(null);
+  }, [isOpen, mode, watchAnchorInView]);
 
   // A layer that keeps its anchor clear re-reads its geometry while it
   // is open: content that grows, an anchor that resizes or moves (in layout or
@@ -2651,7 +2725,7 @@ function useLayerImplementation(
 
   // Render function for context mode
   const renderContext = useCallback(
-    (children: ReactNode, props?: ContextRenderProps) => {
+    (children: ReactNode, props?: InternalContextRenderProps) => {
       const {
         placement = 'above',
         alignment = 'center',
@@ -2665,6 +2739,7 @@ function useLayerImplementation(
         as: Container = 'div',
         onMouseEnter,
         onMouseLeave,
+        whileUnmounted,
       } = props || {};
 
       // CSS anchor positioning (dynamic, not in StyleX)
@@ -2756,6 +2831,9 @@ function useLayerImplementation(
             : {})}
           role={role}
           aria-label={ariaLabel}
+          // A copied direction also goes on `dir`, so `:dir()` inside the
+          // layer agrees with the direction its layout uses.
+          dir={portalDir(mount.portalStyle, extraStyle)}
           popover={lightDismiss ? 'auto' : 'manual'}
           className={combinedClassName}
           style={{
@@ -2787,6 +2865,7 @@ function useLayerImplementation(
           mountStore={mountStore}
           renderLayer={renderLayer}
           sentinelRef={sentinelRefCallback}
+          whileUnmounted={whileUnmounted}
         />
       );
     },
@@ -2896,10 +2975,10 @@ export function useLayer(
  */
 export function useLayerInternal(
   options: InternalContextLayerOptions,
-): ContextLayerReturn;
+): InternalContextLayerReturn;
 export function useLayerInternal(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayerInternal(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): ContextLayerReturn | FixedLayerReturn {
+): InternalContextLayerReturn | FixedLayerReturn {
   return useLayerImplementation(options);
 }

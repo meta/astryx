@@ -127,12 +127,11 @@ export function planChecks({
   );
 
   const linted = present(changed.filter(file => LINTED.test(file)));
-  // CI checks the formatting of changed TypeScript and Markdown files, and not
-  // on the docsite and spec lanes.
-  const formatted =
-    scope.docsiteOnly || specOnly
-      ? []
-      : present(changed.filter(file => FORMATTED.test(file)));
+  // CI checks the formatting of changed TypeScript and Markdown files on every
+  // lane but the docsite lane.
+  const formatted = scope.docsiteOnly
+    ? []
+    : present(changed.filter(file => FORMATTED.test(file)));
   checks.push({
     id: 'lint',
     commands: [

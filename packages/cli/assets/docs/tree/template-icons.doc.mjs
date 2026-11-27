@@ -26,7 +26,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Use `Icon` for a standalone icon. For a component icon prop, pass what that prop accepts: most, such as `Button` and `IconButton`, take an element like `<Icon icon={BellIcon} />`, and some menu and navigation items also accept the icon definition itself. This keeps sizing, color, and accessibility aligned with the system.',
+          text: 'Use `Icon` for a standalone icon. For a component icon prop, pass what that prop accepts: most, such as `Button` and `IconButton`, take an element like `<Icon icon={BellIcon} />`, and some menu and navigation items also accept the icon component itself. This keeps sizing, color, and accessibility aligned with the system.',
         },
         {
           type: 'code',
@@ -44,7 +44,7 @@ import {BellIcon} from '@heroicons/react/24/outline';
           items: [
             'Use one supported icon set consistently inside a template.',
             'Give an icon-only control its required visible or assistive label through the Astryx control API.',
-            'Do not paste raw `svg` and `path` markup when an existing icon definition fits.',
+            'Do not paste raw `svg` and `path` markup when an existing icon fits.',
             'Do not render a library icon directly when `Icon` or the receiving Astryx component can render it.',
             'Declare an icon library other than Astryx as a dependency ({@link generic:export-template-assets}).',
           ],
@@ -57,7 +57,7 @@ import {BellIcon} from '@heroicons/react/24/outline';
       content: [
         {
           type: 'prose',
-          text: 'A product mark or missing domain symbol can stay package-owned. Export a compatible icon definition from a public package path, then import that path from the template.',
+          text: 'A product mark or missing domain symbol can stay package-owned. Export a compatible icon component from a public package path, then import that path from the template.',
         },
         {
           type: 'code',

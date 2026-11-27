@@ -41,6 +41,7 @@ import {packCli} from './packages/cli/test-utils/pack-cli.mjs';
 import {moveUserHome} from './packages/cli/test-utils/test-home.mjs';
 import {repositoryUserAgent} from './packages/cli/test-utils/test-launcher.mjs';
 import {
+  TEST_TMP_PREFIX,
   sweepTrash,
   trashFolder,
 } from './packages/cli/test-utils/run-folder.mjs';
@@ -92,7 +93,7 @@ export default async function setup(project) {
     );
     // The run's temp folder sits beside its home folder, not around it, as
     // on a developer's computer.
-    const runTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-test-tmp-'));
+    const runTmp = fs.mkdtempSync(path.join(os.tmpdir(), TEST_TMP_PREFIX));
     moveUserHome(userHome, runTmp);
     // Tests read the package manager that started them from its user agent.
     // The run names the repository's own, so a run started with `node` or

@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {formatDateAbsolute, formatFilterValue} from './formatFilterValue';
 import type {TranslatorFn} from '../i18n';
 import type {OperatorValue, FilterValue} from './types';
@@ -279,16 +279,77 @@ describe('formatFilterValue', () => {
         fmt({type: 'date_relative'}, {type: 'date_relative', value: '7d'}),
       ).toBe('7d');
     });
-    it('renders a fixed placeholder for a date range', () => {
-      expect(
-        fmt(
-          {type: 'date_range'},
-          {
+    describe('a date range reads each part as its calendar day', () => {
+      const range = (
+        start: number,
+        end: number,
+      ): FilterValue & {type: 'date_range'} => ({
+        type: 'date_range',
+        value: {
+          start: {type: 'ABSOLUTE', unixSeconds: start},
+          end: {type: 'ABSOLUTE', unixSeconds: end},
+        },
+      });
+      const day = (iso: string) => Date.parse(iso) / 1000;
+      // Intl puts a thin space around a range's dash, and the exact space
+      // differs between ICU versions.
+      const read = (
+        value: FilterValue,
+        maxLength = 20,
+        timezoneID?: string,
+      ): string =>
+        fmt({type: 'date_range'}, value, maxLength, timezoneID).replace(
+          /\s/g,
+          ' ',
+        );
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('reads UTC days with no timezoneID', () => {
+        expect(
+          read(range(day('2024-03-09T00:00:00Z'), day('2024-03-10T00:00:00Z'))),
+        ).toBe('Mar 9 – 10, 2024');
+      });
+
+      it('reads the days in timezoneID', () => {
+        // 03:00 UTC on March 10 and 11 is the evening of March 9 and 10 in
+        // Los Angeles.
+        expect(
+          read(
+            range(day('2024-03-10T03:00:00Z'), day('2024-03-11T03:00:00Z')),
+            20,
+            'America/Los_Angeles',
+          ),
+        ).toBe('Mar 9 – 10, 2024');
+      });
+
+      it('writes both years for a range across a year end, and one day once', () => {
+        expect(
+          read(
+            range(day('2024-12-30T00:00:00Z'), day('2025-01-02T00:00:00Z')),
+            40,
+          ),
+        ).toBe('Dec 30, 2024 – Jan 2, 2025');
+        expect(
+          read(range(day('2024-03-09T00:00:00Z'), day('2024-03-09T00:00:00Z'))),
+        ).toBe('Mar 9, 2024');
+      });
+
+      it('reads a now or relative part as the day it resolves to', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2024-03-10T12:00:00Z'));
+        expect(
+          read({
             type: 'date_range',
-            value: {start: {type: 'NOW'}, end: {type: 'NOW'}},
-          },
-        ),
-      ).toBe('date range');
+            value: {
+              start: {type: 'RELATIVE', backValue: 7, unit: 'day'},
+              end: {type: 'NOW'},
+            },
+          }),
+        ).toBe('Mar 3 – 10, 2024');
+      });
     });
     it('reads a date-only value as its day in the zone, with no time, and a time-of-day value with its time', () => {
       // 2024-03-10T03:00:00Z: March 10 in Tokyo, March 9 in Los Angeles.

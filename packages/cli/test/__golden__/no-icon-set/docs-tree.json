@@ -367,9 +367,6 @@
       "check-icons-in-the-app"
     ],
     "mentions": [
-      "Do not paste raw `svg` and `path` markup when an existing icon definition fits.",
-      "Export a compatible icon definition from a public package path, then import that path from the template.",
-      "For a component icon prop, pass what that prop accepts: most, such as `Button` and `IconButton`, take an element like `<Icon icon={BellIcon} />`, and some menu and navigation items also accept the icon definition itself.",
       "Use one supported icon set consistently inside a template."
     ]
   },
@@ -1113,6 +1110,7 @@
       "movement-principles",
       "respecting-user-preferences",
       "usage",
+      "own-css",
       "theme-motion",
       "best-practices"
     ],
@@ -1464,6 +1462,24 @@
       "install-an-integration",
       "use-what-it-adds",
       "check-for-problems"
+    ],
+    "mentions": []
+  },
+  "visualization": {
+    "type": "docs.node",
+    "children": [
+      "visualization/data-colors-in-renderers"
+    ],
+    "mentions": []
+  },
+  "visualization/data-colors-in-renderers": {
+    "type": "docs.detail",
+    "sections": [
+      "choose-a-path",
+      "use-datavars",
+      "use-raw-css-variables",
+      "draw-canvas-with-resolved-colors",
+      "configure-vega-lite"
     ],
     "mentions": []
   },

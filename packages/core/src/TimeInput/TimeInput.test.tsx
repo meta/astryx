@@ -20,6 +20,7 @@ import {InputGroup, InputGroupText} from '../InputGroup';
 import {InternationalizationProvider} from '../i18n';
 import type {ISOTimeString} from '../utils';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
@@ -633,17 +634,18 @@ describe('TimeInput', () => {
 
       const container = screen.getByLabelText('Time')
         .parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('You need the Editor role');
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(tooltip()).not.toHaveAttribute('popover-open');
       });
     });
 
@@ -657,11 +659,11 @@ describe('TimeInput', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(screen.getByLabelText('Time')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
     });
 
@@ -700,7 +702,7 @@ describe('TimeInput', () => {
         />,
       );
       const input = screen.getByLabelText('Time');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -940,6 +942,29 @@ describe('TimeInput locale time text (issue 8992)', () => {
       expect(politeRegion()).toHaveTextContent('14:31');
     });
   });
+
+  it.each([
+    ['en-US', 'ltr'],
+    ['ar-EG', 'rtl'],
+    ['he-IL', 'rtl'],
+  ])(
+    'reads its time text in the direction of %s, not the page direction',
+    (locale, direction) => {
+      render(
+        <div dir="rtl">
+          <InternationalizationProvider locale={locale}>
+            <TimeInput
+              label="Time"
+              value={'09:00' as ISOTimeString}
+              onChange={() => {}}
+              presentation="text-input"
+            />
+          </InternationalizationProvider>
+        </div>,
+      );
+      expect(screen.getByRole('textbox')).toHaveAttribute('dir', direction);
+    },
+  );
 
   it('shows the catalog format hint for the resolved hour format', () => {
     renderIn('de-DE', {value: undefined});

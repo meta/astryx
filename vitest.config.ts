@@ -11,7 +11,8 @@
  *   include lists. The root-level `test` options (globals, environment,
  *   coverage, setupFiles, pool sizing) are inherited by projects that set
  *   `extends: true`; the `node` project deliberately does NOT extend, so it
- *   runs in a plain node environment without the jsdom/StyleX overhead.
+ *   runs in a plain node environment without the jsdom/StyleX overhead. The
+ *   root `maxWorkers` (scripts/vitest-workers.mjs) applies to every project.
  *
  *   (Migrated from the removed `vitest.workspace.ts` for Vitest 4, which
  *   dropped the standalone workspace file in favor of inline `test.projects`.)
@@ -24,6 +25,7 @@ import {configDefaults, defineConfig} from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import stylexResolution from './scripts/stylex-module-resolution.cjs';
 import DurationShardSequencer from './scripts/vitest-shard-sequencer.mjs';
+import {testWorkers} from './scripts/vitest-workers.mjs';
 import {
   NODE_TEST_EXCLUDE,
   NODE_TEST_INCLUDE,
@@ -111,6 +113,13 @@ export default defineConfig({
     // Node 25 and later define their own `localStorage` global, which hides
     // jsdom's; a Node that knows the flag turns its own off in the workers.
     execArgv: ['--max-old-space-size=4096', ...webStorageOff],
+    // A single run on a shared machine starts at most 8 workers, and one per
+    // 2 GiB of memory: a Node test can start CLI processes of its own, so on a
+    // many-core machine Vitest's default loads it far past its cores. A count
+    // on the command line, a CI runner, a watch and a command line that is not
+    // surely a single run keep Vitest's own count. Set here, not in a
+    // project: every project uses it. VITEST_MAX_WORKERS still overrides it.
+    maxWorkers: testWorkers(),
     // A `--shard` leg of the `node` project runs files chosen by their
     // recorded time, not by count, so the slowest files never share a leg
     // (scripts/vitest-shard-sequencer.mjs, spec:AST-030 FR22).

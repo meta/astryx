@@ -142,6 +142,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   before the document finished loading (or while hydrating), it announces
   nothing. When it appears, or its message changes, later, it announces its
   message once through the shared polite channel (`spec:AST-086` FR2, FR11).
+  Inside an element that is already a live region, it announces nothing: that
+  region speaks its content (`spec:AST-086` FR4).
   The message is the title and description, without content hidden from
   assistive technology; action labels are not part of it. Action controls keep
   their own names, roles, and behavior.

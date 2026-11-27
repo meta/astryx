@@ -36,7 +36,7 @@ import {
   spacingStepToToken,
 } from '../Layout/padding.stylex';
 import type {SizeValue, SpacingStep} from '../utils/types';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import type {SectionVariantMap} from './index';
 
@@ -179,6 +179,10 @@ export interface SectionProps extends BaseProps<HTMLElement> {
   /**
    * Internal padding of the section using the spacing scale.
    * Accepts numeric spacing steps: 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10.
+   * When omitted, each edge takes the theme's per-edge or per-axis section
+   * padding, then the nearest ancestor Section's explicit `padding` (not
+   * across an overlay or a layout root such as AppShell), then the theme's
+   * section padding, then step 4 (16px).
    * @default 4 (16px)
    */
   padding?: SpacingStep;

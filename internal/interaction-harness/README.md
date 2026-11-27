@@ -170,6 +170,18 @@ presented `minProgressMs`. When the action may be the page's first contact
 with the harness, take `watchAnimations(locator)` before it and read
 `watch.started()` after.
 
+**Rest and input holds.** A Core layer holds a finger's input under a shield
+while its motion runs, and the hold ends when that motion settles. After a
+storyboard has sought or paused the motion, it settles at a later look, after
+the element rests. A press that goes down under the shield is held. So
+`waitForRest` also waits until no hold of the element's own layer is in place,
+and a tap on the element right after it acts. A viewport-wide hold of another
+layer is not read. A layer inside the held one, such as a toast that an alert
+raises, is left out, as a dismissal leaves it live. A hold still in place at
+the deadline rejects by name.
+When `waitForAnimation` finds no animation on a dialog or a popover, its error
+says whether the element is still open.
+
 **Busy main thread.** Mark the element, start the screencast, start the
 animation, wait until it runs (`waitForAnimation`: an animation cannot start
 while the thread is held), block the main thread for 1 s (`spec:AST-094`
@@ -521,7 +533,10 @@ counted `Paint` names the node it painted (`node`), and each `UpdateLayoutTree`
 counts the elements it restyled (`elements`). A proof that expects no Layout
 can explain one: `traceRendering(page, body, {keepEvents: true})` keeps the
 window's main-thread events, and `layoutSources` names the task that ran each
-Layout and each invalidation before it. The
+Layout and each invalidation before it. `restyleSources` gives each style
+recalculation its element count and the style invalidations before it. With
+`{trackInvalidations: true}` the trace also names each invalidation's node and
+reason. The
 harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
 animation's target and laying out an anchored one: it reads only the element a

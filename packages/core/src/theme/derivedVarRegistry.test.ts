@@ -102,13 +102,13 @@ const STRUCTURAL_VARS = new Set([
   '--_table-header-inline',
   '--_table-header-end-room',
   '--_table-edge-inline-end',
-  // A gliding row's divider, carried on the row for the glide
-  // (Table/glidingDivider.ts). Private runtime plumbing.
   // A container's press paint while a press on a nested control is held,
   // and what it paints at rest instead (hooks/useClickableContainer.ts).
   // Private runtime plumbing, never authored by a theme.
   '--_nested-press-paint',
   '--_nested-press-rest',
+  // A gliding row's divider, carried on the row for the glide
+  // (Table/glidingDivider.ts). Private runtime plumbing.
   '--_table-row-glide-width',
   '--_table-row-glide-style',
   '--_table-row-glide-color',
@@ -348,6 +348,10 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // `break-word` fallback. scripts/text-overflow-wrap-anywhere.test.mjs
   // keeps every such container setting it.
   '--_astryx-text-overflow-wrap',
+  // Button FR19: an open popover sets it on the control that holds its
+  // separate anchor, and the control reads it as the factor a press scales
+  // it by. Popover/PopoverAnchor.test.tsx keeps every such control reading it.
+  '--_astryx-press-scale',
   // List FR5 and the container-padding record's corner geometry: a bleeding
   // List passes its first and last rows the container corner they take.
   '--_list-corner-start-start',
@@ -412,8 +416,9 @@ const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   // documents and reads both slots.
   DropdownMenu: ['--_item-label-color', '--_item-description-color'],
   // List's edge="flush" zeroes the inline inset of the Item each ListItem
-  // renders; Item owns, documents and reads it.
-  List: ['--_item-inset-inline'],
+  // renders, and a reorderable row that stays put sets the room after its
+  // marker; Item owns, documents and reads both.
+  List: ['--_item-inset-inline', '--_item-marker-room'],
   // A layer content root stops an outer Stepper's connector gap; Stepper owns,
   // documents and reads it.
   Layer: ['--step-connector-gap'],
@@ -450,6 +455,16 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // The ::after layer adds it to its offset, so the band starts past the
   // border. It is the layer's geometry, not a property a theme author sets. A
   // theme changes the divider through `--border-width`, which this follows.
+  // A reorderable list's values for its rows' handle room: whether the
+  // handles take a place, their targets' reach, and a bleeding list's start
+  // padding. They are reorder layout, not properties a theme author sets.
+  '--_reorder-shown',
+  '--_reorder-reach',
+  '--_reorder-bleed-start',
+  // The room a row keeps after its list marker for its neighbours' reorder
+  // handles: a reorderable List row that stays put sets it, and Item pads the
+  // content after the marker by it.
+  '--_item-marker-room',
   '--_hit-border-bottom',
   // The interaction overlay's colour on the ::after layer of the cards:
   // written by the component's own hover and mouse `:active` arms, never a
@@ -526,6 +541,10 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // control — a theme reaches them by setting the vars directly.
   '--_item-label-color',
   '--_item-description-color',
+  // Set by an open row expansion on its row, read by that row's cells: 0, so
+  // the panel below carries the divider. A theme's `borderBottomWidth` on
+  // the row must not write it, or an open row would draw a divider again.
+  '--_table-open-row-divider-width',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -617,7 +636,9 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
     const key = keys.join(', ');
 
     it(`${dir} (${key}): registry matches doc derived`, () => {
-      for (const k of keys) expect(derivedVarRegistry[k]).toBeDefined();
+      for (const k of keys) {
+        expect(derivedVarRegistry[k]).toBeDefined();
+      }
       expect(keys.flatMap(k => derivedVarRegistry[k] ?? [])).toEqual(
         docDerived,
       );
@@ -626,7 +647,9 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
     // generateThemeRules looks the registry up by the theme's components key,
     // so a key that is not one of the doc's targets never expands.
     it(`${dir} (${key}): registry key is a documented theming target`, () => {
-      for (const k of keys) expect(docTargetKeys).toContain(k);
+      for (const k of keys) {
+        expect(docTargetKeys).toContain(k);
+      }
     });
   }
 
@@ -643,12 +666,15 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
           `${dir}: has theming.derived but no DIR_TO_REGISTRY_KEY mapping. ` +
             `Add the mapping and a derivedVarRegistry entry.`,
         );
-      } else
-        for (const key of [mapped].flat())
-          if (!derivedVarRegistry[key])
+      } else {
+        for (const key of [mapped].flat()) {
+          if (!derivedVarRegistry[key]) {
             missing.push(
               `${dir} (${key}): has theming.derived but no derivedVarRegistry entry.`,
             );
+          }
+        }
+      }
     }
     expect(missing).toEqual([]);
   });

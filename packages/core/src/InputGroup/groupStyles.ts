@@ -2,13 +2,15 @@
 
 /**
  * @file groupStyles.ts
- * @input Uses StyleX, theme tokens, and layer-aware group end-cap selectors
+ * @input Uses StyleX, theme tokens, and the group end-cap styles of
+ *   privateAttributes/tooltipDescription.stylex.ts
  * @output Exports shared group-aware styles for InputGroup children
  * @position Shared styles consumed by InputGroup-compatible controls and addons
  */
 
 import * as stylex from '@stylexjs/stylex';
 import {radiusVars, borderVars} from '../theme/tokens.stylex';
+import {groupEndStyles} from '../privateAttributes/tooltipDescription.stylex';
 
 /**
  * The internal marker every InputGroup member sets on the element that carries
@@ -21,20 +23,9 @@ export const inputGroupItemProps = {
 } as const;
 const MEMBER = '[data-astryx-input-group-item]';
 
-// Anything a caller places after a member (a wrapped Button, a custom element)
-// still counts as following it, so the trailing edge keeps today's rule over
-// any sibling; only context-layer infrastructure (popovers, inert markers,
-// native dialog surfaces) is skipped. Followers are not always members, so
-// this rule cannot name them by the marker.
-//
-// `:nth-last-child(1 of S)`, not `:not(:has(~ S))`: the stylesheet is global,
-// and WebKit re-evaluates a sibling-relative `:has()` against every earlier
-// sibling on each insertion, so filling any container became quadratic
-// (ButtonGroup FR3). A member always matches S, so being the last of S is the
-// same as having no following S.
-const IS_LAST_ITEM =
-  ':nth-last-child(1 of :not([popover]):not(template):not(dialog))';
-const FOLLOWED = `:not(${IS_LAST_ITEM})`;
+// The trailing edge, which finds the last member past layer pieces and a
+// tooltip's hidden description, comes from groupEndStyles: a caller's own
+// element after a member still counts as following it.
 
 // Button consumes InputGroup context anywhere below the group, including buttons
 // inside an input's own implementation. Keep the visual adaptation on direct
@@ -42,9 +33,8 @@ const FOLLOWED = `:not(${IS_LAST_ITEM})`;
 const DIRECT_INPUT_GROUP_ADDON = `:where(.astryx-input-group > ${MEMBER})`;
 const DIRECT_INPUT_GROUP_ADDON_FOCUS_VISIBLE = `${DIRECT_INPUT_GROUP_ADDON}:focus-visible`;
 const DIRECT_INPUT_GROUP_ADDON_NOT_FIRST = `${DIRECT_INPUT_GROUP_ADDON}:not(:first-child)`;
-const DIRECT_INPUT_GROUP_ADDON_WITH_MEMBER_AFTER = `${DIRECT_INPUT_GROUP_ADDON}${FOLLOWED}`;
 
-export const groupStyles = stylex.create({
+const baseGroupStyles = stylex.create({
   buttonAddon: {
     borderStartStartRadius: {
       default: null,
@@ -53,14 +43,6 @@ export const groupStyles = stylex.create({
     borderEndStartRadius: {
       default: null,
       [DIRECT_INPUT_GROUP_ADDON_NOT_FIRST]: 0,
-    },
-    borderStartEndRadius: {
-      default: null,
-      [DIRECT_INPUT_GROUP_ADDON_WITH_MEMBER_AFTER]: 0,
-    },
-    borderEndEndRadius: {
-      default: null,
-      [DIRECT_INPUT_GROUP_ADDON_WITH_MEMBER_AFTER]: 0,
     },
     height: {
       default: null,
@@ -88,14 +70,6 @@ export const groupStyles = stylex.create({
       default: 0,
       ':first-child': radiusVars['--radius-element'],
     },
-    borderStartEndRadius: {
-      default: 0,
-      [IS_LAST_ITEM]: radiusVars['--radius-element'],
-    },
-    borderEndEndRadius: {
-      default: 0,
-      [IS_LAST_ITEM]: radiusVars['--radius-element'],
-    },
     // Input wrappers already sit at z-index 1. A focused member goes one
     // higher, so an unfocused input beside it cannot cover its focus ring.
     ':focus-within': {
@@ -103,3 +77,13 @@ export const groupStyles = stylex.create({
     },
   },
 });
+
+/**
+ * The group styles, each with its trailing edge (groupEndStyles) right after
+ * it, so a caller sets both in the same order as one style.
+ */
+export const groupStyles = {
+  ...baseGroupStyles,
+  buttonAddon: [baseGroupStyles.buttonAddon, groupEndStyles.inputGroupAddon],
+  inGroup: [baseGroupStyles.inGroup, groupEndStyles.inputGroupMember],
+} as const;

@@ -155,6 +155,13 @@ export const docs = {
         default: 'unset (a pinned cell shows its base)',
         private: true,
       },
+      {
+        name: '--_table-open-row-divider-width',
+        description:
+          "The divider width of an open expandable row's cells: 0, because the expansion panel below the row draws the divider, so the row and its panel read as one unit.",
+        default: "unset (a cell draws the theme's border width)",
+        private: true,
+      },
     ],
     derived: [{property: 'backgroundColor', vars: ['--table-row-overlay']}],
     componentIcons: [

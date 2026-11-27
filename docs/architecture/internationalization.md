@@ -332,7 +332,12 @@ for all 30 shipped locales plus `pseudo`.
   and create first-paint or hydration errors. `utils/textDirection.ts`
   (`textDirectionProps`, `withTextDirection`) is the shared helper that marks
   caller text with no right-to-left letter `dir="ltr"`; components use it
-  rather than reading direction themselves.
+  rather than reading direction themselves. `cutTextDirection` in the same
+  module gives a label that cuts its own text its direction: `ltr` for text
+  with no right-to-left letter, `rtl` for text whose letters are all
+  right-to-left, so the label keeps its start on either page. Text that mixes
+  both scripts takes no direction and follows the page. A known limit: a
+  mixed label led by the other script than the page's is cut at its start.
 - **INV12 — Locale and direction are related but distinct.** The provider derives
   a default direction from locale and accepts an explicit override. It does not
   mutate DOM `dir`. Applications own the page or region `dir`, and must keep it

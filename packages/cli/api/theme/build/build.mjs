@@ -897,14 +897,13 @@ export const BUILT_BY_LINE =
 export const CLI_VERSION_LINE = /^( \* CLI: @astryxdesign\/cli@)(\S+)(\s*)$/u;
 
 /**
- * `lines` with the command in a built module's built-by line as
- * `<command>`, when exactly one line is a built-by line; otherwise unchanged,
- * so a second or a malformed line stays significant.
+ * `lines` with the command in each of a built module's built-by lines as
+ * `<command>`. A theme module has one built-by line and a family module one
+ * per member.
  * @param {string[]} lines
  * @returns {string[]}
  */
 export function withBuiltByCommandPlaceholder(lines) {
-  if (lines.filter(line => BUILT_BY_LINE.test(line)).length !== 1) return lines;
   return lines.map(line => line.replace(BUILT_BY_LINE, '$1<command>$3$4'));
 }
 
@@ -943,8 +942,8 @@ export function withCliReleasePlaceholder(lines) {
  * Normalize generated file content for staleness comparison: without the
  * header's `Command:` line ({@link withoutBuildCommandLine}), with the release
  * that the header's one `CLI:` line names as `<version>`
- * ({@link withCliReleasePlaceholder}), and with the command in a built
- * module's one {@link BUILT_BY_LINE} as `<command>`. Which release
+ * ({@link withCliReleasePlaceholder}), and with the command in each of a
+ * built module's {@link BUILT_BY_LINE}s (one per theme) as `<command>`. Which release
  * answers, and the command that starts it, depend on how the CLI was started
  * (a global install, a tool that runs it, or the project's own copy) and
  * change with each update, so the same outputs built another way are not
@@ -2143,7 +2142,7 @@ function hasAdaptationIntent(themeDef) {
 /**
  * The default viewport-width tier start points, in CSS px. A theme whose
  * effective map is exactly this asked for nothing.
- * SYNC: packages/core/src/theme/themeAdaptations.ts (DEFAULT_WIDTH_BREAKPOINTS)
+ * SYNC: packages/core/src/theme/breakpoints.ts (DEFAULT_WIDTH_BREAKPOINTS)
  */
 const DEFAULT_WIDTH_BREAKPOINTS = Object.freeze({
   sm: 640,
@@ -2672,24 +2671,76 @@ function hasNamedExport(/** @type {string} */ file, /** @type {string} */ name, 
   return esm ? unknown ? null : false : null;
 }
 // prettier-ignore
-async function validateRegistryGraphs(/** @type {Array<{specifier: string, exportName: string}>} */ registries, /** @type {string} */ aggregatePath) {
-  /** @type {Array<{specifier: string, parent: string, commonJs: boolean, imports: string[], root?: {exportName: string}}>} */ const pending = registries.map(root => ({specifier: root.specifier, parent: aggregatePath, commonJs: false, imports: [root.exportName], root}));
-  /** @type {Array<{file: string, exportName: string}>} */ const runtimeChecks = []; const seen = new Set();
+async function validateRegistryGraphs(/** @type {Array<{specifier: string, exportName: string, compiledCopy?: string}>} */ registries, /** @type {string} */ aggregatePath) {
+  // A registry the build compiles is checked by importing its compiled copy
+  // with Node, as the family module imports it; that import also loads every
+  // module the copy imports, so the walk below its source only reads them.
+  /** @type {Array<{specifier: string, parent: string, commonJs: boolean, imports: string[], root?: {exportName: string, compiledCopy?: string}, compiled?: boolean}>} */ const pending = registries.map(root => ({specifier: root.specifier, parent: aggregatePath, commonJs: false, imports: [root.exportName], root, compiled: root.compiledCopy != null}));
+  /** @type {Array<{file: string, exportName: string, load?: string}>} */ const runtimeChecks = []; const seen = new Set();
   while (pending.length > 0) {
-    const current = pending.pop(); if (!current) break; const {specifier, parent, commonJs, imports, root} = current;
+    const current = pending.pop(); if (!current) break; const {specifier, parent, commonJs, imports, root, compiled} = current;
     if (/\.css(?:$|[?#])/i.test(specifier)) throw registryGraphError(`Theme family registry graph imports CSS: ${specifier}`);
     const file = resolveRegistryModule(specifier, parent, commonJs); if (!file) continue;
     if (/\.css$/i.test(file)) throw registryGraphError(`Theme family registry graph imports CSS: ${file}`);
     const external = file.split(path.sep).includes('node_modules');
-    for (const name of imports) if (external) runtimeChecks.push({file, exportName: name}); else { const named = hasNamedExport(file, name); if (named === false) throw registryGraphError(`Family registry ${file} does not export "${name}".`); if (named === null) runtimeChecks.push({file, exportName: name}); }
-    if (root) runtimeChecks.push({file, exportName: root.exportName});
+    if (!compiled) for (const name of imports) if (external) runtimeChecks.push({file, exportName: name}); else { const named = hasNamedExport(file, name); if (named === false) throw registryGraphError(`Family registry ${file} does not export "${name}".`); if (named === null) runtimeChecks.push({file, exportName: name}); }
+    else if (!external) for (const name of imports) if (hasNamedExport(file, name) === false) throw registryGraphError(`Family registry ${file} does not export "${name}".`);
+    if (root) runtimeChecks.push({file, exportName: root.exportName, load: root.compiledCopy});
     if (seen.has(file)) continue; seen.add(file);
-    if (/\.[cm]?[jt]sx?$/i.test(file)) for (const edge of moduleDependencies(fs.readFileSync(file, 'utf8'), file)) pending.push({...edge, parent: file});
+    if (/\.[cm]?[jt]sx?$/i.test(file)) for (const edge of moduleDependencies(fs.readFileSync(file, 'utf8'), file)) pending.push({...edge, parent: file, compiled});
   }
   for (const [index, root] of runtimeChecks.entries()) {
-    let exports; try { exports = await import(`${pathToFileURL(root.file).href}?astryx-family-check=${Date.now()}-${index}`); }
+    let exports; try { exports = await import(`${pathToFileURL(root.load ?? root.file).href}?astryx-family-check=${Date.now()}-${index}`); }
     catch (error) { throw registryGraphError(`Cannot import family registry ${root.file}: ${error instanceof Error ? error.message : String(error)}`); }
     if (!(root.exportName in exports)) throw registryGraphError(`Family registry ${root.file} does not export "${root.exportName}".`);
+  }
+}
+/**
+ * Check a family's registries before anything is written. The modules the
+ * build compiles are written to a folder beside the modules folder, at its
+ * depth, so each relative import in them resolves as it will from the modules
+ * folder, and each compiled registry is imported from there with Node, as
+ * the family module will import it. The folder is always removed.
+ * @param {Array<{specifier: string, exportName: string, compiledCopy?: string}>} registries
+ * @param {string} aggregatePath
+ * With `--check` nothing is written: a compiled registry whose committed
+ * copy matches this build's is imported from that copy, and one whose copy is
+ * stale or missing is left to the comparison of the outputs, which reports it.
+ * @param {{outDir: string, modulesDir: string, writes: Array<{dest: string, content: string}>, check?: boolean}} compiled
+ */
+async function checkFamilyRegistries(registries, aggregatePath, {outDir, modulesDir, writes, check}) {
+  // A compiled copy this build does not write (a file of yours holds its
+  // path) is not what the family module imports, so that registry is checked
+  // from its source, as before.
+  const written = new Set(writes.map(write => write.dest));
+  registries = registries.map(({compiledCopy, ...registry}) => (compiledCopy && written.has(compiledCopy) ? {...registry, compiledCopy} : registry));
+  if (check) {
+    // The committed copies are imported only when every module this build
+    // compiles matches its committed copy: a copy imports the others.
+    const current = writes.every(write => path.relative(modulesDir, write.dest).startsWith('..') || (fs.existsSync(write.dest) && normalizeThemeBuildForCompare(fs.readFileSync(write.dest, 'utf8')) === normalizeThemeBuildForCompare(write.content)));
+    return validateRegistryGraphs(current ? registries : registries.filter(registry => !registry.compiledCopy), aggregatePath);
+  }
+  if (!registries.some(registry => registry.compiledCopy)) return validateRegistryGraphs(registries, aggregatePath);
+  const checkDir = fs.mkdtempSync(path.join(outDir, `.${path.basename(modulesDir)}-check-`));
+  /** @param {string} file */
+  const inCheck = file => path.join(checkDir, path.relative(modulesDir, file));
+  try {
+    for (const write of writes) {
+      if (path.relative(modulesDir, write.dest).startsWith('..')) continue;
+      fs.mkdirSync(path.dirname(inCheck(write.dest)), {recursive: true});
+      fs.writeFileSync(inCheck(write.dest), write.content);
+    }
+    await validateRegistryGraphs(
+      registries.map(registry =>
+        registry.compiledCopy ? {...registry, compiledCopy: inCheck(registry.compiledCopy)} : registry,
+      ),
+      aggregatePath,
+    );
+  } catch (error) {
+    if (error instanceof Error) error.message = error.message.split(checkDir).join(modulesDir);
+    throw error;
+  } finally {
+    fs.rmSync(checkDir, {recursive: true, force: true});
   }
 }
 /**
@@ -5708,8 +5759,7 @@ async function themeBuildInternal(
         at => {
           for (const [layer, {lineOf}] of writtenIn.entries())
             for (const keys of declarationPaths(at, blocks))
-              if (lineOf(keys) != null)
-                return {path: keys, layer};
+              if (lineOf(keys) != null) return {path: keys, layer};
           return null;
         },
         {
@@ -5722,9 +5772,7 @@ async function themeBuildInternal(
     )) {
       // At its line in the theme's file, or in the local theme it extends
       // that writes it (a family member's included).
-      const writer = writtenIn.find(
-        w => w.lineOf(entry.path) != null,
-      );
+      const writer = writtenIn.find(w => w.lineOf(entry.path) != null);
       const line = writer?.lineOf(entry.path) ?? null;
       const file =
         writer && writer.file !== filePath
@@ -6627,7 +6675,7 @@ function allocateFamilyBindings(members) {
  * function, so its static values are written as JSON alone.
  * @param {any} member
  * @param {any} parent - The member's parent in the family, if any.
- * @param {{themeBinding: string | undefined, parentBinding: string | null | undefined, outDir: string, registryImports: Array<{specifier: string, exportName: string}>, expression: (own: string | null, inherited: string | null) => string | undefined, compileLocal?: (importPath: string, filePath: string) => {specifier: string, sourceFile: string} | null}} context
+ * @param {{themeBinding: string | undefined, parentBinding: string | null | undefined, outDir: string, registryImports: Array<{specifier: string, exportName: string, compiledCopy?: string}>, expression: (own: string | null, inherited: string | null) => string | undefined, compileLocal?: (importPath: string, filePath: string) => {specifier: string, sourceFile: string} | null}} context
  * @returns {{imports: Array<{importPath: string, importedName: string, localName: string}>, expression: string, mergeName?: string} | null}
  */
 function familyComponentIcons(member, parent, context) {
@@ -6658,6 +6706,9 @@ function familyComponentIcons(member, parent, context) {
     context.registryImports.push({
       specifier: input.validate ?? importPath,
       exportName: info.exportName,
+      ...(input.validate != null && input.specifier
+        ? {compiledCopy: path.resolve(context.outDir, input.specifier)}
+        : {}),
     });
   } else {
     // Without an import, a member's own slots are the ones that differ from
@@ -6926,7 +6977,7 @@ async function buildFamily(
   const buildCommand = `astryx theme build --family ${headerSources.join(' ')} --family-key ${baseName}`;
   const bindings = allocateFamilyBindings(members);
   const css = generateFamilyCSS(members);
-  /** @type {Array<{specifier: string, exportName: string}>} */
+  /** @type {Array<{specifier: string, exportName: string, compiledCopy?: string}>} */
   const registryImports = [];
   // Each member's local TypeScript or JSX registry module is compiled under
   // the family's output folder, all in one plan, so two members' modules of
@@ -7029,7 +7080,7 @@ async function buildFamily(
       // prettier-ignore
       const indicator = familyRegistryInput(member.indicatorInfo, member.filePath, outDir, undefined, compileLocal);
       // prettier-ignore
-      for (const registry of [icon, indicator]) if (registry.info) registryImports.push({specifier: registry.validate ?? registry.specifier ?? registry.info.importPath, exportName: registry.info.exportName});
+      for (const registry of [icon, indicator]) if (registry.info) registryImports.push({specifier: registry.validate ?? registry.specifier ?? registry.info.importPath, exportName: registry.info.exportName, ...(registry.validate != null && registry.specifier ? {compiledCopy: path.resolve(outDir, registry.specifier)} : {})});
       const ownIcons = icon.info ? `${themeBinding}Icons` : null;
       // A parent with function entries keeps them in `__icons`; its `icons`
       // is the node view.
@@ -7077,7 +7128,15 @@ async function buildFamily(
       );
     })
     .join('\n');
-  await validateRegistryGraphs(registryImports, jsPath);
+  /** @param {boolean} check */
+  const checkRegistries = check =>
+    checkFamilyRegistries(registryImports, jsPath, {
+      outDir,
+      modulesDir: modulesFolder(outDir, baseName),
+      writes: [...localWrites.values()],
+      check,
+    });
+  if (options.check) await checkRegistries(true);
   const declarations = members
     .map((member, index) =>
       generateBuiltTypes(member.theme, member.iconInfo, null, {
@@ -7140,6 +7199,8 @@ async function buildFamily(
       // The result's warnings carry what text prints.
       onWarning: message => outputWarnings.push(message),
     });
+    // After the output checks refuse a build, before anything is written.
+    await checkRegistries(false);
   }
   // Each member's settings that do not show as written, at the member's
   // file when the member's own source writes them.

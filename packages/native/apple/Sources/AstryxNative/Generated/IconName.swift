@@ -14,7 +14,7 @@ public struct IconName: RawRepresentable, ExpressibleByStringLiteral, Hashable, 
     try container.encode(rawValue)
   }
   /// Every built-in name, in the order AST-082 FR17 lists them.
-  public static let builtIn: [IconName] = [.close, .chevronDown, .chevronLeft, .chevronRight, .chevronsLeft, .chevronsRight, .check, .success, .error, .warning, .info, .calendar, .clock, .externalLink, .menu, .moreHorizontal, .search, .upload, .arrowUp, .arrowDown, .arrowsUpDown, .funnel, .eyeSlash, .viewColumns, .copy, .checkDouble, .wrench, .stop, .microphone]
+  public static let builtIn: [IconName] = [.close, .chevronDown, .chevronLeft, .chevronRight, .chevronsLeft, .chevronsRight, .check, .success, .error, .warning, .info, .calendar, .clock, .externalLink, .menu, .moreHorizontal, .search, .upload, .arrowUp, .arrowDown, .arrowsUpDown, .funnel, .eyeSlash, .viewColumns, .copy, .checkDouble, .wrench, .stop, .microphone, .drag]
   public static let close: IconName = "close"
   public static let chevronDown: IconName = "chevronDown"
   public static let chevronLeft: IconName = "chevronLeft"
@@ -44,4 +44,5 @@ public struct IconName: RawRepresentable, ExpressibleByStringLiteral, Hashable, 
   public static let wrench: IconName = "wrench"
   public static let stop: IconName = "stop"
   public static let microphone: IconName = "microphone"
+  public static let drag: IconName = "drag"
 }

@@ -87,6 +87,11 @@ import {
   nearest,
   closestOf,
   partsOf,
+  boxFrameOf,
+  FILL_THING,
+  FRAME_THING,
+  widerFrameOf,
+  rowFrameOf,
   undoArgs,
   isCheckNote,
   withoutBadValues,
@@ -6212,7 +6217,7 @@ async function changeOnce(
   }
   let k = keyOf(s);
   // (The settings as the theme held them before this change: what a carried
-  // height read there.)
+  // height read there, and which box a pager's border drew on.)
   const settingsBefore = [...data.settings];
   // (A saved control height the shared one gives way to is replaced below,
   // with the sizes it keeps.)
@@ -7830,6 +7835,64 @@ async function changeOnce(
   // said once, for every side written.)
   const stateNote = shorthand?.stateNote ?? s.stateNote;
   if (stateNote) notes.push(stateNote);
+  // (A border or shadow on a pager goes on the row that frames its pages:
+  // said, with its undo, when it changed something.)
+  {
+    const frame = sub === 'set' && !r.unchanged ? boxFrameOf(ctx, s) : null;
+    if (frame)
+      notes.push(
+        `wrote on ${frame}, the row that frames ${s.on}'s controls as one strip, so they draw one box together; to undo it: ${P} undo ${slug} ${undoArgs(s)}`,
+      );
+    // (A fill or a frame setting set or undone on a pager can change which
+    // box its other border, radius and shadow entries draw on: the filled
+    // bar, or the row that frames its pages, as the wider frame they
+    // narrow does. Each one that moves is said, with the line that puts it
+    // back.)
+    const row = s.on ? rowFrameOf(ctx, s.on) : null;
+    if (
+      row &&
+      !r.unchanged &&
+      (FILL_THING.test(kebab(String(s.thing))) ||
+        FRAME_THING.test(kebab(String(s.thing)))) &&
+      (sub === 'set' || sub === 'undo')
+    ) {
+      const same = (/** @type {any} */ x) =>
+        x.on === s.on &&
+        x.thing === s.thing &&
+        (x.state ?? null) === (s.state ?? null) &&
+        (x.when ?? null) === (s.when ?? null) &&
+        (x.mode ?? null) === (s.mode ?? null);
+      const after = data.settings;
+      const box = (/** @type {any} */ x, /** @type {any[]} */ settings) =>
+        boxFrameOf({...ctx, themeSettings: settings}, x) ?? x.on;
+      // (An undone fill comes back with its own scope and value.)
+      const undone = settingsBefore.find(same);
+      const putBack =
+        sub === 'set'
+          ? `${P} undo ${slug} ${undoArgs(s)}`
+          : undone
+            ? `${P} set ${slug} ${setArgs(undone, String(undone.value ?? ''))}`
+            : `${P} undo ${slug}`;
+      for (const x of after) {
+        if (same(x)) continue;
+        if (x.on !== s.on || x.source !== 'property') continue;
+        const from = box(x, settingsBefore);
+        const to = box(x, after);
+        if (from === to) continue;
+        // (The reason is where it draws now: with a wider frame that still
+        // covers it, else on the bar or the row as the fill there says.)
+        const wider = widerFrameOf(after, x);
+        const why = wider
+          ? `it goes with the wider ${s.on} frame it narrows, on ${to}`
+          : to === s.on
+            ? `${s.on} is filled there, so it is its own box`
+            : `${s.on} shows no fill there, so its pages draw one strip on ${row}`;
+        notes.push(
+          `${x.thing} on ${s.on}${x.when ? ` (--when ${x.when})` : ''}${x.mode ? ` (--mode ${x.mode})` : ''} draws on ${to} now, not on ${from}: ${why}; to put it back: ${putBack}`,
+        );
+      }
+    }
+  }
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
   // lines that change one of them, or only the part at rest.
@@ -8671,6 +8734,7 @@ export async function themeEditShow(theme, options = {}) {
     throw await savedDamageRefusal(e, theme, cwd);
   }
   const ctx = await context(cwd);
+  ctx.themeSettings = data.settings;
   // show --png takes its sheet too, after any build it makes.
   ctx.takesPictures = png ? {sheet: section ? `sheet-${section}` : null} : null;
   // The app copy is written once show succeeds (at its end), never by a

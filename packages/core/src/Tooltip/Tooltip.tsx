@@ -24,11 +24,13 @@ import React, {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {visibleText} from '../utils/accessibleName';
 import {
   useTooltip,
   type TooltipFocusTrigger,
   type TooltipTouchTrigger,
 } from './useTooltip';
+import {TooltipDescribesContext} from './tooltipPresentInterest';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {colorVars} from '../theme/tokens.stylex';
 
@@ -67,7 +69,10 @@ export interface TooltipProps {
 
   /**
    * Content to display in the tooltip.
-   * Typically short, non-interactive text.
+   * Typically short, non-interactive text. Until the tooltip first shows, it
+   * also renders as the trigger's hidden description, so a component inside
+   * it runs its effects before then. The tooltip renders it again inside the
+   * layer when it first shows.
    */
   content: ReactNode;
 
@@ -173,12 +178,45 @@ function isTextOnly(children: ReactNode): boolean {
   return typeof children === 'string' || typeof children === 'number';
 }
 
-/**
- * Utility to merge ARIA ID strings
- */
+/** Merges ARIA ID lists, each id once. */
 function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
-  const filtered = ids.filter(Boolean);
-  return filtered.length > 0 ? filtered.join(' ') : undefined;
+  const tokens = new Set(
+    ids.flatMap(id => (id == null ? [] : id.split(/\s+/).filter(Boolean))),
+  );
+  return tokens.size > 0 ? [...tokens].join(' ') : undefined;
+}
+
+/**
+ * The trigger's accessible name as Button's `tooltip` reads it: its
+ * `aria-label`, else the text an assistive technology reads in it (not this
+ * tooltip's own hidden copy). Null when `aria-labelledby` names it from
+ * other elements: that name is not compared, so the tooltip still describes
+ * the trigger.
+ */
+function nameOf(element: Element): string | null {
+  if (element.hasAttribute('aria-labelledby')) {
+    return null;
+  }
+  const label = element.getAttribute('aria-label');
+  if (label != null && label.trim() !== '') {
+    return label.trim();
+  }
+  return visibleText(element);
+}
+
+/** A tooltip that repeats its trigger's name adds no description. */
+function repeatsName(element: Element, contentText: string | null): boolean {
+  const text = contentText?.trim() ?? '';
+  return text !== '' && text === nameOf(element);
+}
+
+/** Sets `aria-describedby`, or removes it when no id is left. */
+function setDescribedBy(element: Element, ids: string | undefined): void {
+  if (ids == null) {
+    element.removeAttribute('aria-describedby');
+  } else {
+    element.setAttribute('aria-describedby', ids);
+  }
 }
 
 /**
@@ -213,6 +251,11 @@ export function Tooltip({
 }: TooltipProps): ReactElement {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textOnly = children != null ? isTextOnly(children) : false;
+  // Plain-text content, the only content that can repeat the trigger's name.
+  const contentText =
+    typeof content === 'string' || typeof content === 'number'
+      ? String(content)
+      : null;
 
   // Determine if hover indication should be shown
   const showHoverIndication =
@@ -253,10 +296,9 @@ export function Tooltip({
 
       // Set aria-describedby, merging with existing
       const existingDescribedBy = el.getAttribute('aria-describedby');
-      el.setAttribute(
-        'aria-describedby',
-        mergeIds(existingDescribedBy, tooltip.describedBy) ?? '',
-      );
+      if (!repeatsName(el, contentText)) {
+        setDescribedBy(el, mergeIds(existingDescribedBy, tooltip.describedBy));
+      }
 
       return () => {
         tooltip.ref(null);
@@ -293,7 +335,7 @@ export function Tooltip({
       cancelled = true;
       detach?.();
     };
-  }, [anchorRef, tooltip.ref, tooltip.describedBy]);
+  }, [anchorRef, contentText, tooltip.ref, tooltip.describedBy]);
 
   // For element children with display:contents, attach ref to first child
   useIsomorphicLayoutEffect(() => {
@@ -319,10 +361,12 @@ export function Tooltip({
 
     // Set aria-describedby, merging with existing
     const existingDescribedBy = firstChild.getAttribute('aria-describedby');
-    firstChild.setAttribute(
-      'aria-describedby',
-      mergeIds(existingDescribedBy, tooltip.describedBy) ?? '',
-    );
+    if (!repeatsName(firstChild, contentText)) {
+      setDescribedBy(
+        firstChild,
+        mergeIds(existingDescribedBy, tooltip.describedBy),
+      );
+    }
 
     return () => {
       tooltip.ref(null);
@@ -332,7 +376,7 @@ export function Tooltip({
         firstChild.removeAttribute('aria-describedby');
       }
     };
-  }, [anchorRef, textOnly, tooltip.ref, tooltip.describedBy]);
+  }, [anchorRef, contentText, textOnly, tooltip.ref, tooltip.describedBy]);
 
   // Sibling mode: render only the tooltip (no wrapper needed)
   if (anchorRef && children == null) {
@@ -346,7 +390,7 @@ export function Tooltip({
         <span
           ref={tooltip.ref}
           tabIndex={0}
-          aria-describedby={tooltip.describedBy}
+          aria-describedby={tooltip.describedBy || undefined}
           // The span is a tab stop Astryx adds: it draws the shared ring,
           // which a theme restyles through the focus-outline tokens.
           {...focusOutlineProps.focusVisible(
@@ -374,21 +418,38 @@ export function Tooltip({
 Tooltip.displayName = 'Tooltip';
 
 /**
- * A tooltip whose content is its anchor's own name (a cut Button label or
- * table heading), so it adds no description. It is open while it is mounted;
- * `onHide` closes it (Escape). Internal: the truncation tooltip module loads
- * it with this module; the Tooltip entry does not export it.
+ * A tooltip whose content is its anchor's own text (cut Text, a cut Button
+ * label or table heading), so it adds no description: the anchor gets no
+ * `aria-describedby`. With `isOpen`, it is open while `isOpen` is true and
+ * `onHide` closes it (Escape). Without `isOpen`, hover, tap and focus open it,
+ * as they open a Tooltip. Internal: the truncation tooltip module loads it
+ * with this module; the Tooltip entry does not export it.
  */
-export function UndescribedTooltip({
-  anchorRef,
-  content,
-  onHide,
-}: {
+export function UndescribedTooltip(props: UndescribedTooltipProps): ReactNode {
+  // No hidden copy: the anchor's own text is the tooltip's content.
+  return (
+    <TooltipDescribesContext value={false}>
+      <UndescribedTooltipLayer {...props} />
+    </TooltipDescribesContext>
+  );
+}
+
+interface UndescribedTooltipProps {
   anchorRef: RefObject<HTMLElement | null>;
   content: ReactNode;
-  onHide: () => void;
-}): ReactNode {
-  const tooltip = useTooltip({placement: 'above', isOpen: true, onHide});
+  placement?: LayerPlacement;
+  isOpen?: boolean;
+  onHide?: () => void;
+}
+
+function UndescribedTooltipLayer({
+  anchorRef,
+  content,
+  placement = 'above',
+  isOpen,
+  onHide,
+}: UndescribedTooltipProps): ReactNode {
+  const tooltip = useTooltip({placement, isOpen, onHide});
   const attach = tooltip.ref;
   // Syncs the trigger listeners with the anchor's current element on every
   // render: a Button that renders a new element (a link Button that becomes

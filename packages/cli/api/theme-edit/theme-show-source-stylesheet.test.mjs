@@ -17,6 +17,7 @@ import {
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {hasModuleHooks} from '../../test-utils/module-hooks.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -43,6 +44,12 @@ describe('show of a theme whose source imports a stylesheet', () => {
       source,
       `import './brand.css';\n${fs.readFileSync(source, 'utf8')}`,
     );
+    if (!hasModuleHooks) {
+      await expect(themeEditShow('t', {cwd})).rejects.toThrow(
+        'it imports themes/t/brand.css, and loading a theme that imports a stylesheet or asset needs Node 22.15 or later',
+      );
+      return;
+    }
     const result = await themeEditShow('t', {cwd});
     expect(JSON.stringify(result.data)).toContain(
       'themes/t/t.theme.ts imports themes/t/brand.css, which the built outputs do not carry',

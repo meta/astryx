@@ -2,8 +2,8 @@
 
 /**
  * @file themeAdaptations.edges.test.ts
- * @input The size-edge helpers in themeAdaptations.ts and the source of Core
- *   and the published themes
+ * @input The size-edge helpers in breakpoints.ts and the source of Core and
+ *   the published themes
  * @output Checks the size-edge spellings, and that every range or lowered
  *   width or height edge in Core and the themes goes through those helpers
  * @position Unit half of the boundary proof; the browser half is
@@ -19,7 +19,7 @@ import {
   heightBelowFeature,
   widthBelowFeature,
   widthFromFeature,
-} from './themeAdaptations';
+} from './breakpoints';
 
 const CORE_SRC = path.resolve(__dirname, '..');
 const THEMES = path.resolve(CORE_SRC, '../../themes');
@@ -167,7 +167,7 @@ describe('size edges', () => {
         .map(entry => path.join(THEMES, entry.name, 'src'))
         .filter(dir => fs.existsSync(dir)),
     ];
-    const helper = path.join(CORE_SRC, 'theme/themeAdaptations.ts');
+    const helper = path.join(CORE_SRC, 'theme/breakpoints.ts');
     const found: string[] = [];
     for (const root of roots) {
       for (const file of sourceFiles(root)) {

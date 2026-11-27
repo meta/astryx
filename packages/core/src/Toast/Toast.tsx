@@ -57,6 +57,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Toast/Toast.generated';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 
@@ -100,7 +101,7 @@ const styles = stylex.create({
       'translateY(var(--_toast-swipe-y, 0px)) scale(var(--_toast-swipe-scale, 1))',
     transitionProperty: 'opacity, transform',
     transitionDuration: {
-      default: durationVars['--duration-fast'],
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor} + ${reducedMotionTransform.settle})`,
       '@media (prefers-reduced-motion: reduce)': '0.01ms',
     },
     transitionTimingFunction: easeVars['--ease-standard'],

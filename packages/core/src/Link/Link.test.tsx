@@ -10,7 +10,7 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {fireEvent, render, screen} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
 import type {ReactNode} from 'react';
@@ -19,6 +19,7 @@ import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {Text} from '../Text/Text';
 import {Link} from './Link';
 import {LinkProvider} from './LinkProvider';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 function CustomLink({
   children,
@@ -834,8 +835,20 @@ describe('Link names and native attributes', () => {
       </Link>,
     );
     const link = screen.getByRole('link', {name: 'Settings'});
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent('Configure settings');
     expect(link.getAttribute('aria-describedby')).toBe(tooltip.id);
+  });
+
+  it('adds no description when its tooltip repeats the link text', async () => {
+    render(
+      <Link href="/settings" tooltip="Settings">
+        Settings
+      </Link>,
+    );
+    const link = screen.getByRole('link', {name: 'Settings'});
+    // The tooltip wires its trigger once the commit has run.
+    await waitFor(() => expect(getTooltip()).toHaveTextContent('Settings'));
+    expect(link).not.toHaveAttribute('aria-describedby');
   });
 });

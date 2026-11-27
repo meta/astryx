@@ -6,12 +6,13 @@
  * @file useClickableContainer.ts
  * @input Container ref, interactive element ref, click/href handlers
  * @output onClick, onMouseUp and onPointerDown handlers for the container;
- *   INTERACTIVE_SELECTORS list; hasInteractiveAncestor and the shared
- *   innermostInteractive walk; the internal useClickableContainerProxy, the
+ *   INTERACTIVE_SELECTORS list; hasInteractiveAncestor, pressBelongsToControl
+ *   and the shared innermostInteractive walk; the internal useClickableContainerProxy, the
  *   handlers without the marker
  * @position Core hook for clickable containers with nested interactive
  *   elements. A click on a nested button or link does not run the card's
- *   action, and a press there, from any pointer, shows no press on the card.
+ *   action. A mouse or pen press there shows no press on the card, and so
+ *   does a finger where the primary pointer is coarse.
  *   Each navigation passes the rule in utils/safeUrl.ts first.
  *
  * SYNC: Each style that paints a container's `:active` press reads
@@ -130,6 +131,20 @@ export function hasInteractiveAncestor(el: Element, rootEl: Element): boolean {
   return innermostInteractive(el, rootEl, belongsToSomethingElse) != null;
 }
 
+/**
+ * Whether a press on `target` belongs to a control, not to the row around it.
+ * Internal: Item's row click and the menu sheet's row release share it.
+ * The form-control check also looks above the row. It keeps a row inside a
+ * link or button inert, and it keeps a read-only input, which the shared walk
+ * skips.
+ */
+export function pressBelongsToControl(target: Element, row: Element): boolean {
+  return (
+    target.closest('button, a, input, select, textarea') != null ||
+    hasInteractiveAncestor(target, row)
+  );
+}
+
 // hasInteractiveAncestor documents this answer until the next minor.
 // A layer root stops such a press before any bubble-phase React handler.
 // A native listener or a capture-phase handler still sees it.
@@ -179,8 +194,8 @@ function markNestedPress(container: HTMLElement): void {
 /**
  * The press half of a container's press rule. A press that starts on a nested
  * interactive element other than the container's own action does not activate
- * the container, so the container shows no press for it, for every pointer.
- * The press controller's paint on `container` ends. For a mouse or a pen, the
+ * the container, so the container shows no press for it: for a mouse, a pen,
+ * or a finger where the primary pointer is coarse. The press controller's paint on `container` ends. For a mouse or a pen, the
  * container's `:active` paint also stays off until the press ends. A press on
  * the container's surface or on `ownAction` is left alone. Not part of the
  * package's public API.
@@ -423,8 +438,8 @@ export function useClickableContainerProxy({
     [containerRef, href, disabled],
   );
 
-  // The press-state counterpart of onClick's rule: a press that would not
-  // activate the container shows no press on it, for every pointer.
+  // The press-state counterpart of onClick's rule: a mouse or pen press that
+  // would not activate the container shows no press on it.
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       if (disabled) {

@@ -21,6 +21,7 @@ import {SideNavSection} from './SideNavSection';
 import {SideNavCollapseContext} from './SideNavCollapseContext';
 import {SideNavRenderContext} from './SideNavRenderContext';
 import {AppShellMobileContext} from '../AppShell/AppShellMobileContext';
+import {loadMobileNavDrawer} from '../MobileNav/MobileNavToggle';
 
 // jsdom does not implement showModal/close on <dialog>; the drawer uses them.
 beforeAll(() => {
@@ -81,6 +82,12 @@ function InDrawer({children}: {children: ReactNode}) {
     </AppShellMobileContext>
   );
 }
+
+// These cases test the drawer once it has loaded. MobileNavDrawer.test.tsx
+// tests the closed placeholder and the load itself.
+beforeAll(async () => {
+  await loadMobileNavDrawer();
+});
 
 describe('SideNav slots follow isRenderable', () => {
   const renderModes: ReadonlyArray<[string, (node: ReactNode) => ReactNode]> = [

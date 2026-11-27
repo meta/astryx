@@ -11,12 +11,12 @@ import {Text, Heading} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Link} from '@astryxdesign/core/Link';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
-import type {BlogPost} from '../../lib/blog/schema';
+import type {BlogPostMeta} from '../../lib/blog/schema';
 import {AuthorByline} from './AuthorByline';
 import {BlogCoverArt} from './BlogCoverArt';
 import {ReleaseCoverArt} from './ReleaseCoverArt';
 import {parseReleaseVersion} from '../../lib/blog/release';
-import {blogCoverUrl} from '../../lib/blog/coverImage';
+import {blogCoverSources, blogCoverUrl} from '../../lib/blog/coverImage';
 import css from './BlogCard.module.css';
 
 const styles = stylex.create({
@@ -77,16 +77,23 @@ const styles = stylex.create({
 });
 
 export interface BlogCardProps {
-  post: BlogPost;
+  post: BlogPostMeta;
   feature?: boolean;
   /** Hide the description/excerpt (e.g. to keep the home showcase tight). */
   hideDescription?: boolean;
+  /**
+   * How wide the card's layout draws the cover, as an `<img>` `sizes` value.
+   * The browser then loads the cover at that width. Without it, the cover
+   * loads at the width that its article also uses.
+   */
+  coverSizes?: string;
 }
 
 export function BlogCard({
   post,
   feature = false,
   hideDescription = false,
+  coverSizes,
 }: BlogCardProps) {
   const releaseVersion = parseReleaseVersion(post.title);
   return (
@@ -101,7 +108,9 @@ export function BlogCard({
         <AspectRatio ratio={16 / 9} xstyle={styles.cover} className={css.cover}>
           {post.coverImage ? (
             <img
-              src={blogCoverUrl(post.coverImage)}
+              {...(coverSizes == null
+                ? {src: blogCoverUrl(post.coverImage)}
+                : blogCoverSources(post.coverImage, coverSizes))}
               alt={post.coverAlt ?? ''}
               {...stylex.props(styles.coverImg)}
             />
