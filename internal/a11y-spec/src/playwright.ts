@@ -2,10 +2,14 @@
 
 /**
  * @file playwright.ts
- * @input Uses @playwright/test and .github/scripts/lib/offline-media.js
+ * @input Uses @playwright/test, .github/scripts/lib/offline-media.js and
+ *   .github/scripts/lib/fetch-error.js
  * @output `test`: Playwright's base test with hermetic browser contexts, and
  *   every other export of @playwright/test unchanged. `keepRequestsLocal`:
  *   the same network rule for a context the spec makes from its own browser.
+ *   `safeFetchError`: the error of a failed request (`route.fetch()`, the
+ *   `request` fixture) without its call log, which lists the request's
+ *   headers.
  * @position The one base test for the browser specs that playwright.config.ts
  *   and playwright.interaction.config.ts run. Specs import `test` from here,
  *   not from @playwright/test; a lint rule enforces it.
@@ -22,6 +26,7 @@ import {
 } from '@playwright/test';
 import {routeRemoteImages} from '../../../.github/scripts/lib/offline-media.js';
 
+export {safeFetchError} from '../../../.github/scripts/lib/fetch-error.js';
 export * from '@playwright/test';
 
 /** Makes `context` hermetic. Await it before the first navigation. */

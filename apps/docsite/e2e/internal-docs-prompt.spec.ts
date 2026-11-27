@@ -8,6 +8,7 @@
  */
 
 import {expect, test, type Page, type Route} from '@playwright/test';
+import {safeFetchError} from '../../../.github/scripts/lib/fetch-error.js';
 
 const deployments = [
   {name: 'production', origin: 'https://astryx.atmeta.com'},
@@ -54,14 +55,18 @@ async function servePublicOrigin(
   }
   await page.route(`${origin}/**`, async route => {
     const url = new URL(route.request().url());
-    const response = await route.fetch({
-      url: `${baseURL}${url.pathname}${url.search}`,
-      // A new connection for each proxied request. Playwright's request client
-      // keeps idle sockets open with no timeout of its own, and `next start`
-      // closes one after six idle seconds: a request sent on it as it closes
-      // is reset, and the page it was loading never hydrates.
-      headers: {...route.request().headers(), connection: 'close'},
-    });
+    const response = await route
+      .fetch({
+        url: `${baseURL}${url.pathname}${url.search}`,
+        // A new connection for each proxied request. Playwright's request client
+        // keeps idle sockets open with no timeout of its own, and `next start`
+        // closes one after six idle seconds: a request sent on it as it closes
+        // is reset, and the page it was loading never hydrates.
+        headers: {...route.request().headers(), connection: 'close'},
+      })
+      .catch(error => {
+        throw safeFetchError(error);
+      });
     await route.fulfill({response});
   });
 }
