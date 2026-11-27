@@ -187,9 +187,24 @@ async function readPopover(page: Page, triggerName: string) {
         b => b.textContent?.trim() === name,
       ) ?? null;
     const active = document.activeElement as HTMLElement | null;
-    const activeStyle = active ? getComputedStyle(active) : null;
+    // A switch's input is transparent; its track, the next sibling, paints
+    // the focus ring.
+    const ringPainter =
+      active?.getAttribute('role') === 'switch'
+        ? (active.nextElementSibling as HTMLElement | null)
+        : active;
+    const ringStyle = ringPainter ? getComputedStyle(ringPainter) : null;
+    // Every visible element in the surface that holds text of its own.
     const texts = surface
-      ? Array.from(surface.querySelectorAll('.astryx-text')).filter(visible)
+      ? Array.from(surface.querySelectorAll<HTMLElement>('*')).filter(
+          el =>
+            visible(el) &&
+            Array.from(el.childNodes).some(
+              n =>
+                n.nodeType === Node.TEXT_NODE &&
+                (n.textContent ?? '').trim() !== '',
+            ),
+        )
       : [];
     const textContrast = texts.map(t => {
       const fg = rgba(getComputedStyle(t).color);
@@ -217,9 +232,12 @@ async function readPopover(page: Page, triggerName: string) {
             border: `${style?.borderTopStyle} ${style?.borderTopWidth} ${style?.borderTopColor}`,
             color: style?.color ?? null,
             themeTextColor: (() => {
-              const root = document.querySelector('[data-astryx-theme]');
+              const root = document.querySelector(
+                '#storybook-root [data-astryx-theme]',
+              );
               return root ? getComputedStyle(root).color : null;
             })(),
+            textMeasured: textContrast.length,
             minTextContrast: textContrast.length
               ? Math.min(...textContrast)
               : null,
@@ -259,8 +277,8 @@ async function readPopover(page: Page, triggerName: string) {
               isSurface: active === surface,
               isTrigger: active === trigger,
               focusVisible: active.matches(':focus-visible'),
-              outline: activeStyle
-                ? `${activeStyle.outlineStyle} ${activeStyle.outlineWidth}`
+              outline: ringStyle
+                ? `${ringStyle.outlineStyle} ${ringStyle.outlineWidth}`
                 : null,
             }
           : null,
@@ -290,7 +308,11 @@ function checkOpenSemantics(check: Check, read: Read, label: string) {
     `trigger aria-controls ${t?.controls} does not name the popup`,
   );
   check(
-    (s?.minTextContrast ?? MIN_TEXT_CONTRAST) >= MIN_TEXT_CONTRAST,
+    (s?.textMeasured ?? 0) > 0,
+    'no visible text in the surface to measure',
+  );
+  check(
+    s?.minTextContrast != null && s.minTextContrast >= MIN_TEXT_CONTRAST,
     `surface text contrast ${s?.minTextContrast}`,
   );
 }
