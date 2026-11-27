@@ -82,6 +82,7 @@ import {
   validateStoryRtlAuditParameters,
   withD1CompletionIdentity,
 } from './rtl-audit-coverage.mjs';
+import {receiptDrift} from './verified-na-receipts.mjs';
 import {
   createCuratedPages,
   createPagePool,
@@ -1438,6 +1439,7 @@ async function cleanupRuntime() {
     const {verifiedNa, verifiedNaError} = readVerifiedNa();
     const coverage = buildComponentCoverage({components: auditedComponents, verifiedNa});
     if (verifiedNaError) coverage.registryError = verifiedNaError;
+    const drift = receiptDrift({verifiedNa, projectRoot: PROJECT_ROOT, components: auditedComponents});
     fs.writeFileSync(
       OUT,
       `${JSON.stringify(
@@ -1445,6 +1447,7 @@ async function cleanupRuntime() {
           generatedAt: new Date().toISOString(),
           scope: {packages: ACTIVE_PACKAGE_NAMES, filters: FILTER},
           coverage,
+          receiptDrift: drift,
         },
         null,
         2,
@@ -1452,6 +1455,7 @@ async function cleanupRuntime() {
     );
     console.error(`NOTE no stories for ${FILTER.join(',')}; WROTE ${OUT} with coverage only`);
     console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
+    console.error(`RCPT: ${drift.drifted.length} of ${drift.checked} receipted declarations drifted (informational)`);
     process.exitCode =
       coverage.gaps > 0 || coverage.staleVerifiedNa > 0 || coverage.registryError != null ? 1 : 0;
     return;
@@ -1675,6 +1679,8 @@ async function cleanupRuntime() {
     enforced: !AUTO_ONLY && !CURATED_ONLY,
   });
   if (verifiedNaError) coverage.registryError = verifiedNaError;
+  // Receipt drift is reported beside coverage and never changes its statuses.
+  const drift = receiptDrift({verifiedNa, projectRoot: PROJECT_ROOT, components: auditedComponents});
   // Story identities with no public component are not roster entries (INV5);
   // name them so the report shows what the roster left out.
   coverage.ignoredStoryIdentities = ignoredStoryIdentities({
@@ -1771,6 +1777,7 @@ async function cleanupRuntime() {
     },
     curated: {results: curatedResults},
     coverage,
+    receiptDrift: drift,
   };
   fs.writeFileSync(OUT, JSON.stringify(report, null, 2));
   console.error(`\nWROTE ${OUT}`);
@@ -1780,6 +1787,7 @@ async function cleanupRuntime() {
   console.error(`POOL: ${pageRecoveries.length} page replacement(s) after a failed story`);
   console.error(retriesLine(storyRetries));
   console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
+  console.error(`RCPT: ${drift.drifted.length} of ${drift.checked} receipted declarations drifted (informational)`);
   if (coverage.ignoredStoryIdentities.length > 0) console.error(`IGN : ${coverage.ignoredStoryIdentities.length} story identities name no public component (not roster entries): ${coverage.ignoredStoryIdentities.map(entry => entry.component).join(', ')}`);
   if (declaredD5PhysicalRegions.length > 0) console.error(`D5P : ${declaredD5PhysicalRegions.length} declared physical region(s): ${declaredD5PhysicalRegions.map(r => `${r.storyId} (${r.physical} within ${r.within})`).join('; ')}`);
   // Non-zero exit only signals CI (which is soft/continue-on-error). Surface a
