@@ -6,7 +6,7 @@
  * @file InfinityScrollbar.tsx
  * @input Scroll geometry and a logical navigation target
  * @output Keyboard and pointer control across the full range
- * @position Scrollbar for the clipped Lab viewport
+ * @position Scrollbar for a clipped Lab viewport
  */
 import {useRef, type RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -27,23 +27,40 @@ import {
 const styles = stylex.create({
   track: {
     position: 'relative',
-    inlineSize: spacingVars['--spacing-3'],
     backgroundColor: colorVars['--color-background-surface'],
   },
+  trackVertical: (extent: number) => ({
+    inlineSize: spacingVars['--spacing-3'],
+    blockSize: extent,
+    alignSelf: 'end',
+  }),
+  trackHorizontal: {blockSize: spacingVars['--spacing-3'], gridColumn: 1},
   thumb: {
     borderRadius: radiusVars['--radius-element'],
     position: 'absolute',
-    insetInline: 0,
+    insetInlineStart: 0,
     insetBlockStart: 0,
     touchAction: 'none',
     cursor: {
       default: 'grab',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    backgroundColor: colorVars['--color-neutral'],
-    transform: 'translateY(var(--infinity-thumb-offset, 0px))',
+    forcedColorAdjust: {'@media (forced-colors: active)': 'none'},
+    backgroundColor: {
+      default: colorVars['--color-neutral'],
+      '@media (forced-colors: active)': 'CanvasText',
+    },
   },
-  size: (height: number) => ({blockSize: height}),
+  vertical: (size: number) => ({
+    inlineSize: '100%',
+    blockSize: size,
+    transform: 'translateY(var(--infinity-thumb-offset, 0px))',
+  }),
+  horizontal: (size: number) => ({
+    blockSize: '100%',
+    inlineSize: size,
+    transform: 'translateX(var(--infinity-thumb-offset, 0px))',
+  }),
 });
 
 interface InfinityScrollbarProps {
@@ -52,6 +69,8 @@ interface InfinityScrollbarProps {
   label: string;
   thumbHeight: number;
   thumbRef: RefObject<HTMLDivElement | null>;
+  orientation?: 'vertical' | 'horizontal';
+  direction?: 'ltr' | 'rtl';
   navigate: (position: ScrollPosition) => boolean;
   move: (delta: number) => boolean;
   readFraction: () => number;
@@ -63,6 +82,8 @@ export function InfinityScrollbar({
   label,
   thumbHeight,
   thumbRef,
+  orientation = 'vertical',
+  direction = 'ltr',
   navigate,
   move,
   readFraction,
@@ -72,30 +93,40 @@ export function InfinityScrollbar({
     start: number;
     fraction: number;
   } | null>(null);
-  const {viewportHeight, itemHeight} = geometry;
-  const travel = viewportHeight - thumbHeight;
+  const {viewportHeight: extent, itemHeight: pitch} = geometry;
+  const vertical = orientation === 'vertical';
+  const sign = !vertical && direction === 'rtl' ? -1 : 1;
+  const travel = extent - thumbHeight;
   return (
     <div
-      {...stylex.props(styles.track)}
+      {...stylex.props(
+        styles.track,
+        vertical ? styles.trackVertical(extent) : styles.trackHorizontal,
+      )}
       onPointerDown={event => {
         if (event.button !== 0 || event.target !== event.currentTarget) {
           return;
         }
-        const top = event.currentTarget.getBoundingClientRect().top;
-        navigate(
-          positionAtFraction(geometry, (event.clientY - top) / viewportHeight),
-        );
+        const rect = event.currentTarget.getBoundingClientRect();
+        const local = vertical
+          ? event.clientY - rect.top
+          : sign === 1
+            ? event.clientX - rect.left
+            : rect.right - event.clientX;
+        navigate(positionAtFraction(geometry, local / extent));
       }}>
       <div
         {...stylex.props(
           styles.thumb,
-          styles.size(thumbHeight),
+          vertical
+            ? styles.vertical(thumbHeight)
+            : styles.horizontal(thumbHeight),
           focusOutlineStyles.focusVisible,
         )}
         ref={thumbRef}
         role="scrollbar"
         tabIndex={0}
-        aria-orientation="vertical"
+        aria-orientation={orientation}
         aria-label={label}
         aria-controls={controls}
         aria-valuemin={0}
@@ -117,17 +148,17 @@ export function InfinityScrollbar({
             case 'End':
               navigate(endPosition(geometry));
               break;
-            case 'ArrowDown':
-              move(itemHeight);
-              break;
-            case 'ArrowUp':
-              move(-itemHeight);
-              break;
             case 'PageDown':
-              move(viewportHeight);
+              move(extent);
               break;
             case 'PageUp':
-              move(-viewportHeight);
+              move(-extent);
+              break;
+            case vertical ? 'ArrowDown' : 'ArrowRight':
+              move(pitch * sign);
+              break;
+            case vertical ? 'ArrowUp' : 'ArrowLeft':
+              move(-pitch * sign);
               break;
             default:
               return;
@@ -143,7 +174,7 @@ export function InfinityScrollbar({
           event.currentTarget.setPointerCapture(event.pointerId);
           drag.current = {
             pointer: event.pointerId,
-            start: event.clientY,
+            start: vertical ? event.clientY : event.clientX,
             fraction: readFraction(),
           };
         }}
@@ -152,10 +183,11 @@ export function InfinityScrollbar({
           if (active?.pointer !== event.pointerId || travel <= 0) {
             return;
           }
+          const coordinate = vertical ? event.clientY : event.clientX;
           navigate(
             positionAtFraction(
               geometry,
-              active.fraction + (event.clientY - active.start) / travel,
+              active.fraction + (sign * (coordinate - active.start)) / travel,
             ),
           );
         }}

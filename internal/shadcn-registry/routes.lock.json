@@ -628,11 +628,6 @@
       "aliases": []
     },
     {
-      "name": "component-lab-infinity-list",
-      "path": "components/lab/infinity-list",
-      "aliases": []
-    },
-    {
       "name": "component-lab-line-clamp",
       "path": "components/lab/line-clamp",
       "aliases": []

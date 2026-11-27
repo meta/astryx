@@ -4,7 +4,7 @@
  * @file scrollWindow.ts
  * @input Logical item position and a fixed-pitch viewport
  * @output Viewport bounds and a range from the shared planner
- * @position Geometry adapter for the Lab list
+ * @position Geometry adapter for logical Table scrolling
  */
 import {calculateListWindow} from '@astryxdesign/core/internal/virtualization';
 
@@ -67,23 +67,6 @@ export function jumpToItem(
 ): ScrollPosition {
   const end = endPosition(geometry);
   return index > end.index ? end : {index: Math.max(0, index), offset: 0};
-}
-
-export function wheelDistance(
-  geometry: ScrollGeometry,
-  {deltaX, deltaY, deltaMode, shiftKey}: WheelEvent,
-) {
-  if (shiftKey && deltaX === 0) {
-    return 0;
-  }
-  return (
-    deltaY *
-    (deltaMode === 1
-      ? geometry.itemHeight
-      : deltaMode === 2
-        ? geometry.viewportHeight
-        : 1)
-  );
 }
 
 export function scrollFraction(

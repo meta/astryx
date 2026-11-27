@@ -2,6 +2,7 @@
 
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import {Link} from '@astryxdesign/core/Link';
 import {Token, type TokenColor} from '@astryxdesign/core/Token';
 
 const meta: Meta<typeof Token> = {
@@ -371,9 +372,9 @@ export const LongEndContentInNarrowSpace: Story = {
       <Token
         label="With a control:"
         endContent={
-          <button type="button" aria-label="Range details">
+          <Link label="Range details" onClick={() => {}}>
             i
-          </button>
+          </Link>
         }
         onRemove={() => {}}
       />
