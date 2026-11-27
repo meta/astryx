@@ -766,7 +766,8 @@ the shared Storybook PR owner.
 Outside the classifier-routed workflows, the Internal Registry dependency check,
 the CLI smoke test and the hardening-issue opener run only when the paths they
 read change (FR14).
-The nightly perf lane (FR18) and the daily platform-only run, which runs path-safety's Windows drive-path case and the SF Symbols macOS case on their own runners (as DEC-24's weekly WebKit run does for WebKit), are the scheduled runs outside them.
+The nightly perf lane is the one scheduled measurement outside them (FR18).
+The daily minimum-Node run and the daily platform-only run, which runs path-safety's Windows drive-path case and the SF Symbols macOS case on their own runners (as DEC-24's weekly WebKit run does for WebKit), are scheduled test runs outside them.
 
 ## Verification
 
