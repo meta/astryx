@@ -79,6 +79,22 @@ describe('testWorkers', () => {
     expect(
       testWorkers({cores: 10, memory: 64 * GiB, ...watch('run', '-w')}),
     ).toBe(5);
+    expect(
+      testWorkers({cores: 10, memory: 64 * GiB, ...watch('run', '-uw')}),
+    ).toBe(5);
+    expect(
+      testWorkers({cores: 10, memory: 64 * GiB, ...watch('run', '--watch=1')}),
+    ).toBe(5);
+    expect(
+      testWorkers({
+        cores: 10,
+        memory: 64 * GiB,
+        ...watch('run', '--watch=false'),
+      }),
+    ).toBe(MOST_WORKERS);
+    expect(
+      testWorkers({cores: 10, memory: 64 * GiB, ...watch('run', '-u')}),
+    ).toBe(MOST_WORKERS);
     // `run` or `list` as a file filter or a test-name pattern is still a watch.
     expect(
       testWorkers({cores: 10, memory: 64 * GiB, ...watch('watch', 'list')}),
@@ -138,10 +154,19 @@ const repoRoot = path.resolve(
  * else the root's, else Vitest's default. The run is set up, never started.
  * @param {string[]} flags
  * @param {Record<string, string>} env
+ * @param {number} [cores]
  * @returns {Record<string, number | null>}
  */
-function resolvedWorkers(flags, env) {
+function resolvedWorkers(flags, env, cores) {
+  // A machine with that many cores, when given: Vitest and testWorkers() both
+  // read os.availableParallelism().
+  const machine = cores
+    ? `const os = (await import('node:os')).default;
+       os.availableParallelism = () => ${cores};
+       (await import('node:module')).syncBuiltinESMExports();`
+    : '';
   const script = `
+    ${machine}
     process.argv.push('vitest', 'run', ...${JSON.stringify(flags)});
     const {createVitest, parseCLI} = await import('vitest/node');
     const {options} = parseCLI(['vitest', 'run', '--project', 'ui', '--project', 'node', ...${JSON.stringify(flags)}]);
@@ -168,6 +193,23 @@ function resolvedWorkers(flags, env) {
 }
 
 describe('a ui + node run on a shared machine', () => {
+  it(
+    "gives every project the root count, not Vitest's default, on 40 cores",
+    {timeout: 120_000},
+    () => {
+      // Vitest's default there is 39, so a root value that went missing shows.
+      const expected = testWorkers({
+        cores: 40,
+        env: {},
+        argv: ['node', 'vitest', 'run'],
+      });
+      expect(resolvedWorkers([], {}, 40)).toEqual({
+        ui: expected,
+        node: expected,
+      });
+    },
+  );
+
   it('gives every project the --maxWorkers count', {timeout: 120_000}, () => {
     expect(resolvedWorkers(['--maxWorkers=2'], {})).toEqual({ui: 2, node: 2});
   });

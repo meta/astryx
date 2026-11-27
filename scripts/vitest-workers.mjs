@@ -22,8 +22,12 @@ export const MEMORY_PER_WORKER = 2 * 1024 ** 3;
 /** A command-line worker count, in either spelling Vitest accepts. */
 const WORKERS_FLAG = /^--max-?workers(=|$)/i;
 
-/** A watch flag, which keeps `vitest run` watching. */
-const WATCH_FLAG = /^(--watch(=true)?|-w)$/;
+/**
+ * A watch flag, which keeps `vitest run` watching: `--watch` with any value
+ * but `false`, or a short-flag group with `w` in it (Vitest reads `-uw` as
+ * `-u -w`).
+ */
+const WATCH_FLAG = /^(--watch(=(?!false$).*)?|-[a-zA-Z]*w[a-zA-Z]*)$/;
 
 /**
  * Whether the command line makes a single run: `--run` anywhere, `list` as
