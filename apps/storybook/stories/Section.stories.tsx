@@ -385,6 +385,20 @@ export const Dividers: Story = {
           </p>
         </Section>
       </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>stacked nested sections</h4>
+        <Section data-evidence="stack" variant="section" width={220}>
+          <Section variant="muted" dividers={['bottom']}>
+            <p {...stylex.props(styles.text)}>First</p>
+          </Section>
+          <Section variant="muted" dividers={['bottom']}>
+            <p {...stylex.props(styles.text)}>Middle</p>
+          </Section>
+          <Section variant="muted">
+            <p {...stylex.props(styles.text)}>Last</p>
+          </Section>
+        </Section>
+      </div>
     </div>
   ),
 };

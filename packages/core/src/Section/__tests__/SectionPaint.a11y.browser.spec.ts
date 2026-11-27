@@ -54,7 +54,12 @@ async function readSection(page: Page, evidence: string) {
     };
     const box = (element: Element) => {
       const rect = element.getBoundingClientRect();
-      return {top: rect.top, bottom: rect.bottom, height: rect.height};
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      };
     };
     return {
       wrapper: box(wrapper),
@@ -79,6 +84,9 @@ test('each variant paints its token and transparent paints nothing', async ({
   await open(page, 'dividers');
   const muted = await readSection(page, 'dividers-block');
   expect(muted.background).toBe(muted.muted);
+  // The width prop sizes the outer wrapper, and the painted container fills it.
+  expect(muted.wrapper.width).toBe(220);
+  expect(muted.painted.width).toBe(220);
   const surface = await readSection(page, 'dividers-start');
   expect(surface.background).toBe(surface.surface);
   expect(surface.surface).not.toBe(surface.muted);
@@ -145,4 +153,34 @@ test('a nested Section reaches its parent painted edges inline and at its first 
     expect(pair.padding).not.toBe('0px');
     expect(pair).toMatchObject({left: 0, right: 0, top: 0, bottom: 0});
   }
+});
+
+test('stacked nested Sections escape the top edge only as the first child and the bottom edge only as the last', async ({
+  page,
+}) => {
+  await open(page, 'dividers');
+  const stack = await page
+    .locator('[data-evidence="stack"]')
+    .evaluate(wrapper => {
+      const parent = wrapper.firstElementChild as HTMLElement;
+      const outer = parent.getBoundingClientRect();
+      return [...parent.children].map(child => {
+        const rect = child.getBoundingClientRect();
+        return {
+          top: rect.top - outer.top,
+          bottom: rect.bottom - outer.top,
+          height: outer.height,
+        };
+      });
+    });
+  expect(stack).toHaveLength(3);
+  const [first, middle, last] = stack;
+  // The first reaches the parent's top edge and the last its bottom edge.
+  expect(first.top).toBe(0);
+  expect(last.bottom).toBe(last.height);
+  // The siblings touch: a middle or last child that escapes upward, or a
+  // first or middle child that escapes downward, overlaps its neighbour.
+  expect(middle.top).toBe(first.bottom);
+  expect(last.top).toBe(middle.bottom);
+  expect(first.bottom).toBeLessThan(last.height);
 });
