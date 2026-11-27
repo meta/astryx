@@ -47,8 +47,8 @@ const styles = stylex.create({
   // Base container styles passed to useLayer
   container: {
     backgroundColor: colorVars['--color-background-surface'],
-    // The surface sets its own text color: a <dialog> or [popover] otherwise
-    // takes the browser's CanvasText, not the theme's text.
+    // The browser gives `[popover]` `CanvasText`, which follows the color
+    // scheme and not the theme.
     color: colorVars['--color-text-primary'],
     '--_hovercard-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_hovercard-radius)',
