@@ -22,6 +22,7 @@ const {
   PREBUILT_OPTIONS,
   compileRules,
   pluginOptions,
+  processRules,
   resolveStyleXImport,
   sourcePackages,
   sourceStylesheet,
@@ -29,7 +30,6 @@ const {
 } = require('./source-stylesheet.js');
 const astryxPostcss = require('./next-postcss.js');
 const turbopackLoader = require('./turbopack-loader.js');
-const {processStylexRules} = require('@stylexjs/babel-plugin');
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -68,10 +68,7 @@ describe('a source build against the prebuilt stylesheets', () => {
       ...TARGETS[name],
       provider: provider && TARGETS[provider],
     });
-    const sheet = buildCss.composePackageStylesheet(
-      '',
-      processStylexRules(rules, false),
-    );
+    const sheet = buildCss.composePackageStylesheet('', processRules(rules));
     // Everything after the banner: the layer order, then the rules.
     return sheet.slice(sheet.indexOf(buildCss.ASTRYX_LAYER_ORDER));
   }

@@ -7,7 +7,7 @@
  *   StyleX at-rule keys
  * @position The reference spellings of the touch, compact and iOS-gate
  *   conditions. utils/touchPresentation.ts holds the same conditions for
- *   script; theme/themeAdaptations.ts spells the compact key.
+ *   script; theme/breakpoints.ts spells the compact key.
  *
  * SYNC: When modified, update touchPresentation.ts and
  * touchPresentation.test.ts.

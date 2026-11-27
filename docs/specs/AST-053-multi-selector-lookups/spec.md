@@ -186,8 +186,8 @@ Adopt the contract one command at a time:
 
 ## Current-state impact
 
-The component lookup remains the designated first adopter. Its runtime implementation
-lands separately from this specification amendment and MUST apply FR1-FR12 before it
+The component lookup adopts this contract: an array of selectors returns an
+ordered `component.batch` response. It MUST apply FR1-FR12 before it
 claims compliance. CLI browse and single-selector response types stay unchanged;
 programmatic callers choose the catalog with an omitted argument, one result with a
 string, and a batch with an array. `architecture:cli-surface` keeps ownership of the

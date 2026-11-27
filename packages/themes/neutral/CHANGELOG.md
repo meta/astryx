@@ -1,4 +1,4 @@
-# @xds/theme-neutral
+# @astryxdesign/theme-neutral
 
 # 0.7.17
 
@@ -509,7 +509,7 @@ Thanks to everyone who contributed to this release:
 
 #### Changes
 
-- Tracks `@xds/core@0.0.15` (bare-name migration + data-attribute selector surface).
+- Tracks `@astryxdesign/core@0.0.15` (bare-name migration + data-attribute selector surface).
 
 # 0.0.13
 
@@ -520,7 +520,7 @@ Thanks to everyone who contributed to this release:
 #### Patch Changes
 
 - Updated dependencies
-  - @xds/core@0.0.13
+  - the earlier scope's `core@0.0.13`
 
 ---
 
@@ -535,7 +535,7 @@ Thanks to everyone who contributed to this release:
 #### Patch Changes
 
 - Updated dependencies
-  - @xds/core@0.0.5
+  - the earlier scope's `core@0.0.5`
 
 ---
 
@@ -543,7 +543,7 @@ Thanks to everyone who contributed to this release:
 
 #### Patch Changes
 
-- Updated dependencies — aligned with @xds/core@0.0.4
+- Updated dependencies — aligned with the earlier scope's `core@0.0.4`
 
 ---
 

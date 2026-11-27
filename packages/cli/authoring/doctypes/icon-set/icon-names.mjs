@@ -41,4 +41,5 @@ export const ICON_NAMES = Object.freeze([
   'wrench',
   'stop',
   'microphone',
+  'drag',
 ]);

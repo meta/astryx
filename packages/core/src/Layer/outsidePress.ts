@@ -60,6 +60,14 @@ export interface OutsidePressOptions {
    * document judges presses too, and an inner root's judgment stands.
    */
   readonly root?: Node | null;
+  /**
+   * Whether `onOutside` closes a layer, so the press counts as an outside
+   * dismissal that a modal host's backdrop press reads. False for an owner
+   * whose outside press closes no layer, such as an open still waiting for
+   * its layer to load: the backdrop press then still closes the host.
+   * Defaults to true.
+   */
+  readonly isDismissal?: boolean;
 }
 
 // A modal host's backdrop press reads this. A press that closed a layer above
@@ -102,6 +110,7 @@ export function watchOutsidePress(
     onPress,
     ignoresPans = false,
     root = null,
+    isDismissal = true,
   }: OutsidePressOptions = {},
 ): () => void {
   const doc = owner.ownerDocument;
@@ -116,7 +125,9 @@ export function watchOutsidePress(
   const close = () => {
     startedOutside = false;
     panStart = null;
-    noteOutsideDismissal(doc);
+    if (isDismissal) {
+      noteOutsideDismissal(doc);
+    }
     onOutside();
   };
 
@@ -187,7 +198,9 @@ export function watchOutsidePress(
     startedOutside = false;
     panStart = null;
     if (wasOutside && !isInside(event.composedPath())) {
-      noteOutsideDismissal(doc);
+      if (isDismissal) {
+        noteOutsideDismissal(doc);
+      }
       onOutside();
     }
   };

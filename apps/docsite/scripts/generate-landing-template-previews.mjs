@@ -29,6 +29,7 @@ import {
 import {optimizeTemplateImages} from './template-image-loader.mjs';
 import {fillTemplatePlaceholders} from '../../../packages/cli/foundation/discovery/template-placeholders.mjs';
 import {finishSnapshotHtml} from './lib/preview-snapshot-html.mjs';
+import {themesStorePhotoSources} from '../src/app/(site)/_landing/themesStorePhotos.mjs';
 
 const docsiteDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -71,9 +72,13 @@ const templatesDir = path.resolve(
   '../../packages/cli/assets/templates/pages',
 );
 
-// A tile shows its page at less than half size, so this width is enough on a
-// high-density screen. It must be a width the image optimizer allows.
-export const PREVIEW_IMAGE_WIDTH = 640;
+// A tile lays its page out at full size and scales the whole page down. It
+// draws a photo at about one fifth of the photo's layout size, so the largest
+// photo box of a tile sets this width, not the template's layout. The width
+// is a constant: the generator rewrites a URL in the template's source, and
+// has no `<img>` to give a `srcset` to. It must be a width the image
+// optimizer allows.
+export const PREVIEW_IMAGE_WIDTH = 384;
 
 /**
  * How a preview whose markup the site takes is rendered: the site's own
@@ -178,14 +183,16 @@ export default function Preview() {
  * without the embedded source that only `export --reverse` reads, or the
  * page's script. The site's
  * own stylesheet styles it, so the page's styles are not kept. Its images
- * load at low priority.
+ * load at low priority, from the sources that `imageSources` gives them.
  * @param {string} html
+ * @param {Parameters<typeof finishSnapshotHtml>[1]} [imageSources]
  * @returns {string}
  */
-export function previewMarkup(html) {
+export function previewMarkup(html, imageSources) {
   const body = /<body[^>]*>([\s\S]*)<\/body>/u.exec(html)?.[1] ?? '';
   return finishSnapshotHtml(
     body.replace(SOURCE_BLOCK, '').replace(PAGE_SCRIPT, '').trim(),
+    imageSources,
   );
 }
 
@@ -290,6 +297,7 @@ async function main() {
     await render('page.tsx', {cwd: pageDir, out: 'page.html', ...PREVIEW_MARKUP_RENDER});
     previews[id] = previewMarkup(
       fs.readFileSync(path.join(pageDir, 'page.html'), 'utf8'),
+      themesStorePhotoSources,
     );
     console.log(
       `landing preview ${id} ${(previews[id].length / 1024).toFixed(0)} KB`,

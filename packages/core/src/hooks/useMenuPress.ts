@@ -6,8 +6,9 @@
  * @file useMenuPress.ts
  * @input The menu root, its trigger, the enabled-row selector, and callbacks
  *   for opening, highlighting, activating and dismissing
- * @output useMenuPress, useMenuPressInternal for DropdownMenu, the marker
- *   attributes and the activation mark
+ * @output useMenuPress, useMenuPressInternal for DropdownMenu and its sheet, the marker
+ *   attributes, the activation mark and elementAtMenuPoint (internal: the
+ *   point lookup a caller's hitTest builds on)
  * @position Core hook for DropdownMenu, ContextMenu, DropdownMenuSubMenu,
  *   Selector, MenuBottomSheetActionList and the navigation menus. The
  *   transition table lives in menuPressGesture.ts.
@@ -154,6 +155,41 @@ const INNER_CONTROL_SELECTOR = 'a[href], button, [tabindex]';
 let isModelActivation = false;
 
 /**
+ * The element under a viewport point, as a menu's press resolves it. Internal:
+ * the hooks entry point does not export it. A Core menu's `hitTest` calls it
+ * first, so that a hit test keeps the menu's own lookup. `doc` must have
+ * `elementFromPoint`.
+ */
+export function elementAtMenuPoint(
+  menu: HTMLElement | null,
+  doc: Document,
+  x: number,
+  y: number,
+): Element | null {
+  // Hit-test in the menu's own tree: inside a shadow root the document
+  // answers with the shadow host, never the row under the pointer.
+  const tree = menu?.getRootNode();
+  const scope: Pick<Document, 'elementFromPoint' | 'elementsFromPoint'> =
+    tree != null &&
+    tree !== doc &&
+    typeof (tree as ShadowRoot).elementFromPoint === 'function'
+      ? (tree as ShadowRoot)
+      : doc;
+  const element = scope.elementFromPoint(x, y);
+  if (isInputShield(element) && typeof scope.elementsFromPoint === 'function') {
+    // An input hold's shield covers the viewport while the menu enters. It
+    // keeps new input away, but the press in flight still reaches the row
+    // under it. So the hit test sees through that shield only.
+    return (
+      scope
+        .elementsFromPoint(x, y)
+        .find(candidate => !isInputShield(candidate)) ?? null
+    );
+  }
+  return element;
+}
+
+/**
  * Whether a menu row activation dispatched by the press model is in flight.
  * True for the synchronous extent of that dispatch, so a row that forwards
  * the activation to a control inside it (a link) can tell the model's click
@@ -212,7 +248,8 @@ export interface UseMenuPressOptions {
   /**
    * Resolve the element under a viewport point. Defaults to
    * `elementFromPoint` on the menu's own document or shadow root, falling back
-   * to the event target where the document lacks it (jsdom). A test seam.
+   * to the event target where the document lacks it (jsdom). A bottom sheet
+   * passes one that also maps a row's icon, padding or end content to the row.
    */
   hitTest?: (x: number, y: number) => Element | null;
   /**
@@ -245,6 +282,13 @@ interface MenuPressConfig extends UseMenuPressOptions {
    * the content-touch delay.
    */
   isInScrollView?: (control: Element) => boolean;
+  /**
+   * Whether a press that starts on `target` belongs to a control there. The
+   * model leaves such a press alone: it tracks nothing, acts on nothing and
+   * swallows no click, so the control handles its own press. A bottom sheet
+   * passes one for the controls in a row's content.
+   */
+  ownsPress?: (target: Element) => boolean;
 }
 
 export interface UseMenuPressReturn {
@@ -406,13 +450,20 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
  * null when the model took no press on the trigger in this gesture: the
  * keyboard, or a press it ignores.
  */
-export function useMenuPressInternal(input: UseMenuPressOptions): {
+export function useMenuPressInternal(
+  input: UseMenuPressOptions,
+  {ownsPress}: Pick<MenuPressConfig, 'ownsPress'> = {},
+): {
   press: UseMenuPressReturn;
   triggerClickPointerType: () => MenuPressPointerType | null;
 } {
-  // The touch model is the hook's own: an untyped caller's `touchModel` does
-  // not reach the model.
-  const {touchModel: _touchModel, ...publicOptions} = input as MenuPressConfig;
+  // The touch model and `ownsPress` are the hook's own: an untyped caller's
+  // `touchModel` or `ownsPress` does not reach the model.
+  const {
+    touchModel: _touchModel,
+    ownsPress: _ownsPress,
+    ...publicOptions
+  } = input as MenuPressConfig;
   // An unset delay follows UIMenu for a finger on every device, with its
   // scroll-view wait. A set one keeps the released wait.
   const options: MenuPressConfig = {
@@ -420,6 +471,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
     touchModel:
       publicOptions.longPressDelayMs === undefined ? 'uikit' : 'pointer',
     isInScrollView: isInsideScrollView,
+    ownsPress,
   };
   const optionsRef = useCommittedRef(options);
   // The highlight, and the hover focus of the rows in this menu, follow the
@@ -494,28 +546,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
       if (hitTest != null) {
         element = hitTest(event.clientX, event.clientY);
       } else if (typeof doc.elementFromPoint === 'function') {
-        // Hit-test in the menu's own tree: inside a shadow root the document
-        // answers with the shadow host, never the row under the pointer.
-        const tree = menu?.getRootNode();
-        const scope: Pick<Document, 'elementFromPoint' | 'elementsFromPoint'> =
-          tree != null &&
-          tree !== doc &&
-          typeof (tree as ShadowRoot).elementFromPoint === 'function'
-            ? (tree as ShadowRoot)
-            : doc;
-        element = scope.elementFromPoint(event.clientX, event.clientY);
-        if (
-          isInputShield(element) &&
-          typeof scope.elementsFromPoint === 'function'
-        ) {
-          // An input hold's shield covers the viewport while the menu enters.
-          // It keeps new input away, but the press in flight still reaches the
-          // row under it. So the hit test sees through that shield only.
-          element =
-            scope
-              .elementsFromPoint(event.clientX, event.clientY)
-              .find(candidate => !isInputShield(candidate)) ?? null;
-        }
+        element = elementAtMenuPoint(menu, doc, event.clientX, event.clientY);
       } else {
         element = event.target instanceof Element ? event.target : null;
       }
@@ -691,6 +722,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
             cancelsTouchEnd: native?.pointerType === 'touch',
             touchIdentifier: touchIdentifierRef.current ?? undefined,
             touchTarget: touchTargetRef.current ?? undefined,
+            staysArmedAfterTouchEnd: true,
           });
           if (native != null) {
             activate(effect.row, native);
@@ -724,6 +756,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
               cancelsTouchEnd: native?.pointerType === 'touch',
               touchIdentifier: touchIdentifierRef.current ?? undefined,
               touchTarget: touchTargetRef.current ?? undefined,
+              staysArmedAfterTouchEnd: true,
             });
           }
           if (effect.dismiss) {
@@ -1028,6 +1061,9 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
       // its parent menu, and both would otherwise track the same pointer.
       const target = event.target as Element | null;
       if (target?.closest(MENU_PRESS_ROOT_SELECTOR) !== menu) {
+        return;
+      }
+      if (target != null && optionsRef.current.ownsPress?.(target) === true) {
         return;
       }
       if (pointerType !== 'mouse') {

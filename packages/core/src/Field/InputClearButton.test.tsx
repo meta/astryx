@@ -17,7 +17,7 @@
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {describe, it, expect, vi, afterEach} from 'vitest';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {render, screen, fireEvent} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {
   InputClearButton,
@@ -30,6 +30,11 @@ import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
+import {
+  getTooltip,
+  getTooltipDescriptions,
+  tooltipTextOnHover,
+} from '../__tests__/tooltipDescription';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -79,12 +84,13 @@ describe('InputClearButton', () => {
     const button = screen.getByRole('button', {
       name: 'Clear Assigned engineering partner',
     });
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
-    expect(tooltip).toHaveTextContent(/^Clear$/);
-    expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
+    // The name already says "Clear", so the tooltip adds no description and a
+    // screen reader does not read the word twice.
+    expect(button).toHaveAccessibleDescription('');
+    expect(getTooltipDescriptions()).toHaveLength(0);
 
-    fireEvent.mouseEnter(button);
-    await waitFor(() => expect(showPopover).toHaveBeenCalled());
+    expect(await tooltipTextOnHover(button)).toBe('Clear');
+    expect(showPopover).toHaveBeenCalled();
     showPopover.mockRestore();
   });
 
@@ -97,9 +103,7 @@ describe('InputClearButton', () => {
       </InternationalizationProvider>,
     );
     expect(screen.getByRole('button', {name: 'Suche leeren'})).toBeTruthy();
-    expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
-      /^Leeren$/,
-    );
+    expect(getTooltip()).toHaveTextContent(/^Leeren$/);
   });
 
   it('renders a real button with the given accessible label', () => {

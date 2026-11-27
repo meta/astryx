@@ -9,12 +9,19 @@
  * @position Colocated test for family:input-fields FR10
  */
 
-import {describe, it, expect, vi} from 'vitest';
+import {describe, it, expect, vi, beforeAll} from 'vitest';
 import {render, fireEvent} from '@testing-library/react';
 import {DateRangeInput, type DateRangeInputProps} from './DateRangeInput';
 import {FormLayout} from '../FormLayout';
 import {expectFieldInputProps} from '../Field/fieldInputFamily.testing';
 import {describeFieldInputParts} from '../Field/fieldInputFamily.render-testing';
+import {loadDateRangeCalendar} from './DateRangeCalendar';
+// Calendar loads on the trigger's first intent. Loading it up front lets these
+// cases open the popover synchronously; DateRangeInput.calendarLoad*.test.tsx
+// covers the load itself.
+beforeAll(async () => {
+  await loadDateRangeCalendar();
+});
 
 // The range trigger is the field's semantic control: it carries the value,
 // the popup state, and the accessible name.

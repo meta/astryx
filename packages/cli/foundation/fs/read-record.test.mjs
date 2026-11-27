@@ -82,6 +82,24 @@ describe('recordReads', () => {
     expect(outside.size).toBe(0);
   });
 
+  it('treats a URL that names no local file as outside a run: a promise read rejects, an existence check says no', async () => {
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    for (const url of [
+      new URL('http://example.test/doc.txt'),
+      new URL('file:///tmp/a%2Fb.txt'),
+    ]) {
+      /** @type {Promise<unknown> | undefined} */
+      let pending;
+      expect(() => {
+        pending = recordReads(seen, () => fs.promises.readFile(url));
+      }).not.toThrow();
+      await expect(pending).rejects.toThrow();
+      expect(recordReads(seen, () => fs.existsSync(url))).toBe(false);
+    }
+    expect(seen.size).toBe(0);
+  });
+
   it('sees an edit made after the operation', () => {
     const {file} = scratch();
     /** @type {Map<string, string>} */

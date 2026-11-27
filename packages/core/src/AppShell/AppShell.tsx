@@ -40,6 +40,7 @@ import {
   spacingVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {isModifiedClick} from '../DropdownMenu/menuItemRoles';
 import {Layout} from '../Layout/Layout';
 import {LayoutHeader} from '../Layout/LayoutHeader';
 import {LayoutPanel} from '../Layout/LayoutPanel';
@@ -92,7 +93,6 @@ import {
 } from '../utils/focusOutline.stylex';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useMediaQuery} from '../hooks/useMediaQuery';
-import {matchesMediaQuery} from '../utils/coarsePointer';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {themeProps} from '../utils/themeProps';
 import {useThemeDefinition} from '../theme/useTheme';
@@ -100,7 +100,7 @@ import {
   DEFAULT_WIDTH_BREAKPOINTS,
   type WidthBreakpointName,
   widthBelowFeature,
-} from '../theme/themeAdaptations';
+} from '../theme/breakpoints';
 import type {AppShellVariantMap} from './index';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -111,6 +111,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/AppShell/AppShell.generated';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 const HasActivity = typeof React.Activity !== 'undefined';
@@ -677,23 +678,23 @@ export function AppShell({
   if (isMobileNavOpen && !isMobileNavCloseHeld) {
     setIsMobileNavCloseHeld(true);
   }
+  // Under reduced motion (the setting, or a theme's reducedMotion: 'always')
+  // the drawer closes at once, so the hold ends at once.
+  const reducedMotion = useReducesMotion();
   // Syncs the mobile-nav close hold with a timer. The hold ends after the
   // slide-out delay.
   useEffect(() => {
     if (!HasActivity || isMobileNavOpen) {
       return;
     }
-    const delayMs = matchesMediaQuery(
-      window,
-      '(prefers-reduced-motion: reduce)',
-    )
+    const delayMs = reducedMotion
       ? 0
       : MOBILE_NAV_MAX_CLOSE_DELAY_MS + ACTIVITY_HIDE_BUFFER_MS;
     const timeout = setTimeout(() => {
       setIsMobileNavCloseHeld(false);
     }, delayMs);
     return () => clearTimeout(timeout);
-  }, [isMobileNavOpen]);
+  }, [isMobileNavOpen, reducedMotion]);
   const isMobileNavActivityVisible = isMobileNavOpen || isMobileNavCloseHeld;
 
   const mobileNavOnOpenChange = mobileNavConfig?.onOpenChange;
@@ -712,12 +713,19 @@ export function AppShell({
   );
 
   const mainContentId = useAppShellMainId();
-  // Move focus to the main content container when the skip link is activated.
-  // Hash navigation alone doesn't reliably move focus in every browser, so
-  // focus the target explicitly (it's focusable via tabIndex={-1}).
-  const handleSkipLinkClick = useCallback(() => {
-    document.getElementById(mainContentId)?.focus();
-  }, [mainContentId]);
+  // Hash navigation alone does not move focus in every browser, so the skip
+  // link focuses main itself (main has tabIndex={-1}). A plain activation
+  // does not follow the href: a hash router reads the new hash as a route
+  // and leaves the page. The href stays for a page without script.
+  const handleSkipLinkClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (!isModifiedClick(event)) {
+        event.preventDefault();
+      }
+      document.getElementById(mainContentId)?.focus();
+    },
+    [mainContentId],
+  );
 
   // Main draws its focus ring only for focus a Tab press moved onto it, and
   // keeps it for as long as that focus stays, even once the content fits.

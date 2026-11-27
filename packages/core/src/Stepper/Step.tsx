@@ -60,6 +60,7 @@ import {
 } from '../utils';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import type {BaseProps} from '../BaseProps';
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
@@ -1115,6 +1116,8 @@ export function Step({
   // duration, so it lands at once and carries no stale delay into a later
   // change.
   const isSingleAdvance = activeStep === previousActiveStep + 1;
+  // Under reduced motion, from the setting or a theme, the fill lands at once.
+  const reducesMotion = useReducesMotion();
   const animatedSpan = previousActiveStep;
 
   /**
@@ -1122,7 +1125,7 @@ export function Step({
    * `spanIndex`, both expressed as fractions of that span.
    */
   const fillTiming = (spanIndex: number, offset: number, share: number) => {
-    if (!isSingleAdvance || spanIndex !== animatedSpan) {
+    if (reducesMotion || !isSingleAdvance || spanIndex !== animatedSpan) {
       return styles.connectorTiming('0s', '0s');
     }
     return styles.connectorTiming(

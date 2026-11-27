@@ -96,12 +96,18 @@ import {
   isLayerFocusStranded,
   prepareFocusRepairOnRemoval,
   restoreLayerFocus,
+  revealReturnTarget,
   trackLayerFocus,
   type LayerFocusRecord,
 } from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {isHTMLElement} from '../utils/nodeType';
-import {matchesMediaQuery, watchMediaQuery} from '../utils/coarsePointer';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
+import {
+  reducesMotion,
+  themeReducesMotion,
+  watchReduceMotionSetting,
+} from '../privateAttributes/reducedMotion.stylex';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 
@@ -111,7 +117,6 @@ declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
 
-const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 /**
  * Calculate a directional translate offset for dialog entry animation.
  * Returns a normalized vector from the trigger element toward the viewport
@@ -257,8 +262,9 @@ const styles = stylex.create({
     // reduced-motion cross-fade, 200 ms on easeInOut whatever the theme's
     // duration (design:reduced-motion DR2, DR4). Moves to
     // reducedMotionFadeConsts once that is on main.
+    // A theme that reduces motion for everyone shows the dialog at once.
     animationDuration: {
-      default: durationVars['--duration-medium-max'],
+      default: `calc(${durationVars['--duration-medium-max']} * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '200ms',
     },
     animationTimingFunction: {
@@ -723,8 +729,10 @@ export function Dialog({
         doc,
         isFocusMovedInOnOpen: true,
         // The ring follows the last input in the opener's own document.
-        focus: element =>
-          focusForLastInputTemporarily(element, {preventScroll: true}),
+        focus: element => {
+          focusForLastInputTemporarily(element, {preventScroll: true});
+          revealReturnTarget(element);
+        },
       });
     }
     wasOpenRef.current = isOpenNow;
@@ -766,15 +774,18 @@ export function Dialog({
         dialog.style.setProperty('--dialog-dir-y', `${dir.y}px`);
       }
     };
-    const view = dialog.ownerDocument.defaultView;
-    if (!matchesMediaQuery(view, REDUCED_MOTION_QUERY)) {
+    if (!reducesMotion(dialog)) {
       aimAtOpener();
       return;
     }
-    // Under reduced motion the entrance does not travel. When the preference
-    // ends while the dialog is open, the entrance replays and travels.
-    return watchMediaQuery(view, REDUCED_MOTION_QUERY, reducesMotion => {
-      if (!reducesMotion) {
+    // Under reduced motion, from the setting or a theme, the entrance does
+    // not travel. If the setting ends while the dialog is open and no theme's
+    // mark holds, the entrance replays and travels. A theme's mark is not watched.
+    if (themeReducesMotion(dialog)) {
+      return;
+    }
+    return watchReduceMotionSetting(dialog.ownerDocument.defaultView, isOn => {
+      if (!isOn && !themeReducesMotion(dialog)) {
         aimAtOpener();
       }
     });

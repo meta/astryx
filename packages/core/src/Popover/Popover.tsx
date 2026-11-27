@@ -45,6 +45,8 @@ import React, {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import {useAttachment} from '../hooks/useAttachment';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import type {
   AdaptivePresentation,
@@ -53,7 +55,7 @@ import type {
 import {
   compactDefinition,
   DEFAULT_COMPACT_DEFINITION,
-} from '../theme/themeAdaptations';
+} from '../theme/breakpoints';
 import {useThemeDefinition} from '../theme/useTheme';
 import * as stylex from '@stylexjs/stylex';
 import {devWarn} from '../utils/devWarning';
@@ -560,14 +562,18 @@ export function Popover({
   const resolvedPresentation = usePresentationSurface(presentation);
   const [isSheetOpenState, setIsSheetOpenState] = useState(false);
 
+  // Read when the open state changes, so an inline `onOpenChange` does not
+  // give the popover new show and hide callbacks on every render.
+  const onOpenChangeRef = useCommittedRef(onOpenChange);
+
   const handlePopoverShow = useCallback(() => {
     presentSurfaceRef.current();
-    onOpenChange?.(true);
-  }, [onOpenChange]);
+    onOpenChangeRef.current?.(true);
+  }, [onOpenChangeRef]);
 
   const handlePopoverHide = useCallback(() => {
-    onOpenChange?.(false);
-  }, [onOpenChange]);
+    onOpenChangeRef.current?.(false);
+  }, [onOpenChangeRef]);
 
   const popover = usePopoverInternal({
     dialogLabel: label,
@@ -599,6 +605,15 @@ export function Popover({
     onHide: handlePopoverHide,
     onCloseStart: surfaceMotion.closeStart,
   });
+  // The members the trigger wiring reads. The popover object is new on every
+  // render. A new object alone must not attach the trigger again.
+  const {
+    triggerRef: setPopoverTrigger,
+    toggle: togglePopover,
+    isOpen: isPopoverOpen,
+  } = popover;
+  const triggerHasPopup = popover.triggerProps['aria-haspopup'];
+  const triggerControls = popover.triggerProps['aria-controls'];
 
   const {contentRef: surfaceRef} = popover;
   // The layer's show handler calls this as the popover opens. It reads the
@@ -749,9 +764,9 @@ export function Popover({
       if (!isControlled) {
         setIsSheetOpenState(next);
       }
-      onOpenChange?.(next);
+      onOpenChangeRef.current?.(next);
     },
-    [isControlled, onOpenChange],
+    [isControlled, onOpenChangeRef],
   );
 
   const measureOverflow = useCallback(() => {
@@ -853,9 +868,9 @@ export function Popover({
     (element: HTMLElement | null) => {
       renderTriggerRef.current = element;
       anchorElementRef.current = element;
-      popover.triggerRef(element);
+      setPopoverTrigger(element);
     },
-    [popover],
+    [setPopoverTrigger],
   );
   const handleTriggerClick = useCallback(
     (event?: {currentTarget: EventTarget | null}) => {
@@ -872,7 +887,7 @@ export function Popover({
       // Opening chooses the surface; an open popover closes as a popover.
       if (
         isSheetOpen ||
-        (!popover.isOpen && resolvedPresentation === 'bottom-sheet')
+        (!isPopoverOpen && resolvedPresentation === 'bottom-sheet')
       ) {
         const opener =
           trigger instanceof HTMLElement ? trigger : renderTriggerRef.current;
@@ -882,9 +897,16 @@ export function Popover({
         setSheetOpen(!isSheetOpen);
         return;
       }
-      popover.toggle();
+      togglePopover();
     },
-    [isEnabled, isSheetOpen, popover, resolvedPresentation, setSheetOpen],
+    [
+      isEnabled,
+      isSheetOpen,
+      isPopoverOpen,
+      togglePopover,
+      resolvedPresentation,
+      setSheetOpen,
+    ],
   );
 
   // Shared handler for keydown events on role="button" elements.
@@ -910,7 +932,7 @@ export function Popover({
       // The sheet's surface is a dialog whatever the popover's role.
       button.setAttribute(
         'aria-haspopup',
-        isSheetMounted ? 'dialog' : popover.triggerProps['aria-haspopup'],
+        isSheetMounted ? 'dialog' : triggerHasPopup,
       );
       button.setAttribute('aria-expanded', String(isAnySurfaceOpen));
       // A closed trigger names no surface. The attach runs again as the
@@ -918,12 +940,11 @@ export function Popover({
       if (isAnySurfaceOpen) {
         button.setAttribute(
           'aria-controls',
-          isSheetMounted ? sheetId : popover.triggerProps['aria-controls'],
+          isSheetMounted ? sheetId : triggerControls,
         );
       }
       // The trigger's text is in the DOM the caller rendered, read as the
       // trigger attaches; it names a sheet that has no `label` (DEC-8).
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- reads the caller-rendered trigger's text, which only the DOM holds
       setTriggerText(readTriggerText(button));
 
       // Event handlers
@@ -947,7 +968,8 @@ export function Popover({
       };
     },
     [
-      popover,
+      triggerHasPopup,
+      triggerControls,
       isAnySurfaceOpen,
       isSheetMounted,
       sheetId,
@@ -956,84 +978,94 @@ export function Popover({
     ],
   );
 
-  // Sibling mode: attach to external anchorRef
+  // Warns once for each element that holds no button, so an attachment that
+  // looks for it after each commit does not warn on every commit.
+  const warnedAnchorRef = useRef<HTMLElement | null>(null);
+  // The anchor the trigger wiring uses: the element `anchorRef` holds, or in
+  // children mode the wrapper, which takes no pressed-state transform. A
+  // render-prop trigger sets its own anchor through `setRenderTrigger`.
+  const findTriggerAnchor = (): HTMLElement | null => {
+    const anchor = anchorRef
+      ? anchorRef.current
+      : typeof children === 'function'
+        ? null
+        : wrapperRef.current;
+    if (anchor == null) {
+      return null;
+    }
+    if (findTriggerButton(anchor) == null) {
+      if (warnedAnchorRef.current !== anchor) {
+        warnedAnchorRef.current = anchor;
+        devWarn(
+          'Popover',
+          (anchorRef
+            ? 'anchorRef must reference a <button> or [role="button"] element. '
+            : 'children must contain a <button> or [role="button"] element. ') +
+            'The popover trigger implements the button + dialog ARIA pattern.',
+        );
+      }
+      // Without a button, sibling mode has no anchor; children mode keeps
+      // the wrapper.
+      return anchorRef ? null : anchor;
+    }
+    return anchor;
+  };
+  const findTrigger = (): HTMLElement | null => {
+    const anchor = findTriggerAnchor();
+    return anchor == null ? null : findTriggerButton(anchor);
+  };
+
+  useAttachment(
+    findTriggerAnchor,
+    anchor => {
+      anchorElementRef.current = anchor;
+      setPopoverTrigger(anchor);
+      return () => {
+        // A render-prop trigger that took over may already be the anchor.
+        if (anchorElementRef.current === anchor) {
+          anchorElementRef.current = null;
+          setPopoverTrigger(null);
+        }
+      };
+    },
+    setPopoverTrigger,
+  );
+
+  // The trigger's text names a sheet that has no `label`. The attach reads
+  // it; the Effect below follows a change while the same trigger stays.
+  const attachedTriggerRef = useRef<{
+    button: HTMLElement;
+    text: string;
+  } | null>(null);
+  useAttachment(
+    findTrigger,
+    button => {
+      const detach = attachTrigger(button);
+      const attached = {button, text: readTriggerText(button)};
+      attachedTriggerRef.current = attached;
+      return () => {
+        if (attachedTriggerRef.current === attached) {
+          attachedTriggerRef.current = null;
+        }
+        detach();
+      };
+    },
+    attachTrigger,
+  );
+
+  // Effect: syncs the trigger text state with the attached trigger element's
+  // text, and sets it only when it changed.
   useIsomorphicLayoutEffect(() => {
-    if (!anchorRef) {
+    const attached = attachedTriggerRef.current;
+    if (attached == null) {
       return;
     }
-
-    const el = anchorRef.current;
-    if (!el) {
-      return;
+    const text = readTriggerText(attached.button);
+    if (text !== attached.text) {
+      attached.text = text;
+      setTriggerText(text);
     }
-
-    const button = findTriggerButton(el);
-    if (!button) {
-      devWarn(
-        'Popover',
-        'anchorRef must reference a <button> or [role="button"] element. ' +
-          'The popover trigger implements the button + dialog ARIA pattern.',
-      );
-    }
-    if (!button) {
-      return;
-    }
-
-    // Set up anchor positioning on the anchorRef element itself
-    anchorElementRef.current = el;
-    popover.triggerRef(el);
-
-    // Attach handlers + ARIA to the button
-    const detach = attachTrigger(button);
-
-    return () => {
-      anchorElementRef.current = null;
-      popover.triggerRef(null);
-      detach();
-    };
-  }, [anchorRef, popover, attachTrigger]);
-
-  // Children mode: use wrapper as CSS anchor, find button inside for
-  // ARIA + event handlers.
-  useIsomorphicLayoutEffect(() => {
-    if (anchorRef) {
-      return;
-    } // Skip if using anchorRef mode
-    if (typeof children === 'function') {
-      return;
-    } // Skip if using render prop mode
-
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      return;
-    }
-
-    // Use the wrapper as the CSS anchor — it doesn't receive pressed-state
-    // transforms, so the anchor position stays stable.
-    anchorElementRef.current = wrapper;
-    popover.triggerRef(wrapper);
-
-    // Find the button inside the wrapper
-    const button = findTriggerButton(wrapper);
-    if (!button) {
-      devWarn(
-        'Popover',
-        'children must contain a <button> or [role="button"] element. ' +
-          'The popover trigger implements the button + dialog ARIA pattern.',
-      );
-    }
-    if (!button) {
-      return;
-    }
-
-    const detach = attachTrigger(button);
-
-    return () => {
-      anchorElementRef.current = null;
-      popover.triggerRef(null);
-      detach();
-    };
-  }, [anchorRef, popover, attachTrigger]);
+  });
 
   // Sync controlled state: show or hide the anchored popover, the one surface
   // with an imperative API, to follow the latch. The sheet follows the latch

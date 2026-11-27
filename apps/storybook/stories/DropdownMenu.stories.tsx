@@ -17,6 +17,8 @@ import {
   type DropdownMenuProps,
 } from '@astryxdesign/core/DropdownMenu';
 import {Button} from '@astryxdesign/core/Button';
+import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {Switch} from '@astryxdesign/core/Switch';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
@@ -1150,6 +1152,73 @@ export const ActionSheetPresentation: Story = {
       />
     </div>
   ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector('button');
+    if (trigger instanceof HTMLElement) {
+      trigger.click();
+    }
+  },
+};
+
+function SheetEndContentControls(args: StoryArgs) {
+  const [isPinned, setIsPinned] = useState(false);
+  const [isStarred, setIsStarred] = useState(false);
+  return (
+    <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
+      <DropdownMenu
+        presentation="bottom-sheet"
+        button={{label: 'Note settings'}}
+        {...args}
+        items={[
+          {
+            label: 'Pin note',
+            onClick: () => console.log('Pin note selected'),
+            endContent: (
+              <Switch
+                label="Pinned"
+                isLabelHidden
+                value={isPinned}
+                onChange={setIsPinned}
+              />
+            ),
+          },
+          {
+            label: 'Star note',
+            onClick: () => console.log('Star note selected'),
+            endContent: (
+              <CheckboxInput
+                label="Starred"
+                isLabelHidden
+                value={isStarred}
+                onChange={setIsStarred}
+              />
+            ),
+          },
+          {
+            label: 'Archive note',
+            onClick: () => console.log('Archive note selected'),
+            endContent: <input type="checkbox" aria-label="Archived" />,
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+export const ActionSheetEndContentControls: Story = {
+  name: 'Presentation / action sheet, end-content controls',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '560px'},
+      description: {
+        story:
+          'A press fixture for the sheet’s end-content handling, not a recommended layout. A press on an end-content control toggles it and runs no row. For a toggle in an action sheet, put the control in the menu header or footer; in a popover menu, a DropdownMenuCheckboxItem row also works.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: (args: StoryArgs) => <SheetEndContentControls {...args} />,
   play: async ({canvasElement}) => {
     const trigger = canvasElement.querySelector('button');
     if (trigger instanceof HTMLElement) {

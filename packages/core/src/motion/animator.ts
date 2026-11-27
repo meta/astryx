@@ -1211,9 +1211,9 @@ export function motionNow(): number {
 }
 
 /**
- * Whether the user asked for reduced motion (`prefers-reduced-motion:
- * reduce`), read at the moment of the call: the preference the animator uses
- * by default for its Reduce Motion substitution. A component never reads it
+ * Whether the person's Reduce Motion setting is on (`prefers-reduced-motion:
+ * reduce`), read at the moment of the call, without a theme's `'always'`
+ * (`reducesMotion` adds that, and the animator calls it). A component never reads it
  * to pick a curve of its own: its motion settings do not override the
  * policy (design:reduced-motion DR4); `animator.reducedMotion()` or
  * `reducedMotionFade()` gives the policy's answer. False without a window
@@ -2639,7 +2639,11 @@ export function createMotionEngine(
     scheduleDemote();
   };
 
-  /** Ends promotion PROMOTION_LINGER_MS after the last motion ends. */
+  /**
+   * Ends promotion PROMOTION_LINGER_MS after the last motion ends. It never
+   * ends before the animations retire. An animation retires on its own clock,
+   * which can run behind the page clock.
+   */
   const scheduleDemote = () => {
     if (demoteTimer != null) {
       clearTimeout(demoteTimer);
@@ -2655,7 +2659,7 @@ export function createMotionEngine(
         const moving = [...segments.values()].some(
           segment => time < segment.start + segment.duration,
         );
-        if (moving || pendingGroups.size > 0) {
+        if (moving || pendingGroups.size > 0 || retireTimers.size > 0) {
           scheduleDemote();
           return;
         }

@@ -14,6 +14,7 @@ import {
   proportional,
   pixel,
   useTableSortable,
+  useTableColumnResize,
 } from '@astryxdesign/core/Table';
 import type {TableSortState} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
@@ -1150,6 +1151,53 @@ export const HeadingOverflow: Story = {
           textOverflow="truncate"
         />
       </div>
+    </div>
+  ),
+};
+
+// The longest heading sits in a resizable column. The last column takes the
+// remaining space and has no resize boundary.
+const resizableComparisonColumns: TableColumn<AppComparison>[] = [
+  {key: 'criterion', header: 'Criterion'},
+  {key: 'apple', header: 'Apple Notes'},
+  {key: 'obsidian', header: 'Obsidian'},
+  {key: 'notion', header: 'Notion'},
+];
+
+function ResizableHeadingTable() {
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const resizePlugin = useTableColumnResize<AppComparison>({
+    columnWidths,
+    columns: resizableComparisonColumns as TableColumn<
+      Record<string, unknown>
+    >[],
+    onColumnResizeEnd: updates => {
+      setColumnWidths(previous => ({...previous, ...updates}));
+    },
+  });
+  return (
+    <Table
+      data={appComparison}
+      columns={resizableComparisonColumns}
+      idKey="id"
+      density="compact"
+      dividers="grid"
+      textOverflow="truncate"
+      plugins={{columnResize: resizePlugin}}
+    />
+  );
+}
+
+/**
+ * A resizable column's heading under `textOverflow="truncate"`: it stays on
+ * one line and ends in an ellipsis inside its own column, as a heading with no
+ * resize boundary does.
+ */
+export const HeadingOverflowResizable: Story = {
+  tags: ['no-visual'],
+  render: () => (
+    <div data-heading-overflow="resizable">
+      <ResizableHeadingTable />
     </div>
   ),
 };

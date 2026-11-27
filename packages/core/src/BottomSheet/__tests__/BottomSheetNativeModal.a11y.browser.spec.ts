@@ -38,11 +38,13 @@ import {
 } from '@astryxdesign/a11y-spec/storybook';
 import {
   armHold,
+  drag,
   freezeTimers,
   installTimerGate,
   releaseAnimations,
   seekAnimations,
   thawTimers,
+  touchDriver,
   waitForRest,
   type HeldAnimation,
 } from '@astryxdesign/interaction-harness';
@@ -75,6 +77,12 @@ async function mountScrollable(page: Page, story = 'hug-content') {
   await page.keyboard.press('Escape');
   await expect(page.locator('dialog[open]')).toHaveCount(0);
   await page.evaluate(() => {
+    // A lead as tall as the scroll below keeps the opener in view, where it
+    // was before the scroll. A close then has no hidden opener to scroll back
+    // to, so any movement of the page comes from the lock.
+    const lead = document.createElement('div');
+    lead.style.height = '300px';
+    document.body.prepend(lead);
     const spacer = document.createElement('div');
     spacer.id = 'spacer';
     spacer.style.height = '3000px';
@@ -318,28 +326,21 @@ test('the lock keeps the page where it is on a page whose body sets its own over
 const DRAG_START = {x: 195, y: 120};
 
 /**
- * A finger drag down the backdrop as trusted touch events, one move per frame;
- * Chromium only (CDP). `Input.synthesizeScrollGesture` delivers the touch's
- * start but none of its moves to the page, so it cannot show a cancelled move.
+ * A finger drag down the backdrop, 240 px over 200 ms, as real touch input
+ * in Chromium and WebKit (the interaction harness). Every move reaches the
+ * page as a trusted, cancelable touchmove, so the lock's cancel is what holds
+ * each one.
  */
 async function touchDragDown(page: Page) {
-  const session = await page.context().newCDPSession(page);
-  await session.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [DRAG_START],
-  });
-  for (let step = 1; step <= 12; step += 1) {
-    await session.send('Input.dispatchTouchEvent', {
-      type: 'touchMove',
-      touchPoints: [{x: DRAG_START.x, y: DRAG_START.y + step * 20}],
-    });
-    await page.evaluate(async () => new Promise(requestAnimationFrame));
-  }
-  await session.send('Input.dispatchTouchEvent', {
-    type: 'touchEnd',
-    touchPoints: [],
-  });
-  await session.detach();
+  const driver = await touchDriver(page);
+  await driver.play(
+    drag(
+      DRAG_START,
+      {x: DRAG_START.x, y: DRAG_START.y + 240},
+      {durationMs: 200},
+    ),
+    {pacing: 'spacing'},
+  );
   // Two frames, so the page has handled the lift before the test reads it.
   await page.evaluate(
     async () =>
@@ -351,15 +352,14 @@ async function touchDragDown(page: Page) {
 
 test('the lock holds a backdrop drag when the flow renders inside a scrolling container', async ({
   page,
-  browserName,
 }) => {
-  test.skip(browserName !== 'chromium', 'touch input needs CDP');
   await mountScrollable(page);
   // The sheets render their dialogs in place, so moving the story root into a
   // scroller puts the open flow inside it. A modal dialog's pans still go to
   // the viewport, never to that scroller, so the lock cancels them here too.
   // iOS Safari scrolls the page under a move that goes through.
-  // Chromium never does, so the cancelled moves are the evidence here.
+  // Chromium and desktop WebKit never do, so the cancelled moves are the
+  // evidence here.
   await page.evaluate(() => {
     const root = document.getElementById('storybook-root');
     const container = document.createElement('div');

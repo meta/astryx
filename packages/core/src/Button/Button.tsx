@@ -31,6 +31,7 @@ import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {useTooltip} from '../Tooltip/useTooltip';
+import {TooltipDescribesContext} from '../Tooltip/tooltipPresentInterest';
 import {useCutTextOnKeyboardFocus} from '../Text/cutTextOnKeyboardFocus';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
@@ -71,6 +72,7 @@ import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {ButtonHitAreaContext} from './buttonHitArea';
+import {createSharedContext} from '../utils/sharedContext';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
@@ -81,6 +83,7 @@ import {
   controlPressLayerStyles,
   rowPressLayerStyles,
 } from '../privateAttributes/press.stylex';
+import {groupEndStyles} from '../privateAttributes/tooltipDescription.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ButtonVariantMap} from './index';
 import {
@@ -89,7 +92,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Button/Button.generated';
 import {isRenderable} from '../utils/isRenderable';
-import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
+import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
 
 registerEnglishFallback(english);
 
@@ -165,13 +168,17 @@ const styles = stylex.create({
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   pressable: {
+    // An open layer that names this Button as an anchor apart from its
+    // trigger sets the factor to 1 on it (Popover/usePopover.tsx). `initial`
+    // here keeps the factor of a control around this Button out.
+    '--_astryx-press-scale': 'initial',
     transform: {
       default: 'scale(1)',
       // A mouse press. Under a coarse pointer `:active` is not a press (it
       // paints on the touch and outlives a scroll), so the touch press model
       // writes `data-astryx-press` instead; see interactionOverlay.stylex.ts.
       [`:active:where(:not(:disabled,[aria-disabled="true"],${POPUP_OPEN}))`]: {
-        default: 'scale(0.98)',
+        default: 'scale(var(--_astryx-press-scale, 0.98))',
         '@media (pointer: coarse)': 'scale(1)',
         // Under reduced motion a press never scales the button. The overlay
         // alone shows the press.
@@ -181,7 +188,7 @@ const styles = stylex.create({
           'scale(1)',
       },
       [`${PRESSED_ON}:not(${POPUP_OPEN})`]: {
-        default: 'scale(0.98)',
+        default: 'scale(var(--_astryx-press-scale, 0.98))',
         '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
           'scale(1)',
         '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
@@ -196,10 +203,11 @@ const styles = stylex.create({
   },
   // A tracked action's press is painted by its group's tracker alone.
   pressableTracked: {
+    '--_astryx-press-scale': 'initial',
     transform: {
       default: 'scale(1)',
       [`${PRESSED_ON}:not(${POPUP_OPEN})`]: {
-        default: 'scale(0.98)',
+        default: 'scale(var(--_astryx-press-scale, 0.98))',
         '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
           'scale(1)',
         '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
@@ -361,6 +369,18 @@ const variants = stylex.create({
 });
 
 /**
+ * Internal to Core. True where a Core part's Button name already contains its
+ * tooltip text, such as Banner's dismiss button and the field clear button.
+ * The tooltip still shows but adds no description. The package does not
+ * export it.
+ */
+export const ButtonTooltipInNameContext = createSharedContext<boolean>(
+  'ButtonTooltipInNameContext',
+  1,
+  false,
+);
+
+/**
  * Button variant type derived from ButtonVariantMap.
  * Extensible via module augmentation of ButtonVariantMap.
  */
@@ -472,7 +492,9 @@ export interface ButtonProps extends BaseProps<HTMLButtonElement> {
    */
   endContent?: ReactNode;
   /**
-   * Tooltip text shown on hover.
+   * Tooltip text shown on hover, above the button. For another side, rich
+   * content, or control over when it shows, wrap the button in `Tooltip`
+   * instead, without this prop.
    */
   tooltip?: string;
   /**
@@ -551,45 +573,9 @@ const loadingStyles = stylex.create({
   },
 });
 
-/**
- * "I am the last member of the group" — the trailing end cap.
- *
- * NOT `:last-child`: several members render an invisible layer element AFTER
- * their button (a tooltip'd Button returns button + layer; DropdownMenu returns
- * trigger + popover). `useLayer` renders those inline rather than portaling
- * them, so the layer — not the button — took the `:last-child` slot and the real
- * trailing button silently kept square corners (#2508).
- *
- * Layers always carry the native `popover` attribute (useLayer.tsx), and a
- * popover is never an in-flow member — it is `display: none` until shown, then
- * promoted to the top layer. Context layers also retain an inert `<template>`
- * marker so they can re-resolve their JSX position. Neither element is a group
- * member, so "last member" is: no following element sibling besides those
- * pieces of layer infrastructure — the last sibling that is not one of them.
- *
- * Written as `:nth-last-child(1 of …)`, not `:not(:has(~ …))`: the stylesheet
- * is global, and WebKit re-evaluates a sibling-relative `:has()` against every
- * earlier sibling on each insertion, so filling any container on the page
- * became quadratic (ButtonGroup FR3). A member is never layer infrastructure,
- * so being the last such sibling is the same as having none after it.
- *
- * Reading it the other way round — marking the *buttons* and testing for a
- * marked sibling — is the trap: it silently reclassifies anything it doesn't
- * recognise as "not a member", so a member wrapped in a `display: contents`
- * wrapper (Tooltip, HoverCard) or a raw child would make the button BEFORE it
- * round mid-group. Ignoring known layers keeps the predicate conservative: an
- * unrecognised sibling still counts, exactly as `:last-child` did, so the worst
- * case degrades to the old behaviour instead of a wrong corner.
- *
- * Kept as a same-file const: StyleX only statically evaluates a selector key
- * from a const in the same file.
- *
- * The leading edge still uses `:first-child` — a member's button always precedes
- * its own layer, so the first button is genuinely `:first-child`.
- */
-const IS_LAST_ITEM =
-  ':nth-last-child(1 of :not([popover]):not(template):not(dialog))';
-
+// A grouped button's leading edge uses `:first-child`: a member's button always
+// precedes its own layer. The trailing edge comes from groupEndStyles, which
+// finds the last member past layer pieces and tooltip descriptions.
 const groupStyles = stylex.create({
   horizontal: {
     borderStartStartRadius: {
@@ -599,14 +585,6 @@ const groupStyles = stylex.create({
     borderEndStartRadius: {
       default: 0,
       ':first-child': radiusVars['--radius-element'],
-    },
-    borderStartEndRadius: {
-      default: 0,
-      [IS_LAST_ITEM]: radiusVars['--radius-element'],
-    },
-    borderEndEndRadius: {
-      default: 0,
-      [IS_LAST_ITEM]: radiusVars['--radius-element'],
     },
     borderInlineStartWidth: {
       default: borderVars['--border-width'],
@@ -626,14 +604,6 @@ const groupStyles = stylex.create({
     borderStartEndRadius: {
       default: 0,
       ':first-child': radiusVars['--radius-element'],
-    },
-    borderEndStartRadius: {
-      default: 0,
-      [IS_LAST_ITEM]: radiusVars['--radius-element'],
-    },
-    borderEndEndRadius: {
-      default: 0,
-      [IS_LAST_ITEM]: radiusVars['--radius-element'],
     },
     borderBlockStartWidth: {
       default: borderVars['--border-width'],
@@ -689,14 +659,6 @@ const forcedColorsEdge = stylex.create({
       default: 'solid',
       ':first-child': {default: 'none', [FORCED_COLORS]: 'solid'},
     },
-    borderInlineEndWidth: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: '1px'},
-    },
-    borderInlineEndStyle: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'solid'},
-    },
   },
   groupVertical: {
     borderInlineStartWidth: {default: null, [FORCED_COLORS]: '1px'},
@@ -712,14 +674,6 @@ const forcedColorsEdge = stylex.create({
       default: 'solid',
       ':first-child': {default: 'none', [FORCED_COLORS]: 'solid'},
     },
-    borderBlockEndWidth: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: '1px'},
-    },
-    borderBlockEndStyle: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'solid'},
-    },
   },
 });
 
@@ -731,34 +685,18 @@ const forcedColorsEdgeColor = stylex.create({
   horizontal: {
     borderBlockStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
     borderBlockEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
-    borderInlineEndColor: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
-    },
   },
   horizontalOnError: {
     borderBlockStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
     borderBlockEndColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
-    borderInlineEndColor: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'CanvasText'},
-    },
   },
   vertical: {
     borderInlineStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
     borderInlineEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
-    borderBlockEndColor: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
-    },
   },
   verticalOnError: {
     borderInlineStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
     borderInlineEndColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
-    borderBlockEndColor: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'CanvasText'},
-    },
   },
 });
 
@@ -1001,6 +939,10 @@ export function Button({
       (buttonGroup.orientation === 'horizontal'
         ? groupStyles.horizontal
         : groupStyles.vertical),
+    buttonGroup &&
+      (buttonGroup.orientation === 'horizontal'
+        ? groupEndStyles.buttonGroupHorizontal
+        : groupEndStyles.buttonGroupVertical),
     inputGroup != null && buttonGroup == null && inputGroupStyles.buttonAddon,
     buttonGroup &&
       (variant === 'primary' || variant === 'destructive') &&
@@ -1019,12 +961,26 @@ export function Button({
     isSolidVariant &&
       buttonGroup != null &&
       (buttonGroup.orientation === 'horizontal'
+        ? groupEndStyles.forcedColorsEdgeHorizontal
+        : groupEndStyles.forcedColorsEdgeVertical),
+    isSolidVariant &&
+      buttonGroup != null &&
+      (buttonGroup.orientation === 'horizontal'
         ? variant === 'destructive'
           ? forcedColorsEdgeColor.horizontalOnError
           : forcedColorsEdgeColor.horizontal
         : variant === 'destructive'
           ? forcedColorsEdgeColor.verticalOnError
           : forcedColorsEdgeColor.vertical),
+    isSolidVariant &&
+      buttonGroup != null &&
+      (buttonGroup.orientation === 'horizontal'
+        ? variant === 'destructive'
+          ? groupEndStyles.forcedColorsEdgeColorHorizontalOnError
+          : groupEndStyles.forcedColorsEdgeColorHorizontal
+        : variant === 'destructive'
+          ? groupEndStyles.forcedColorsEdgeColorVerticalOnError
+          : groupEndStyles.forcedColorsEdgeColorVertical),
     // AFTER the shared focus outline: the outline supplies width/style/offset
     // for every variant, and `destructive` re-colors just the ring to match
     // its own surface. Ordering is the mechanism — StyleX is last-wins.
@@ -1083,7 +1039,7 @@ export function Button({
         {isIconOnly ? null : (
           <span
             ref={labelRef}
-            {...textDirectionProps(children ?? label)}
+            {...cutTextDirection(children ?? label)}
             {...stylex.props(styles.labelText, truncatedTextStyles.pageAlign)}>
             {children ?? label}
           </span>
@@ -1123,10 +1079,13 @@ export function Button({
           (addsNoName(icon) && addsNoName(endContent) ? label : undefined));
   // A tooltip that repeats the name adds nothing to the description, so a
   // screen reader does not read the same words twice.
+  const isTooltipInName = use(ButtonTooltipInNameContext);
   const isTooltipName =
     tooltip != null &&
     accessibleName != null &&
-    tooltip.trim() === accessibleName.trim();
+    (isTooltipInName
+      ? accessibleName.includes(tooltip.trim())
+      : tooltip.trim() === accessibleName.trim());
 
   // When a tooltip is attached via the hook, point aria-describedby at the
   // tooltip content (composing with any consumer-provided value).
@@ -1222,7 +1181,12 @@ export function Button({
   return (
     <>
       {element}
-      {tooltip ? tooltipHook.renderTooltip(tooltip) : null}
+      {tooltip ? (
+        // A tooltip that repeats the name adds no description.
+        <TooltipDescribesContext value={!isTooltipName}>
+          {tooltipHook.renderTooltip(tooltip)}
+        </TooltipDescribesContext>
+      ) : null}
       {cutLabel.tooltip}
     </>
   );

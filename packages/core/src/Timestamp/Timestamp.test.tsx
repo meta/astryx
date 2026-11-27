@@ -1327,6 +1327,7 @@ describe('Timestamp', () => {
       const button = card.querySelector('button')!;
       const restName = button.getAttribute('aria-label');
       fireEvent.mouseEnter(button);
+      fireEvent.pointerMove(button);
       fireEvent.click(button);
       await waitFor(() =>
         expect(button).toHaveAccessibleName(
@@ -1360,6 +1361,7 @@ describe('Timestamp', () => {
       // The visible tooltip content defaults to the short imperative 'Copy'
       // (the full "Copy <value>" string stays the button's aria-label).
       fireEvent.mouseEnter(button);
+      fireEvent.pointerMove(button);
       await waitFor(() =>
         expect(
           screen.getByText('Copy', {
@@ -1377,6 +1379,14 @@ describe('Timestamp', () => {
           }),
         ).toBeInTheDocument(),
       );
+    });
+
+    it("names the copy button 'Copy <value>' once: its 'Copy' tooltip adds no description", async () => {
+      render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
+      const card = await openTimestampHoverCard();
+      const button = card.querySelector('button')!;
+      expect(button.getAttribute('aria-label')).toMatch(/^Copy /);
+      expect(button).toHaveAccessibleDescription('');
     });
 
     describe('copy icon slot', () => {
@@ -1626,9 +1636,15 @@ describe('Timestamp', () => {
         />,
       );
       const card = await openTimestampHoverCard();
-      const [rowValue] = Array.from(card.querySelectorAll('dd')).map(
-        el => el.textContent ?? '',
-      );
+      // The row's visible text: the copy button's tooltip description, a
+      // hidden sibling, is not part of the value.
+      const [rowValue] = Array.from(card.querySelectorAll('dd')).map(el => {
+        const visible = el.cloneNode(true) as HTMLElement;
+        visible
+          .querySelectorAll('span[hidden][id$="-description"]')
+          .forEach(piece => piece.remove());
+        return visible.textContent ?? '';
+      });
       const copyButton = card.querySelectorAll('button')[0];
 
       fireEvent.click(copyButton);

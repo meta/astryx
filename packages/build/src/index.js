@@ -24,6 +24,7 @@
 
 const path = require('node:path');
 const {isSwizzledSource} = require('./swizzle-marker');
+const {keyRelations} = require('./keyed-relations');
 const fs = require('node:fs');
 const babel = require('@babel/core');
 const stylexBabelPlugin = require('@stylexjs/babel-plugin');
@@ -248,8 +249,9 @@ function createPlugin() {
           for (const filePath of files) {
             // Classify every file on each pass: when a marker appears or goes,
             // `withAstryx()` rebuilds the copy with the other prefix.
+            const normalizedFilePath = filePath.replace(/\\/g, '/');
             const isLibrary =
-              libraryPatterns.some(p => filePath.includes(p)) ||
+              libraryPatterns.some(p => normalizedFilePath.includes(p)) ||
               isSwizzledSource(filePath, markerMemo);
             const rulesMap = isLibrary ? libraryRulesMap : productRulesMap;
             const movedSides = (
@@ -303,14 +305,15 @@ function createPlugin() {
           const libraryRules = Array.from(libraryRulesMap.values()).flat();
           const productRules = Array.from(productRulesMap.values()).flat();
 
-          // Process each group separately
+          // Process each group separately, each relation keyed to its rule's
+          // class as the prebuilt stylesheets print it (keyed-relations.js).
           const libraryCss = libraryRules.length
-            ? stylexBabelPlugin.processStylexRules(libraryRules, {
+            ? stylexBabelPlugin.processStylexRules(keyRelations(libraryRules), {
                 useLayers: true,
               })
             : '';
           const productCss = productRules.length
-            ? stylexBabelPlugin.processStylexRules(productRules, {
+            ? stylexBabelPlugin.processStylexRules(keyRelations(productRules), {
                 useLayers: true,
               })
             : '';

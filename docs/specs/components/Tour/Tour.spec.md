@@ -13,7 +13,8 @@ review_triggers: [behavior, accessibility]
 verified_by:
   [
     packages/lab/src/Tour/Tour.test.tsx,
-    packages/lab/src/Tour/__tests__/TourCardTarget.interaction.browser.spec.ts,
+    packages/lab/src/Tour/Tour.announcement.test.tsx,
+    packages/lab/src/Tour/__tests__/Tour.interaction.browser.spec.ts,
   ]
 modules: []
 families: [family:overlay-dismissal]
@@ -29,7 +30,7 @@ system_specs: [spec:AST-119]
 
 | Area                    | Contract                                                                                                                                                                        |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | Unchanged by this record.                                                                                                                                                       |
+| Public contract         | A `steps` array, the active step the app owns through `activeId`, and the reasons `onEnd` reports (`spec:AST-119`).                                                             |
 | Behavior                | Without a backdrop, a press on the page or on the target leaves the tour running. With a backdrop, a press outside the callout, the target included, ends it with `'backdrop'`. |
 | End-user impact         | A person can use the control a step introduces, or the rest of the page, while a plain tour stays open; a dimmed tour ends on a press outside it.                               |
 | Builder impact          | An app that needs a press on the page or the target to end the tour passes `hasBackdrop`, which also dims the page and reports `'backdrop'` (DEC-1).                            |
@@ -50,7 +51,7 @@ callout. Consumer usage lives in `Tour.doc.mjs`.
 
 - Released default preserved: `no` for a tour without a backdrop: a press on the page or on the target leaves it running (FR1, DEC-1).
 - Compatibility class: behavioral, Lab.
-- Controlled/uncontrolled behavior: unchanged; `isActive` and `onDismiss` are the app's.
+- Controlled/uncontrolled behavior: controlled; `activeId`, `onActiveIdChange` and `onEnd` are the app's (`spec:AST-119` FR4, FR5).
 - Migration decision: DEC-1. An app that needs an outside press to end a tour passes `hasBackdrop`, which also dims the page and reports `'backdrop'` instead of `'close'`.
 
 ## Ownership boundary
@@ -62,14 +63,18 @@ callout. Consumer usage lives in `Tour.doc.mjs`.
 
 **Does not own / non-goals**
 
-- The callout's placement, where focus goes when a step starts or the tour ends, and the step controls. Not recorded here.
 - Escape, which ends the tour through the shared layer dismissal stack (`family:overlay-dismissal`).
+- The callout's placement, where focus goes when a step starts or the tour ends, and the step controls (`spec:AST-119` FR6–FR17).
 
 ## Public concepts
 
-| Concept  | Closed values or states | Meaning                                                                         | Availability by variant/orientation/state | Default | Owner            | Stability    | Invalid-value behavior |
-| -------- | ----------------------- | ------------------------------------------------------------------------------- | ----------------------------------------- | ------- | ---------------- | ------------ | ---------------------- |
-| Backdrop | on, off                 | Whether the step dims the page and ends the tour on a press outside the callout | Every step                                | off     | `component:Tour` | experimental | Not applicable         |
+| Concept        | Closed values or states          | Meaning                                                                                           | Availability by variant/orientation/state | Default        | Owner            | Stability    | Invalid-value behavior                                                         |
+| -------------- | -------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------- | -------------- | ---------------- | ------------ | ------------------------------------------------------------------------------ |
+| Steps          | an ordered array of step objects | The steps the tour can show; a step left out of the array does not exist (`spec:AST-119` FR1–FR3) | Every tour                                | none; required | `component:Tour` | experimental | The later of two steps that share an id is ignored, with a development warning |
+| Active step    | a step id, or none               | The step that shows; the app owns it (`spec:AST-119` FR4)                                         | Every tour                                | none; required | `component:Tour` | experimental | An id that matches no step shows nothing, with a development warning           |
+| Anchor         | an element, or none              | The element a step describes; a step without one shows centered (`spec:AST-119` FR6)              | Every step                                | none           | `component:Tour` | experimental | Not applicable                                                                 |
+| Missing anchor | center, skipStep, endTour        | What a step does when it starts and its anchor is not in the document (`spec:AST-119` FR8)        | Every tour                                | center         | `component:Tour` | experimental | Not applicable                                                                 |
+| Backdrop       | on, off                          | Whether the step dims the page and ends the tour on a press outside the callout                   | Every tour                                | off            | `component:Tour` | experimental | Not applicable                                                                 |
 
 ## Behavioral and layout contract
 
@@ -79,7 +84,7 @@ callout. Consumer usage lives in `Tour.doc.mjs`.
 
 ## Accessibility contract
 
-- **AR1 — the page stays usable.** Without a backdrop, keyboard focus can leave the callout for the page and the target, and a press there does not end the tour (FR1).
+- **AR1 — the page stays usable.** Without a backdrop, keyboard focus can leave the callout for the page and the target (`spec:AST-119` FR14), and a press there does not end the tour (FR1).
 
 ## Design relationships
 
@@ -89,16 +94,21 @@ callout. Consumer usage lives in `Tour.doc.mjs`.
 
 The component implements design requirements without copying their rationale.
 
+The overlay and the ring carry `data-backdrop="backdrop"` while the tour has a
+backdrop, so a theme can paint a dimmed step apart from a plain one
+(`architecture:public-component-api` DEC-2). A theme targets the callout as
+`tour`, the ring as `tour-highlight` and the overlay as `tour-overlay`.
+
 ## Family and system relationships
 
 - `family:overlay-dismissal` owns Escape through the shared dismissal stack. The step adopts it, and this record owns only the step's outside dismissal (FR1) and whether focus can leave the callout (AR1).
 
 ## Verification map
 
-| Contract | Verification                                                                                                                                                                                                                                                                                | Representative states                   | Mutation or failure expectation                                           | Audit section |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------- | ------------- |
-| FR1      | "keeps the tour running when the target is pressed"; "keeps the tour running when the page is pressed"; "dismisses with \"backdrop\" when the backdrop is clicked"; "pressing the introduced control keeps the tour, and Escape ends it"; "a press on the dimmed page ends a backdrop tour" | No backdrop and backdrop; a card target | A press that ends a plain tour, or leaves a dimmed tour running, fails it | None          |
-| AR1      | "lets Tab move past the step into the page"; "Tab leaves the callout for the page"                                                                                                                                                                                                          | No backdrop                             | Focus kept in the callout fails it                                        | None          |
+| Contract | Verification                                                                                                                                                                                                                                                                                                                                   | Representative states                     | Mutation or failure expectation                                           | Audit section |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------- | ------------- |
+| FR1      | "leaves a press on the overlay alone without a backdrop"; "is modal with a backdrop: aria-modal, Escape from anywhere, and a press on the backdrop ends it"; "without a backdrop the page stays usable, and Escape ends the tour only from the callout or the anchor"; "a press on the dimmed page, the anchor included, ends a backdrop tour" | No backdrop and backdrop; a button anchor | A press that ends a plain tour, or leaves a dimmed tour running, fails it | None          |
+| AR1      | "Tab leaves a callout without a backdrop and stays in one with a backdrop"                                                                                                                                                                                                                                                                     | No backdrop                               | Focus kept in the callout fails it                                        | None          |
 
 ## Decision log
 
