@@ -556,7 +556,8 @@ Known verification gaps:
   need arises (INV21a).
 - `require-baseprops-passthrough` fails strict lint in `packages/core/src`
   (outside `theme/`) and `packages/richtext/src`; a component that takes
-  `props` whole, such as ChatSendButton, is not checked.
+  `props` whole, such as ChatSendButton, or types its props with a `type` alias
+  instead of an `interface`, such as Calendar, is not checked.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
 - INV24: the delta covers declarations, CSS custom properties, theme targets,
