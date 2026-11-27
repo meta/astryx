@@ -2,7 +2,12 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
+import * as stylex from '@stylexjs/stylex';
 import {Section} from './Section';
+
+const callerStyles = stylex.create({
+  inset: {marginBlockStart: 7, outlineWidth: 3},
+});
 
 /**
  * The functional class output, as an order-insensitive set. StyleX's dev
@@ -217,6 +222,22 @@ describe('Section', () => {
       expect(outerStyle).toContain(size);
     }
     expect(inner.getAttribute('style') ?? '').not.toMatch(/\d+px/);
+  });
+
+  it('gives the xstyle classes to the outer wrapper, not the painted container', () => {
+    const {container} = render(
+      <Section xstyle={callerStyles.inset}>Content</Section>,
+    );
+    const outer = container.firstElementChild as HTMLElement;
+    const inner = outer.firstElementChild as HTMLElement;
+    const caller = (stylex.props(callerStyles.inset).className ?? '')
+      .split(' ')
+      .filter(c => c !== '' && !c.includes('__') && !c.includes('.'));
+    expect(caller.length).toBeGreaterThan(0);
+    for (const name of caller) {
+      expect(classSet(outer)).toContain(name);
+      expect(classSet(inner)).not.toContain(name);
+    }
   });
 
   it('adds no role, name, or tab stop of its own', () => {

@@ -5,7 +5,9 @@
  * @file SectionPaint.a11y.browser.spec.ts
  * @input The built Storybook's Section stories in Chromium and WebKit
  * @output Real-browser proof that each variant and divider paints its token
- *   on its logical edge in both directions, and that a nested Section escapes
+ *   on its logical edge in both directions, that the painted container fills
+ *   a fixed or a percentage minHeight, that padding resolves an edge over its
+ *   axis and an axis over the uniform step, and that a nested Section escapes
  *   its parent's inset
  * @position Ongoing browser check for Section; jsdom computes no StyleX layout
  *   or paint
@@ -175,4 +177,81 @@ test('stacked nested Sections escape the top edge only as the first child and th
   expect(middle.top).toBe(first.bottom);
   expect(last.top).toBe(middle.bottom);
   expect(first.bottom).toBeLessThan(last.height);
+});
+
+test('the painted container fills a fixed and a percentage minHeight', async ({
+  page,
+}) => {
+  await open(page, 'min-height');
+  for (const [evidence, minimum] of [
+    ['min-height-fixed', 240],
+    ['min-height-percent', 200],
+  ] as const) {
+    const section = await readSection(page, evidence);
+    // The wrapper reaches the minimum, and the paint and the bottom divider
+    // reach the wrapper's bottom edge.
+    expect(section.wrapper.height).toBe(minimum);
+    expect(section.painted.height).toBe(minimum);
+    expect(section.painted.bottom).toBe(section.wrapper.bottom);
+    expect(section.background).toBe(section.muted);
+    expect(section.edges.bottom).toBe(`1px solid ${section.border}`);
+  }
+});
+
+/** The painted padding per physical edge, and the padding a child that reads
+ * the published container-padding variables would take. */
+async function readPadding(page: Page, evidence: string) {
+  return page.locator(`[data-evidence="${evidence}"]`).evaluate(wrapper => {
+    const painted = wrapper.firstElementChild as HTMLElement;
+    const style = getComputedStyle(painted);
+    const probe = document.createElement('div');
+    probe.style.paddingInlineStart = 'var(--container-padding-inline-start)';
+    probe.style.paddingInlineEnd = 'var(--container-padding-inline-end)';
+    probe.style.paddingBlockStart = 'var(--container-padding-block-start)';
+    probe.style.paddingBlockEnd = 'var(--container-padding-block-end)';
+    painted.append(probe);
+    const published = getComputedStyle(probe);
+    const result = {
+      padding: {
+        top: style.paddingTop,
+        bottom: style.paddingBottom,
+        left: style.paddingLeft,
+        right: style.paddingRight,
+      },
+      published: {
+        top: published.paddingTop,
+        bottom: published.paddingBottom,
+        left: published.paddingLeft,
+        right: published.paddingRight,
+      },
+    };
+    probe.remove();
+    return result;
+  });
+}
+
+test('padding takes an edge over its axis and an axis over the uniform step, and publishes what it applies', async ({
+  page,
+}) => {
+  for (const direction of ['ltr', 'rtl'] as const) {
+    await open(page, 'padding-precedence', direction);
+    const axis = await readPadding(page, 'axis-over-uniform');
+    const axisEdges = {top: '8px', bottom: '8px', left: '4px', right: '4px'};
+    expect(axis.padding).toEqual(axisEdges);
+    expect(axis.published).toEqual(axisEdges);
+
+    const edge = await readPadding(page, 'edge-over-axis-start');
+    const [start, end] =
+      direction === 'rtl'
+        ? (['right', 'left'] as const)
+        : (['left', 'right'] as const);
+    const edgeEdges = {
+      top: '8px',
+      bottom: '24px',
+      [start]: '8px',
+      [end]: '24px',
+    };
+    expect(edge.padding).toEqual(edgeEdges);
+    expect(edge.published).toEqual(edgeEdges);
+  }
 });

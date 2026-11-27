@@ -62,6 +62,12 @@ const variantStyles = stylex.create({
 const nestedStyles = stylex.create({
   // Outer wrapper escapes parent's container padding
   outer: {
+    // A column flex container, so the painted container grows to a
+    // `minHeight` the wrapper reaches. `height: 100%` resolves only against a
+    // set `height`. As a flex item, the painted container also contains its
+    // children's margins and floats.
+    display: 'flex',
+    flexDirection: 'column',
     // Escape horizontal padding using directional vars with shorthand fallback
     marginInlineStart: 'calc(-1 * var(--container-padding-inline-start, 0px))',
     marginInlineEnd: 'calc(-1 * var(--container-padding-inline-end, 0px))',
@@ -83,6 +89,10 @@ const nestedStyles = stylex.create({
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
     height: '100%',
+    flexGrow: 1,
+    // Content taller than a set `height` overflows the painted container,
+    // as it does without flex, instead of stretching it.
+    minHeight: 0,
   },
 });
 

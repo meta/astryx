@@ -47,6 +47,9 @@ const styles = stylex.create({
     fontSize: 14,
     color: colorVars['--color-text-secondary'],
   },
+  fixedColumn: {
+    height: 400,
+  },
 });
 
 const meta: Meta<typeof Section> = {
@@ -397,6 +400,80 @@ export const Dividers: Story = {
           <Section variant="muted">
             <p {...stylex.props(styles.text)}>Last</p>
           </Section>
+        </Section>
+      </div>
+    </div>
+  ),
+};
+
+export const MinHeight: Story = {
+  render: () => (
+    <div {...stylex.props(styles.storyWrapper)}>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>minHeight=240</h4>
+        <Section
+          data-evidence="min-height-fixed"
+          variant="muted"
+          width={220}
+          minHeight={240}
+          dividers={['bottom']}>
+          <p {...stylex.props(styles.text)}>
+            The muted paint and the bottom divider reach 240px.
+          </p>
+        </Section>
+      </div>
+      <div {...stylex.props(styles.fixedColumn)}>
+        <h4 {...stylex.props(styles.heading)}>minHeight=50% of 400px</h4>
+        <Section
+          data-evidence="min-height-percent"
+          variant="muted"
+          width={220}
+          minHeight="50%"
+          dividers={['bottom']}>
+          <p {...stylex.props(styles.text)}>
+            The muted paint and the bottom divider reach 200px.
+          </p>
+        </Section>
+      </div>
+    </div>
+  ),
+};
+
+export const PaddingPrecedence: Story = {
+  render: () => (
+    <div {...stylex.props(styles.storyWrapper)}>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          padding=6 + paddingBlock=2 + paddingInline=1
+        </h4>
+        <Section
+          data-evidence="axis-over-uniform"
+          variant="muted"
+          width={220}
+          padding={6}
+          paddingBlock={2}
+          paddingInline={1}>
+          <p {...stylex.props(styles.text)}>
+            Each axis takes its own step over the uniform 24px.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          paddingBlock=6 + paddingBlockStart=2, paddingInline=6 +
+          paddingInlineStart=2
+        </h4>
+        <Section
+          data-evidence="edge-over-axis-start"
+          variant="muted"
+          width={220}
+          paddingBlock={6}
+          paddingBlockStart={2}
+          paddingInline={6}
+          paddingInlineStart={2}>
+          <p {...stylex.props(styles.text)}>
+            Each start edge takes 8px; each end edge keeps its axis 24px.
+          </p>
         </Section>
       </div>
     </div>
