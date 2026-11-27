@@ -75,11 +75,13 @@ const styles = stylex.create({
   // start edge alone places the panel; the physical left edge is removed,
   // because it applies after a logical edge. The scroll padding is the focus
   // ring's outer reach, so Tab scrolls each action and its ring into view.
+  // The extra 1px absorbs whole-pixel scrolling: browsers scroll in whole
+  // pixels, but a row's top can sit at a fraction.
   panelBelowButton: {
     left: null,
     transform: 'none',
     overflowY: 'auto',
-    scrollPaddingBlock: `calc(${focusVars['--focus-outline-offset']} + ${focusVars['--focus-outline-width']})`,
+    scrollPaddingBlock: `calc(${focusVars['--focus-outline-offset']} + ${focusVars['--focus-outline-width']} + 1px)`,
   },
   panelBelowButtonBox: (inlineStart: number, maxHeight: number) => ({
     insetInlineStart: `${inlineStart}px`,
