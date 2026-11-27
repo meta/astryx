@@ -8,8 +8,9 @@
  *   import graph, the `audit` specs, and their recorded times.
  * @output The `audit` specs of each changed component, then of each changed
  *   primitive and the components that use it; this run's legs, at most three
- *   of about ten minutes on a first run; and the record merge-guard reads:
- *   owed, ran, deferred, complete.
+ *   of about ten minutes on a first run, or four when that runs every owed
+ *   audit; the notice for audits it defers; and the record merge-guard
+ *   reads: owed, ran, deferred, complete.
  * @position The plan job writes the legs and the record; each leg runs its
  *   share. An `audit` spec otherwise runs only in its own component-audit pull
  *   request and in the release check.
@@ -30,11 +31,16 @@ import {
   planLegs,
   renderingFolders,
 } from './a11y-pr-contracts.mjs';
-import {costOf, splitByDuration} from '../../scripts/lib/duration-split.mjs';
+import {costOf, fitLegsToBudget} from '../../scripts/lib/duration-split.mjs';
 import {isA11ySpecFile} from './lib/a11y-spec-files.mjs';
 
 export const PRIMITIVES_FILE = '.github/a11y-shared-primitives.json';
 export const MAX_LEGS = 3;
+/**
+ * A first run takes one more leg when that runs every owed audit: a run that
+ * finishes them needs no second run at the same head.
+ */
+export const COMPLETING_MAX_LEGS = MAX_LEGS + 1;
 /** A later run at the same head runs every owed audit, in up to six legs. */
 export const LATER_MAX_LEGS = 6;
 const DURATIONS_FILE = '.github/a11y-contract-durations.json';
@@ -104,32 +110,24 @@ export function listAuditSpecs(root) {
 }
 
 /**
- * Legs for the files, each about ten minutes or less when `maxLegs` allows:
- * like `planLegs`, with one more leg at a time while the longest is over.
+ * Legs for the files, each ten minutes or less when `maxLegs` allows, from
+ * `planLegs`'s count; an audit longer than that runs in a leg of its own,
+ * unless, at `maxLegs`, an even split is shorter (`fitLegsToBudget`).
  * @param {string[]} files
  * @param {Record<string, number>} seconds
  * @param {number} maxLegs
  */
 export function fitLegs(files, seconds, maxLegs) {
-  const cost = costOf(files, seconds);
-  const split = (/** @type {number} */ count) => {
-    const shares = splitByDuration(files, count, cost);
-    return {
-      count,
-      shares,
-      longestMs: Math.max(
-        ...shares.map(
-          share => share.reduce((total, file) => total + cost(file), 0) * 1000,
-        ),
-      ),
-    };
+  const plan = fitLegsToBudget(files, costOf(files, seconds), {
+    budget: LEG_BUDGET_MS / 1000,
+    maxLegs,
+    start: planLegs(files, seconds, maxLegs).count,
+  });
+  return {
+    count: plan.count,
+    shares: plan.shares,
+    longestMs: plan.longest * 1000,
   };
-  const most = Math.max(1, Math.min(maxLegs, files.length));
-  let plan = split(Math.min(planLegs(files, seconds, maxLegs).count, most));
-  while (plan.longestMs > budgetFor(files, seconds) && plan.count < most) {
-    plan = split(plan.count + 1);
-  }
-  return plan;
 }
 
 /**
@@ -159,9 +157,10 @@ export function changedComponents(changed) {
  * The audits a change owes and this run's legs. A changed component's own
  * audits come first, then each changed primitive's and those of the folders
  * that render it, nearest first. A first run fits what it can into
- * {@link MAX_LEGS} legs of about ten minutes and names the rest as deferred; a
- * later run at the same head runs every owed audit, in up to
- * {@link LATER_MAX_LEGS} legs.
+ * {@link MAX_LEGS} legs of about ten minutes, takes
+ * {@link COMPLETING_MAX_LEGS} when that runs every owed audit, and otherwise
+ * names the rest as deferred; a later run at the same head runs every owed
+ * audit, in up to {@link LATER_MAX_LEGS} legs.
  * @param {object} options
  * @param {string[]} options.changed
  * @param {string[]} options.primitives
@@ -224,6 +223,17 @@ export function planDependentAudits({
       budgetFor([...files, file], seconds);
     (fits || files.length === 0 ? files : deferred).push(file);
   }
+  if (deferred.length > 0) {
+    const completing = fitLegs(owed, seconds, COMPLETING_MAX_LEGS);
+    if (completing.longestMs <= budgetFor(owed, seconds))
+      return {
+        ...base,
+        files: owed,
+        deferred: [],
+        complete: true,
+        ...completing,
+      };
+  }
   const legs = fitLegs(files, seconds, MAX_LEGS);
   return {...base, files, deferred, complete: deferred.length === 0, ...legs};
 }
@@ -261,6 +271,21 @@ function planEverything(specs, seconds) {
   };
 }
 
+/**
+ * The notice for audits a first run could not fit. The audits-at-head
+ * dispatch runs only the owed audits at this head, and merge-guard accepts
+ * its record; a re-run of all jobs would repeat the whole run for them.
+ * @param {{deferred: string[]}} plan
+ * @param {{repo: string, pr: string, head: string}} target
+ */
+export function deferredMessage(plan, {repo, pr, head}) {
+  const command = `gh workflow run audits-at-head.yml -R ${repo} -f pr=${pr} -f head=${head}`;
+  return {
+    annotation: `::warning title=Audits not yet run::${plan.deferred.length} owed audit spec files did not run: four legs of ten minutes cannot hold every owed audit. Dispatch audits-at-head for this head: it runs only the audits this change owes, at this head, and merge-guard accepts its record. ${command}`,
+    summary: `Not yet run (${plan.deferred.length}). Dispatch audits-at-head for this head; it runs only the audits this change owes, at this head:\n\n\`${command}\``,
+  };
+}
+
 export const TOO_LARGE = 'diff too large to scope (>3,000 files); split the PR';
 export const UNDECIDED =
   'the changed files could not be read; re-run all jobs at this head';
@@ -281,8 +306,9 @@ export function undecidedMessage(plan, truncated) {
 }
 
 /**
- * The legs job's matrix: one entry per planned leg, or a single leg that only
- * says it has no share.
+ * The legs job's matrix: one entry per planned leg. A plan with no leg gives
+ * one entry: a pull request's legs job reads the count and starts no leg, and
+ * the at-head dispatch's one leg only says it has no share.
  * @param {number} count
  */
 export function legsFor(count) {
@@ -321,6 +347,11 @@ function main() {
   const changed = everything
     ? []
     : fs.readFileSync(changedFile, 'utf8').split('\n').filter(Boolean);
+  const target = {
+    repo: process.env.GITHUB_REPOSITORY || '<owner>/<repo>',
+    pr: process.env.PR_NUMBER || '<pull request>',
+    head: process.env.ASTRYX_HEAD_SHA || '<head>',
+  };
   const plan = planDependentAudits({
     changed,
     primitives: readPrimitives(root),
@@ -361,9 +392,7 @@ function main() {
     if (plan.everything) {
       console.log(undecidedMessage(plan, truncated).annotation);
     } else if (plan.deferred.length > 0) {
-      console.log(
-        `::warning title=Audits not yet run::${plan.deferred.length} owed audit spec files do not fit three legs of ten minutes. Re-run all jobs at this head to run every owed audit; merge-guard merges only on a run that ran them all.`,
-      );
+      console.log(deferredMessage(plan, target).annotation);
       console.log('Not yet run:');
       for (const file of plan.deferred) console.log(`  ${file}`);
     }
@@ -391,7 +420,7 @@ function main() {
         (plan.everything
           ? `${undecidedMessage(plan, truncated).summary}\n\n${list(plan.deferred)}\n`
           : plan.deferred.length
-            ? `Not yet run (${plan.deferred.length}); re-run all jobs at this head:\n\n${list(plan.deferred)}\n`
+            ? `${deferredMessage(plan, target).summary}\n\n${list(plan.deferred)}\n`
             : 'Every owed audit ran.\n'),
     );
   }

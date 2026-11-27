@@ -1,9 +1,26 @@
-Results for "experimental" (3)
+Results for "experimental" (19)
+name:        author-a-theme
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs author-a-theme --index
+parent:      pnpm exec astryx docs guides
+name:        author-a-theme
+section:     creating-a-custom-theme
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs author-a-theme creating-a-custom-theme
+parent:      pnpm exec astryx docs author-a-theme --index
 name:        authoring/field-reference
 section:     config
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs authoring/field-reference config
+parent:      pnpm exec astryx docs authoring/field-reference --index
+name:        authoring/field-reference
+section:     reference-doc
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs authoring/field-reference reference-doc
 parent:      pnpm exec astryx docs authoring/field-reference --index
 name:        authoring/field-reference
 section:     schema-doc
@@ -17,3 +34,75 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs authoring/field-reference template-doc
 parent:      pnpm exec astryx docs authoring/field-reference --index
+name:        cli/api/functions/theme-add
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/api/functions/theme-add
+parent:      pnpm exec astryx docs cli/api/functions
+name:        cli/commands/theme
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/commands/theme
+parent:      pnpm exec astryx docs cli/commands
+name:        cli/commands/theme-add
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/commands/theme-add
+parent:      pnpm exec astryx docs cli/commands
+name:        cli/experimental/export-pages
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/experimental/export-pages --index
+parent:      pnpm exec astryx docs cli/experimental
+name:        cli/experimental/share-a-page
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/experimental/share-a-page --index
+parent:      pnpm exec astryx docs cli/experimental
+name:        styling/tokens-and-setup
+section:     nextjs-webpack
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs styling/tokens-and-setup nextjs-webpack
+parent:      pnpm exec astryx docs styling/tokens-and-setup --index
+name:        theme
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme --index
+parent:      pnpm exec astryx docs guides
+name:        theme
+section:     make-or-change
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme make-or-change
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     look-after-each-change
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme look-after-each-change
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     denser-or-roomier
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme denser-or-roomier
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     one-kind-of-part
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme one-kind-of-part
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     values-a-part-shows
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme values-a-part-shows
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     no-app-yet
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme no-app-yet
+parent:      pnpm exec astryx docs theme --index

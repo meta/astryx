@@ -35,6 +35,9 @@ const execute = new Function(
 // than the decision helper.
 const trustedSha = 'cccccccccccccccccccccccccccccccccccccccc';
 const oldBaseSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+// Each head was pushed at PUSHED_AT (its first check suite); reviews come after.
+const PUSHED_AT = '2026-11-20T10:00:00Z';
+const REVIEWED_AT = '2026-11-20T11:00:00Z';
 const helperPath = '.github/scripts/review-signal-decision.cjs';
 const head1 = '1111111111111111111111111111111111111111';
 const head2 = '2222222222222222222222222222222222222222';
@@ -43,6 +46,7 @@ const review = (state, commitId = head2) => ({
   user: {login: 'engineer'},
   state,
   commit_id: commitId,
+  submitted_at: REVIEWED_AT,
 });
 const gateStatus = (state, description) => ({
   context: 'review-required',
@@ -62,6 +66,7 @@ const appReview = (state, commitId = head2) => ({
   user: {login: APP, type: 'Bot'},
   state,
   commit_id: commitId,
+  submitted_at: REVIEWED_AT,
 });
 const ungatedSuccess = gateStatus('success', 'No code review required.');
 // The spec-owner job's decision for a PR that changes no spec record.
@@ -82,6 +87,7 @@ function harness(
     statuses = [pendingGate],
     reviewApp = '',
     permission = 'write',
+    author = {login: 'author', type: 'User'},
   } = {},
 ) {
   const calls = [];
@@ -90,7 +96,7 @@ function harness(
     number: 17,
     head: {sha: head2},
     base: {sha: oldBaseSha},
-    user: {login: 'author', type: 'User'},
+    user: author,
     labels: labels.map(name => ({name})),
   };
   const methods = {
@@ -114,6 +120,9 @@ function harness(
         listReviews: methods.listReviews,
       },
       repos: {
+        getCommit: async () => ({
+          data: {commit: {committer: {date: '2026-11-19T08:00:00Z'}}},
+        }),
         getContent: async ({ref, path: filePath}) => {
           // The shared rate-limit wait, read before anything else.
           if (filePath === '.github/scripts/lib/rate-limit-backoff.cjs') {
@@ -154,6 +163,9 @@ function harness(
         removeLabel: async input => calls.push({type: 'remove-label', input}),
       },
       checks: {
+        listSuitesForRef: async () => ({
+          data: {check_suites: [{created_at: PUSHED_AT}]},
+        }),
         listForRef: async () => ({data: {check_runs: []}}),
         update: async input => calls.push({type: 'check-update', input}),
       },
@@ -562,4 +574,33 @@ describe('review-clear review-app approval for write-access authors', () => {
       expect.objectContaining({state: 'pending'}),
     ]);
   });
+});
+
+describe("review-clear re-gates a trainer pass on the review app's own pull request (spec:AST-030 FR15)", () => {
+  it.each([
+    ['a request for changes', 'CHANGES_REQUESTED'],
+    ['a dismissal', 'DISMISSED'],
+  ])(
+    'sets review-required pending again after %s of the trainer pass',
+    async (_name, state) => {
+      const h = harness([review('APPROVED'), review(state)], {
+        labels: [],
+        statuses: [clearedGate],
+        reviewApp: APP,
+        author: {login: APP, type: 'Bot'},
+      });
+
+      await run(h);
+
+      expect(h.calls).toContainEqual({
+        type: 'status',
+        input: expect.objectContaining({
+          sha: head2,
+          context: 'review-required',
+          state: 'pending',
+          description: 'Waiting on code review after approval withdrawal.',
+        }),
+      });
+    },
+  );
 });

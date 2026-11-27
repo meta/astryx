@@ -280,4 +280,115 @@ describe('sharedResizeObserver', () => {
     expect(cb1).not.toHaveBeenCalled();
     expect(cb2).not.toHaveBeenCalled();
   });
+
+  describe('observeResizeAfterLayout', () => {
+    it('skips the call observeResize makes on registration', async () => {
+      const {observeResizeAfterLayout} = await import('./sharedResizeObserver');
+      const el = document.createElement('div');
+      const cb = vi.fn();
+
+      const unsubscribe = observeResizeAfterLayout(el, cb);
+      await Promise.resolve();
+
+      expect(unsubscribe).not.toBeNull();
+      expect(mockObserve).toHaveBeenCalledWith(el);
+      expect(cb).not.toHaveBeenCalled();
+      unsubscribe?.();
+    });
+
+    it("passes on the observer's notifications", async () => {
+      const {observeResizeAfterLayout} = await import('./sharedResizeObserver');
+      const el = document.createElement('div');
+      const cb = vi.fn();
+      const unsubscribe = observeResizeAfterLayout(el, cb);
+      const entry = {target: el} as unknown as ResizeObserverEntry;
+
+      capturedCallback([entry], {} as ResizeObserver);
+
+      expect(cb).toHaveBeenCalledTimes(1);
+      expect(cb).toHaveBeenCalledWith(entry);
+      unsubscribe?.();
+    });
+
+    it('measures an element another subscriber already observes in a microtask, with no entry', async () => {
+      const {observeResize, observeResizeAfterLayout} =
+        await import('./sharedResizeObserver');
+      const el = document.createElement('div');
+      const unsubscribePeer = observeResize(el, vi.fn());
+      const cb = vi.fn();
+
+      const unsubscribe = observeResizeAfterLayout(el, cb);
+
+      // Not where it registers: the microtask after it.
+      expect(cb).not.toHaveBeenCalled();
+      await Promise.resolve();
+      expect(cb).toHaveBeenCalledTimes(1);
+      expect(cb).toHaveBeenCalledWith(null);
+      unsubscribe?.();
+      unsubscribePeer();
+    });
+
+    it('a registration that ends first is not measured in the microtask', async () => {
+      const {observeResize, observeResizeAfterLayout} =
+        await import('./sharedResizeObserver');
+      const el = document.createElement('div');
+      const unsubscribePeer = observeResize(el, vi.fn());
+      const cb = vi.fn();
+
+      const unsubscribe = observeResizeAfterLayout(el, cb);
+      unsubscribe?.();
+      await Promise.resolve();
+
+      expect(cb).not.toHaveBeenCalled();
+      unsubscribePeer();
+    });
+
+    it('returns null where no ResizeObserver exists', async () => {
+      const {observeResizeAfterLayout} = await import('./sharedResizeObserver');
+      const saved = global.ResizeObserver;
+      // @ts-expect-error -- jsdom has no ResizeObserver
+      delete global.ResizeObserver;
+      try {
+        expect(
+          observeResizeAfterLayout(document.createElement('div'), vi.fn()),
+        ).toBeNull();
+      } finally {
+        global.ResizeObserver = saved;
+      }
+    });
+  });
+
+  it('splits the first delivery from later notifications', async () => {
+    const {splitFirstResizeDelivery} = await import('./sharedResizeObserver');
+    const onFirst = vi.fn();
+    const onLater = vi.fn();
+    const onResize = splitFirstResizeDelivery(onFirst, onLater);
+
+    // One delivery: the first notification measures, the rest do nothing.
+    onResize();
+    onResize();
+    onResize();
+    expect(onFirst).toHaveBeenCalledTimes(1);
+    expect(onLater).not.toHaveBeenCalled();
+
+    // A later delivery.
+    await Promise.resolve();
+    onResize();
+    onResize();
+    expect(onFirst).toHaveBeenCalledTimes(1);
+    expect(onLater).toHaveBeenCalledTimes(2);
+  });
+
+  it('reaches later notifications when the first measurement throws', async () => {
+    const {splitFirstResizeDelivery} = await import('./sharedResizeObserver');
+    const onLater = vi.fn();
+    const onResize = splitFirstResizeDelivery(() => {
+      throw new Error('measure failed');
+    }, onLater);
+
+    expect(onResize).toThrow('measure failed');
+    await Promise.resolve();
+    onResize();
+    expect(onLater).toHaveBeenCalledTimes(1);
+  });
 });

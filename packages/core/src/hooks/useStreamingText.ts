@@ -4,7 +4,7 @@
 
 /**
  * @file useStreamingText.ts
- * @input React state, effects and refs; useMediaQuery; useTheme
+ * @input React state, effects and refs; useReducesMotion; useTheme
  * @output useStreamingText hook for smooth text streaming
  * @position Core hook; smooths bursty streamed text into a steady reveal.
  *   Timing comes from the motion tokens, with defaults outside a theme.
@@ -15,7 +15,7 @@
  */
 
 import {useEffect, useMemo, useRef, useState} from 'react';
-import {useMediaQuery} from './useMediaQuery';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {useTheme} from '../theme/useTheme';
 
 /**
@@ -145,43 +145,44 @@ export function useStreamingText(
     return Math.max(4, Math.round(tick));
   }, [token, speed]);
 
-  const [displayedLen, setDisplayedLen] = useState(0);
+  // Where the reveal restarts: at 0 on a clear (a new message), at the whole
+  // text on a stream's end. Adjusted during render, and only then, never per
+  // chunk. State, not refs: a render React discards takes its adjustment with
+  // it. The frame clock alone advances `revealed`, which counts only within
+  // its restart's epoch.
+  const [restart, setRestart] = useState({epoch: 0, len: 0});
+  const [revealed, setRevealed] = useState({epoch: 0, len: 0});
+  const displayedLen =
+    revealed.epoch === restart.epoch ? revealed.len : restart.len;
   const targetRef = useRef(targetText);
-  const displayedLenRef = useRef(0);
   const lastTickRef = useRef(0);
   const rafRef = useRef<number | null>(null);
 
   targetRef.current = targetText;
 
-  // Reset when target clears (new message)
-  const prevTargetLenRef = useRef(targetText.length);
-  if (targetText.length !== prevTargetLenRef.current) {
-    prevTargetLenRef.current = targetText.length;
-    if (targetText.length === 0 && displayedLen !== 0) {
-      displayedLenRef.current = 0;
-      setDisplayedLen(0);
-    }
+  if (targetText.length === 0 && displayedLen !== 0) {
+    setRestart(previous => ({epoch: previous.epoch + 1, len: 0}));
   }
-
-  const prevIsStreamingRef = useRef(isStreaming);
-  if (isStreaming !== prevIsStreamingRef.current) {
-    prevIsStreamingRef.current = isStreaming;
+  const [wasStreaming, setWasStreaming] = useState(isStreaming);
+  if (isStreaming !== wasStreaming) {
+    setWasStreaming(isStreaming);
     if (!isStreaming && targetText.length > 0) {
-      displayedLenRef.current = targetText.length;
-      setDisplayedLen(targetText.length);
+      setRestart(previous => ({
+        epoch: previous.epoch + 1,
+        len: targetText.length,
+      }));
     }
   }
 
-  // Reduced motion skips the progressive reveal and shows the full text.
-  // useMediaQuery follows a preference change mid-stream.
-  const prefersReducedMotion = useMediaQuery(
-    '(prefers-reduced-motion: reduce)',
-  );
+  // Reduced motion skips the progressive reveal and shows the full text. It is
+  // the person's setting, followed live so a change mid-stream takes effect,
+  // or a theme's reducedMotion: 'always'.
+  const reducesMotion = useReducesMotion();
 
   // Syncs the revealed text with an animation-frame clock while the text
   // streams.
   useEffect(() => {
-    if (!isStreaming || speed === 'instant' || prefersReducedMotion) {
+    if (!isStreaming || speed === 'instant' || reducesMotion) {
       return;
     }
 
@@ -190,14 +191,17 @@ export function useStreamingText(
       if (elapsed >= tickMs) {
         lastTickRef.current = now;
         const target = targetRef.current;
-        const currentLen = displayedLenRef.current;
-
-        if (currentLen < target.length) {
-          const nextLen = Math.min(currentLen + charsPerTick, target.length);
-
-          displayedLenRef.current = nextLen;
-          setDisplayedLen(nextLen);
-        }
+        setRevealed(previous => {
+          const currentLen =
+            previous.epoch === restart.epoch ? previous.len : restart.len;
+          if (currentLen >= target.length) {
+            return previous;
+          }
+          return {
+            epoch: restart.epoch,
+            len: Math.min(currentLen + charsPerTick, target.length),
+          };
+        });
       }
 
       rafRef.current = requestAnimationFrame(tick);
@@ -210,9 +214,9 @@ export function useStreamingText(
         rafRef.current = null;
       }
     };
-  }, [isStreaming, charsPerTick, tickMs, speed, prefersReducedMotion]);
+  }, [isStreaming, charsPerTick, tickMs, speed, reducesMotion, restart]);
 
-  if (!isStreaming || speed === 'instant' || prefersReducedMotion) {
+  if (!isStreaming || speed === 'instant' || reducesMotion) {
     return targetText;
   }
 

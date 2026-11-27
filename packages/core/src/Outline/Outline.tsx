@@ -25,6 +25,7 @@
 
 import {useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {cutText} from '../utils/textDirection';
 import {
   colorVars,
   durationVars,
@@ -50,6 +51,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Outline/Outline.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 export type {OutlineItem} from './types';
@@ -67,7 +73,10 @@ export interface OutlineProps extends BaseProps<HTMLElement> {
   /** Called when the active item changes from scroll-spy or click. */
   onActiveIdChange?: (id: string) => void;
 
-  /** Accessible label for the nav landmark. @default 'Table of contents' */
+  /**
+   * Accessible label for the nav landmark. A caller's aria-label wins over it.
+   * @default 'Table of contents'
+   */
   label?: string;
 
   /**
@@ -119,7 +128,8 @@ export interface OutlineProps extends BaseProps<HTMLElement> {
   scrollContainerRef?: React.RefObject<HTMLElement | null>;
 
   /**
-   * Whether activating an item smooth-scrolls to it. Set to false to own the
+   * Whether activating an item scrolls to it: smoothly, or at once under
+   * reduced motion. Set to false to own the
    * scrolling yourself (virtualized content, a router) — the Outline still
    * updates the active item, the hash, and the navigate callbacks, but performs
    * no scroll and suppresses the anchor's default jump.
@@ -171,7 +181,13 @@ const styles = stylex.create({
     top: 'anchor(--outline-active top, 0px)',
     height: 'anchor-size(--outline-active height, 0px)',
     transitionProperty: 'top, height',
-    transitionDuration: durationVars['--duration-fast-min'],
+    // Under reduced motion the indicator does not travel on any pointer.
+    transitionDuration: {
+      default: durationVars['--duration-fast-min'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   activeAnchor: {
@@ -206,7 +222,14 @@ const styles = stylex.create({
     position: 'relative',
     textAlign: 'start',
     textDecoration: 'none',
-    transitionDuration: durationVars['--duration-fast'],
+    // Under reduced motion a hover or current color changes at once on any
+    // pointer.
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
     transitionProperty: 'background-color, color',
     transitionTimingFunction: easeVars['--ease-standard'],
     width: '100%',
@@ -346,11 +369,19 @@ export function Outline({
   style,
   ref,
   'data-testid': testId,
+  'aria-label': ariaLabel,
   ...props
 }: OutlineProps) {
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(items)) {
+    throw devPropError(
+      'Outline',
+      'items',
+      "must be an array of headings, for example items={[{id: 'intro', label: 'Introduction', level: 1}]}.",
+    );
+  }
   const pressable = usePressFeedback();
   const t = useComponentTranslator();
-  const label = labelFromProps ?? t('@astryx.outline.label');
+  const label = ariaLabel ?? labelFromProps ?? t('@astryx.outline.label');
   const rootRef = useRef<HTMLElement | null>(null);
   const LinkComponent = useLinkComponent();
   const {activeId: resolvedActiveId, scrollTo} = useScrollSpy({
@@ -459,7 +490,7 @@ export function Outline({
                     isActive && styles.activeAnchor,
                   ),
                 )}>
-                <span {...stylex.props(styles.label)}>{item.label}</span>
+                {cutText(item.label, styles.label)}
               </LinkComponent>
             </li>
           );

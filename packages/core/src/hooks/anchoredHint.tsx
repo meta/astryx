@@ -32,9 +32,8 @@ import type {ContextLayerReturn} from '../Layer/useLayer';
 
 const styles = stylex.create({
   hint: {
-    // Top layer + anchor positioned
+    // Top layer + anchor positioned. The layer runtime owns the insets.
     position: 'fixed',
-    inset: 'auto',
     margin: 0,
     borderWidth: 0,
     borderStyle: 'none',

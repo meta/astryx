@@ -4,7 +4,8 @@
 
 /**
  * @file CheckboxInput.tsx
- * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip,
+ * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip
+ *   (only while a disabled message can show),
  *   CheckboxRowPressContext (a row around the checkbox that owns its press)
  * @output Exports CheckboxInput component, CheckboxInputProps
  * @position Core implementation; consumed by index.ts, tested by CheckboxInput.test.tsx
@@ -29,6 +30,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -47,6 +49,7 @@ import type {IconType} from '../Icon';
 import type {InputStatus} from '../Field/types';
 import {Spinner} from '../Spinner/Spinner';
 import {useTooltip} from '../Tooltip/useTooltip';
+import {TooltipDescriptionIdContext} from '../Tooltip/tooltipPresentInterest';
 import {mergeProps} from '../utils/mergeProps';
 import {rtlStyles} from '../utils/rtlStyles';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
@@ -60,8 +63,10 @@ import {useIndicator} from '../Indicator/useIndicator';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
+import {indicatorPressPaintStyles} from '../privateAttributes/press.stylex';
 import {registerBoxHold} from '../utils/boxHold';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {
@@ -76,22 +81,15 @@ registerEnglishFallback(english);
 // none of its code.
 registerBoxHold();
 
-/** Written by the touch press controller while the row is pressed. */
-const PRESSED_ON = '[data-astryx-press="on"]';
-/** Written by the touch press controller for the press's release. */
-const PRESSED_FADING = '[data-astryx-press="fading"]';
-
-// The touch press's paint, declared by the shared overlay styles on the
-// element the controller writes to (`pressedAlpha`) at the press's strength,
-// 1 while on and 1 → 0 over the release, and inherited resolved by the layer
-// that paints it. See interactionOverlay.stylex.ts.
-const pressedOverlayImage = 'var(--_press-paint-image)';
-
 const styles = stylex.create({
   container: {
     display: 'flex',
     alignItems: 'center',
-    gap: spacingVars['--spacing-2'],
+    // The room between the box and its label. A theme sets it with gap on
+    // the `checkbox-input` target, which the compiler hands to this row as
+    // --_checkbox-input-gap (derivedVarRegistry): the target is the outer
+    // field, which also holds the status message below the row.
+    gap: `var(--_checkbox-input-gap, ${spacingVars['--spacing-2']})`,
   },
   containerLabelHidden: {
     gap: 0,
@@ -100,26 +98,18 @@ const styles = stylex.create({
   hitAreaHost: {
     position: {default: null, '@media (pointer: coarse)': 'relative'},
   },
-  // An indicator in another package may not name this row's private press
-  // attribute. So the row hands its touch press image down to an indicator
-  // that paints its own press, but only in its own press states. A pressed
-  // outer row hands down nothing, as for the built-in box. The
-  // property has no default: a layered stylesheet ranks a default above the
-  // arms. Only this row declares it. A menu item paints its own press, so a
-  // mapped indicator there paints none.
-  indicatorPressImage: {
-    '--_indicator-press-image': {
-      default: null,
-      [PRESSED_ON]: 'var(--_press-paint-image)',
-      [PRESSED_FADING]: 'var(--_press-paint-image)',
-    },
-  },
   // Under a row that owns the press (CheckboxRowPressContext), this row is
   // never pressed. So it hands down that row's press paint, which the
   // built-in box reads too.
   indicatorRowPressImage: {
     '--_indicator-press-image': 'var(--_checkbox-row-press-paint, none)',
+    // The row paints every press, so the indicator draws no `:active` fill.
+    '--_indicator-active-press': 'transparent',
   },
+  // The slot is as big as the indicator it holds. So a box a theme sizes,
+  // or a replacement indicator, sets the row's spacing, and the pressed layer
+  // fits it. The hidden input keeps the full size for its hit area
+  // (wrapperSizeStyles), centered on the box.
   checkboxWrapper: {
     position: 'relative',
     display: 'flex',
@@ -131,12 +121,13 @@ const styles = stylex.create({
   // The owner paints this layer over the resolved indicator, so a plain theme
   // replacement keeps the pressed feedback. An indicator with
   // `indicatorPressScope` paints its own press from what the row hands down,
-  // so this layer stays off over it. A mouse keeps `:active` (see
-  // interactionOverlay.stylex.ts). Under a coarse pointer that arm is dropped.
-  // The touch press controller then writes the press attribute on the row.
-  // This layer reads it off the scope marker, as the hover tint does. Under a
-  // row that owns the press (CheckboxRowPressContext), the row's own checkbox
-  // paints that row's press paint instead (indicatorRowPressOverlay).
+  // so this layer stays off over it. The press controller writes the press
+  // attribute on the row for every pointer: a finger, a mouse and a pen. The
+  // layer's paint (`indicatorPressPaintStyles`) reads it off the scope marker,
+  // as the hover tint does. `:active` paints only a press the controller does
+  // not paint, and under a coarse pointer it is dropped. Under a row that owns
+  // the press (CheckboxRowPressContext), the row's own checkbox paints that
+  // row's press paint instead (indicatorRowPressOverlay).
   indicatorPressOverlay: {
     '::after': {
       // `when.descendant` takes a pseudo-class; `:is(*)` matches any marked
@@ -149,36 +140,15 @@ const styles = stylex.create({
       inset: 0,
       borderRadius: radiusVars['--radius-inner'],
       pointerEvents: 'none',
-      backgroundColor: {
-        default: 'transparent',
-        [stylex.when.ancestor(':active', indicatorScope)]: {
-          default: colorVars['--color-overlay-pressed'],
-          '@media (pointer: coarse)': 'transparent',
-        },
-      },
-      // The touch press, as an image layer over the colour: an image change is
-      // discrete, so no transition can delay the onset, and the strength the
-      // row's `pressedAlpha` arms own (1 while on, 1 → 0 over the release) is
-      // what moves. Coarse pointers only, like the drop above.
-      backgroundImage: {
-        default: null,
-        [stylex.when.ancestor(PRESSED_ON, indicatorScope)]: {
-          default: null,
-          '@media (pointer: coarse)': pressedOverlayImage,
-        },
-        [stylex.when.ancestor(PRESSED_FADING, indicatorScope)]: {
-          default: null,
-          '@media (pointer: coarse)': pressedOverlayImage,
-        },
-      },
     },
   },
   // The row's own checkbox when its row owns the press
   // (CheckboxRowPressContext). It paints only the paint that row declares
-  // (`--_checkbox-row-press-paint`). No outer row, card or fine pointer
-  // reaches it.
+  // (`--_checkbox-row-press-paint`), so it draws no `:active` fill. No outer
+  // row or card reaches it.
   indicatorRowPressOverlay: {
     '::after': {
+      backgroundColor: 'transparent',
       backgroundImage: 'var(--_checkbox-row-press-paint, none)',
     },
   },
@@ -426,13 +396,10 @@ export function CheckboxInput({
   // native disabled attribute (spec:AST-085 FR1). Value mutation is blocked by
   // the click and onChange guards on the input.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
-    placement: 'above',
-    // The container row is not naturally focusable; focusin bubbles up from the
-    // native checkbox, so always attach focus listeners.
-    focusTrigger: 'always',
-    isEnabled: showsDisabledMessage,
-  });
+  // A hidden copy of the disabled reason describes the input from the first
+  // markup on. The tooltip mounts only while it can show, so a
+  // checkbox with no reason runs none of its work.
+  const disabledMessageID = useId();
 
   // The checkbox visual is an indicator: a theme can restyle it through the
   // canonical `checkbox-indicator` target or replace the component outright.
@@ -456,13 +423,10 @@ export function CheckboxInput({
   // stops.
   const watchRowHitArea = useTouchHitArea(hasHitArea);
   // The disabled-message tooltip listens for hover and focus on the whole
-  // row, a larger trigger. It anchors on the checkbox itself (below), so it
-  // shows next to the control. Its handlers check isEnabled, so the row
-  // always attaches them.
-  const rowRef = useMergedRefs(
-    disabledMessageTooltip.interactionRef,
-    watchRowHitArea,
-  );
+  // row, a larger trigger, and anchors on the checkbox itself, so it shows
+  // next to the control.
+  const rowElementRef = useRef<HTMLDivElement>(null);
+  const rowRef = useMergedRefs(rowElementRef, watchRowHitArea);
   // Where a press on the row itself began. A browser can move a tap's click
   // onto the row's edge, so the band is judged from the press.
   const pressPointRef = useRef<{x: number; y: number} | null>(null);
@@ -530,7 +494,7 @@ export function CheckboxInput({
     describedByParts.push(statusMessageID);
   }
   if (showsDisabledMessage) {
-    describedByParts.push(disabledMessageTooltip.describedBy);
+    describedByParts.push(disabledMessageID);
   }
   const ariaDescribedBy =
     describedByParts.length > 0 ? describedByParts.join(' ') : undefined;
@@ -556,10 +520,13 @@ export function CheckboxInput({
           // Hover and focus reach the checkbox visual through this ancestor
           // marker rather than props, so the whole row drives it.
           !isDisabled && indicatorScope,
+          // An indicator in another package may not name the private press
+          // attribute. So the row hands its press image down to an indicator
+          // that paints its own press (`indicatorPressPaintStyles.handDown`).
           !isDisabled &&
             (isRowPressSurface
               ? styles.indicatorRowPressImage
-              : styles.indicatorPressImage),
+              : indicatorPressPaintStyles.handDown),
           // The touch press's strength and release live on the row the
           // controller writes to; the layer over the checkbox box inherits
           // and paints it. Under a row that owns the press, the box inherits
@@ -573,9 +540,16 @@ export function CheckboxInput({
           {...(isDisabled ? undefined : pressBoxProps)}
           {...stylex.props(
             styles.checkboxWrapper,
-            wrapperSizeStyles[size],
             !isDisabled && styles.indicatorPressOverlay,
-            !isDisabled && isRowPressSurface && styles.indicatorRowPressOverlay,
+            // Under a row that owns the press, the row's own overlay paints
+            // instead of the owner's press paint.
+            !isDisabled &&
+              (isRowPressSurface
+                ? styles.indicatorRowPressOverlay
+                : [
+                    indicatorPressPaintStyles.activeFill,
+                    indicatorPressPaintStyles.image,
+                  ]),
           )}
           {...focusProps}>
           <input
@@ -583,12 +557,7 @@ export function CheckboxInput({
             // pointer events. It runs no caller handler except `onFocus` and
             // `onBlur`.
             {...withholdCallerHandlers(rest, isDisabled)}
-            ref={useMergedRefs(
-              ref,
-              indeterminateRef,
-              disabledMessageTooltip.positionRef,
-              inputRef,
-            )}
+            ref={useMergedRefs(ref, indeterminateRef, inputRef)}
             id={id}
             type="checkbox"
             // Withhold the name while disabled: the input stays focusable (not
@@ -626,7 +595,11 @@ export function CheckboxInput({
             onBlur={onBlur}
             aria-readonly={isReadOnly || undefined}
             aria-describedby={ariaDescribedBy}
-            aria-invalid={status?.type === 'error' ? true : undefined}
+            // Chromium reports an unchecked native-required checkbox invalid
+            // before any interaction; the invalid state follows status instead.
+            aria-invalid={
+              status?.type === 'error' ? true : isRequired ? false : undefined
+            }
             aria-busy={isBusy || undefined}
             {...stylex.props(
               styles.input,
@@ -683,10 +656,55 @@ export function CheckboxInput({
           variant="detached"
         />
       )}
-      {showsDisabledMessage &&
-        disabledMessageTooltip.renderTooltip(disabledMessage)}
+      {/* The tooltip's description is the reason the input's
+          aria-describedby names: a hidden copy until the tooltip first
+          mounts, then the tooltip's text, so the reason renders once. */}
+      {isDisabled && disabledMessage ? (
+        <TooltipDescriptionIdContext value={disabledMessageID}>
+          <DisabledMessageTooltip
+            message={disabledMessage}
+            rowRef={rowElementRef}
+            inputRef={inputRef}
+          />
+        </TooltipDescriptionIdContext>
+      ) : null}
     </div>
   );
+}
+
+interface DisabledMessageTooltipProps {
+  readonly message: string;
+  readonly rowRef: RefObject<HTMLElement | null>;
+  readonly inputRef: RefObject<HTMLElement | null>;
+}
+
+/**
+ * A disabled checkbox's message as a tooltip: hover or focus anywhere on the
+ * row opens it above the checkbox.
+ */
+function DisabledMessageTooltip({
+  message,
+  rowRef,
+  inputRef,
+}: DisabledMessageTooltipProps): ReactNode {
+  const tooltip = useTooltip({
+    placement: 'above',
+    // The container row is not naturally focusable; focusin bubbles up from the
+    // native checkbox, so always attach focus listeners.
+    focusTrigger: 'always',
+  });
+  const {interactionRef, positionRef} = tooltip;
+  // Attaches the tooltip to the row and the checkbox, which the parent
+  // renders.
+  useIsomorphicLayoutEffect(() => {
+    interactionRef(rowRef.current);
+    positionRef(inputRef.current);
+    return () => {
+      interactionRef(null);
+      positionRef(null);
+    };
+  }, [interactionRef, positionRef, rowRef, inputRef]);
+  return tooltip.renderTooltip(message);
 }
 
 CheckboxInput.displayName = 'CheckboxInput';

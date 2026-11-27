@@ -86,7 +86,55 @@ beforeEach(() => {
   };
 });
 
+/** A pointer press on `target`, as the press controller and React read it. */
+function pointerDown(
+  target: Element,
+  init: {pointerType: string; button: number; ctrlKey?: boolean},
+): void {
+  fireEvent.pointerDown(target, {pointerId: 1, ...init});
+  fireEvent.pointerUp(target, {pointerId: 1, ...init});
+}
+
+/** Runs `check` on macOS, where a ctrl-click is the context click. */
+function onApplePlatform(check: () => void): void {
+  Object.defineProperty(navigator, 'platform', {
+    configurable: true,
+    get: () => 'MacIntel',
+  });
+  try {
+    check();
+  } finally {
+    Reflect.deleteProperty(navigator, 'platform');
+  }
+}
+
 describe('CheckboxInput', () => {
+  it("paints a primary mouse press at once, and none for a macOS ctrl-click or a pen's barrel button", () => {
+    render(<CheckboxInput label="Accept" value={false} onChange={() => {}} />);
+    const target = screen.getByRole('checkbox');
+    const row = target.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    onApplePlatform(() =>
+      pointerDown(target, {pointerType: 'mouse', button: 0, ctrlKey: true}),
+    );
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    pointerDown(target, {pointerType: 'pen', button: 2});
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    fireEvent.pointerDown(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+  });
+
   it('calls onChange with new checked state when clicked', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
@@ -531,14 +579,50 @@ describe('CheckboxInput', () => {
           disabledMessage="Terms are managed by your administrator"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent(
+      // The tooltip's layer mounts at its first show.
+      const tooltip = () => screen.getByRole('tooltip', h);
+      fireEvent.mouseEnter(getRow());
+      fireEvent.pointerMove(getRow());
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
+      expect(tooltip()).toHaveTextContent(
         'Terms are managed by your administrator',
       );
-      fireEvent.mouseEnter(getRow());
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(getRow());
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(tooltip()).not.toHaveAttribute('popover-open'),
+      );
+    });
+
+    it('renders the reason once before and after its tooltip first shows, and the checkbox reads it once', async () => {
+      const REASON = 'Terms are managed by your administrator';
+      const holders = () =>
+        Array.from(document.body.querySelectorAll<HTMLElement>('*')).filter(
+          element =>
+            Array.from(element.childNodes).some(
+              node =>
+                node.nodeType === Node.TEXT_NODE && node.textContent === REASON,
+            ),
+        );
+      render(
+        <CheckboxInput
+          label="Accept terms"
+          value={false}
+          onChange={() => {}}
+          isDisabled
+          disabledMessage={REASON}
+        />,
+      );
+      const checkbox = screen.getByRole('checkbox', h);
+      expect(holders()).toHaveLength(1);
+      expect(checkbox).toHaveAccessibleDescription(REASON);
+      fireEvent.mouseEnter(getRow());
+      fireEvent.pointerMove(getRow());
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
+      expect(holders()).toHaveLength(1);
+      expect(screen.getByRole('tooltip', h)).toContainElement(holders()[0]);
+      expect(checkbox).toHaveAccessibleDescription(REASON);
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
@@ -552,10 +636,11 @@ describe('CheckboxInput', () => {
           disabledMessage="Terms are managed by your administrator"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('checkbox', h)).toHaveFocus();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -585,10 +670,11 @@ describe('CheckboxInput', () => {
         </>,
       );
       const checkbox = screen.getByRole('checkbox');
-      const tooltip = screen.getByRole('tooltip', h);
       const ids = checkbox.getAttribute('aria-describedby')!.split(' ');
       expect(ids).toContain('terms-hint');
-      expect(ids).toContain(tooltip.id);
+      expect(checkbox).toHaveAccessibleDescription(
+        'Required before checkout Terms are managed by your administrator',
+      );
     });
 
     it('does not render a tooltip when disabled without a reason', () => {
@@ -618,7 +704,7 @@ describe('CheckboxInput', () => {
       expect(checkbox).toHaveAttribute('aria-disabled', 'true');
     });
 
-    it('links the reason tooltip via aria-describedby', () => {
+    it('describes the checkbox with the reason exactly once', () => {
       render(
         <CheckboxInput
           label="Accept terms"
@@ -629,8 +715,35 @@ describe('CheckboxInput', () => {
         />,
       );
       const checkbox = screen.getByRole('checkbox', h);
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(checkbox.getAttribute('aria-describedby')).toContain(tooltip.id);
+      expect(checkbox).toHaveAccessibleDescription(
+        'Terms are managed by your administrator',
+      );
+    });
+
+    it('describes the input with the reason once, before and after the tooltip shows', async () => {
+      render(
+        <CheckboxInput
+          label="Accept terms"
+          value={false}
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Terms are managed by your administrator"
+        />,
+      );
+      const checkbox = screen.getByRole('checkbox', h);
+      // No layer before the first show; the hidden reason describes the input.
+      expect(screen.queryByRole('tooltip', h)).toBeNull();
+      expect(checkbox).toHaveAccessibleDescription(
+        'Terms are managed by your administrator',
+      );
+      fireEvent.mouseEnter(getRow());
+      fireEvent.pointerMove(getRow());
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
+      expect(checkbox).toHaveAccessibleDescription(
+        'Terms are managed by your administrator',
+      );
     });
 
     it('blocks toggling while focusable-disabled', async () => {
@@ -702,6 +815,44 @@ describe('CheckboxInput', () => {
       expect(checkbox).not.toBeChecked();
     });
   });
+  describe('required invalid state', () => {
+    it('exposes invalid only with an error status, while required still blocks submission', () => {
+      const {rerender} = render(
+        <form>
+          <CheckboxInput
+            label="Accept terms"
+            value={false}
+            onChange={() => {}}
+            isRequired
+          />
+        </form>,
+      );
+      const checkbox = screen.getByRole('checkbox');
+      expect(checkbox).toHaveAttribute('aria-invalid', 'false');
+      expect(checkbox).toBeRequired();
+      expect(checkbox.closest('form')!.checkValidity()).toBe(false);
+      rerender(
+        <form>
+          <CheckboxInput
+            label="Accept terms"
+            value={false}
+            onChange={() => {}}
+            isRequired
+            status={{type: 'error', message: 'Accept the terms to go on'}}
+          />
+        </form>,
+      );
+      expect(checkbox).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('leaves the invalid state unset on a box that is not required', () => {
+      render(
+        <CheckboxInput label="Newsletter" value={false} onChange={() => {}} />,
+      );
+      expect(screen.getByRole('checkbox')).not.toHaveAttribute('aria-invalid');
+    });
+  });
+
   describe('form participation', () => {
     it('submits under htmlName when checked', () => {
       const {container} = render(

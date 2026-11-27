@@ -5,8 +5,9 @@
 /**
  * @file sharedResizeObserver.ts
  * @input ResizeObserver API
- * @output Exports observeResize / unobserveResize for shared observation, and
- *   the internal isResizeObserved
+ * @output Exports observeResize / unobserveResize for shared observation,
+ *   observeResizeAfterLayout for a first measurement after layout, and the
+ *   internal isResizeObserved and splitFirstResizeDelivery
  * @position Utility; consumed by useTruncation, useOverflow, and any component
  *   that needs resize observation without creating per-instance observers
  *
@@ -18,6 +19,7 @@
  * SYNC: When modified, update:
  * - /packages/core/src/utils/index.ts (exports)
  * - /packages/core/src/Text/useTruncation.ts (primary consumer)
+ * - /packages/core/src/Lightbox/Lightbox.tsx (observeResizeAfterLayout)
  */
 
 type ResizeCallback = (entry: ResizeObserverEntry) => void;
@@ -104,6 +106,77 @@ export function observeResize(
     }
     isSubscribed = false;
     unobserveResize(element, callback);
+  };
+}
+
+/**
+ * Observe `element` as `observeResize` does, without the call it makes on
+ * registration. That call runs where the caller registers, such as React's
+ * commit, where a read forces a layout before the browser's own. The
+ * browser's first notification comes after it lays `element` out.
+ *
+ * An element another subscriber already observes gets no new first
+ * notification. So `onResize` runs in a microtask instead, with no entry, and
+ * the caller measures there. It does not run once the registration has ended.
+ *
+ * Returns null where no ResizeObserver exists (jsdom). The caller measures at
+ * once there.
+ */
+export function observeResizeAfterLayout(
+  element: Element,
+  onResize: (entry: ResizeObserverEntry | null) => void,
+): (() => void) | null {
+  if (typeof ResizeObserver === 'undefined') {
+    return null;
+  }
+  const wasObserved = isResizeObserved(element);
+  let isRegistered = false;
+  let isActive = true;
+  const unsubscribe = observeResize(element, entry => {
+    if (isRegistered) {
+      onResize(entry);
+    }
+  });
+  isRegistered = true;
+  if (wasObserved) {
+    queueMicrotask(() => {
+      if (isActive) {
+        onResize(null);
+      }
+    });
+  }
+  return () => {
+    isActive = false;
+    unsubscribe();
+  };
+}
+
+/**
+ * Returns a resize handler that calls `onFirst` for the first notification
+ * and `onLater` for each notification after its delivery. The rest of the
+ * first delivery calls nothing: when several boxes of one element group first
+ * report together, the first measurement already reads them all. The shared
+ * observer reports one delivery in one callback, and a microtask follows that
+ * callback, so the microtask ends the first delivery. Internal.
+ */
+export function splitFirstResizeDelivery(
+  onFirst: () => void,
+  onLater: () => void,
+): () => void {
+  let phase: 'waiting' | 'first' | 'later' = 'waiting';
+  return () => {
+    if (phase === 'later') {
+      onLater();
+      return;
+    }
+    if (phase === 'first') {
+      return;
+    }
+    phase = 'first';
+    queueMicrotask(() => {
+      phase = 'later';
+    });
+    onFirst();
   };
 }
 

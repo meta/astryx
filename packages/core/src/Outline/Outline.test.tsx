@@ -9,7 +9,13 @@
  * SYNC: When modified, update this header
  */
 
-import {useRef} from 'react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  useRef,
+  type ComponentProps,
+} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -23,6 +29,23 @@ const items: OutlineItem[] = [
   {id: 'install', label: 'Installation', level: 3},
   {id: 'api', label: 'API', level: 3},
 ];
+
+describe('Outline item labels', () => {
+  it('gives a Latin label its own direction, so a cut label keeps its start, and gives a right-to-left label its own right-to-left direction', () => {
+    render(
+      <div dir="rtl">
+        <Outline
+          items={[
+            {id: 'overview', label: 'Settings overview', level: 2},
+            {id: 'he', label: 'סקירת הגדרות', level: 2},
+          ]}
+        />
+      </div>,
+    );
+    expect(screen.getByText('Settings overview')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('סקירת הגדרות')).toHaveAttribute('dir', 'rtl');
+  });
+});
 
 describe('parseOutlineFromMarkdown', () => {
   it('extracts headings with generated ids', () => {
@@ -80,6 +103,37 @@ describe('Outline', () => {
     expect(
       screen.getByRole('navigation', {name: 'Table of contents'}),
     ).toBeInTheDocument();
+  });
+
+  it("names the nav with a caller's aria-label over label", () => {
+    render(
+      <Outline
+        items={items}
+        label="On this page"
+        aria-label="Guide sections"
+      />,
+    );
+    expect(
+      screen.getByRole('navigation', {name: 'Guide sections'}),
+    ).toBeInTheDocument();
+  });
+
+  it('forwards ref, DOM props, data-testid, and style to the nav', () => {
+    const ref = vi.fn();
+    render(
+      <Outline
+        items={items}
+        ref={ref}
+        id="page-outline"
+        data-testid="outline"
+        style={{maxWidth: 240}}
+      />,
+    );
+    const nav = screen.getByRole('navigation');
+    expect(ref).toHaveBeenCalledWith(nav);
+    expect(nav).toHaveAttribute('id', 'page-outline');
+    expect(screen.getByTestId('outline')).toBe(nav);
+    expect(nav).toHaveStyle({maxWidth: '240px'});
   });
 
   it('marks the controlled active item with aria-current', () => {
@@ -287,6 +341,24 @@ describe('Outline', () => {
     document.body.removeChild(intro);
     document.body.removeChild(install);
     document.body.removeChild(api);
+  });
+
+  it('reports nothing on mount while the first item is still the active one', () => {
+    // Not at the bottom of the page, and no heading has passed the line.
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      value: 4000,
+      configurable: true,
+    });
+    const onActiveIdChange = vi.fn();
+    // The hook resolves the active id from scroll position on mount. Its
+    // comparison starts from the first item, as the active state does.
+    render(<Outline items={items} onActiveIdChange={onActiveIdChange} />);
+    expect(screen.getByRole('link', {name: 'Introduction'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+    expect(onActiveIdChange).not.toHaveBeenCalled();
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight');
   });
 });
 
@@ -747,6 +819,77 @@ describe('Outline navigate callbacks', () => {
     window.location.hash = '';
   });
 
+  it('ends the first navigation at once when a second one starts', async () => {
+    const user = userEvent.setup();
+    const cleanup = mountHeadings();
+    const onNavigateStart = vi.fn();
+    const onNavigateEnd = vi.fn();
+
+    render(
+      <Outline
+        items={items}
+        onNavigateStart={onNavigateStart}
+        onNavigateEnd={onNavigateEnd}
+      />,
+    );
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    expect(onNavigateEnd).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('link', {name: 'API'}));
+    // The first navigation ends before the second scroll settles.
+    expect(onNavigateStart.mock.calls).toEqual([['install'], ['api']]);
+    expect(onNavigateEnd.mock.calls).toEqual([['install']]);
+
+    act(() => {
+      window.dispatchEvent(new Event('scrollend'));
+    });
+    expect(onNavigateEnd.mock.calls).toEqual([['install'], ['api']]);
+
+    cleanup();
+  });
+
+  it('does not fire onNavigateEnd after the Outline unmounts mid-scroll', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+    const cleanup = mountHeadings();
+    const onNavigateEnd = vi.fn();
+
+    const {unmount} = render(
+      <Outline items={items} onNavigateEnd={onNavigateEnd} />,
+    );
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    unmount();
+
+    act(() => {
+      window.dispatchEvent(new Event('scrollend'));
+      vi.advanceTimersByTime(5000);
+    });
+    expect(onNavigateEnd).not.toHaveBeenCalled();
+
+    cleanup();
+  });
+
+  it('does nothing for Space on a link whose target is missing', async () => {
+    const user = userEvent.setup();
+    window.location.hash = '';
+    const onNavigateStart = vi.fn();
+    const onNavigateEnd = vi.fn();
+
+    render(
+      <Outline
+        items={items}
+        onNavigateStart={onNavigateStart}
+        onNavigateEnd={onNavigateEnd}
+      />,
+    );
+    screen.getByRole('link', {name: 'Installation'}).focus();
+    await user.keyboard('[Space]');
+
+    expect(onNavigateStart).not.toHaveBeenCalled();
+    expect(onNavigateEnd).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('');
+  });
+
   it('does not fire callbacks for a modified (Cmd) click', async () => {
     const user = userEvent.setup();
     const cleanup = mountHeadings();
@@ -1059,6 +1202,72 @@ describe('Outline scroll scoping', () => {
   });
 });
 
+describe('Outline under reduced motion', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    window.scrollBy = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** The person prefers reduced motion; `pointer` names the primary pointer. */
+  function preferReducedMotion(pointer: 'fine' | 'coarse') {
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      query =>
+        ({
+          matches:
+            query === '(prefers-reduced-motion: reduce)' ||
+            (pointer === 'coarse' && query === '(pointer: coarse)'),
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }) as MediaQueryList,
+    );
+  }
+
+  it.each(['fine', 'coarse'] as const)(
+    'lands on the heading at once with a %s pointer',
+    async pointer => {
+      preferReducedMotion(pointer);
+      const user = userEvent.setup();
+      const cleanup = mountHeadings();
+      render(<Outline items={items} />);
+
+      await user.click(screen.getByRole('link', {name: 'Installation'}));
+
+      expect(
+        document.getElementById('install')!.scrollIntoView,
+      ).toHaveBeenCalledWith({behavior: 'instant', block: 'start'});
+      cleanup();
+    },
+  );
+
+  it('lands below a fixed header at once', async () => {
+    preferReducedMotion('fine');
+    const user = userEvent.setup();
+    const cleanup = mountHeadings();
+    vi.spyOn(
+      document.getElementById('install')!,
+      'getBoundingClientRect',
+    ).mockReturnValue({top: 500} as DOMRect);
+    render(<Outline items={items} offset={64} />);
+
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+
+    expect(window.scrollBy).toHaveBeenCalledWith({
+      top: 436,
+      behavior: 'instant',
+    });
+    cleanup();
+  });
+});
+
 describe('useOutlineFromDOM', () => {
   it('collects headings from DOM container', () => {
     function Demo() {
@@ -1084,5 +1293,134 @@ describe('useOutlineFromDOM', () => {
     expect(
       screen.getByText('2:intro:Intro|3:details:Details'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('Outline scroll spy, when React discards a render', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    // At the bottom of the page, a scroll makes the last item active.
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      value: 0,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight');
+  });
+
+  // A transition that suspends for good: React renders the new props, then
+  // keeps the committed tree and never commits that render.
+  const pending = new Promise<never>(() => {});
+  function Pending(): null {
+    use(pending);
+    return null;
+  }
+  function Screen({
+    isPending,
+    ...props
+  }: ComponentProps<typeof Outline> & {isPending: boolean}) {
+    return (
+      <Suspense fallback={null}>
+        <Outline {...props} />
+        {isPending ? <Pending /> : null}
+      </Suspense>
+    );
+  }
+  async function scrollAndWaitAFrame() {
+    await act(async () => {
+      window.dispatchEvent(new Event('scroll'));
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  }
+
+  it('reports a landed navigation to the committed onActiveIdChange', async () => {
+    const user = userEvent.setup();
+    const target = document.createElement('h2');
+    target.id = 'install';
+    document.body.appendChild(target);
+    const committed = vi.fn();
+    const discarded = vi.fn();
+    const {rerender} = render(
+      <Screen items={items} onActiveIdChange={committed} isPending={false} />,
+    );
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen items={items} onActiveIdChange={discarded} isPending />,
+        );
+      });
+    });
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    await act(async () => {
+      window.dispatchEvent(new Event('scrollend'));
+    });
+    expect(discarded).not.toHaveBeenCalled();
+    expect(committed).toHaveBeenLastCalledWith('install');
+    document.body.removeChild(target);
+  });
+
+  it('resolves a scroll against the committed items', async () => {
+    const onActiveIdChange = vi.fn();
+    const {rerender} = render(
+      <Screen
+        items={items}
+        onActiveIdChange={onActiveIdChange}
+        isPending={false}
+      />,
+    );
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen
+            items={items.slice(0, 2)}
+            onActiveIdChange={onActiveIdChange}
+            isPending
+          />,
+        );
+      });
+    });
+    await scrollAndWaitAFrame();
+    expect(onActiveIdChange).not.toHaveBeenCalledWith('install');
+    expect(screen.getByRole('link', {name: 'API'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+  });
+
+  it('compares a scroll with the committed active item', async () => {
+    const onActiveIdChange = vi.fn();
+    const {rerender} = render(
+      <Screen
+        items={items}
+        onActiveIdChange={onActiveIdChange}
+        isPending={false}
+      />,
+    );
+    await scrollAndWaitAFrame();
+    expect(screen.getByRole('link', {name: 'API'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+    onActiveIdChange.mockClear();
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen
+            items={items}
+            activeId="intro"
+            onActiveIdChange={onActiveIdChange}
+            isPending
+          />,
+        );
+      });
+    });
+    await scrollAndWaitAFrame();
+    // The committed item is still the active one, so nothing changes.
+    expect(onActiveIdChange).not.toHaveBeenCalled();
   });
 });

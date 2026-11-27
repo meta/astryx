@@ -164,6 +164,18 @@ export const PROGRESSBAR_FIXTURES: readonly ProgressbarFixture[] = [
     html: bar({value: 3, max: 5, label: 'Disk'}),
   },
   {
+    id: 'violating-valuetext-on-meter',
+    summary: 'formatted value text on a meter, not a progress bar',
+    facts: facts({value: 3, max: 5, valueText: '3 GB / 5 GB', name: 'Disk'}),
+    html: bar({
+      role: 'meter',
+      value: 3,
+      max: 5,
+      valueText: '3 GB / 5 GB',
+      label: 'Disk',
+    }),
+  },
+  {
     id: 'violating-valuetext-stale',
     summary:
       'a progress bar whose value text disagrees with its formatted value',
@@ -219,6 +231,11 @@ export const PROGRESSBAR_MUTATIONS: Readonly<
   'progressbar.value.text-exposed': [
     'violating-valuetext-missing',
     'violating-valuetext-stale',
+  ],
+  'progressbar.value.text-attribute': [
+    'violating-valuetext-missing',
+    'violating-valuetext-stale',
+    'violating-valuetext-on-meter',
   ],
   'progressbar.subtree.no-focusable-descendants': [
     'violating-focusable-mark-inside',

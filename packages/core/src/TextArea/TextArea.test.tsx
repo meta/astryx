@@ -2,7 +2,7 @@
 
 /**
  * @file TextArea.test.tsx
- * @input Uses vitest, @testing-library/react, TextArea component
+ * @input Uses vitest, @testing-library/react, react-dom/server, TextArea component
  * @output Unit tests for TextArea component behavior
  * @position Testing; validates TextArea.tsx implementation
  *
@@ -10,6 +10,7 @@
  */
 
 import {useState} from 'react';
+import {renderToString} from 'react-dom/server';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -19,6 +20,7 @@ import {TestIcon} from '../__tests__/TestIcon';
 import {TextArea} from './TextArea';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
 const RING = stylex
@@ -447,7 +449,7 @@ describe('TextArea', () => {
       const describedBy = textarea.getAttribute('aria-describedby');
       expect(describedBy).toBeTruthy();
       // The status message should be reachable via the described-by ID
-      const messageElement = screen.getByText('Too short');
+      const messageElement = screen.getByText('Too short').parentElement!;
       expect(messageElement).toHaveAttribute('id');
       expect(describedBy).toContain(messageElement.id);
     });
@@ -852,6 +854,109 @@ describe('TextArea', () => {
     });
   });
 
+  describe('htmlMaxLength prop', () => {
+    it('sets the native maxlength attribute', () => {
+      render(
+        <TextArea
+          label="Notes"
+          value=""
+          onChange={() => {}}
+          htmlMaxLength={400}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveAttribute('maxlength', '400');
+      // The prop name must not reach the DOM as an unknown attribute.
+      expect(textarea).not.toHaveAttribute('htmlmaxlength');
+    });
+
+    it('shows no character counter without maxLength', () => {
+      render(
+        <TextArea
+          label="Notes"
+          value="Hello"
+          onChange={() => {}}
+          htmlMaxLength={400}
+        />,
+      );
+      expect(screen.queryByText(/\d+\/\d+/)).not.toBeInTheDocument();
+      expect(screen.getByRole('textbox')).not.toHaveAttribute(
+        'aria-describedby',
+      );
+    });
+
+    it('keeps the counter on maxLength while the native limit comes from htmlMaxLength', () => {
+      render(
+        <TextArea
+          label="Notes"
+          value={'a'.repeat(150)}
+          onChange={() => {}}
+          maxLength={100}
+          htmlMaxLength={400}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveAttribute('maxlength', '400');
+      expect(screen.getByText('150/100')).toBeInTheDocument();
+      expect(textarea).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('does not truncate a controlled value longer than htmlMaxLength', () => {
+      render(
+        <TextArea
+          label="Notes"
+          value={'a'.repeat(50)}
+          onChange={() => {}}
+          htmlMaxLength={10}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveValue('a'.repeat(50));
+      expect(textarea).not.toHaveAttribute('aria-invalid');
+    });
+
+    it('renders no native maxlength when htmlMaxLength is omitted, including after the caller removes it', () => {
+      const {rerender} = render(
+        <TextArea label="Notes" value="" onChange={() => {}} />,
+      );
+      expect(screen.getByRole('textbox')).not.toHaveAttribute('maxlength');
+
+      rerender(
+        <TextArea
+          label="Notes"
+          value=""
+          onChange={() => {}}
+          htmlMaxLength={400}
+        />,
+      );
+      expect(screen.getByRole('textbox')).toHaveAttribute('maxlength', '400');
+
+      rerender(<TextArea label="Notes" value="" onChange={() => {}} />);
+      expect(screen.getByRole('textbox')).not.toHaveAttribute('maxlength');
+    });
+
+    it('is present in server-rendered markup', () => {
+      const html = renderToString(
+        <TextArea
+          label="Notes"
+          htmlName="notes"
+          value=""
+          onChange={() => {}}
+          htmlMaxLength={400}
+        />,
+      );
+      // React writes the attribute as `maxLength`. The HTML parser reads it as
+      // the native `maxlength`, so assert on the parsed element.
+      const host = document.createElement('div');
+      host.innerHTML = html;
+      expect(host.querySelector('textarea')).toHaveAttribute(
+        'maxlength',
+        '400',
+      );
+      expect(html).not.toMatch(/htmlmaxlength/i);
+    });
+  });
+
   describe('hasAutoFocus prop', () => {
     it('sets autofocus attribute when hasAutoFocus is true', () => {
       render(
@@ -1139,17 +1244,20 @@ describe('TextArea', () => {
 
       const textarea = screen.getByRole('textbox');
       const container = textarea.parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        );
       });
     });
 
@@ -1165,11 +1273,10 @@ describe('TextArea', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('textbox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
     });
 
@@ -1219,7 +1326,7 @@ describe('TextArea', () => {
         />,
       );
       const textarea = screen.getByRole('textbox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(textarea.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -1415,5 +1522,67 @@ describe('TextArea caller aria-labelledby', () => {
     expect(screen.getByRole('textbox', {name: 'Notes'})).not.toHaveAttribute(
       'aria-labelledby',
     );
+  });
+});
+
+describe('TextArea error without a message', () => {
+  const messagelessWarnings = (warn: {mock: {calls: unknown[][]}}) =>
+    warn.mock.calls.filter(call =>
+      String(call[0]).includes('an error status has no message'),
+    );
+
+  it('describes the field by hidden translated fallback text and warns once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const {rerender} = render(
+      <TextArea
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'error'}}
+      />,
+    );
+    const field = screen.getByRole('textbox', {name: 'Email'});
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveAccessibleDescription('Invalid value');
+    rerender(
+      <TextArea
+        label="Email"
+        value="x"
+        onChange={() => {}}
+        status={{type: 'error'}}
+      />,
+    );
+    expect(messagelessWarnings(warn)).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it('uses the caller message and no fallback when a message is given', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <TextArea
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'error', message: 'Enter an email address'}}
+      />,
+    );
+    expect(
+      screen.getByRole('textbox', {name: 'Email'}),
+    ).toHaveAccessibleDescription('Enter an email address');
+    expect(screen.queryByText('Invalid value')).toBeNull();
+    expect(messagelessWarnings(warn)).toHaveLength(0);
+    warn.mockRestore();
+  });
+
+  it('adds no fallback for a warning without a message', () => {
+    render(
+      <TextArea
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'warning'}}
+      />,
+    );
+    expect(screen.queryByText('Invalid value')).toBeNull();
   });
 });

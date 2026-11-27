@@ -1,14 +1,6 @@
 {
   "$comment": "Module-scope cross-module identity the FR3 check knows about (spec:AST-110 FR3, FR7). \"open\" names the fix group that removes the entry; \"allowed\" gives the approved reason. A new hit or a stale entry fails scripts/shared-identity.test.mjs.",
   "entries": {
-    "packages/core/src/AppShell/useAppShellMainId.ts:claims": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/AppShell/useAppShellMainId.ts:listeners": {
-      "status": "open",
-      "group": "triage"
-    },
     "packages/core/src/BottomSheet/BottomSheetPanel.tsx:stopViewportResize": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
@@ -38,12 +30,12 @@
       "reason": "One audio context per copy for dictation level metering; a second context costs memory and changes no result."
     },
     "packages/core/src/CodeBlock/highlightRanges.ts:dynamicStyleSheet": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Each copy inserts the same ::highlight rules; a duplicate identical rule changes nothing."
     },
     "packages/core/src/CodeBlock/highlightRanges.ts:registeredHighlightTypes": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Each copy inserts the same ::highlight rules; a duplicate identical rule changes nothing."
     },
     "packages/core/src/CodeBlock/highlightStyles.ts:inserted": {
       "status": "allowed",
@@ -64,14 +56,6 @@
     "packages/core/src/DateInput/nativeDateSegments.ts:cachedEngine": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
-    },
-    "packages/core/src/List/listLayoutUpdates.ts:keptStyles": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/List/listLayoutUpdates.ts:reportedRows": {
-      "status": "open",
-      "group": "triage"
     },
     "packages/core/src/List/listReorderEngine.tsx:sessionsByOptions": {
       "status": "open",
@@ -109,18 +93,6 @@
       "status": "allowed",
       "reason": "Deliberately unshared: a shared key would let any module forge trust or a parse claim."
     },
-    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformHasRenderer": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
-    },
-    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformPluginName": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
-    },
-    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformSourceUnchanged": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
-    },
     "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformTrusted": {
       "status": "allowed",
       "reason": "Deliberately unshared: a shared key would let any module forge trust or a parse claim."
@@ -144,10 +116,6 @@
     "packages/core/src/Markdown/plugins/protocol.ts:sourceHeadingMarker": {
       "status": "open",
       "group": "triage"
-    },
-    "packages/core/src/Markdown/plugins/semanticFence.ts:markdownFenceProposal": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
     },
     "packages/core/src/Markdown/plugins/textTransform.ts:adoptedReplacements": {
       "status": "open",
@@ -173,15 +141,15 @@
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
-    "packages/core/src/Resizable/useResizable.ts:collapseControls": {
+    "packages/core/src/Resizable/resizableModel.ts:collapseControls": {
       "status": "open",
       "group": "F9 Resizable"
     },
-    "packages/core/src/Resizable/useResizable.ts:effectiveMaxima": {
+    "packages/core/src/Resizable/resizableModel.ts:effectiveMaxima": {
       "status": "open",
       "group": "F9 Resizable"
     },
-    "packages/core/src/Resizable/useResizable.ts:releaseEnds": {
+    "packages/core/src/Resizable/resizableModel.ts:releaseEnds": {
       "status": "open",
       "group": "F9 Resizable"
     },
@@ -194,20 +162,20 @@
       "reason": "The attach and the scroll calls run in the same copy; the paging value is shared."
     },
     "packages/core/src/Table/glidingDivider.ts:inlineColorOf": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."
     },
     "packages/core/src/Table/glidingDivider.ts:inlineTopOf": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."
     },
     "packages/core/src/Table/glidingDivider.ts:markedBy": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."
     },
     "packages/core/src/Table/glidingDivider.ts:sourcesOf": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."
     },
     "packages/core/src/Table/plugins/groupedRows/useTableGroupedRows.tsx:GROUP_HEADER": {
       "status": "open",
@@ -262,8 +230,8 @@
       "group": "F13 Shared id sequences"
     },
     "packages/core/src/gestures/fingerScroll.ts:watches": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Keyed by the shared gesture host; each copy's useFingerScroll watches and asks through its own copy, so a second watch adds listeners and changes no answer."
     },
     "packages/core/src/gestures/touchActionRule.ts:markedRoots": {
       "status": "allowed",
@@ -276,10 +244,6 @@
     "packages/core/src/hooks/scrollGeometrySubscriptions.ts:listeners": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
-    },
-    "packages/core/src/hooks/scrollOwnerRegistry.ts:owners": {
-      "status": "open",
-      "group": "triage"
     },
     "packages/core/src/hooks/useEntryAnimation.ts:initialPaintComplete": {
       "status": "open",
@@ -374,8 +338,8 @@
       "group": "F7 Motion frame"
     },
     "packages/core/src/privateAttributes/travelling.stylex.ts:marks": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Set and read inside markTravelling, which only the row's own List calls."
     },
     "packages/core/src/reorderable/createReorderable.ts:reorderableBrand": {
       "status": "allowed",
@@ -393,10 +357,6 @@
       "status": "allowed",
       "reason": "Each copy writes the same reader text-size variables to the document root; the duplicate sync is idempotent."
     },
-    "packages/core/src/theme/generateThemeRules.ts:REACHABLE_MATCH_SET_CACHE": {
-      "status": "allowed",
-      "reason": "A memo cache; a second cache per copy changes no result."
-    },
     "packages/core/src/theme/generateThemeRules.ts:STATUS_ROLE_GENERATION_CACHE": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
@@ -404,6 +364,10 @@
     "packages/core/src/theme/generateThemeRules.ts:activeStatusRoleGeneration": {
       "status": "allowed",
       "reason": "Per-run state of one call (a parse, a transform or a render pass) that never outlives the call; a run never crosses copies."
+    },
+    "packages/core/src/theme/statusRoleDefaults.ts:REACHABLE_MATCH_SET_CACHE": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/core/src/theme/statusRoleDerivation.ts:coreCache": {
       "status": "allowed",
@@ -444,6 +408,10 @@
     "packages/core/src/utils/calendarSystem.ts:supportedCalendars": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/devWarning.ts:missingCallbacks": {
+      "status": "allowed",
+      "reason": "A memo cache that keeps one stand-in callback per component, prop and message; a component renders with one copy, so a second cache per copy changes no result."
     },
     "packages/core/src/utils/devWarning.ts:warnedKeys": {
       "status": "allowed",
@@ -589,6 +557,14 @@
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
+    "packages/core/src/utils/timeFormat.ts:unitFormats": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/timeFormat.ts:unitLists": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
     "packages/core/src/utils/touchHitArea.ts:heldWatches": {
       "status": "open",
       "group": "triage"
@@ -645,7 +621,7 @@
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
     },
-    "packages/richtext/src/CodeSyntaxPlugin.tsx:hasInjectedRules": {
+    "packages/richtext/src/internal/CodeSyntaxPlugin.tsx:hasInjectedRules": {
       "status": "allowed",
       "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
     },
@@ -654,20 +630,20 @@
       "reason": "Set and read inside one copy's editor; no copy reads another's. shared-identity.pins.test.mjs pins it."
     },
     "packages/richtext/src/markdownExtensions.ts:withExport": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "A memo cache keyed by the transformers array; a second cache per copy changes no result."
     },
     "packages/richtext/src/markdownSource.ts:canonicalCache": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/richtext/src/markdownSource.ts:importCount": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Ids carry a random prefix, so two copies' counters do not collide."
     },
     "packages/vega/src/viewInputs.ts:OPAQUE": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Made and read inside one VegaChart copy; not exported."
     }
   }
 }

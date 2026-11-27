@@ -25,14 +25,14 @@ import {
 } from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {mergeProps, rtlStyles} from '../utils';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
   endResizeAt,
   getCollapseControls,
   getEffectiveMaxPx,
   resizablePropsOf,
-  type ResizableProps,
-  type ResizableRegion,
-} from './useResizable';
+} from './resizableModel';
+import type {ResizableProps, ResizableRegion} from './useResizable';
 import {
   createResizeGesture,
   type ResizeGesture,
@@ -50,6 +50,7 @@ import {separatorAttributes} from './separatorAttributes';
 import {themeProps} from '../utils/themeProps';
 
 import {useDevWarning} from '../hooks/useDevWarning';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
@@ -58,6 +59,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Resizable/ResizeHandle.generated';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 
@@ -203,7 +205,10 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-full'],
     backgroundColor: colorVars['--color-border'],
     transitionProperty: 'opacity, background-color, transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
     top: '50%',
   },
@@ -341,7 +346,6 @@ export interface ResizeHandleProps extends Omit<
   position?: 'inline' | 'overlay';
 
   /**
-  /**
    * Reverse the drag direction. Use when the handle controls a panel
    * on the end/right/bottom side.
    * @default false
@@ -423,6 +427,9 @@ export function ResizeHandle({
   xstyle,
   className,
   ref,
+  onFocus: onFocusProp,
+  onBlur: onBlurProp,
+  onDoubleClick: onDoubleClickProp,
   ...props
 }: ResizeHandleProps) {
   const resizable =
@@ -437,15 +444,13 @@ export function ResizeHandle({
 
   // --- The region a `resizable` prop describes ---
 
-  // The gesture reads the latest props at each input. A drag sees the region
-  // as it is now, not as it was at the press.
-  const resizableRef = useRef(resizable);
-  resizableRef.current = resizable;
+  // The gesture reads the committed props at each input. A drag sees the
+  // region as it is now, not as it was at the press.
+  const resizableRef = useCommittedRef(resizable);
   // The region a drag in flight started on: told the gesture is over even
   // after the prop has gone.
   const dragRegionRef = useRef<ResizableProps | undefined>(undefined);
-  const configRef = useRef({direction, isReversed, isDisabled});
-  configRef.current = {direction, isReversed, isDisabled};
+  const configRef = useCommittedRef({direction, isReversed, isDisabled});
   const [isDragging, setIsDragging] = useState(false);
   const [regionGesture] = useState<ResizeGesture>(() => {
     const model: ResizeGestureModel = {
@@ -671,16 +676,16 @@ export function ResizeHandle({
       role="separator"
       {...aria}
       aria-label={label}
-      onDoubleClick={() => {
+      onDoubleClick={composeEventHandlers(() => {
         if (!isDisabled) {
           gesture?.doubleClick();
         }
-      }}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
+      }, onDoubleClickProp)}
+      onFocus={composeEventHandlers(() => setIsFocused(true), onFocusProp)}
+      onBlur={composeEventHandlers(() => setIsFocused(false), onBlurProp)}
       data-resizing={isDragging || undefined}
       {...mergeProps(
-        themeProps('resize-handle'),
+        themeProps('resize-handle', {direction}),
         focusOutlineProps.focusVisible(
           styles.handle,
           isOverlay && styles.overlay,

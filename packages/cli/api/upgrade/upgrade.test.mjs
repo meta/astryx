@@ -550,6 +550,15 @@ describe('upgrade() — errors throw AstryxError', () => {
     );
   });
 
+  it('missing --from outside a project → names the project, keeps ERR_INVALID_ARGUMENT', async () => {
+    const err = await upgrade({}, {cwd: tmpDir}).catch(e => e);
+    expect(err).toBeInstanceOf(AstryxError);
+    expect(err.code).toBe(ERROR_CODES.ERR_INVALID_ARGUMENT);
+    expect(err.message).toBe(
+      'This folder is outside a project, so there is no code to upgrade. Run upgrade with `--from <old version>` in the folder of the app that installs @astryxdesign/core.',
+    );
+  });
+
   it('invalid --from → ERR_INVALID_VERSION', async () => {
     writePkg(tmpDir);
     writeInstalledCore(tmpDir, '0.0.15');

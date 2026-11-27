@@ -16,6 +16,8 @@ applies_to:
     packages/core/src/BaseProps.ts,
     packages/lab/src/,
     packages/richtext/src/,
+    packages/charts/src/,
+    packages/vega/src/,
     packages/cli/authoring/doctypes/component/,
     internal/eslint-plugin-astryx/,
   ]
@@ -25,6 +27,7 @@ verified_by:
     internal/eslint-plugin-astryx/require-baseprops-passthrough.js,
     packages/core/src/docPropLiterals.test.ts,
     packages/core/src/docPropReferences.test.ts,
+    packages/charts/src/marks/marks.test.tsx,
   ]
 deciding_specs:
   [
@@ -68,6 +71,7 @@ deciding_specs:
 ```
 
 This record defines the shared public API contract for stable Astryx components.
+Its handle-ref rule (INV8, DEC-10) applies in every package.
 
 ## Purpose
 
@@ -151,8 +155,15 @@ guidance owns the process used to propose and test APIs.
   behavior only where that public API promises cancellation. A component that
   moves a handler to another element keeps the order and cancellation it
   released for that handler and documents it (`family:input-fields` DEC-8).
-- **INV8 — Refs follow React 19.** A public DOM component accepts `ref` as a prop
-  and connects it to the element promised by its contract.
+- **INV8 — Refs follow React 19.** A public DOM component accepts `ref` as a
+  prop and connects it to the element promised by its contract. In every
+  package, a public ref through which a component or a definition exposes an
+  imperative handle takes `Ref<Handle>`, so it accepts an object ref or a
+  callback ref (DEC-10). React calls a callback ref with the handle when the
+  handle attaches, so the caller learns when the handle is ready. When the
+  handle detaches, a cleanup the callback ref returned runs; a callback ref
+  without a cleanup is called with `null`. A chart series definition's
+  `handleRef`, such as streamGL's, is one application.
 - **INV9 — Released APIs change deliberately.** A released prop, type, export,
   default, or observable behavior is not removed, renamed, retyped, deprecated, or
   corrected incompatibly without the lifecycle, evidence, and migration required by
@@ -169,8 +180,9 @@ guidance owns the process used to propose and test APIs.
   package path is public even when its source comment, filename, or current use
   calls it internal. Privacy requires removing the export or moving the capability
   behind a non-exported boundary. Core's `./internal/*` subpaths are the one
-  exception: reachable, but reserved for Core and Lab, undocumented, versioned
-  in lockstep with Core, limited by lint to those two packages, and imported
+  exception: reachable, but reserved for the packages `spec:AST-017` FR21
+  names, undocumented, versioned in lockstep with Core, limited by lint to
+  those packages, and imported
   by a swizzled copy only for an exported StyleX module whose identity is its
   path (`spec:AST-110` FR1), and outside
   the compatibility promise (`spec:AST-017` FR21).
@@ -202,7 +214,11 @@ guidance owns the process used to propose and test APIs.
   component derive the default; INV16 keeps the caller able to override it.
   When a touch default changes a released component's behavior, that
   `presentation` value is the restoring prop `spec:AST-017` FR3 names
-  (`spec:AST-017/DEC-23`).
+  (`spec:AST-017/DEC-23`). One exception overrides an explicit choice: under a
+  calendar other than `gregory` or `iso8601`, `presentation="native"` on
+  `DateInput` or `DateTimeInput` resolves to the Astryx surface for the
+  pointer, because no native date picker shows the application's calendar
+  (`spec:AST-111` FR15, DEC-7).
 - **INV17 — Compact has one shared definition.** A component that chooses a
   presentation by screen size uses the theme's compact definition: width below
   the effective `md` point or height below 500, with the same numbers on every
@@ -215,7 +231,10 @@ guidance owns the process used to propose and test APIs.
   to compose or render a slot not described in the anatomy; and slots must have
   components. Config objects are fine: plain data that describes actions or options (for example the `{label, icon, onActivate}` entries passed to `createSwipe`) is not a slot. 'Slots must have components' applies to rendered content slots, places that accept arbitrary nodes; such a slot must be a part named in the component's anatomy, and the caller fills it with a component. This extends INV3's rule that a parent does not duplicate a
   composed child's state; a slot's styling follows INV15 and
-  `architecture:component-theming-surface`. See
+  `architecture:component-theming-surface`. A prop that rewords a catalog
+  message for a part the component renders in its own anatomy, such as
+  Popover's `closeButtonLabel`, follows `architecture:internationalization`
+  INV3b, not this invariant. See
   [Slots and composition](../contributing/api-conventions.md#slots-and-composition).
 - **INV19 — Resource cost is weighed against the feature.** Balance resource load against feature
   functionality and cross-platform concerns. If a feature has a large resource
@@ -328,7 +347,9 @@ guidance owns the process used to propose and test APIs.
   change coupling step 6 describes. A removed or renamed row follows INV9.
 
 This record applies to stable public packages, and INV23 also applies to Lab
-source. Lab components are not stable public promises until promotion.
+source. INV8's handle-ref rule (DEC-10) applies in every package, Lab, Charts
+and Vega included. Lab components are not stable public promises until
+promotion.
 
 ## Change coupling
 
@@ -452,11 +473,22 @@ The owner said: "okay let's get rid of this massive file. We don't need it, we s
 
 Rejected: keeping a committed generated API report per package.
 
+### DEC-10 — Every package's handle refs accept callback refs
+
+**Reference:** `architecture:public-component-api/DEC-10`
+**Decider:** `cixzhang`, `2026-11-19 17:20 PT`
+
+Callback refs are an API convention of the whole system, not of one package. A
+public ref that exposes an imperative handle, in any package, takes
+`Ref<Handle>` and accepts an object ref or a callback ref (INV8).
+
+Rejected: accepting callback refs only in the packages that ask for them.
+
 ## Verification
 
 | Invariant               | Evidence                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV8              | Export, public-subpath, prop, and ref checks                                                                             | A promised component/type cannot be imported or its ref cannot reach the contract element                                                                                                                                                                                                                                                                                                                                                                                               |
+| INV1, INV8              | Export, public-subpath, prop, and ref checks                                                                             | A promised component/type cannot be imported or its ref cannot reach the contract element; a `handleRef` that exposes a handle rejects a callback ref                                                                                                                                                                                                                                                                                                                                   |
 | INV2                    | Naming and logical-direction lint/tests                                                                                  | Equivalent concepts use conflicting names or physical direction leaks into public API                                                                                                                                                                                                                                                                                                                                                                                                   |
 | INV2, DEC-1             | Public-API review against the system vocabulary                                                                          | A public prop names a concept the system already names, such as a distance, depth, or press motion, with a new term, or uses `lift` for a layout distance                                                                                                                                                                                                                                                                                                                               |
 | INV3, INV4              | Historical API review benchmark and `spec:AST-002` evidence                                                              | A prop combines unrelated axes or exposes a derivable implementation choice; a new interaction-behavior prop that is not a `<thing>Behavior` closed union, carries an input word where its values can name the behavior, splits one behavior across per-input props, or, as a new prop, defaults to anything but the shipped behavior                                                                                                                                                   |
@@ -466,9 +498,9 @@ Rejected: keeping a committed generated API report per package.
 | INV12, INV13            | Generated declaration/export/behavior inventory plus canonical-owner mapping                                             | A reachable supporting type or behavior outside `./internal/*` is called internal, or mechanical evidence is treated as permission to accept it                                                                                                                                                                                                                                                                                                                                         |
 | INV14                   | `AppShell.test.tsx`                                                                                                      | A component hardcodes a divergent point or treats equality as below                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | INV15                   | Public-API review of the generated declaration inventory                                                                 | A part or StyleX-typed styling prop ships without class-name and inline-style counterparts on the same element                                                                                                                                                                                                                                                                                                                                                                          |
-| INV16                   | Public-API review of touch presentations plus coarse- and fine-pointer runtime tests                                     | A stable component that presents a different surface or switches an open surface's input mode under a coarse pointer and has no `presentation` value that keeps its fine-pointer surface and mode; such a touch mode callers cannot reach; a default that overrides an explicit caller choice                                                                                                                                                                                           |
+| INV16                   | Public-API review of touch presentations plus coarse- and fine-pointer runtime tests                                     | A stable component that presents a different surface or switches an open surface's input mode under a coarse pointer and has no `presentation` value that keeps its fine-pointer surface and mode; such a touch mode callers cannot reach; a default that overrides an explicit caller choice, other than the `spec:AST-111` FR15 calendar exception                                                                                                                                    |
 | INV17                   | Resolver tests at the compact edges plus public-API review                                                               | A component that chooses a presentation by screen size with its own numbers, or disagrees with the theme compact definition at width 768 or height 500                                                                                                                                                                                                                                                                                                                                  |
-| INV18                   | Public-API review against the component's anatomy table                                                                  | A prop that selects or configures a subcomponent's prop or label, a composition that renders a slot the anatomy does not describe, or a rendered content slot that is not a part named in the anatomy                                                                                                                                                                                                                                                                                   |
+| INV18                   | Public-API review against the component's anatomy table                                                                  | A prop that selects or configures a subcomponent's prop or label (a reword of a catalog message for a part the component renders itself follows `architecture:internationalization` INV3b instead), a composition that renders a slot the anatomy does not describe, or a rendered content slot that is not a part named in the anatomy                                                                                                                                                 |
 | INV19                   | Public-API review with a bundle and runtime cost note for a costly feature                                               | A feature with a large resource cost that every caller pays with no plug-in path or named feature prop                                                                                                                                                                                                                                                                                                                                                                                  |
 | INV20                   | Public-API review of new boolean props                                                                                   | A boolean whose only effect is a visual swap where a variant fits                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | INV21                   | Public-API review against existing props, components, hooks, and factories                                               | A new API that shares a job with an existing one that is not being deprecated in its favor; a hook fed to one component slot prop counted as a second API                                                                                                                                                                                                                                                                                                                               |
@@ -522,7 +554,9 @@ Known verification gaps:
   and has no `create…` factory yet; no full inventory exists yet. Each conforms
   by adding its factory; a shipped hook's signature changes only when a real
   need arises (INV21a).
-- The passthrough lint is warning-only while known violations remain.
+- `require-baseprops-passthrough` fails strict lint in `packages/core/src`
+  (outside `theme/`) and `packages/richtext/src`; a component that takes
+  `props` whole, such as ChatSendButton, is not checked.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
 - INV24: the delta covers declarations, CSS custom properties, theme targets,

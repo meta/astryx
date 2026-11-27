@@ -28,6 +28,7 @@ references:
     architecture:public-component-api,
     architecture:layer-runtime,
     family:overlay-dismissal,
+    family:action-groups,
   ]
 ---
 
@@ -132,6 +133,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Keyboard navigation, typeahead and Enter/Space activation — owned by
   `useListFocus`, `useTypeahead` and the component records.
 - Hover-to-open of sub-menu flyouts — owned by `useMenuHover`.
+- Tracking a held pointer across a group's actions outside menus and
+  Selector's and MultiSelector's options — owned by the one internal module
+  `architecture:interaction-modality` INV13 names for `family:action-groups`
+  members; this module covers menus and those options only.
 - The right mouse button inside a menu: it is not modelled.
 
 ## Public API and concepts
@@ -148,6 +153,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 | long-press delay         | released 500 ms when set; unset, as `spec:AST-094` FR29 states (none in a fixed bar; 150 ms in a scroll view) | how long a held finger waits on a trigger before the menu opens. A caller that sets `longPressDelayMs` gets that wait in a fixed bar and in a scroll view alike, which keeps the released behavior (`spec:AST-094` FR25). | `longPressDelayMs`            | `module:DropdownMenu/useMenuPress` | stable    |
 | `data-astryx-menu-press` | present or absent                                                                                             | the root carries this model; a host controller of its own stands aside                                                                                                                                                    | present on every mounted root | `module:DropdownMenu/useMenuPress` | stable    |
 | activation click         | `click` with `detail: 0`, the release's button and modifiers                                                  | how the model acts on a row, marked for the synchronous extent by `isMenuPressActivation()`; `detail === 0` alone therefore no longer means "keyboard" on a menu row                                                      | —                             | `module:DropdownMenu/useMenuPress` | stable    |
+
+`useMenuPressInternal` (not exported from any entry) also reports the accepted
+press's pointer type, which DropdownMenu reads to choose its grow; the public
+hook does not expose it.
 
 ## Behavioral contract
 
@@ -201,6 +210,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **PR3 — Autoscroll.** One interval while a tracked pointer rests in an
   edge zone of an overflowing menu; it stops when the pointer leaves the zone,
   the scroller reaches its edge, or the gesture ends.
+- **PR4 — The press model is the menus' own.** It builds on the layer
+  runtime's gesture counter and input hold. No engine that
+  `architecture:react-component-runtime` INV19 names models a menu's press,
+  where the row under the release acts, so none fits.
 
 ## Accessibility contract
 

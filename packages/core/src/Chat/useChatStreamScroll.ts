@@ -4,8 +4,9 @@
 
 /**
  * @file useChatStreamScroll.ts
- * @input Uses React refs, state, callbacks, useMediaQuery, and the input
- *   stream's document scroll events when the page itself scrolls
+ * @input Uses React refs, state, callbacks, useReducesMotion, the page-scroller
+ *   rules, and the input stream's document scroll events when the page itself
+ *   scrolls
  * @output Exports useChatStreamScroll hook for AI chat scroll behavior
  * @position Utility hook — used by ChatLayout, also usable standalone
  *
@@ -16,8 +17,9 @@
  * - The first fill positions instantly (whether content is present at
  *   mount or arrives async); only subsequent growth springs
  * - `scrollToBottom({behavior: 'instant'})` jumps in one frame, no animation
- * - Under `prefers-reduced-motion`, every spring path falls back to the
- *   same instant jump — following still works, it just doesn't animate
+ * - Under reduced motion (the person's setting, or a theme's
+ *   `reducedMotion: 'always'`), every spring path falls back to the same
+ *   instant jump — following still works, it just doesn't animate
  * - Fractional spring position is retained between frames so browsers that
  *   round scrollTop do not strand the animation short of the bottom
  *
@@ -33,9 +35,14 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {useMediaQuery} from '../hooks/useMediaQuery';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
 import {subscribeInput} from '../utils/inputStream';
+import {
+  scrollEventTarget,
+  scrollportTop,
+  scrollsPage,
+} from '../utils/pageScroller';
 
 // =============================================================================
 // Types
@@ -154,13 +161,6 @@ function markFollowing(el: Element, locked: boolean): void {
   }
 }
 
-// The page's scroll fires at the document. The root's box moves up by that
-// scroll.
-function scrollsPage(el: HTMLElement): boolean {
-  const doc = el.ownerDocument;
-  return el === doc.scrollingElement || el === doc.documentElement;
-}
-
 export function useChatStreamScroll({
   scrollRef,
   enabled = true,
@@ -270,9 +270,7 @@ export function useChatStreamScroll({
     lastScrollTopRef.current = el.scrollTop;
   }, [scrollRef]);
 
-  const prefersReducedMotion = useMediaQuery(
-    '(prefers-reduced-motion: reduce)',
-  );
+  const reducesMotion = useReducesMotion();
 
   // Every spring entry point (scrollToBottom, lock, scrollIfLocked growth
   // follow) funnels through here, so this one branch covers them all.
@@ -280,7 +278,7 @@ export function useChatStreamScroll({
     if (!lockedRef.current) {
       return;
     }
-    if (prefersReducedMotion) {
+    if (reducesMotion) {
       jumpToBottom();
       return;
     }
@@ -290,7 +288,7 @@ export function useChatStreamScroll({
       springPositionRef.current = scrollRef.current?.scrollTop;
       rafRef.current = requestAnimationFrame(animate);
     }
-  }, [animate, jumpToBottom, prefersReducedMotion, scrollRef]);
+  }, [animate, jumpToBottom, reducesMotion, scrollRef]);
 
   // --- Public API ---
 
@@ -314,11 +312,7 @@ export function useChatStreamScroll({
       if (!container) {
         return;
       }
-      // The page's visible area starts at the viewport's top, not at the
-      // root's box.
-      const top = scrollsPage(container)
-        ? 0
-        : container.getBoundingClientRect().top;
+      const top = scrollportTop(container);
       const offset = el.getBoundingClientRect().top - top + container.scrollTop;
       container.scrollTo({top: offset, behavior: 'instant'});
       lastScrollTopRef.current = container.scrollTop;
@@ -421,11 +415,12 @@ export function useChatStreamScroll({
     };
 
     // A scroll of the page fires at the document, not at its root element.
-    const view = isPage ? doc.defaultView : null;
+    const eventTarget = scrollEventTarget(el);
+    const view = eventTarget === doc ? doc.defaultView : null;
     const stopPageListeners: (() => void)[] = [];
     if (view != null) {
       const atDocument = (listener: () => void) => (event: Event) => {
-        if (event.target === doc) {
+        if (event.target === eventTarget) {
           listener();
         }
       };

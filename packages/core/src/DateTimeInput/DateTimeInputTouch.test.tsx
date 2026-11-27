@@ -40,6 +40,15 @@ import {getOnlyButton} from '../__tests__/fastRoleQueries';
 import {InternationalizationProvider} from '../i18n';
 import {DateTimeInput as CoreDateTimeInput} from './DateTimeInput';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
+
+// A press that starts and ends on the scrim: the browser targets the dialog
+// element with the pointer events and with the click.
+function pressScrim(dialog: HTMLElement) {
+  fireEvent.pointerDown(dialog);
+  fireEvent.pointerUp(dialog);
+  fireEvent.click(dialog);
+}
 
 function DateTimeInput(props: DateTimeInputProps) {
   return <CoreDateTimeInput {...props} nativePicker="never" />;
@@ -512,6 +521,24 @@ describe('DateTimeInput touch surface', () => {
     expect(timeField()).toHaveValue('3:45 PM');
   });
 
+  it('keeps the hour and the date as the minute wheel passes its seam at 11:59 PM', () => {
+    const onChange = vi.fn();
+    render(
+      <DateTimeInput
+        label="Meeting"
+        value={'2026-03-21T23:59' as ISODateTimeString}
+        onChange={onChange}
+      />,
+    );
+    openDateSheet();
+    switchToTimePanel();
+
+    fireEvent.keyDown(screen.getByRole('listbox', {name: 'Minute'}), {
+      key: 'ArrowDown',
+    });
+    expect(onChange).toHaveBeenCalledWith('2026-03-21T23:00');
+  });
+
   it('clears an uncommitted time draft when Time Save closes without a date', () => {
     render(<DateTimeInput label="Meeting" onChange={() => {}} />);
     openTimeSheet();
@@ -547,7 +574,7 @@ describe('DateTimeInput touch surface', () => {
     fireEvent.click(optionIn('Minute', '45'));
     expect(timeField()).toHaveValue('3:45 PM');
 
-    fireEvent.click(screen.getByRole('dialog'));
+    pressScrim(screen.getByRole('dialog'));
     expect(timeField()).toHaveValue('');
   });
 
@@ -719,6 +746,29 @@ describe('DateTimeInput touch surface', () => {
 
     fireEvent.click(optionIn('Second', '45'));
     expect(onChange).toHaveBeenCalledWith('2026-03-15T14:30:45');
+  });
+
+  it('keeps a bound with no whole minute when a date change clamps the drafted time', () => {
+    const onChange = vi.fn();
+    withMonthLayout(() => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          min={'2026-03-21T23:59:30' as ISODateTimeString}
+          onChange={onChange}
+        />,
+      );
+      openDateSheet();
+      switchToTimePanel();
+      fireEvent.click(optionIn('Hour', '3'));
+
+      fireEvent.click(screen.getByRole('radio', {name: 'Date'}));
+      fireEvent.click(
+        screen.getByRole('button', {name: 'Saturday, March 21, 2026'}),
+      );
+
+      expect(onChange).toHaveBeenLastCalledWith('2026-03-21T23:59:30');
+    });
   });
 
   it('disables out-of-range hours on the min/max boundary date', () => {
@@ -1158,7 +1208,7 @@ describe('DateTimeInput touch surface', () => {
     expect(field).not.toBeDisabled();
     expect(field).toHaveAttribute('aria-disabled', 'true');
     expect(field.getAttribute('aria-describedby')).toContain(
-      screen.getByRole('tooltip', {hidden: true}).id,
+      getTooltipDescription().id,
     );
     fireEvent.click(field);
     expect(field).toHaveAttribute('aria-expanded', 'false');

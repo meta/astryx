@@ -111,15 +111,13 @@ export {
   type DialogHeroHeaderMediaMode,
 } from './DialogHeroHeader';
 
-// Tour — guided product-tour / NUX walkthrough (meta/astryx#4239)
+// Tour — guided product tour with steps as data (meta/astryx#4239)
 export {
   Tour,
   type TourProps,
-  TourStep,
-  type TourStepProps,
-  useTour,
-  type UseTourReturn,
-  type TourDismissSource,
+  type TourStep,
+  type TourEndReason,
+  type TourMissingAnchorBehavior,
 } from './Tour';
 
 // Stat — experimental KPI/metric display
@@ -164,6 +162,36 @@ export {
   mailIcon,
   lockIcon,
   starterIcons,
+  WeightedSVGIcon,
+  WeightedIconSprite,
+  weightedIconSymbolId,
+  type WeightedSVGIconProps,
+  type WeightedIconSpriteProps,
+  buildWeightedIcon,
+  parseSVGPaths,
+  ICON_WEIGHTS,
+  type IconWeight,
+  type WeightedIconDef,
+  type WeightedIconLayer,
+  type WeightedIconPath,
+  type BuildWeightedIconOptions,
+  registerWeightProbe,
+  xWeightedIcon,
+  checkWeightedIcon,
+  bellWeightedIcon,
+  homeWeightedIcon,
+  settingsWeightedIcon,
+  calendarWeightedIcon,
+  menuWeightedIcon,
+  heartWeightedIcon,
+  eyeWeightedIcon,
+  starWeightedIcon,
+  folderWeightedIcon,
+  shieldWeightedIcon,
+  searchWeightedIcon,
+  mailWeightedIcon,
+  lockWeightedIcon,
+  weightedStarterIcons,
 } from './SVGIcon';
 
 // Chart components — composable d3-based data visualization
@@ -337,6 +365,47 @@ export {
   type DiffViewerLineRef,
   type DiffViewerSide,
 } from './DiffViewer';
+
+// MediaPlayer — video and audio players with themed controls over the native media element
+export {
+  AudioPlayer,
+  MediaCaptionsButton,
+  MediaFullscreenButton,
+  MediaPlayButton,
+  MediaPlaybackRate,
+  MediaPlayer,
+  MediaPlayerElement,
+  MediaSeekButton,
+  MediaTime,
+  MediaTimeSlider,
+  MediaVolume,
+  VideoPlayer,
+  useMediaPlaybackTime,
+  useMediaPlayer,
+  type AudioPlayerProps,
+  type MediaButtonPartProps,
+  type MediaControlSize,
+  type MediaPlayButtonProps,
+  type MediaPlaybackRateProps,
+  type MediaPlayerActions,
+  type MediaPlayerAudioElementProps,
+  type MediaPlayerElementProps,
+  type MediaPlayerError,
+  type MediaPlayerProps,
+  type MediaPlayerState,
+  type MediaPlayerVideoElementProps,
+  type MediaSeekButtonProps,
+  type MediaSliderPlacement,
+  type MediaTextTrackInfo,
+  type MediaTimeProps,
+  type MediaTimeSliderProps,
+  type MediaTimelineChapter,
+  type MediaTimelineMarker,
+  type MediaVolumeProps,
+  type UseMediaPlayerResult,
+  type VideoPlayerCaptionTrack,
+  type VideoPlayerProps,
+} from './MediaPlayer';
 
 // NavigationStack: push/pop drill-down navigation with UIKit's transitions
 // and back swipes.

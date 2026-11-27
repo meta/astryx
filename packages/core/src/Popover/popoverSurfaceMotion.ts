@@ -10,8 +10,9 @@
  * @output Exports `popoverCollapsedState`, `popoverFrame` and
  *   `createPopoverSurfaceMotion`, the touch presentation's present and
  *   dismiss.
- * @position Internal to Popover. Under a finger the popover grows out of its
- *   source and shrinks back into it, as a UIKit popover does.
+ * @position Internal to Popover and DropdownMenu. Under a finger the
+ *   popover grows out of its source and shrinks back into it, as a UIKit
+ *   popover does.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Popover/popoverSurfaceFrame.ts
@@ -29,12 +30,9 @@ import {
 import {holdInput} from '../Layer/inputHold';
 import {ENTRANCE_OPACITY_FLOOR} from '../motion/opacityFloor';
 import {mapProgress, mapRange} from '../motion/progress';
-import {
-  easedProgress,
-  readThemeTiming,
-  type ThemeTimingTokens,
-} from '../motion/themeTiming';
+import {readThemeTimingOrInstant} from '../motion/themeTiming';
 import {placePopoverExitCopy} from '../privateAttributes/popoverExit.stylex';
+import {isCoarsePointer} from '../utils/coarsePointer';
 import {
   frameOf,
   popoverCollapsedState,
@@ -80,11 +78,6 @@ function surfaceCurves(
   };
 }
 
-/** A theme timing that does not resolve plays no motion. */
-function timingOn(element: Element, tokens: ThemeTimingTokens): MotionCurve {
-  return readThemeTiming(element, tokens) ?? easedProgress(0, x => x);
-}
-
 /** What `animator` shows now, split back into scale and length. */
 function readState(animator: Animator, axis: 'x' | 'y'): SurfaceState {
   const across = animator.get(axis === 'x' ? 'scaleY' : 'scaleX');
@@ -94,6 +87,16 @@ function readState(animator: Animator, axis: 'x' | 'y'): SurfaceState {
     length: across > 0 ? along / across : 1,
     opacity: animator.get('opacity'),
   };
+}
+
+/**
+ * The element a touch presentation's input holds key on: the top-layer
+ * popover around the surface. The entrance hold, the hold until the grow's
+ * first frame and the grow's own hold then share one shield. The open shows
+ * it in the top layer once.
+ */
+export function holdLayerOf(surface: Element): Element {
+  return surface.closest('[popover]') ?? surface;
 }
 
 export interface PopoverSurfaceMotion {
@@ -255,7 +258,7 @@ export function createPopoverSurfaceMotion(
       // screen, about the same point. Both reads come before this task's
       // first write.
       const from = readState(exiting.animator, collapsed.axis);
-      const timing = timingOn(element, POPOVER_ENTRANCE_TOKENS);
+      const timing = readThemeTimingOrInstant(element, POPOVER_ENTRANCE_TOKENS);
       // A dismissal let the element go (exit, below).
       animator.attach(element);
       endExit();
@@ -272,7 +275,7 @@ export function createPopoverSurfaceMotion(
       // at full size: the opening task took the CSS entrance off, and a
       // dismissal leaves the element unscaled.
       const geometry = measure();
-      const timing = timingOn(element, POPOVER_ENTRANCE_TOKENS);
+      const timing = readThemeTimingOrInstant(element, POPOVER_ENTRANCE_TOKENS);
       present(null, geometry, timing);
     });
     // Without animation frames the presentation has already run: no frame
@@ -325,7 +328,11 @@ export function createPopoverSurfaceMotion(
     );
     presentHandle = handle;
     endHold();
-    releaseHold = holdInput(element, {until: handle, scope: 'viewport'});
+    // Under a fine primary pointer, as on a touchscreen laptop, the page
+    // stays live while it grows.
+    releaseHold = isCoarsePointer(view)
+      ? holdInput(holdLayerOf(element), {until: handle, scope: 'viewport'})
+      : null;
     void handle.finished.then(() => {
       if (presentHandle === handle) {
         presentHandle = null;
@@ -358,7 +365,7 @@ export function createPopoverSurfaceMotion(
       return;
     }
     const from = readState(animator, target.axis);
-    const timing = timingOn(element, POPOVER_EXIT_TOKENS);
+    const timing = readThemeTimingOrInstant(element, POPOVER_EXIT_TOKENS);
     presentHandle = null;
     // The copy stands where the surface is drawn, the growth's frame
     // included.

@@ -12,6 +12,7 @@ import {
   scopedExtraTests,
   specReaderTests,
   uiTestRoots,
+  withReached,
   withoutAlreadyRun,
 } from './fs-guard-tests.mjs';
 import os from 'node:os';
@@ -232,6 +233,51 @@ describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)'
     'packages/themes/butter/butter.spec.md',
   ];
   const read = file => sources[file] ?? '';
+
+  it('lists the tests that read the recorded Node test times for a change to them', () => {
+    const timesSources = {
+      'scripts/plan.mjs':
+        "import fs from 'node:fs';\nexport const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');",
+      'scripts/plan.test.mjs': "import {DURATIONS} from './plan.mjs';",
+      'scripts/other.test.mjs':
+        "import fs from 'node:fs';\nfs.readFileSync('scripts/other.json');",
+    };
+    const timesFiles = [
+      ...Object.keys(timesSources),
+      'scripts/vitest-node-durations.json',
+      'scripts/other.json',
+    ];
+    expect(
+      specReaderTests(timesFiles, file => timesSources[file] ?? '', [
+        'scripts/vitest-node-durations.json',
+      ]),
+    ).toEqual(['scripts/plan.test.mjs']);
+  });
+
+  it('lists the tests that read the recorded interaction test times for a change to them', () => {
+    const timesSources = {
+      '.github/scripts/legs.mjs':
+        "import fs from 'node:fs';\nexport const DURATIONS = path.join(ROOT, '.github/playwright-leg-durations.json');",
+      '.github/scripts/legs.test.mjs': "import {DURATIONS} from './legs.mjs';",
+      '.github/scripts/refresh.mjs': "import {DURATIONS} from './legs.mjs';",
+      '.github/scripts/refresh.test.mjs': "import {x} from './refresh.mjs';",
+      '.github/scripts/other.test.mjs':
+        "import fs from 'node:fs';\nfs.readFileSync('.github/other.json');",
+    };
+    const timesFiles = [
+      ...Object.keys(timesSources),
+      '.github/playwright-leg-durations.json',
+      '.github/other.json',
+    ];
+    expect(
+      specReaderTests(timesFiles, file => timesSources[file] ?? '', [
+        '.github/playwright-leg-durations.json',
+      ]),
+    ).toEqual([
+      '.github/scripts/legs.test.mjs',
+      '.github/scripts/refresh.test.mjs',
+    ]);
+  });
 
   it('lists every test whose imports read files and name a spec path in code', () => {
     expect(specReaderTests(files, read)).toEqual([
@@ -502,6 +548,63 @@ describe('a test the --changed run already ran runs once', () => {
         ['scripts/a.test.mjs', 'scripts/other.test.mjs'],
       ),
     ).toEqual(['scripts/guard.test.mjs']);
+  });
+
+  it('lists the reached tests first, then the other tests, each once', () => {
+    expect(
+      withReached(
+        ['scripts/guard.test.mjs', 'scripts/a.test.mjs'],
+        [
+          'scripts/a.test.mjs',
+          'scripts/changed.test.mjs',
+          'scripts/a.test.mjs',
+        ],
+      ),
+    ).toEqual([
+      'scripts/a.test.mjs',
+      'scripts/changed.test.mjs',
+      'scripts/guard.test.mjs',
+    ]);
+  });
+
+  it('the lister puts the reached tests first and lists each test once', () => {
+    const repoRoot = path.resolve(import.meta.dirname, '../..');
+    const script = path.join(repoRoot, '.github/scripts/fs-guard-tests.mjs');
+    const lines = text => text.split('\n').filter(Boolean);
+    const guards = lines(
+      execFileSync(process.execPath, [script, '--changed', 'HEAD'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }),
+    );
+    expect(guards.length).toBeGreaterThan(1);
+    // One test the change reaches that no guard list names, and one guard
+    // that the reached list names too.
+    const reachedOnly = 'scripts/a-reached-test.test.mjs';
+    const both = guards[0];
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reached-'));
+    try {
+      const list = path.join(dir, 'reached.json');
+      fs.writeFileSync(
+        list,
+        JSON.stringify(
+          [reachedOnly, both].map(file => ({
+            file: path.join(repoRoot, file),
+            projectName: 'node',
+          })),
+        ),
+      );
+      const tests = lines(
+        execFileSync(
+          process.execPath,
+          [script, '--changed', 'HEAD', '--reached', list],
+          {cwd: repoRoot, encoding: 'utf8'},
+        ),
+      );
+      expect(tests).toEqual([reachedOnly, both, ...guards.slice(1)]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 
   it('the lister drops a guard the changed run listed, and keeps the rest', () => {

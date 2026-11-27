@@ -6,8 +6,8 @@
  * @file useFocusTrap.ts
  * @input Uses React useCallback, useEffect, useRef
  * @output Exports useFocusTrap, the internal focus-region Tab containment it
- *   composes, the deprecated Escape-state shim, and an
- *   internal compatibility-signal hook
+ *   composes (with focusRegionAround and precedes), the deprecated
+ *   Escape-state shim, and an internal compatibility-signal hook
  * @position Core hook; used by dialogs, modals, date pickers
  *
  * Based on WAI-ARIA dialog pattern:
@@ -18,11 +18,19 @@
  */
 
 import {useCallback, useEffect, useRef} from 'react';
-import {isFocusLost} from '../utils/focusReturn';
-import {isHTMLElement} from '../utils/nodeType';
+import {
+  cancelLayerFocus,
+  moveFocusOutOfHiddenLayer,
+  prepareFocusRepairOnRemoval,
+  restoreLayerFocus,
+  trackLayerFocus,
+  type LayerFocusRecord,
+} from '../utils/focusReturn';
+import {isHTMLElement, isModalDialog} from '../utils/nodeType';
 import {sharedState} from '../utils/sharedRealm';
+import {useCommittedRef} from './useCommittedRef';
+import {getFocusableElements, inTabOrder, isTabStop} from './focusableSelector';
 
-import {FOCUSABLE_SELECTOR} from './focusableSelector';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 
 // Escape-dismissible focus traps currently mounted. This is the whole state
@@ -68,71 +76,12 @@ export function useFocusTrapEscapeCompatibilitySignal(isActive: boolean): void {
   }, [isActive]);
 }
 
-/**
- * Whether an element is shown as a popover. jsdom and browsers without the
- * Popover API do not recognize `:popover-open`, and nothing is popover-open
- * there.
- */
-function isPopoverOpen(el: Element): boolean {
-  try {
-    return el.matches(':popover-open');
-  } catch {
-    return false;
-  }
-}
+// Re-exported for the modules that import it from here (SideNav, the menu's
+// region stops, tests); it lives in focusableSelector beside the selector.
+export {getFocusableElements};
 
-/**
- * Whether an element is currently perceivable/focusable — excludes ones hidden
- * via `display:none`/`visibility:hidden` or inside an `inert`/`hidden` subtree,
- * which the browser skips for Tab, and ones inside an `aria-hidden="true"`
- * subtree, which sighted-keyboard users could Tab to while AT skips them
- * (WCAG 4.1.2 — focusable content must be exposed to assistive tech).
- */
-function isVisiblyFocusable(el: HTMLElement): boolean {
-  if (el.hasAttribute('inert') || el.closest('[inert]')) {
-    return false;
-  }
-  if (el.hidden || el.closest('[hidden]')) {
-    return false;
-  }
-  // A closed <dialog> renders nothing, so nothing inside it can take focus.
-  // A dialog shown with showPopover() (a non-modal sheet or drawer) never
-  // sets `open`, so it counts as shown while it is popover-open.
-  for (
-    let dialog = el.closest('dialog');
-    dialog != null;
-    dialog = dialog.parentElement?.closest('dialog') ?? null
-  ) {
-    if (!dialog.open && !isPopoverOpen(dialog)) {
-      return false;
-    }
-  }
-  // closest() matches the element itself as well as any ancestor.
-  if (el.closest('[aria-hidden="true"]')) {
-    return false;
-  }
-  // offsetParent is null for display:none (and fixed elements); pair with a
-  // visibility check via getComputedStyle when available.
-  if (typeof window !== 'undefined' && window.getComputedStyle) {
-    const style = window.getComputedStyle(el);
-    if (style.visibility === 'hidden' || style.display === 'none') {
-      return false;
-    }
-  }
-  return true;
-}
-
-/**
- * Get all focusable elements within a container.
- *
- * Exported for menus that place their own Tab stops inside a trapped layer
- * (DropdownMenu's header and footer), so they judge reachability exactly as
- * the trap does. Not re-exported from the package's `hooks` entry.
- */
-export function getFocusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(
-    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-  ).filter(isVisiblyFocusable);
+function getTabStops(container: HTMLElement): HTMLElement[] {
+  return getFocusableElements(container).filter(isTabStop);
 }
 
 /**
@@ -201,9 +150,10 @@ function trapDocument(container: HTMLElement | null): Document {
 }
 
 /**
- * Whether node `a` comes before node `b` in document order.
+ * Whether node `a` comes before node `b` in document order. Internal: not
+ * re-exported from `hooks`.
  */
-function precedes(a: Node, b: Node): boolean {
+export function precedes(a: Node, b: Node): boolean {
   return (
     (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
   );
@@ -222,13 +172,16 @@ function attemptFocus(element: HTMLElement): boolean {
 }
 
 /**
- * Wrap focus to `target` for a Tab press, and cancel the press only when the
- * target took focus. A target the browser refuses (inert behind a modal
- * layered over this region) leaves the press to the browser instead of
- * stranding focus where it was.
+ * Wrap focus to `target` for a Tab press, and cancel the press only when
+ * focus moved. A target the browser refuses (inert behind a modal layered
+ * over this region) leaves the press to the browser instead of stranding
+ * focus where it was. A target can hand focus on to another element in its
+ * own focus handler. That also counts as a move.
  */
 function wrapFocus(event: KeyboardEvent, target: HTMLElement): void {
-  if (attemptFocus(target)) {
+  const doc = target.ownerDocument;
+  const before = doc.activeElement;
+  if (attemptFocus(target) || doc.activeElement !== before) {
     event.preventDefault();
   }
 }
@@ -237,8 +190,10 @@ function wrapFocus(event: KeyboardEvent, target: HTMLElement): void {
  * Focus the first focusable descendant of a container.
  * Returns true if a focusable element was found and focused.
  */
-function focusFirstDescendant(container: HTMLElement): boolean {
-  const focusable = getFocusableElements(container);
+function focusFirstDescendant(
+  container: HTMLElement,
+  focusable: HTMLElement[] = getFocusableElements(container),
+): boolean {
   for (const element of focusable) {
     if (attemptFocus(element)) {
       return true;
@@ -251,8 +206,10 @@ function focusFirstDescendant(container: HTMLElement): boolean {
  * Focus the last focusable descendant of a container.
  * Returns true if a focusable element was found and focused.
  */
-function focusLastDescendant(container: HTMLElement): boolean {
-  const focusable = getFocusableElements(container);
+function focusLastDescendant(
+  container: HTMLElement,
+  focusable: HTMLElement[] = getFocusableElements(container),
+): boolean {
   for (let i = focusable.length - 1; i >= 0; i--) {
     if (attemptFocus(focusable[i])) {
       return true;
@@ -269,6 +226,24 @@ const activeRegionContainers = sharedState(
   1,
   () => new Set<HTMLElement>(),
 );
+
+/**
+ * The innermost active focus region that contains `element`, or `null`. A
+ * layer that renders inside the region around its anchor stays in reach of
+ * that region's Tab containment. Internal: not re-exported from `hooks`.
+ */
+export function focusRegionAround(element: Element): HTMLElement | null {
+  let innermost: HTMLElement | null = null;
+  for (const container of activeRegionContainers) {
+    if (
+      container.contains(element) &&
+      (innermost == null || innermost.contains(container))
+    ) {
+      innermost = container;
+    }
+  }
+  return innermost;
+}
 
 function hasInnerRegionHolding(
   container: HTMLElement,
@@ -309,16 +284,34 @@ export function useFocusRegionContainment(
   // Track if focus change was triggered by keyboard (Tab key)
   const isKeyboardNavigationRef = useRef(false);
 
+  // Syncs the shared registry of region containers. It runs after each
+  // render. A layer that moves to another host mounts its container again
+  // while the region is active. The new element then replaces the old one.
+  const registeredRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    const container = containerRef.current;
-    if (!isActive || container == null) {
+    const container = isActive ? containerRef.current : null;
+    const registered = registeredRef.current;
+    if (container === registered) {
       return;
     }
-    activeRegionContainers.add(container);
-    return () => {
-      activeRegionContainers.delete(container);
-    };
-  }, [containerRef, isActive]);
+    if (registered != null) {
+      activeRegionContainers.delete(registered);
+    }
+    if (container != null) {
+      activeRegionContainers.add(container);
+    }
+    registeredRef.current = container;
+  });
+  // Takes the container out of the shared registry when the region unmounts.
+  useEffect(
+    () => () => {
+      if (registeredRef.current != null) {
+        activeRegionContainers.delete(registeredRef.current);
+        registeredRef.current = null;
+      }
+    },
+    [],
+  );
 
   /**
    * Handle focus events - redirect focus back into container if it escapes.
@@ -344,12 +337,13 @@ export function useFocusRegionContainment(
         lastFocusRef.current = target as Element;
       } else if (isKeyboardNavigationRef.current) {
         // Focus escaped via keyboard - redirect it back
-        const focusedFirst = focusFirstDescendant(container);
+        const tabStops = getTabStops(container);
+        const focusedFirst = focusFirstDescendant(container, tabStops);
 
         // If we're back at the same element (Shift+Tab from first element),
         // try focusing the last element instead
         if (focusedFirst && lastFocusRef.current === doc.activeElement) {
-          focusLastDescendant(container);
+          focusLastDescendant(container, tabStops);
         } else if (
           !focusedFirst &&
           isHTMLElement(lastFocusRef.current) &&
@@ -399,6 +393,12 @@ export function useFocusRegionContainment(
       }
 
       if (event.key === 'Tab') {
+        if (event.ctrlKey || event.metaKey) {
+          // Ctrl+Tab and Meta+Tab switch tabs or apps. They do not move
+          // focus, so the region leaves them to the browser and the page.
+          // Alt+Tab stays: Safari moves focus to each item on Option+Tab.
+          return;
+        }
         if (event.defaultPrevented) {
           // A control that handles Tab itself (an editor that indents) keeps
           // focus where it is.
@@ -411,7 +411,7 @@ export function useFocusRegionContainment(
           // The trap contains focus that is inside it; it does not pull in a
           // Tab pressed elsewhere on the page. A layer can be open while focus
           // legitimately sits outside it — a listbox popup anchored to its own
-          // input, a non-modal popover beside the content it annotates — and
+          // input, a popover beside the content it annotates — and
           // capturing that Tab would take the rest of the page away from
           // keyboard users.
           return;
@@ -427,7 +427,7 @@ export function useFocusRegionContainment(
         // focus that lands outside is redirected back in.
         isKeyboardNavigationRef.current = true;
 
-        const focusable = getFocusableElements(container);
+        const focusable = getTabStops(container);
         if (focusable.length === 0) {
           // There is nowhere to advance to. Keep focus on the current
           // programmatic target (for example a dialog panel with tabIndex=-1)
@@ -438,9 +438,20 @@ export function useFocusRegionContainment(
           return;
         }
 
+        // Focus can sit on an element that is not a Tab stop (a dialog title
+        // with tabIndex -1). It takes its place in the order with the stops.
+        const isProgrammaticStop = !(focusable as Element[]).includes(active);
         // jsdom groups a selector list by selector, not in document order.
+        const order = inTabOrder(
+          [...focusable, ...(isProgrammaticStop ? [active] : [])].sort(
+            (a, b) => (precedes(a, b) ? -1 : 1),
+          ),
+        );
         const stops = collapseRadioGroups(
-          [...focusable].sort((a, b) => (precedes(a, b) ? -1 : 1)),
+          order.filter(
+            (element): element is HTMLElement =>
+              !isProgrammaticStop || element !== active,
+          ),
           active,
         );
         const first = stops[0];
@@ -454,16 +465,14 @@ export function useFocusRegionContainment(
           return;
         }
 
-        // Programmatic focus can also sit on an element that is not a Tab stop
-        // (a dialog title with tabIndex -1). Its place in document order
-        // decides the edge: nothing tabbable before it means Shift+Tab is
-        // leaving the region, nothing after it means Tab is.
-        const isProgrammaticStop = !(focusable as Element[]).includes(active);
+        // A focused element that is no tab stop has a place in the order.
+        // With no tab stop before it, Shift+Tab is leaving the region. With
+        // none after it, Tab is.
         if (event.shiftKey) {
           // Shift+Tab: if on (or before) the first element, wrap to last
           if (
             active === first ||
-            (isProgrammaticStop && precedes(active, first))
+            (isProgrammaticStop && order.indexOf(active) < order.indexOf(first))
           ) {
             wrapFocus(event, last);
           }
@@ -471,7 +480,7 @@ export function useFocusRegionContainment(
           // Tab: if on (or after) the last element, wrap to first
           if (
             active === last ||
-            (isProgrammaticStop && precedes(last, active))
+            (isProgrammaticStop && order.indexOf(active) > order.indexOf(last))
           ) {
             wrapFocus(event, first);
           }
@@ -568,28 +577,65 @@ interface InternalFocusTrapOptions extends UseFocusTrapOptions {
    */
   getRestoreTarget?: () => HTMLElement | null;
   /**
-   * Where focus goes on deactivation when the restore target is gone (no
-   * longer connected), read at deactivation. Without it, focus is left where
-   * the browser puts it.
+   * A component's own stand-in for an opener that is gone, read at
+   * deactivation. It comes after the opener and its trigger in the shared
+   * return chain.
    */
   getRestoreFallback?: () => HTMLElement | null;
   /**
-   * Moves focus to the element the trap restores to on deactivation, in
-   * place of `element.focus()`, so the caller knows which focus is the
-   * return.
+   * Moves focus to the element the trap returns to, in place of the shared
+   * move, so the caller knows which focus is the return.
    */
   restoreFocusTo?: (element: HTMLElement) => void;
+  /** The overlay's trigger now, for an opener that remounted. */
+  getTrigger?: () => HTMLElement | null;
+  /** The overlay's anchor now, when it is not the trigger. */
+  getAnchor?: () => Element | null;
+  /** The id the trigger's `aria-controls` names. */
+  layerId?: string;
+  /**
+   * Whether Tab and Shift+Tab cycle inside the container while it is active.
+   * An overlay that does not contain leaves Tab to the page's own order.
+   * @default true
+   */
+  isContaining?: boolean;
+  /**
+   * Whether the overlay takes an Escape press now, asked at press time with
+   * the container. An overlay that does not contain takes Escape only while
+   * it holds focus; otherwise the press passes to the layer or page beneath.
+   */
+  isEscapeInScope?: (container: Element | null) => boolean;
+}
+
+export interface InternalFocusTrapReturn<
+  T extends HTMLElement = HTMLElement,
+> extends UseFocusTrapReturn<T> {
+  /**
+   * Runs the focus return now, as the overlay starts to close and while it
+   * still holds focus. Deactivation then has nothing left to do.
+   */
+  returnFocus: () => void;
+  /**
+   * Moves focus out of the container while the layer stays open: to the first
+   * of `first` that can take focus, then along the focus-return chain.
+   */
+  moveFocusOut: (first: ReadonlyArray<Element | null>) => boolean;
 }
 
 export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
   options: InternalFocusTrapOptions,
-): UseFocusTrapReturn<T> {
+): InternalFocusTrapReturn<T> {
   const {
     isActive,
     onEscape,
     getRestoreTarget,
     getRestoreFallback,
     restoreFocusTo,
+    getTrigger,
+    getAnchor,
+    layerId,
+    isContaining = true,
+    isEscapeInScope,
   } = options;
   const getRestoreTargetRef = useRef(getRestoreTarget);
   getRestoreTargetRef.current = getRestoreTarget;
@@ -597,11 +643,15 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
   getRestoreFallbackRef.current = getRestoreFallback;
   const restoreFocusToRef = useRef(restoreFocusTo);
   restoreFocusToRef.current = restoreFocusTo;
+  const getTriggerRef = useCommittedRef(getTrigger);
+  const getAnchorRef = useCommittedRef(getAnchor);
+  const layerIdRef = useCommittedRef(layerId);
 
   const containerRef = useRef<T | null>(null);
 
-  // Tab and Shift+Tab wrap inside the container while the trap is active.
-  useFocusRegionContainment(containerRef, isActive);
+  // Tab and Shift+Tab wrap inside the container while the trap is active and
+  // containing.
+  useFocusRegionContainment(containerRef, isActive && isContaining);
 
   // Join the shared layer dismissal stack. The trap no longer listens for
   // Escape itself: the stack owns one listener and routes each press to the
@@ -623,9 +673,17 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
     // content; hand the stack the container instead so two DOM-nested traps
     // still resolve in the right order.
     getContainer: () => containerRef.current,
+    isPresent:
+      isEscapeInScope == null
+        ? undefined
+        : () => isEscapeInScope(containerRef.current),
   });
 
-  useFocusTrapEscapeCompatibilitySignal(isEscapeTrap);
+  // A trap that takes Escape only within a scope is not counted. A handler
+  // that stands down for it would drop each press the trap passes.
+  useFocusTrapEscapeCompatibilitySignal(
+    isEscapeTrap && isEscapeInScope == null,
+  );
 
   /**
    * Focus the first focusable element.
@@ -637,100 +695,88 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
   }, []);
 
   /**
-   * Capture the element focused before the trap activated, and restore focus to
-   * it when the trap deactivates (or the component unmounts). Overlays are
-   * opened imperatively (e.g. `showPopover()`), so the browser's declarative
-   * popover focus restoration does not apply — without this, closing a Popover
-   * via Escape or light dismiss drops keyboard focus to `<body>`.
-   *
-   * The restore is guarded so it never steals focus a consumer moved on
-   * purpose: it only runs when focus would otherwise be lost — i.e. the active
-   * element is nothing, the document body/root, or still inside the (possibly
-   * now-unmounted) trap container. If focus already moved to some other element
-   * outside the trap (the user clicked elsewhere, or a consumer such as
-   * DropdownMenu already refocused its trigger), the restore is a no-op.
-   *
-   * The restore is also skipped when focus never entered the trap while it
-   * was active. Some popups — a Typeahead/PowerSearch listbox anchored to its
-   * own input — deliberately keep DOM focus on the trigger and never move it
-   * into the trap container (they open with `role: "none"` and
-   * `hasAutoFocus: false`). For those, the restore would cancel a blur the
-   * user asked for on outside-click dismissal, re-focusing the trigger so a
-   * second click no longer fires a `focus` event and cannot reopen the menu.
-   * Tracking `focusin` inside the container distinguishes "focus was here and
-   * we should rescue it" from "focus was never here and we should leave it
-   * alone" — popups that do take focus (Dialog, DropdownMenu, a Typeahead
-   * option click) are unaffected.
+   * The shared layer focus return (`utils/focusReturn`). Activation records
+   * the opener and its stand-ins; deactivation, or an earlier `returnFocus`,
+   * returns focus that the close would strand. Overlays are opened
+   * imperatively (`showPopover()`), and the browser restores focus only for
+   * an auto popover whose opener is still there, so the trap owns the return.
+   * Focus that never entered the container (a listbox popup that keeps focus
+   * on its input) or that already left it is not moved.
    */
+  const recordRef = useRef<LayerFocusRecord | null>(null);
   useEffect(() => {
     if (!isActive) {
       return;
     }
-
-    // Snapshot the container now; by cleanup it may be detached or unmounted.
     const container = containerRef.current;
-    const doc = trapDocument(container);
-    const previouslyFocused =
-      getRestoreTargetRef.current?.() ??
-      (doc.activeElement as HTMLElement | null);
-
-    // Whether focus ever entered the trap container while it was active.
-    // Initialized from the current active element in case focus was already
-    // inside at activation (e.g. a programmatic focus before the effect ran).
-    let hadFocusInside =
-      container != null && container.contains(doc.activeElement);
-
-    const markFocusInside = (event: FocusEvent) => {
-      const target = event.target as Node | null;
-      if (target != null && containerRef.current?.contains(target)) {
-        hadFocusInside = true;
-      }
-    };
-    doc.addEventListener('focusin', markFocusInside, true);
-
-    const restoreFocus = (element: HTMLElement) => {
-      const restoreTo = restoreFocusToRef.current;
-      if (restoreTo == null) {
-        element.focus();
-      } else {
-        restoreTo(element);
-      }
-    };
-
+    const record = trackLayerFocus({
+      getLayer: () => containerRef.current ?? container,
+      opener: getRestoreTargetRef.current?.() ?? null,
+      getTrigger: () => getTriggerRef.current?.() ?? null,
+      getRestoreFallback: () => getRestoreFallbackRef.current?.() ?? null,
+      getAnchor: () => getAnchorRef.current?.() ?? null,
+      layerId: layerIdRef.current ?? null,
+      focus:
+        restoreFocusToRef.current == null
+          ? undefined
+          : element => restoreFocusToRef.current?.(element),
+      doc: container?.ownerDocument,
+    });
+    recordRef.current = record;
+    const repairOnRemoval =
+      container == null ? null : prepareFocusRepairOnRemoval(container);
     return () => {
-      doc.removeEventListener('focusin', markFocusInside, true);
-
-      if (!hadFocusInside) {
+      recordRef.current = null;
+      if (record.isDone) {
         return;
       }
-
-      if (!isFocusLost(container, doc)) {
+      // A trap on a modal <dialog> that stays modal through its exit (a
+      // scrim Drawer sliding out) leaves the return to the dialog's own
+      // close: the page outside it is still inert.
+      if (container != null && isModalDialog(container)) {
+        cancelLayerFocus(record);
         return;
       }
-
-      // The page itself is no place to return to: an opener removed before
-      // the overlay opened leaves the body as the element focused then.
-      const isPage =
-        previouslyFocused === doc.body ||
-        previouslyFocused === doc.documentElement;
-      if (
-        previouslyFocused != null &&
-        previouslyFocused.isConnected &&
-        typeof previouslyFocused.focus === 'function' &&
-        !(isPage && getRestoreFallbackRef.current != null)
-      ) {
-        restoreFocus(previouslyFocused);
+      if (container == null || container.isConnected) {
+        restoreLayerFocus(record);
+        cancelLayerFocus(record);
         return;
       }
-      const fallback = getRestoreFallbackRef.current?.();
-      if (fallback != null && fallback.isConnected) {
-        restoreFocus(fallback);
+      // Removed while active, as with its owner or its whole view. An
+      // opener still on the page takes focus at once. Otherwise the return
+      // waits until the removal is done, so it never lands on an element the
+      // same removal is taking away.
+      if (restoreLayerFocus(record, {isOpenerOnly: true})) {
+        return;
       }
+      repairOnRemoval?.(() => {
+        restoreLayerFocus(record, {warnsWhenNothingQualifies: false});
+      });
+      queueMicrotask(() => cancelLayerFocus(record));
     };
-  }, [isActive]);
+  }, [isActive, getAnchorRef, getTriggerRef, layerIdRef]);
+
+  const returnFocus = useCallback(() => {
+    const record = recordRef.current;
+    if (record != null) {
+      restoreLayerFocus(record);
+    }
+  }, []);
+
+  // A layer that hides while it stays open (its anchor is missing) moves
+  // focus out through the same chain, without ending the return.
+  const moveFocusOut = useCallback(
+    (first: ReadonlyArray<Element | null>): boolean => {
+      const record = recordRef.current;
+      return record != null && moveFocusOutOfHiddenLayer(record, first);
+    },
+    [],
+  );
 
   return {
     containerRef,
     focusFirst,
+    returnFocus,
+    moveFocusOut,
   };
 }

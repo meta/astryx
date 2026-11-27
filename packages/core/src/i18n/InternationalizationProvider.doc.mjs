@@ -141,7 +141,7 @@ export function AppI18n({children}: {children: ReactNode}) {
 }`,
     },
     {
-      label: 'Override one Astryx string',
+      label: 'Change one Astryx string across your app',
       code: `import type {ReactNode} from 'react';
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 

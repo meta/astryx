@@ -12,10 +12,8 @@
 import * as fs from 'node:fs';
 import {AstryxError} from '../../../error.mjs';
 import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
-import {
-  findShowcase,
-  replaceDemoContent,
-} from '../../../template/template.mjs';
+import {showcaseSource} from '../../_adapter.mjs';
+import {findShowcase, replaceDemoContent} from '../../../template/template.mjs';
 
 /**
  * Resolve and read a component's showcase block into the
@@ -31,13 +29,24 @@ import {
  * @param {string} ctx.ownerPackage - the npm package that owns the component
  * @returns {Promise<import('../../component.type.mjs').ComponentDetailShowcaseResponse>}
  */
-export async function componentDetailShowcase(componentName, {cwd, name, packageScope = null, resolve = true, ownerPackage}) {
+export async function componentDetailShowcase(
+  componentName,
+  {cwd, name, packageScope = null, resolve = true, ownerPackage},
+) {
   const match = resolve
-    ? await findShowcase(componentName, cwd, packageScope ? {package: packageScope} : undefined)
+    ? await findShowcase(
+        componentName,
+        cwd,
+        packageScope ? {package: packageScope} : undefined,
+      )
     : null;
   if (!match) {
     const suffix = packageScope ? ` in package "${packageScope}"` : '';
-    throw new AstryxError(`No showcase found for "${name}"${suffix}`, undefined, ERROR_CODES.ERR_NO_SHOWCASE);
+    throw new AstryxError(
+      `No showcase found for "${name}"${suffix}`,
+      undefined,
+      ERROR_CODES.ERR_NO_SHOWCASE,
+    );
   }
   return {
     type: 'component.detail.showcase',
@@ -47,7 +56,9 @@ export async function componentDetailShowcase(componentName, {cwd, name, package
       aspectRatio: /** @type {number} */ (match.aspectRatio),
       // Handed-out source, not a copy: demo content becomes the placeholder a
       // copy writes, and fixture media stays.
-      source: replaceDemoContent(fs.readFileSync(match.filePath, 'utf-8')).source,
+      source: showcaseSource(
+        replaceDemoContent(fs.readFileSync(match.filePath, 'utf-8')).source,
+      ),
     },
   };
 }

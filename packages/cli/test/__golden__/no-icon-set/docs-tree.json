@@ -117,6 +117,7 @@
     "sections": [
       "start-from-the-generated-doc",
       "explain-when-to-use-it",
+      "choose-keywords",
       "document-every-public-prop",
       "add-focused-examples",
       "read-the-result"
@@ -167,6 +168,7 @@
       "keep-within-the-limits",
       "see-what-agents-read",
       "refresh-the-block",
+      "ship-a-skill",
       "global-mode"
     ],
     "mentions": []
@@ -365,9 +367,6 @@
       "check-icons-in-the-app"
     ],
     "mentions": [
-      "Do not paste raw `svg` and `path` markup when an existing icon definition fits.",
-      "Export a compatible icon definition from a public package path, then import that path from the template.",
-      "For a component icon prop, pass what that prop accepts: most, such as `Button` and `IconButton`, take an element like `<Icon icon={BellIcon} />`, and some menu and navigation items also accept the icon definition itself.",
       "Use one supported icon set consistently inside a template."
     ]
   },
@@ -564,6 +563,7 @@
       "debug-event",
       "gap-report-handler",
       "discover-source",
+      "example-scope",
       "codemod",
       "provider-identity",
       "authored-doc-graph-fields",
@@ -633,6 +633,7 @@
     "sections": [
       "pick-a-check",
       "run-every-check-in-ci",
+      "get-ready-to-list",
       "what-integration-verify-does"
     ],
     "mentions": []
@@ -1109,6 +1110,7 @@
       "movement-principles",
       "respecting-user-preferences",
       "usage",
+      "own-css",
       "theme-motion",
       "best-practices"
     ],
@@ -1240,13 +1242,24 @@
     "type": "docs.detail",
     "sections": [
       "design-tokens",
-      "stylex-setup"
+      "stylex-setup",
+      "nextjs-webpack"
     ],
-    "mentions": []
+    "mentions": [
+      "/** @type {import('next').NextConfig} */\nconst nextConfig = {\n  experimental: {\n    optimizePackageImports: ['@astryxdesign/core'],\n  },\n};\n\nexport default nextConfig;",
+      "If your Next.js app builds with webpack (`next build --webpack`), add `@astryxdesign/core` to `experimental.optimizePackageImports`."
+    ]
   },
   "theme": {
     "type": "docs.detail",
     "sections": [
+      "make-or-change",
+      "look-after-each-change",
+      "denser-or-roomier",
+      "one-kind-of-part",
+      "values-a-part-shows",
+      "no-app-yet",
+      "share-with-other-teams",
       "quick-start",
       "creating-a-custom-theme",
       "icon-sizes",
@@ -1449,6 +1462,24 @@
       "install-an-integration",
       "use-what-it-adds",
       "check-for-problems"
+    ],
+    "mentions": []
+  },
+  "visualization": {
+    "type": "docs.node",
+    "children": [
+      "visualization/data-colors-in-renderers"
+    ],
+    "mentions": []
+  },
+  "visualization/data-colors-in-renderers": {
+    "type": "docs.detail",
+    "sections": [
+      "choose-a-path",
+      "use-datavars",
+      "use-raw-css-variables",
+      "draw-canvas-with-resolved-colors",
+      "configure-vega-lite"
     ],
     "mentions": []
   },

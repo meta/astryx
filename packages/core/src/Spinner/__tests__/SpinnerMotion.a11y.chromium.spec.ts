@@ -19,12 +19,16 @@ import {
 import {
   animationStoryboard,
   blockMainThread,
-  frameStats,
+  busyWindowProof,
+  CONTROL_SIDE,
   parseTransform,
+  startBusyControl,
   startScreencast,
   timeline,
+  trackControl,
   traceRendering,
   type CastFrame,
+  type TrackedFrame,
 } from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
@@ -120,8 +124,15 @@ interface Box {
   height: number;
 }
 
-/** A checksum of each box in each frame, decoded in a scratch page. */
-async function checksums(
+/**
+ * Each ring's angle in each frame, in degrees, decoded in a scratch page. The
+ * reading is the direction of the ring's arc from the centre of its box. It is
+ * the mean direction of the box's pixels, each weighted by its colour
+ * difference from the box's corner. The track is even all round, so only the
+ * arc moves the mean. Each reading continues from the frame before, so a full
+ * turn adds 360.
+ */
+async function angles(
   page: Page,
   frames: ReadonlyArray<CastFrame>,
   boxes: ReadonlyArray<Box>,
@@ -129,10 +140,10 @@ async function checksums(
   const scratch = await page.context().newPage();
   const viewportWidth = page.viewportSize()?.width ?? 402;
   try {
-    const out: number[][] = [];
+    const readings: number[][] = [];
     for (let i = 0; i < frames.length; i += 10) {
       const batch = frames.slice(i, i + 10).map(f => f.data);
-      out.push(
+      readings.push(
         ...(await scratch.evaluate(
           async ({items, crops, vw}) => {
             const result: number[][] = [];
@@ -142,7 +153,7 @@ async function checksums(
               ).blob();
               const bitmap = await createImageBitmap(blob);
               const scale = bitmap.width / vw;
-              const sums: number[] = [];
+              const directions: number[] = [];
               for (const box of crops) {
                 const w = Math.ceil(box.width * scale);
                 const h = Math.ceil(box.height * scale);
@@ -163,15 +174,27 @@ async function checksums(
                   h,
                 );
                 const {data} = context.getImageData(0, 0, w, h);
-                let sum = 0;
-                for (let p = 0; p < data.length; p += 4) {
-                  sum =
-                    (sum * 31 + data[p] * 3 + data[p + 1] * 5 + data[p + 2]) %
-                    1000000007;
+                let sumX = 0;
+                let sumY = 0;
+                for (let y = 0; y < h; y += 1) {
+                  for (let x = 0; x < w; x += 1) {
+                    const p = (y * w + x) * 4;
+                    const weight =
+                      Math.abs(data[p] - data[0]) +
+                      Math.abs(data[p + 1] - data[1]) +
+                      Math.abs(data[p + 2] - data[2]);
+                    const dx = x + 0.5 - w / 2;
+                    const dy = y + 0.5 - h / 2;
+                    const distance = Math.hypot(dx, dy);
+                    if (distance > 0) {
+                      sumX += (weight * dx) / distance;
+                      sumY += (weight * dy) / distance;
+                    }
+                  }
                 }
-                sums.push(sum);
+                directions.push((Math.atan2(sumY, sumX) * 180) / Math.PI);
               }
-              result.push(sums);
+              result.push(directions);
             }
             return result;
           },
@@ -179,7 +202,17 @@ async function checksums(
         )),
       );
     }
-    return out;
+    // The shortest change from frame to frame: a ring turns far less than
+    // half a turn between two frames.
+    const continued = readings.map(frame => [...frame]);
+    for (let i = 1; i < readings.length; i += 1) {
+      for (let ring = 0; ring < boxes.length; ring += 1) {
+        const change =
+          ((readings[i][ring] - readings[i - 1][ring] + 540) % 360) - 180;
+        continued[i][ring] = continued[i - 1][ring] + change;
+      }
+    }
+    return continued;
   } finally {
     await scratch.close();
   }
@@ -221,35 +254,37 @@ test('the ring keeps turning while a script holds the main thread', async ({
     }
     boxes.push(box);
   }
+  // The control crosses the top strip, so every ring sits below it.
+  for (const box of boxes) {
+    expect(box.y).toBeGreaterThan(CONTROL_SIDE);
+  }
+  await startBusyControl(page);
   const cast = await startScreencast(page);
   await page.waitForTimeout(300);
   const busy = await blockMainThread(page, BLOCK_MS);
   await page.waitForTimeout(200);
   const frames = await cast.stop();
-  const sums = await checksums(page, frames, boxes);
-
-  // Judge the block's inside, a frame clear of each edge.
-  const from = busy.from + 20;
-  const to = busy.to - 20;
-  const inside = frames
-    .map((frame, i) => ({t: frame.t, sums: sums[i]}))
-    .filter(f => f.t >= from && f.t <= to);
-  const expected = Math.floor((to - from) / (1000 / 60));
-  // The compositor keeps presenting frames at display rate…
-  expect(inside.length).toBeGreaterThanOrEqual(Math.floor(expected * 0.85));
-  // …and every ring moves in nearly every one of them.
+  const control = await trackControl(page, frames);
+  const readings = await angles(page, frames, boxes);
+  // Each ring is judged against the compositor-only control in the same
+  // frames. It shows a new angle on every frame the control moved on, and it
+  // stalls no longer than the control. A control with too few frames in the
+  // block throws FrameStarvationError.
   for (let ring = 0; ring < 4; ring += 1) {
-    const stats = frameStats(
-      inside.map(f => ({t: f.t, value: f.sums[ring]})),
-      {from, to},
+    const turning: TrackedFrame[] = frames.map((frame, i) => ({
+      t: frame.t,
+      box: {x: readings[i][ring], y: 0, width: 1, height: 1},
+      pixels: 1,
+      engine: frame.engine,
+    }));
+    const proof = busyWindowProof(turning, busy, {axis: 'x', control});
+    test.info().annotations.push({
+      type: `busy window, ring ${ring}`,
+      description: proof.summary,
+    });
+    expect(proof.verdict.failures, `ring ${ring}: ${proof.summary}`).toEqual(
+      [],
     );
-    expect(stats.changed, `ring ${ring} frames changed`).toBeGreaterThanOrEqual(
-      Math.floor((inside.length - 1) * 0.9),
-    );
-    expect(
-      stats.longestStallMs,
-      `ring ${ring} longest stall`,
-    ).toBeLessThanOrEqual(50);
   }
 });
 

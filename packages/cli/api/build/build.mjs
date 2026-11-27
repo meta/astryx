@@ -15,11 +15,16 @@
  */
 
 import {AstryxError} from '../error.mjs';
+import {
+  docPackageManager,
+  runWithDocPackageManager,
+} from '../../foundation/env/package-manager.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {buildHelp} from './help/help.mjs';
 import {buildKit} from './kit/kit.mjs';
 import {
   loadBlockPicker,
+  keptBlockCatalog,
   loadTreeWeights,
   withListingCache,
 } from './_adapter.mjs';
@@ -39,7 +44,7 @@ export {buildHelp, buildKit};
  */
 export async function build(query, options = {}) {
   if (!query || !String(query).trim()) {
-    return buildHelp();
+    return buildHelp({cwd: options.cwd});
   }
   if (
     options.limit != null &&
@@ -52,15 +57,24 @@ export async function build(query, options = {}) {
     );
   }
   // The kit resolves every candidate's source and docs by walking the same
-  // tree; read each directory once for this call.
-  return withListingCache(
-    async () =>
-      /** @type {import('./build.type.mjs').BuildKitResponse} */ (
-        await runTree(
-          BUILD_TREE,
-          {query, options},
-          {weights: loadTreeWeights(), blocks: loadBlockPicker()},
-        )
+  // tree; read each directory once for this call. Doc `{@pm}` steps render
+  // for the project the call names, as search's do.
+  return runWithDocPackageManager(
+    docPackageManager(options.cwd ?? process.cwd()),
+    () =>
+      withListingCache(
+        async () =>
+          /** @type {import('./build.type.mjs').BuildKitResponse} */ (
+            await runTree(
+              BUILD_TREE,
+              {query, options},
+              {
+                weights: loadTreeWeights(),
+                blocks: loadBlockPicker(),
+                keepBlocks: keptBlockCatalog,
+              },
+            )
+          ),
       ),
   );
 }

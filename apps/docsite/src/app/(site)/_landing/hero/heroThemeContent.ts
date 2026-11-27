@@ -17,6 +17,7 @@ import {themeObjects} from '@/generated/themeRegistry';
 // CSS and skips runtime injection. BRAND_BLUE (logo-only) lives in @/constants.
 import {astryxTheme} from '@/themes/astryx';
 import {BRAND_BLUE} from '@/constants';
+import {optimizedImageSources} from '../../../../lib/optimizedImageUrl.mjs';
 
 // Sentinel for the docsite's local brand theme (not an @astryxdesign/theme-* package).
 const ASTRYX = 'astryx';
@@ -96,23 +97,26 @@ const REEL_THEMES: ReadonlyArray<string> = [
 ];
 
 // Per-theme card content, keyed by theme name (or the ASTRYX sentinel).
+// The photos are WebP copies of the theme product PNGs, 700 to 960 px wide.
+// A card loads a photo through reelPhotoSources or reelThumbSources, at the
+// width that its slot and the screen need.
 const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   [ASTRYX]: {
     // Product photos reuse the Neutral theme's image set (watch / headphones /
     // backpack) now that Neutral is no longer a standalone reel slide.
     product: {
-      image: '/neutral/preview-watch.png',
+      image: '/landing/hero/neutral-watch.webp',
       title: 'Minimalist watch',
       description: 'Clean design, everyday durability.',
       price: '$240',
     },
     feature: {
-      image: '/neutral/preview-headphones.png',
+      image: '/landing/hero/neutral-headphones.webp',
       title: 'Wireless headphones',
       price: '$180',
     },
     mini: {
-      image: '/neutral/preview-backpack.png',
+      image: '/landing/hero/neutral-backpack.webp',
       title: 'Canvas backpack',
       description: 'Water-resistant.',
     },
@@ -127,18 +131,18 @@ const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   },
   '@astryxdesign/theme-neutral': {
     product: {
-      image: '/neutral/preview-watch.png',
+      image: '/landing/hero/neutral-watch.webp',
       title: 'Minimalist watch',
       description: 'Clean design, everyday durability.',
       price: '$240',
     },
     feature: {
-      image: '/neutral/preview-headphones.png',
+      image: '/landing/hero/neutral-headphones.webp',
       title: 'Wireless headphones',
       price: '$180',
     },
     mini: {
-      image: '/neutral/preview-backpack.png',
+      image: '/landing/hero/neutral-backpack.webp',
       title: 'Canvas backpack',
       description: 'Water-resistant.',
     },
@@ -153,18 +157,18 @@ const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   },
   '@astryxdesign/theme-butter': {
     product: {
-      image: '/images/butter/preview-watch.png',
+      image: '/landing/hero/butter-watch.webp',
       title: 'Butter croissant',
       description: 'Flaky, laminated layers baked golden each morning.',
       price: '$6',
     },
     feature: {
-      image: '/images/butter/preview-backpack.png',
+      image: '/landing/hero/butter-backpack.webp',
       title: 'Belgian waffle',
       price: '$8',
     },
     mini: {
-      image: '/images/butter/preview-headphones.png',
+      image: '/landing/hero/butter-headphones.webp',
       title: 'Pancakes',
       description: 'Stacked tall with melting butter.',
     },
@@ -174,18 +178,18 @@ const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   },
   '@astryxdesign/theme-matcha': {
     product: {
-      image: '/images/matcha/preview-watch.png',
+      image: '/landing/hero/matcha-watch.webp',
       title: 'Matcha',
       description: 'Stone-ground ceremonial matcha over cold milk.',
       price: '$6',
     },
     feature: {
-      image: '/images/matcha/preview-headphones.png',
+      image: '/landing/hero/matcha-headphones.webp',
       title: 'Strawberry matcha',
       price: '$7',
     },
     mini: {
-      image: '/images/matcha/preview-tumbler.png',
+      image: '/landing/hero/matcha-tumbler.webp',
       title: 'Ube matcha',
       description: 'Ube and cream matcha.',
     },
@@ -200,18 +204,18 @@ const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   },
   '@astryxdesign/theme-gothic': {
     product: {
-      image: '/images/gothic/preview-watch.png',
+      image: '/landing/hero/gothic-watch.webp',
       title: 'Sea holly',
       description: 'A single preserved thistle stem with a steely bloom.',
       price: '$24',
     },
     feature: {
-      image: '/images/gothic/preview-headphones.png',
+      image: '/landing/hero/gothic-headphones.webp',
       title: 'Garden rose',
       price: '$18',
     },
     mini: {
-      image: '/images/gothic/preview-backpack.png',
+      image: '/landing/hero/gothic-backpack.webp',
       title: 'Ranunculus',
       description: 'Layered petals in a soft mauve.',
     },
@@ -221,18 +225,18 @@ const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   },
   '@astryxdesign/theme-y2k': {
     product: {
-      image: '/images/y2k/preview-watch.png',
+      image: '/landing/hero/y2k-watch.webp',
       title: 'Phone',
       description: 'Iridescent clamshell with a rainbow screen.',
       price: '$18',
     },
     feature: {
-      image: '/images/y2k/preview-headphones.png',
+      image: '/landing/hero/y2k-headphones.webp',
       title: 'Glow star set',
       price: '$12',
     },
     mini: {
-      image: '/images/y2k/preview-backpack.png',
+      image: '/landing/hero/y2k-backpack.webp',
       title: 'Butterfly',
       description: 'Sparkly stick-on in pastel chrome.',
     },
@@ -355,44 +359,48 @@ const DEFAULT_AURORA: HeroAuroraPalette = {
   right: 'var(--color-background-pink)',
 };
 
-// The custom (web) font families each reel theme paints with — body, heading,
-// and the marketing-scale display family. Listed here so the hero can warm them
-// before the first auto-advance (the @font-face rules ship in the docsite's
-// Google Fonts <link>, but the browser only fetches a family's woff2 once a
-// glyph using it first paints — i.e. when the reel swaps to that slide, which
-// is the visible FOUT first-time visitors hit). System/fallback stacks
-// (-apple-system, Georgia, …) are intentionally omitted: they need no fetch.
-//
-// Keep in sync with the typography.{body,heading} families + display overrides
-// in each theme package (packages/themes/<name>/src/<name>Theme.ts).
-const REEL_FONT_FAMILIES: ReadonlyArray<string> = [
-  // Astryx (docsite brand)
-  'Figtree',
-  // Matcha (DM Sans body + Playwrite US Trad heading)
-  'DM Sans',
-  'Playwrite US Trad',
-  // Butter (Outfit body/heading + Sarina display)
-  'Outfit',
-  'Sarina',
-  // Gothic (Fustat body/heading + Manufacturing Consent display)
-  'Fustat',
-  'Manufacturing Consent',
-  // Y2K (Poppins body/heading + Crimson Text display)
-  'Poppins',
-  'Crimson Text',
-];
+// The web fonts that the hero cards of each reel theme draw, with the font
+// weights that their text asks for. The hero loads them before the reel
+// shows the theme's slide, so that the slide does not show a fallback font
+// first. Poppins has one file for each weight, so the list has each weight
+// that a card draws. A theme's display family (Sarina, Manufacturing Consent,
+// Crimson Text) is not in the list, because no card has display text. The
+// headings of Matcha ask Playwrite US Trad for weight 600. The family has
+// no file for that weight, and the browser loads the file for weight 400.
+// SYNC: hero-theme-content.test.ts pins this list, and
+// e2e/font-loading.spec.ts compares it with the fonts that the cards of the
+// built page ask for.
+const REEL_FONTS: Record<
+  string,
+  ReadonlyArray<{family: string; weights: ReadonlyArray<number>}>
+> = {
+  [ASTRYX]: [{family: 'Figtree', weights: [400, 500, 600]}],
+  '@astryxdesign/theme-matcha': [
+    {family: 'DM Sans', weights: [400, 500, 600]},
+    {family: 'Playwrite US Trad', weights: [600]},
+  ],
+  '@astryxdesign/theme-butter': [
+    {family: 'Outfit', weights: [400, 500, 600, 700]},
+  ],
+  '@astryxdesign/theme-gothic': [
+    {family: 'Fustat', weights: [400, 500, 600, 700]},
+  ],
+  '@astryxdesign/theme-y2k': [{family: 'Poppins', weights: [400, 500, 600]}],
+};
 
 /**
- * `document.fonts.load()` specifiers for the reel's custom families. A short
- * representative string is enough to pull the right woff2 — the API loads the
- * whole face that would render those glyphs. We warm a normal and a bold-ish
- * weight since the cards mix body and heading weights.
+ * `document.fonts.load()` specifiers for the fonts of a theme's cards. The
+ * API loads the font file that draws text of that family and weight.
  */
+function fontSpecifiers(themeName: string): string[] {
+  return (REEL_FONTS[themeName] ?? []).flatMap(({family, weights}) =>
+    weights.map(weight => `${weight} 1rem "${family}"`),
+  );
+}
+
+/** The specifiers for every theme of the reel, in slide order. */
 export const REEL_FONT_SPECIFIERS: ReadonlyArray<string> =
-  REEL_FONT_FAMILIES.flatMap(family => [
-    `400 1rem "${family}"`,
-    `600 1rem "${family}"`,
-  ]);
+  REEL_THEMES.flatMap(fontSpecifiers);
 
 // Ordered slides from REEL_THEMES; unresolved (uninstalled) themes are skipped.
 export const HERO_THEME_SLIDES: ReadonlyArray<HeroThemeSlide> = REEL_THEMES.map(
@@ -413,20 +421,57 @@ export const HERO_THEME_SLIDES: ReadonlyArray<HeroThemeSlide> = REEL_THEMES.map(
   },
 ).filter((s): s is HeroThemeSlide => s !== null);
 
+// The photos are square and cover their boxes, so the longer side of a box
+// is the size that its photo needs. Each value is the largest box of the
+// five slides in one layout of HeroFloatingCards. The layouts are the wide
+// one, the collage from 768 px, and the narrow collage.
+const PHOTO_SIZES =
+  '(min-width: 1024px) 258px, (min-width: 768px) 315px, 216px';
+// 1080 px gives a photo its own width, which is 700 to 960 px.
+const PHOTO_WIDTHS = [256, 384, 640, 750, 1080];
+// The thumbnail's frame is a spacing token, so its size comes from the
+// theme of the slide: 38 to 65 px. A file this small loses detail at the
+// exact size, so each width is well above the size that a screen needs.
+const THUMB_SIZES = '66px';
+const THUMB_WIDTHS = [128, 256];
+
+/** What an `<img>` or a warm-up `Image` loads a reel photo from. */
+export interface ReelImageSources {
+  src: string;
+  srcSet: string;
+  sizes: string;
+}
+
+/** The sources of a product card or feature card photo. */
+export function reelPhotoSources(image: string): ReelImageSources {
+  return optimizedImageSources(image, PHOTO_WIDTHS, PHOTO_SIZES);
+}
+
+/** The sources of the buy card's thumbnail. */
+export function reelThumbSources(image: string): ReelImageSources {
+  return optimizedImageSources(image, THUMB_WIDTHS, THUMB_SIZES);
+}
+
 /**
- * Every product photo the reel cards reference, deduped and in slide order. The
- * cards use plain <img> (no next/image priority), so on a fresh visit a slide's
- * remote CDN photos aren't fetched until that slide renders — they pop in as
- * the reel advances. The hero warms this list on mount so the images are in the
- * browser cache before the first auto-advance. Scoped to just the reel's photos
- * (3 per slide) so it doesn't bloat the rest of the landing page's initial load.
+ * The three photos of each slide, in slide order, with the sources that the
+ * slide's cards give their <img>. A card loads a photo only when its slide
+ * shows. On a wide screen the hero loads this list after the page loads, so
+ * that the browser has each file before the reel advances to its slide.
  */
-export const REEL_IMAGE_SRCS: ReadonlyArray<string> = Array.from(
-  new Set(
-    HERO_THEME_SLIDES.flatMap(slide => [
-      slide.content.product.image,
-      slide.content.feature.image,
-      slide.content.mini.image,
-    ]),
-  ),
-);
+export const REEL_IMAGES: ReadonlyArray<ReelImageSources> =
+  HERO_THEME_SLIDES.flatMap(slide => slideAssets(slide).images);
+
+/** The fonts and the photos that one slide loads when it shows. */
+export function slideAssets(slide: HeroThemeSlide): {
+  fonts: ReadonlyArray<string>;
+  images: ReadonlyArray<ReelImageSources>;
+} {
+  return {
+    fonts: fontSpecifiers(slide.name),
+    images: [
+      reelPhotoSources(slide.content.product.image),
+      reelPhotoSources(slide.content.feature.image),
+      reelThumbSources(slide.content.mini.image),
+    ],
+  };
+}

@@ -17,7 +17,7 @@
  *
  * @input  blogPosts (from the generated registry)
  * @output A marketing section linking to the latest blog posts
- * @position Rendered inside the home page showcase overlay (app/(site)/page.tsx)
+ * @position Rendered inside the home page showcase overlay (app/(site)/HomePage.tsx)
  */
 
 'use client';
@@ -38,6 +38,15 @@ import {BlogFeatureCard} from '../../../components/blog/BlogFeatureCard';
 // (right), filled by the 3 most recent posts (blogPosts is emitted latest-first
 // by the generator).
 const SLOT_COUNT = 3;
+
+// How wide the featured split draws a cover. From 1024 px the 1200 px
+// section gives the feature card at most 825 px and a compact card 344 px.
+// Below that each card has the full width, less the page's two 24 px
+// gutters.
+// SYNC: the gutters are the `paddingInline` of `showcaseOverlay` in
+// HomePage.tsx.
+const FEATURE_COVER_SIZES = '(min-width: 1024px) 825px, calc(100vw - 48px)';
+const COMPACT_COVER_SIZES = '(min-width: 1024px) 344px, calc(100vw - 48px)';
 
 const styles = stylex.create({
   section: {
@@ -148,10 +157,19 @@ export function BlogShowcase() {
   return (
     <BlogSection>
       <div {...stylex.props(styles.splitGrid)}>
-        <BlogFeatureCard post={featurePost} hideDescription />
+        <BlogFeatureCard
+          post={featurePost}
+          hideDescription
+          coverSizes={FEATURE_COVER_SIZES}
+        />
         <div {...stylex.props(styles.rightCol)}>
           {compactPosts.map(post => (
-            <BlogCard key={post.slug} post={post} hideDescription />
+            <BlogCard
+              key={post.slug}
+              post={post}
+              hideDescription
+              coverSizes={COMPACT_COVER_SIZES}
+            />
           ))}
         </div>
       </div>

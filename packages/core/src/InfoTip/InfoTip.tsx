@@ -33,6 +33,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon, type IconSize} from '../Icon/Icon';
 import {stopInReactTree} from '../Layer/layerClickBoundary';
 import {useTooltip} from '../Tooltip/useTooltip';
+import {tooltipIdOf} from '../Tooltip/tooltipPresentInterest';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -49,6 +50,7 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
+import {pickDataAttributes} from '../utils/themeProps';
 
 registerEnglishFallback(english);
 
@@ -135,6 +137,7 @@ export function InfoTip({
   xstyle,
   className,
   style,
+  ...rest
 }: InfoTipProps): ReactNode {
   const t = useComponentTranslator();
   const hitAreaRef = useTouchHitArea(true);
@@ -193,12 +196,13 @@ export function InfoTip({
   return (
     <>
       <button
+        {...pickDataAttributes(rest)}
         ref={mergedRef}
         type="button"
         aria-label={label ?? t('@astryx.infoTip.label')}
-        aria-describedby={tooltip.describedBy}
+        aria-describedby={tooltip.describedBy || undefined}
         aria-expanded={isPinned}
-        aria-controls={isShown ? tooltip.describedBy : undefined}
+        aria-controls={isShown ? tooltipIdOf(tooltip.describedBy) : undefined}
         onPointerDownCapture={handlePointerDownCapture}
         onClick={handleClick}
         {...mergeProps(

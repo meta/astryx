@@ -17,5 +17,4 @@ export const doc = {
     'Button',
     'Stack',
   ],
-  icons: {GlobeAltIcon: 'globe', LockClosedIcon: 'lock'},
 };

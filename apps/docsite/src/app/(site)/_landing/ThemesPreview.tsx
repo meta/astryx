@@ -2,11 +2,8 @@
 
 'use client';
 
+import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {
-  AppShellMobileContext,
-  type AppShellMobileContextValue,
-} from '@astryxdesign/core/AppShell';
 import {Card} from '@astryxdesign/core/Card';
 import {HStack} from '@astryxdesign/core/Layout';
 import {Theme} from '@astryxdesign/core/theme';
@@ -15,30 +12,20 @@ import {
   shadowVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {ThemeShowcaseStore} from '../../../../../../packages/cli/assets/templates/pages/theme-showcase/page';
-import {getThemeShowcaseContent} from '../../../components/themeShowcaseContent';
 import {themeObjects} from '../../../generated/themeRegistry';
 import {useThemeMode} from '../../providers';
+import {SarinaAa} from './SarinaAa';
 
 // Built Butter theme (__built:true) — same registry the hero reel + /themes
 // page pull from, so the left preview renders pre-built CSS with no runtime
 // injection.
 const butterTheme = themeObjects['@astryxdesign/theme-butter'];
 
-// Butter's bespoke showcase content (breakfast products + inventory) — the
-// same source of truth the /themes page feeds ThemeShowcaseStore, so this card
-// stays in sync with the themes page.
-const butterContent = getThemeShowcaseContent('butter');
-
 // Swatch + "Aa" colors as Butter theme tokens (resolved via the Butter <Theme>
 // scope around the rail below) rather than hardcoded hex, so they stay in sync.
 const BUTTER_BLUE = 'var(--color-accent)';
 const BUTTER_YELLOW = 'var(--color-background-yellow)';
 const BUTTER_CREAM = 'var(--color-background-body)';
-
-// Butter's signature display cursive — the theme only applies it to display-role
-// text, so the "Aa" sets the family explicitly.
-const BUTTER_SCRIPT = 'Sarina, "Brush Script MT", "Snell Roundhand", cursive';
 
 // The store template's natural (pre-scale) render width and the layout height
 // at which the first section ends — just below the 3 product cards (the cards'
@@ -137,6 +124,8 @@ const styles = stylex.create({
   // window with a hair to spare — no right-clip, no gutter — at any card width.
   // calc() dividing a length by a length yields the unitless number scale()
   // requires.
+  // SYNC: PHOTO_SIZES in themesStorePhotos.mjs states the size that this
+  // scale draws a store photo at.
   scaleInner: {
     width: STORE_RENDER_WIDTH,
     transform: `scale(calc(min(${STORE_MAX}px, calc(100cqw - ${RAIL_RESERVE}px)) / ${STORE_RENDER_WIDTH + 4}px))`,
@@ -158,9 +147,7 @@ const styles = stylex.create({
     borderColor: 'rgba(29, 28, 17, 0.12)',
   },
   railWordmark: {
-    fontFamily: BUTTER_SCRIPT,
     fontSize: 24,
-    lineHeight: 1,
     color: BUTTER_BLUE,
   },
 });
@@ -169,25 +156,12 @@ const swatchColors = stylex.create({
   fill: (color: string) => ({backgroundColor: color}),
 });
 
-// The store template's internal responsive grids read useAppShellMobile(), which
-// reflects the DOCSITE's viewport. Since the store is rendered at a fixed 1000px
-// desktop width and scaled down to a miniature, we force isMobile:false so its
-// product grid keeps the 3-column desktop layout on small screens (otherwise it
-// collapses to a single full-width product, ignoring the miniature's scale).
-const FORCE_DESKTOP_MOBILE_CONTEXT: AppShellMobileContextValue = {
-  isMobile: false,
-  isMobileNavOpen: false,
-  toggleMobileNav: () => {},
-  openMobileNav: () => {},
-  closeMobileNav: () => {},
-  isMobileNavEnabled: false,
-  hasAutoToggle: false,
-};
-
-// Live, theme-aware replacement for the old /feature-brand.png: the real /themes
+// Theme-aware replacement for the old /feature-brand.png: the real /themes
 // ThemeShowcaseStore (Butter content) on the left + Butter swatches & script "Aa"
 // on the right, both in a Butter <Theme> scope so they're dark-mode correct.
-export function ThemesPreview() {
+// The page passes the store as a build-time snapshot (FrozenPreview), so the
+// store's code does not ship to the browser.
+export function ThemesPreview({store}: {store: ReactNode}) {
   // Follow the docsite light/dark toggle so the Butter preview switches modes
   // (keeps Butter's palette; 'system' defers to the OS before the toggle).
   const {themeMode} = useThemeMode();
@@ -200,10 +174,7 @@ export function ThemesPreview() {
               {...stylex.props(styles.scaleViewport)}
               data-themes-card-preview>
               <div {...stylex.props(styles.scaleInner)} inert>
-                <AppShellMobileContext.Provider
-                  value={FORCE_DESKTOP_MOBILE_CONTEXT}>
-                  <ThemeShowcaseStore {...butterContent} />
-                </AppShellMobileContext.Provider>
+                {store}
               </div>
             </div>
           </Theme>
@@ -222,9 +193,7 @@ export function ThemesPreview() {
             <div
               {...stylex.props(styles.swatch, swatchColors.fill(BUTTER_CREAM))}
             />
-            <span {...stylex.props(styles.railWordmark)} aria-hidden="true">
-              Aa
-            </span>
+            <SarinaAa xstyle={styles.railWordmark} />
           </HStack>
         </Theme>
       </div>

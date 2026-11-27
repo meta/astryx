@@ -8,7 +8,40 @@ export type ThemeDataAttributes = Record<`data-${string}`, string | undefined>;
 export type ThemeProps = {className: string} & ThemeDataAttributes;
 
 export function themeDataAttributeName(prop: string): `data-${string}` {
+  if (isLowercaseAscii(prop)) {
+    return `data-${prop}`;
+  }
   return `data-${prop.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
+}
+
+// Most prop names are lowercase ASCII and need no change, so they skip the
+// conversion. A non-ASCII letter can have a lowercase form, so a name with one
+// goes through the conversion.
+function isLowercaseAscii(text: string): boolean {
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    if ((code >= 65 && code <= 90) || code > 127) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Return the caller's `data-*` attributes from a component's remaining props.
+ *
+ * A component spreads them on its own element, before its own attributes, so
+ * tools and tests can tag it. Other unknown props stay off the DOM: the
+ * component keeps its id, role, ARIA attributes, and handlers.
+ */
+export function pickDataAttributes(props: object): ThemeDataAttributes {
+  const attrs: ThemeDataAttributes = {};
+  for (const [key, value] of Object.entries(props)) {
+    if (key.startsWith('data-')) {
+      attrs[key as `data-${string}`] = value as string | undefined;
+    }
+  }
+  return attrs;
 }
 
 /**
@@ -39,11 +72,14 @@ export function themeDataAttributes(props?: ClassProps): ThemeDataAttributes {
   const attrs: ThemeDataAttributes = {};
 
   if (props) {
-    for (const [prop, value] of Object.entries(props)) {
-      if (value == null) {
+    for (const prop in props) {
+      if (!Object.hasOwn(props, prop)) {
         continue;
       }
-      attrs[themeDataAttributeName(prop)] = String(value);
+      const value = props[prop];
+      if (value != null) {
+        attrs[themeDataAttributeName(prop)] = String(value);
+      }
     }
   }
 

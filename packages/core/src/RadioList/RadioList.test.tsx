@@ -15,6 +15,7 @@
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
 import {
   hasReleaseFade,
   readsPressStrength,
@@ -23,8 +24,14 @@ import {
 } from '../__tests__/pressState';
 import {RadioList} from './RadioList';
 import {RadioListItem} from './RadioListItem';
+import {FormLayout} from '../FormLayout/FormLayout';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import {getTooltip} from '../__tests__/tooltipDescription';
+
+const itemTestStyles = stylex.create({
+  custom: {marginBlockStart: 4},
+});
 
 // Mock showPopover/hidePopover (not implemented in jsdom) so the tooltip layer
 // reflects its open state via a `popover-open` attribute the tests can assert.
@@ -53,7 +60,93 @@ beforeEach(() => {
   };
 });
 
+/** A pointer press on `target`, as the press controller and React read it. */
+function pointerDown(
+  target: Element,
+  init: {pointerType: string; button: number; ctrlKey?: boolean},
+): void {
+  fireEvent.pointerDown(target, {pointerId: 1, ...init});
+  fireEvent.pointerUp(target, {pointerId: 1, ...init});
+}
+
+/** Runs `check` on macOS, where a ctrl-click is the context click. */
+function onApplePlatform(check: () => void): void {
+  Object.defineProperty(navigator, 'platform', {
+    configurable: true,
+    get: () => 'MacIntel',
+  });
+  try {
+    check();
+  } finally {
+    Reflect.deleteProperty(navigator, 'platform');
+  }
+}
+
 describe('RadioList', () => {
+  it("paints a primary mouse press on an option at once, and none for a macOS ctrl-click or a pen's barrel button", () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}}>
+        <RadioListItem label="Free" value="free" />
+        <RadioListItem label="Pro" value="pro" />
+      </RadioList>,
+    );
+    const target = screen.getByText('Pro');
+    const row = target.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    onApplePlatform(() =>
+      pointerDown(target, {pointerType: 'mouse', button: 0, ctrlKey: true}),
+    );
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    pointerDown(target, {pointerType: 'pen', button: 2});
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    fireEvent.pointerDown(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+  });
+
+  it('paints no row press for a mouse, pen or finger press on a select in end content, and one for a press on the label', () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}}>
+        <RadioListItem label="Free" value="free" />
+        <RadioListItem
+          label="Pro"
+          value="pro"
+          endContent={
+            <select aria-label="Billing">
+              <option>Monthly</option>
+              <option>Yearly</option>
+            </select>
+          }
+        />
+      </RadioList>,
+    );
+    const select = screen.getByRole('combobox', {name: 'Billing'});
+    const row = select.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    for (const pointerType of ['mouse', 'pen', 'touch']) {
+      fireEvent.pointerDown(select, {pointerId: 1, pointerType, button: 0});
+      expect(row).not.toHaveAttribute('data-astryx-press');
+      fireEvent.pointerUp(select, {pointerId: 1, pointerType, button: 0});
+    }
+    const label = screen.getByText('Pro');
+    const mouse = {pointerId: 1, pointerType: 'mouse', button: 0};
+    fireEvent.pointerDown(label, mouse);
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(label, mouse);
+  });
+
   it('renders with label', () => {
     render(
       <RadioList label="Preference" value="" onChange={() => {}}>
@@ -322,7 +415,7 @@ describe('RadioList', () => {
     // element — a `<label>` names a single control and can't be associated
     // with a group. It is rendered as a `<span>` and referenced via
     // aria-labelledby (with no orphaned htmlFor).
-    const labelEl = screen.getByText('Plan');
+    const labelEl = screen.getByText('Plan').parentElement!;
     expect(labelEl.tagName).toBe('SPAN');
     expect(labelEl.closest('label')).toBeNull();
     expect(labelEl).not.toHaveAttribute('for');
@@ -454,26 +547,31 @@ describe('RadioList', () => {
 
     it('shows the reason tooltip on hover when the group is disabled with a reason', async () => {
       renderGroup();
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('Upgrade your account to change plans');
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent(
+        'Upgrade your account to change plans',
+      );
       const group = screen.getByRole('radiogroup');
       fireEvent.mouseEnter(group);
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      fireEvent.pointerMove(group);
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(group);
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(tooltip()).not.toHaveAttribute('popover-open'),
+      );
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderGroup();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       await user.tab();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
     });
 
     it('describes each radio with the reason, as well as the radiogroup', () => {
       renderGroup();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       for (const name of ['Free', 'Pro']) {
         const radio = screen.getByRole('radio', {name});
         expect(radio.getAttribute('aria-describedby')?.split(' ')).toContain(
@@ -506,7 +604,7 @@ describe('RadioList', () => {
           />
         </RadioList>,
       );
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       const radio = screen.getByRole('radio', {name: 'Free'});
       const ids = radio.getAttribute('aria-describedby')!.split(' ');
       expect(ids).toHaveLength(2);
@@ -533,7 +631,7 @@ describe('RadioList', () => {
       __resetInteractionModalityForTest();
       const onChange = vi.fn();
       renderGroup({onChange});
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       const pro = screen.getByRole('radio', {name: 'Pro'});
       // A tap, in the order a browser dispatches it.
       fireEvent.pointerEnter(pro, {pointerType: 'touch'});
@@ -541,7 +639,7 @@ describe('RadioList', () => {
       fireEvent.pointerUp(pro, {pointerType: 'touch'});
       fireEvent.mouseEnter(pro);
       fireEvent.click(pro);
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       expect(onChange).not.toHaveBeenCalled();
       expect(pro).not.toBeChecked();
     });
@@ -1044,6 +1142,181 @@ describe('RadioList', () => {
   });
 });
 
+describe('one Tab stop', () => {
+  it('takes the other radios out of the Tab order for one Tab press', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <RadioList label="Notify" value="sms" onChange={() => {}}>
+          <RadioListItem label="Email" value="email" />
+          <RadioListItem label="SMS" value="sms" />
+          <RadioListItem label="Push" value="push" />
+        </RadioList>,
+      );
+      const email = screen.getByRole('radio', {name: 'Email'});
+      const sms = screen.getByRole('radio', {name: 'SMS'});
+      const push = screen.getByRole('radio', {name: 'Push'});
+      email.focus();
+      fireEvent.keyDown(email, {key: 'Tab'});
+      expect(sms.tabIndex).toBe(-1);
+      expect(push.tabIndex).toBe(-1);
+      expect(email.tabIndex).toBe(0);
+      vi.runAllTimers();
+      expect(sms).not.toHaveAttribute('tabindex');
+      expect(push).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restores the original tab indexes when a second Tab press comes before the restore', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <RadioList label="Notify" value="sms" onChange={() => {}}>
+          <RadioListItem label="Email" value="email" />
+          <RadioListItem label="SMS" value="sms" />
+          <RadioListItem label="Push" value="push" />
+        </RadioList>,
+      );
+      const email = screen.getByRole('radio', {name: 'Email'});
+      const sms = screen.getByRole('radio', {name: 'SMS'});
+      const push = screen.getByRole('radio', {name: 'Push'});
+      email.focus();
+      fireEvent.keyDown(email, {key: 'Tab'});
+      fireEvent.keyDown(email, {key: 'Tab', shiftKey: true});
+      expect(sms.tabIndex).toBe(-1);
+      vi.runAllTimers();
+      expect(sms).not.toHaveAttribute('tabindex');
+      expect(push).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restores the tab indexes when focus leaves the group before the restore', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <>
+          <RadioList label="Notify" value="sms" onChange={() => {}}>
+            <RadioListItem label="Email" value="email" />
+            <RadioListItem label="SMS" value="sms" />
+          </RadioList>
+          <button type="button">Next</button>
+        </>,
+      );
+      const email = screen.getByRole('radio', {name: 'Email'});
+      const sms = screen.getByRole('radio', {name: 'SMS'});
+      email.focus();
+      fireEvent.keyDown(email, {key: 'Tab'});
+      expect(sms.tabIndex).toBe(-1);
+      screen.getByRole('button', {name: 'Next'}).focus();
+      expect(sms).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restores a nested group's radios after a Tab press in it", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <RadioList label="Plan" value="team" onChange={() => {}}>
+          <RadioListItem label="Solo" value="solo" />
+          <RadioListItem
+            label="Team"
+            value="team"
+            endContent={
+              <RadioList label="Seats" value="ten" onChange={() => {}}>
+                <RadioListItem label="Five" value="five" />
+                <RadioListItem label="Ten" value="ten" />
+              </RadioList>
+            }
+          />
+        </RadioList>,
+      );
+      const five = screen.getByRole('radio', {name: 'Five'});
+      const ten = screen.getByRole('radio', {name: 'Ten'});
+      const solo = screen.getByRole('radio', {name: 'Solo'});
+      five.focus();
+      fireEvent.keyDown(five, {key: 'Tab'});
+      expect(ten.tabIndex).toBe(-1);
+      expect(solo).not.toHaveAttribute('tabindex');
+      vi.runAllTimers();
+      expect(ten).not.toHaveAttribute('tabindex');
+      expect(solo).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('works for a group rendered in a same-origin iframe', () => {
+    vi.useFakeTimers();
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    try {
+      const frameDocument = iframe.contentDocument!;
+      const container = frameDocument.body.appendChild(
+        frameDocument.createElement('div'),
+      );
+      const {unmount} = render(
+        <RadioList label="Notify" value="sms" onChange={() => {}}>
+          <RadioListItem label="Email" value="email" />
+          <RadioListItem label="SMS" value="sms" />
+        </RadioList>,
+        {container},
+      );
+      const email = container.querySelector<HTMLInputElement>(
+        'input[value="email"]',
+      )!;
+      const sms =
+        container.querySelector<HTMLInputElement>('input[value="sms"]')!;
+      expect(email instanceof HTMLInputElement).toBe(false);
+      fireEvent.keyDown(email, {key: 'Tab'});
+      expect(sms.tabIndex).toBe(-1);
+      vi.runAllTimers();
+      expect(sms).not.toHaveAttribute('tabindex');
+      unmount();
+    } finally {
+      iframe.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaves the Tab order alone for other keys and for Ctrl+Tab', () => {
+    render(
+      <RadioList label="Notify" value="sms" onChange={() => {}}>
+        <RadioListItem label="Email" value="email" />
+        <RadioListItem label="SMS" value="sms" />
+      </RadioList>,
+    );
+    const email = screen.getByRole('radio', {name: 'Email'});
+    const sms = screen.getByRole('radio', {name: 'SMS'});
+    fireEvent.keyDown(email, {key: 'ArrowDown'});
+    fireEvent.keyDown(email, {key: 'Tab', ctrlKey: true});
+    expect(sms).not.toHaveAttribute('tabindex');
+  });
+
+  it("runs a caller's onKeyDown after its own handling", () => {
+    const onKeyDown = vi.fn();
+    render(
+      <RadioList
+        label="Notify"
+        value="sms"
+        onChange={() => {}}
+        onKeyDown={onKeyDown}>
+        <RadioListItem label="Email" value="email" />
+        <RadioListItem label="SMS" value="sms" />
+      </RadioList>,
+    );
+    fireEvent.keyDown(screen.getByRole('radio', {name: 'Email'}), {
+      key: 'Tab',
+    });
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+});
+
 // jsdom cannot emulate forced-colors rendering, so this asserts that the
 // compiled output includes the forced-colors rule; visual behavior needs
 // manual verification under Windows High Contrast.
@@ -1069,14 +1342,14 @@ function readsRowPress(el: Element): boolean {
 
 /**
  * Does the row declare the mouse press's paint while pressed, but not while a
- * nested link or button is the pressed one?
+ * nested control is the pressed one?
  */
 function declaresRowPress(el: Element): boolean {
   return rulesWithSelector(el, ':active').some(
     rule =>
       rule.includes('--_radio-row-press:') &&
       rule.includes('var(--color-overlay-pressed)') &&
-      /:not\(:has\(a:active, ?button:active/.test(rule),
+      rule.includes(':not(:has(button:not([aria-readonly="true"]):active'),
   );
 }
 
@@ -1178,6 +1451,335 @@ describe('RadioList group disabled state', () => {
     expect(screen.getByRole('radiogroup', {name: 'Size'})).toHaveAttribute(
       'aria-disabled',
       'true',
+    );
+  });
+});
+
+describe('RadioList record contract', () => {
+  it('orders the group description: caller ids, description, status message, then the disabled reason (FR1)', () => {
+    render(
+      <>
+        <p id="caller-note">Changes apply next week</p>
+        <RadioList
+          label="Preference"
+          value="a"
+          onChange={() => {}}
+          aria-describedby="caller-note"
+          description="Pick one"
+          status={{type: 'warning', message: 'Check your plan'}}
+          isDisabled
+          disabledMessage="Locked by your admin">
+          <RadioListItem label="Option A" value="a" />
+        </RadioList>
+      </>,
+    );
+    const ids =
+      screen
+        .getByRole('radiogroup')
+        .getAttribute('aria-describedby')
+        ?.split(' ') ?? [];
+    expect(ids).toHaveLength(4);
+    expect(ids[0]).toBe('caller-note');
+    expect(document.getElementById(ids[1])).toHaveTextContent('Pick one');
+    expect(document.getElementById(ids[2])).toHaveTextContent(
+      'Check your plan',
+    );
+    // The reason's id is the one each radio of the group adds.
+    expect(ids[3]).toBe(
+      screen.getByRole('radio').getAttribute('aria-describedby'),
+    );
+  });
+
+  it('renders the label tooltip as a button named after the group label (FR1)', () => {
+    render(
+      <RadioList
+        label="Preference"
+        labelTooltip="How we use it"
+        value=""
+        onChange={() => {}}>
+        <RadioListItem label="Option A" value="a" />
+      </RadioList>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'About Preference'}),
+    ).toBeInTheDocument();
+  });
+
+  it('calls onChange once for a click on an option label or description (FR3)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RadioList label="Preference" value="" onChange={onChange}>
+        <RadioListItem label="Option A" value="a" />
+        <RadioListItem label="Option B" value="b" description="Second" />
+      </RadioList>,
+    );
+    await user.click(screen.getByText('Option A'));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith('a');
+    await user.click(screen.getByText('Second'));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenLastCalledWith('b');
+  });
+
+  it('enters an empty group disabled with a reason on its first radio (FR4)', () => {
+    render(
+      <>
+        <button type="button">Before</button>
+        <RadioList
+          label="Preference"
+          value=""
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Locked">
+          <RadioListItem label="Option A" value="a" />
+          <RadioListItem label="Option B" value="b" />
+          <RadioListItem label="Option C" value="c" />
+        </RadioList>
+      </>,
+    );
+    const radios = screen.getAllByRole('radio');
+    screen.getByRole('button', {name: 'Before'}).focus();
+    // A browser that lands mid-group on entry.
+    radios[1].focus();
+    expect(radios[0]).toHaveFocus();
+    expect(radios[0]).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('runs a caller onFocus after its entry handling (FR4, FR8)', () => {
+    const focusedAtCall: Element[] = [];
+    render(
+      <>
+        <button type="button">Before</button>
+        <RadioList
+          label="Preference"
+          value=""
+          onChange={() => {}}
+          onFocus={() => {
+            if (document.activeElement) {
+              focusedAtCall.push(document.activeElement);
+            }
+          }}>
+          <RadioListItem label="Option A" value="a" />
+          <RadioListItem label="Option B" value="b" />
+          <RadioListItem label="Option C" value="c" />
+        </RadioList>
+      </>,
+    );
+    const radios = screen.getAllByRole('radio');
+    screen.getByRole('button', {name: 'Before'}).focus();
+    radios[1].focus();
+    expect(radios[0]).toHaveFocus();
+    // The caller first runs once the entry redirect has moved focus.
+    expect(focusedAtCall[0]).toBe(radios[0]);
+  });
+
+  it('keeps the radios of a group disabled without a reason focusable and aria-disabled (FR5)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <>
+        <button type="button">Before</button>
+        <RadioList label="Plan" value="free" onChange={onChange} isDisabled>
+          <RadioListItem label="Free" value="free" />
+          <RadioListItem label="Pro" value="pro" />
+        </RadioList>
+      </>,
+    );
+    const radios = screen.getAllByRole('radio');
+    for (const radio of radios) {
+      expect(radio).not.toBeDisabled();
+      expect(radio).toHaveAttribute('aria-disabled', 'true');
+    }
+    screen.getByRole('button', {name: 'Before'}).focus();
+    await user.tab();
+    expect(radios[0]).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    fireEvent.click(radios[1]);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('pins native disabled on an individually disabled radio of a disabled group (RadioListItem FR6 gap)', () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}} isDisabled>
+        <RadioListItem label="Free" value="free" />
+        <RadioListItem label="Pro" value="pro" isDisabled />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radio', {name: 'Free'})).not.toBeDisabled();
+    expect(screen.getByRole('radio', {name: 'Pro'})).toBeDisabled();
+  });
+
+  it('submits no value for a disabled option or a group disabled without a reason (FR5)', () => {
+    const {container} = render(
+      <>
+        <form data-testid="item-disabled">
+          <RadioList label="Plan" htmlName="plan" value="b" onChange={() => {}}>
+            <RadioListItem label="Option A" value="a" />
+            <RadioListItem label="Option B" value="b" isDisabled />
+          </RadioList>
+        </form>
+        <form data-testid="group-disabled">
+          <RadioList
+            label="Region"
+            htmlName="region"
+            value="a"
+            onChange={() => {}}
+            isDisabled>
+            <RadioListItem label="Option A" value="a" />
+          </RadioList>
+        </form>
+      </>,
+    );
+    for (const form of Array.from(container.querySelectorAll('form'))) {
+      expect([...new FormData(form).keys()]).toEqual([]);
+    }
+  });
+
+  it('exposes a form-level required default only through aria-required (FR6)', () => {
+    render(
+      <FormLayout defaultOptionality="required">
+        <RadioList label="Preference" value="" onChange={() => {}}>
+          <RadioListItem label="Option A" value="a" />
+          <RadioListItem label="Option B" value="b" />
+        </RadioList>
+      </FormLayout>,
+    );
+    expect(screen.getByRole('radiogroup')).toHaveAttribute(
+      'aria-required',
+      'true',
+    );
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio).not.toBeRequired();
+    }
+  });
+
+  it('puts the radio-list target with orientation and size on the radiogroup, and the size on every item (FR7, FR9)', () => {
+    const {rerender} = render(
+      <RadioList label="Preference" value="" onChange={() => {}}>
+        <RadioListItem label="Option A" value="a" />
+      </RadioList>,
+    );
+    const group = screen.getByRole('radiogroup');
+    expect(group).toHaveClass('astryx-radio-list');
+    expect(group).toHaveAttribute('data-orientation', 'vertical');
+    expect(group).toHaveAttribute('data-size', 'md');
+    rerender(
+      <RadioList
+        label="Preference"
+        value=""
+        onChange={() => {}}
+        orientation="horizontal"
+        size="sm">
+        <RadioListItem label="Option A" value="a" />
+        <RadioListItem label="Option B" value="b" />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radiogroup')).toHaveAttribute(
+      'data-orientation',
+      'horizontal',
+    );
+    expect(screen.getByRole('radiogroup')).toHaveAttribute('data-size', 'sm');
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio.closest('.astryx-radio-list-item')).toHaveAttribute(
+        'data-size',
+        'sm',
+      );
+    }
+  });
+
+  it('puts data-testid on the radiogroup (FR8)', () => {
+    render(
+      <RadioList
+        label="Preference"
+        value=""
+        onChange={() => {}}
+        data-testid="group">
+        <RadioListItem label="Option A" value="a" />
+      </RadioList>,
+    );
+    expect(screen.getByTestId('group')).toBe(screen.getByRole('radiogroup'));
+  });
+});
+
+describe('RadioListItem record contract', () => {
+  it('throws when rendered outside a RadioList (FR1)', () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    try {
+      expect(() =>
+        render(<RadioListItem label="Option A" value="a" />),
+      ).toThrow(/must be used within/);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('renders startContent after the radio, ahead of the label (FR2)', () => {
+    render(
+      <RadioList label="Preference" value="" onChange={() => {}}>
+        <RadioListItem
+          label="Option A"
+          value="a"
+          startContent={<span data-testid="start">*</span>}
+        />
+      </RadioList>,
+    );
+    const radio = screen.getByRole('radio', {name: 'Option A'});
+    const start = screen.getByTestId('start');
+    const label = screen.getByText('Option A');
+    expect(
+      radio.compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      start.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('runs a caller onClick on the radio once for a direct click and once for a row-surface click (FR4)', async () => {
+    const user = userEvent.setup();
+    const targets: EventTarget[] = [];
+    render(
+      <RadioList label="Plan" value="" onChange={() => {}}>
+        <RadioListItem
+          label="Pro"
+          value="pro"
+          description="Billed monthly"
+          onClick={event => targets.push(event.currentTarget)}
+        />
+      </RadioList>,
+    );
+    const radio = screen.getByRole('radio', {name: 'Pro'});
+    await user.click(radio);
+    expect(targets).toEqual([radio]);
+    await user.click(screen.getByText('Billed monthly'));
+    expect(targets).toEqual([radio, radio]);
+  });
+
+  it('puts ref, className, style and xstyle on the row (FR12)', () => {
+    const ref = {current: null as HTMLDivElement | null};
+    render(
+      <RadioList label="Preference" value="" onChange={() => {}}>
+        <RadioListItem
+          ref={ref}
+          label="Option A"
+          value="a"
+          className="caller-row"
+          style={{scrollMarginTop: '7px'}}
+          xstyle={itemTestStyles.custom}
+        />
+      </RadioList>,
+    );
+    const row = screen
+      .getByRole('radio', {name: 'Option A'})
+      .closest('.astryx-radio-list-item');
+    expect(row).not.toBeNull();
+    expect(ref.current).toBe(row);
+    expect(row).toHaveClass('caller-row');
+    expect((row as HTMLElement).style.scrollMarginTop).toBe('7px');
+    expect(row!.className).toContain(
+      stylex.props(itemTestStyles.custom).className!.split(' ')[0],
     );
   });
 });

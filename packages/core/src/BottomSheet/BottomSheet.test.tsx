@@ -19,7 +19,15 @@ import {
   onTestFinished,
 } from 'vitest';
 import {act, cleanup, render, screen, fireEvent} from '@testing-library/react';
-import {Profiler, createRef, useState, type ReactNode} from 'react';
+import {
+  Profiler,
+  Suspense,
+  createRef,
+  startTransition,
+  use,
+  useState,
+  type ReactNode,
+} from 'react';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {resetBottomSheetStackForTests} from './bottomSheetStack';
@@ -30,6 +38,14 @@ import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
 import {__resetRevealsAtReportForTest} from '../keyboard/useMobileKeyboard';
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
 import {animatorFor} from '../motion/animator';
+
+// A press that starts and ends on the scrim: the browser targets the dialog
+// element with the pointer events and with the click.
+function pressScrim(dialog: HTMLElement) {
+  fireEvent.pointerDown(dialog);
+  fireEvent.pointerUp(dialog);
+  fireEvent.click(dialog);
+}
 
 // A sheet has no stops unless its host asks for them, so the tests that
 // exercise detents pass their own. These three — a 14% peek, a half-height
@@ -567,8 +583,44 @@ describe('BottomSheet', () => {
         Content
       </BottomSheet>,
     );
+    fireEvent.pointerDown(screen.getByRole('dialog'));
+    fireEvent.pointerUp(screen.getByRole('dialog'));
     fireEvent.click(screen.getByRole('dialog'));
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('stays open on a press that starts inside and ends on the scrim (family:overlay-dismissal FR10)', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Filters">
+        <input aria-label="Search" defaultValue="Note text" />
+      </BottomSheet>,
+    );
+    const dialog = screen.getByRole('dialog');
+    const input = screen.getByLabelText('Search');
+
+    fireEvent.pointerDown(input);
+    fireEvent.pointerUp(dialog);
+    fireEvent.click(dialog);
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('stays open on a press that starts on the scrim and ends inside the sheet (family:overlay-dismissal FR10)', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Filters">
+        <input aria-label="Search" defaultValue="Note text" />
+      </BottomSheet>,
+    );
+    const dialog = screen.getByRole('dialog');
+    const input = screen.getByLabelText('Search');
+
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(input);
+    fireEvent.click(dialog);
+
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 
   it('purpose=form blocks scrim and swipe dismissal but allows Escape', () => {
@@ -584,6 +636,8 @@ describe('BottomSheet', () => {
     );
     const dialog = screen.getByRole('dialog');
 
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(dialog);
     fireEvent.click(dialog);
     drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}]);
 
@@ -611,6 +665,8 @@ describe('BottomSheet', () => {
     );
     const dialog = screen.getByRole('alertdialog');
 
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(dialog);
     fireEvent.click(dialog);
     fireEvent.keyDown(dialog, {key: 'Escape'});
     fireEvent(dialog, new Event('cancel', {cancelable: true}));
@@ -635,6 +691,8 @@ describe('BottomSheet', () => {
     fireEvent(dialog, new Event('cancel', {cancelable: true}));
     expect(onOpenChange).not.toHaveBeenCalled();
 
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(dialog);
     fireEvent.click(dialog);
     expect(onOpenChange).toHaveBeenCalledTimes(1);
     drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}]);
@@ -969,6 +1027,61 @@ describe('BottomSheet', () => {
       }
     });
 
+    it('returns focus to the committed finalFocusRef when it unmounts after React discards a render with another', async () => {
+      // A transition that suspends for good: React renders it, then keeps the
+      // committed tree and never commits that render.
+      const forever = new Promise<never>(() => {});
+      function Forever(): null {
+        use(forever);
+        return null;
+      }
+      const target = document.createElement('button');
+      const discardedTarget = document.createElement('button');
+      document.body.append(target, discardedTarget);
+      const finalFocusRef = {current: target as HTMLElement | null};
+      const discardedFinalFocusRef = {
+        current: discardedTarget as HTMLElement | null,
+      };
+      const page = (
+        focusRef: {current: HTMLElement | null} | null,
+        isPending = false,
+      ) => (
+        <Suspense fallback={null}>
+          {focusRef == null ? null : (
+            <BottomSheet
+              isOpen
+              onOpenChange={() => {}}
+              finalFocusRef={focusRef}
+              label="Filters">
+              <button type="button">Inside</button>
+            </BottomSheet>
+          )}
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+      try {
+        const {rerender} = render(page(finalFocusRef));
+        act(() =>
+          screen.getByRole('button', {name: 'Inside', hidden: true}).focus(),
+        );
+        await act(async () => {
+          startTransition(() => {
+            rerender(page(discardedFinalFocusRef, true));
+          });
+        });
+
+        // The page removes the open sheet; its removal returns focus.
+        rerender(page(null));
+        await act(async () => {});
+
+        expect(document.activeElement).not.toBe(discardedTarget);
+        expect(document.activeElement).toBe(target);
+      } finally {
+        target.remove();
+        discardedTarget.remove();
+      }
+    });
+
     it('leaves focus where the person took it when the sheet closes from the page', () => {
       const opener = document.createElement('button');
       const elsewhere = document.createElement('input');
@@ -1039,7 +1152,7 @@ describe('BottomSheet', () => {
           Content
         </BottomSheet>,
       );
-      fireEvent.click(screen.getByRole('dialog'));
+      pressScrim(screen.getByRole('dialog'));
       expect(onOpenChange).not.toHaveBeenCalled();
     });
 
@@ -2055,6 +2168,62 @@ describe('BottomSheet', () => {
 
       // Half of the 800px window is 400px of visible sheet: 736 - 400 = 336px
       // of travel, taken as layout height once the snap lands.
+      dragHandleTo(336);
+
+      expect(sheet.style.height).toBe('448px');
+      expect(sheet.style.transform).toBe('');
+    });
+
+    it('rests at the committed stop when React discards a render that moves it', async () => {
+      const observers = mockResizeObserverInstances();
+      mockVisualViewport(800);
+      mockWindowHeight(800);
+      // A transition that suspends for good: React renders the new stops,
+      // then keeps the committed tree and never commits that render.
+      const forever = new Promise<never>(() => {});
+      function Forever(): null {
+        use(forever);
+        return null;
+      }
+      function Screen({
+        snapPoints,
+        isPending,
+      }: {
+        snapPoints: ReadonlyArray<number>;
+        isPending: boolean;
+      }) {
+        return (
+          <Suspense fallback={null}>
+            <BottomSheet
+              isOpen
+              onOpenChange={() => {}}
+              label="Release notes"
+              snapPoints={snapPoints}
+              height="tall">
+              Content
+            </BottomSheet>
+            {isPending ? <Forever /> : null}
+          </Suspense>
+        );
+      }
+      const view = render(<Screen snapPoints={[0.5]} isPending={false} />);
+      const sheet = getSheet();
+      const sheetObserver = observers.find(instance =>
+        instance.observed.has(sheet),
+      );
+      act(() => {
+        sheetObserver?.callback(
+          [resizeEntry(784, 736)],
+          sheetObserver as unknown as ResizeObserver,
+        );
+      });
+      await act(async () => {
+        startTransition(() => {
+          view.rerender(<Screen snapPoints={[0.25]} isPending />);
+        });
+      });
+
+      // The committed stop is still half the window: 336px of travel.
       dragHandleTo(336);
 
       expect(sheet.style.height).toBe('448px');
@@ -4785,8 +4954,9 @@ describe('BottomSheet', () => {
           matches:
             query === '(prefers-reduced-motion: reduce)' ||
             (coarse &&
-              query ===
-                '(prefers-reduced-motion: reduce) and (pointer: coarse)'),
+              (query === '(pointer: coarse)' ||
+                query ===
+                  '(prefers-reduced-motion: reduce) and (pointer: coarse)')),
           media: query,
           onchange: null,
           addEventListener: vi.fn(),
@@ -4927,6 +5097,31 @@ describe('BottomSheet', () => {
     });
   });
 
+  describe('scrim property isolation', () => {
+    // A drag writes the scrim's opacity on the dialog for each move, and only
+    // the dialog's backdrop reads it. An inherited custom property restyles
+    // every element under the one it changes on. jsdom reports the declared
+    // `initial`. A browser computes no value, which the interaction proof
+    // BottomSheetDragRestyle covers.
+    it("declares the dialog's scrim properties `initial` on the sheet panel", () => {
+      render(
+        <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+          Content
+        </BottomSheet>,
+      );
+      const dialog = screen.getByRole('dialog', {hidden: true});
+      dialog.style.setProperty('--_sheet-scrim-opacity', '0.5');
+      dialog.style.setProperty('--_sheet-scrim-duration', '120ms');
+      const computed = window.getComputedStyle(getSheet());
+      expect(computed.getPropertyValue('--_sheet-scrim-opacity')).toBe(
+        'initial',
+      );
+      expect(computed.getPropertyValue('--_sheet-scrim-duration')).toBe(
+        'initial',
+      );
+    });
+  });
+
   describe('container padding isolation', () => {
     it('resets container padding custom properties to 0px on the sheet panel element', () => {
       render(
@@ -5014,6 +5209,34 @@ describe('BottomSheet focus region (Dialog DEC-2)', () => {
       </BottomSheet>,
     );
     expectTabWrapsInside(screen.getByRole('dialog'));
+  });
+
+  it('wraps past a roving group\u2019s tabindex="-1" buttons at the end of the sheet', () => {
+    render(
+      <BottomSheet isOpen onOpenChange={() => {}} label="Choose">
+        <button type="button">Save</button>
+        <div role="radiogroup" aria-label="View">
+          <button type="button" role="radio" aria-checked="true" tabIndex={0}>
+            All
+          </button>
+          <button type="button" role="radio" aria-checked="false" tabIndex={-1}>
+            Mine
+          </button>
+          <button type="button" role="radio" aria-checked="false" tabIndex={-1}>
+            This week
+          </button>
+        </div>
+      </BottomSheet>,
+    );
+    const save = screen.getByRole('button', {name: 'Save'});
+    const all = screen.getByRole('radio', {name: 'All'});
+
+    all.focus();
+    expect(fireEvent.keyDown(all, {key: 'Tab'})).toBe(false);
+    expect(save).toHaveFocus();
+
+    expect(fireEvent.keyDown(save, {key: 'Tab', shiftKey: true})).toBe(false);
+    expect(all).toHaveFocus();
   });
 
   it('leaves Tab alone in a non-modal sheet', () => {

@@ -14,6 +14,8 @@
  */
 
 import {
+  Fragment,
+  isValidElement,
   use,
   useCallback,
   useEffect,
@@ -21,11 +23,26 @@ import {
   useState,
   type ReactNode,
   type RefCallback,
+  useSyncExternalStore,
 } from 'react';
-import {TooltipPresentInterestContext} from './tooltipPresentInterest';
+import {createPortal} from 'react-dom';
+import {useCommittedRef} from '../hooks/useCommittedRef';
+import {getNodeText} from '../utils/getNodeText';
+import {holdMouseMoves, isMouseMove} from '../utils/inputStream';
+import {createStore, type SharedStore} from '../utils/sharedRealm';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {
+  DESCRIPTION_SUFFIX,
+  TooltipDescribesContext,
+  TooltipDescriptionIdContext,
+  TooltipPresentInterestContext,
+} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
+import {getInteractionModality} from '../utils/interactionModality';
+import {NON_TEXT_INPUT_TYPES} from '../keyboard/keyboardHeight';
 import * as stylex from '@stylexjs/stylex';
 import {
+  noInvoker,
   useLayerInternal,
   type ContextRenderProps,
   type LayerAlignment,
@@ -49,6 +66,23 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {tooltipDescriptionProps} from '../privateAttributes/tooltipDescription.stylex';
+
+/**
+ * Whether `element` is a text field in any state: a text-like `<input>`, a
+ * `<textarea>` or an editable element, also when it is read-only, disabled
+ * or brings up no keyboard.
+ */
+function isTextField(element: HTMLElement): boolean {
+  if (element.localName === 'input') {
+    return !NON_TEXT_INPUT_TYPES.has(
+      (element.getAttribute('type') ?? 'text').toLowerCase(),
+    );
+  }
+  return element.matches(
+    'textarea, [contenteditable]:not([contenteditable="false"])',
+  );
+}
 
 /**
  * Grace period (ms) before hiding on pointer-leave when no explicit `hideDelay`
@@ -58,10 +92,9 @@ import {
 const HOVER_BRIDGE_DELAY = 100;
 
 const styles = stylex.create({
-  // Base container styles - inverted colors for high contrast
+  // The same inverted surface Toast paints, so the two match in every theme.
   container: {
-    // Inverted color palette: dark background, light text
-    backgroundColor: colorVars['--color-text-primary'],
+    backgroundColor: colorVars['--color-background-inverted'],
     color: colorVars['--color-background-surface'],
     borderRadius: radiusVars['--radius-container'],
     // Typography
@@ -211,13 +244,21 @@ export interface TooltipReturn {
 
   /**
    * ID for aria-describedby on the trigger element.
-   * Caller should compose with other IDs using mergeIds utility.
+   * Caller should compose with other IDs using mergeIds utility. It names the
+   * tooltip's text description: until the tooltip first shows, a hidden copy
+   * of the tooltip text that `renderTooltip` renders after the trigger, in
+   * server and client markup alike; after that, the tooltip's content. It is
+   * not the tooltip element's id.
    */
   describedBy: string;
 
   /**
    * Render function for tooltip content.
    * Returns anchor-positioned popover element.
+   *
+   * Until the tooltip first shows, the content also renders as the trigger's
+   * hidden description, so a component inside it runs its effects before
+   * then. The tooltip renders it again inside the layer when it first shows.
    *
    * `positioning` is excluded: the tooltip always derives its position from
    * placement/alignment, so accepting the custom opt-out here would be a
@@ -238,8 +279,8 @@ export interface TooltipReturn {
    * `isEnabled` is false.
    *
    * Use `show()` and `hide()` to build a toggle-style trigger: your own button
-   * calls them, sets `aria-describedby` and `aria-controls` to `describedBy`
-   * and `aria-expanded` (true while shown), and keeps its own accessible name.
+   * calls them, sets `aria-describedby` to `describedBy` and `aria-expanded`
+   * (true while shown), and keeps its own accessible name.
    */
   show: () => void;
 
@@ -248,6 +289,75 @@ export interface TooltipReturn {
    * `isOpen`, it calls `onHide` and does not change `isOpen`.
    */
   hide: () => void;
+}
+
+/**
+ * The trigger's description until the layer first mounts: a hidden copy of
+ * the tooltip text (the `hidden` attribute). `aria-describedby` reads a hidden
+ * node it names directly, and browse mode skips it. It is a sibling after the
+ * trigger, never inside it, and the commit that mounts the layer removes it.
+ * Group rules that find the last member (ButtonGroup's trailing radius) skip
+ * it. A Core component that renders the
+ * tooltip under `TooltipDescribesContext` `false` gets none.
+ */
+function TooltipDescription({
+  id,
+  children,
+}: {
+  id: string;
+  children: ReactNode;
+}): ReactNode {
+  const describes = use(TooltipDescribesContext);
+  // The host span reaches render through a store, so no DOM node is in
+  // state.
+  const [hostStore] = useState(createHostStore);
+  const host = useSyncExternalStore(
+    hostStore.subscribe,
+    hostStore.get,
+    readNoHost,
+  );
+  if (!describes) {
+    return null;
+  }
+  if (!hasComponent(children)) {
+    return (
+      <span id={id} hidden {...tooltipDescriptionProps}>
+        {getNodeText(children)}
+      </span>
+    );
+  }
+  // Content that holds a component renders as it is, so its text reaches the
+  // description. Its markup can hold a block, which must not sit in an
+  // enclosing paragraph. So the copy starts empty, server markup included,
+  // and the client renders the content into it through a portal.
+  return (
+    <span ref={hostStore.set} id={id} hidden {...tooltipDescriptionProps}>
+      {host != null ? createPortal(children, host) : null}
+    </span>
+  );
+}
+
+const readNoHost = (): HTMLElement | null => null;
+
+/** A store for the element a description renders its content into. */
+const createHostStore = (): SharedStore<HTMLElement | null> =>
+  createStore<HTMLElement | null>(null);
+
+/**
+ * Whether tooltip content holds a component element, whose text only its own
+ * rendering knows.
+ */
+function hasComponent(node: ReactNode): boolean {
+  if (Array.isArray(node)) {
+    return node.some(hasComponent);
+  }
+  if (!isValidElement(node)) {
+    return false;
+  }
+  if (typeof node.type !== 'string' && node.type !== Fragment) {
+    return true;
+  }
+  return hasComponent((node.props as {children?: ReactNode}).children);
 }
 
 /**
@@ -268,13 +378,12 @@ export interface TooltipReturn {
  * @example
  * ```
  * const tooltip = useTooltip({ placement: 'above' });
- * <Button ref={tooltip.ref} aria-describedby={tooltip.describedBy}>
+ * <Button ref={tooltip.ref} aria-describedby={tooltip.describedBy || undefined}>
  *   Hover me
  * </Button>
  * {tooltip.renderTooltip('Helpful tooltip text')}
  * ```
  */
-
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
     placement = 'above',
@@ -294,11 +403,16 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // over the trigger: content taller than the room above and below opens
   // beside it, or on the roomier side sized to that room, and scrolls what does not
   // fit inside the surface, which stays hoverable (spec:AST-059 FR4).
+  // The layer mounts at its first show and then stays. A page of closed
+  // tooltips mounts no layers.
   const layer = useLayerInternal({
     mode: 'context',
     onShow,
     onHide,
     keepsAnchorClear: true,
+    lazyMount: true,
+    keepsMountAfterShow: true,
+    getInvoker: noInvoker,
   });
   const {
     ref: layerRef,
@@ -309,6 +423,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     id: layerId,
     render: renderLayer,
   } = layer;
+  // The trigger's description is a hidden copy of the tooltip text until the
+  // layer first mounts: it is in server and client markup before the first
+  // show. Once the layer is mounted, its content is the description, and the
+  // copy is gone.
+  const describes = use(TooltipDescribesContext);
+  const givenDescriptionId = use(TooltipDescriptionIdContext);
+  const descriptionId = givenDescriptionId ?? `${layerId}${DESCRIPTION_SUFFIX}`;
 
   const popoverXstyle = styles.container;
 
@@ -317,10 +438,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const triggerRef = useRef<HTMLElement | null>(null);
   // Set only by a Core component that mounts the tooltip on interaction.
   const presentInterest = use(TooltipPresentInterestContext);
-  // Whether the tooltip is enabled now, for a show that runs after a render
-  // (a pending hover show) and for the trigger ref callback.
-  const isEnabledRef = useRef(isEnabled);
-  isEnabledRef.current = isEnabled;
   // Counts the renders in which the tooltip is disabled. A pending show
   // records it, so a show scheduled before a disable is dropped even when
   // the tooltip is enabled again before the timer fires.
@@ -353,9 +470,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideLayer();
   }, [clearTimeouts, hideLayer]);
 
-  // DOM listeners read the latest controlled state through a ref.
-  const latestRef = useRef({isOpen, isLayerOpen, onShow, onHide});
-  latestRef.current = {isOpen, isLayerOpen, onShow, onHide};
+  const latestRef = useCommittedRef({isOpen, isLayerOpen, onShow, onHide});
 
   // The app's show() holds the tooltip open until hide(), Escape, a press or
   // scroll outside, or focus leaving the trigger and the tooltip.
@@ -391,7 +506,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
     }
     hideNow();
-  }, [setHeld, hideNow]);
+  }, [setHeld, hideNow, latestRef]);
 
   const {
     isTouchPointerRef,
@@ -413,12 +528,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       hide: hideFromTouch,
     },
     handleReleaseInLayer,
+    true,
   );
 
   const isHeldOpen = useCallback(() => {
     const latest = latestRef.current;
     return isHeldRef.current && latest.isLayerOpen && latest.isOpen !== false;
-  }, []);
+  }, [latestRef]);
 
   const releaseHold = useCallback(() => {
     clearTapOpen();
@@ -429,7 +545,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       return;
     }
     hideNow();
-  }, [clearTapOpen, setHeld, hideNow]);
+  }, [clearTapOpen, setHeld, hideNow, latestRef]);
 
   const dropHold = useCallback(() => {
     if (isHeldRef.current) {
@@ -516,7 +632,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   }, []);
 
   // Event handlers
-  const handleMouseEnter = useCallback(() => {
+  const handleHover = useCallback(() => {
     // A tap synthesizes mouseenter. On touch the tap path owns the decision,
     // so hover must not also fire — including the tap that just opened the
     // tooltip, which would otherwise be double-handled.
@@ -526,8 +642,37 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     scheduleShow();
   }, [isTouchPointerRef, scheduleShow]);
 
+  // Set from a mouse or pen's arrival on the trigger until it first moves
+  // there. A browser also sends the arrival when the trigger appears or
+  // moves under a still pointer, after a layout change or a scroll. The user
+  // did not point at the trigger then, so only a move over it opens the
+  // tooltip. A pointer that moves onto the trigger also moves over it in the
+  // same frame, so a real hover opens after `delay`. Firefox sends that
+  // `pointermove` before the `mouseenter`, so the `mousemove` that follows it
+  // counts too. After a scroll WebKit also sends a move at the point where
+  // the mouse already was; that is not a move (isMouseMove).
+  const isArrivalUnmovedRef = useRef(false);
+  const handleMouseEnter = useCallback(() => {
+    isArrivalUnmovedRef.current = !isTouchPointerRef.current;
+  }, [isTouchPointerRef]);
+  const handlePointerMove = useCallback(
+    (event: MouseEvent) => {
+      if (
+        !isArrivalUnmovedRef.current ||
+        (event as Partial<PointerEvent>).pointerType === 'touch' ||
+        !isMouseMove(event)
+      ) {
+        return;
+      }
+      isArrivalUnmovedRef.current = false;
+      handleHover();
+    },
+    [handleHover],
+  );
+
   const handleMouseLeave = useCallback(
     (event: Event) => {
+      isArrivalUnmovedRef.current = false;
       // On touch the synthesized mouseleave arrives with the next tap elsewhere,
       // which the outside-tap dismissal already handles — and handling it here
       // too would close the tooltip behind the tap-open bookkeeping's back.
@@ -561,6 +706,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       if (trigger != null && !isFocusOnTrigger(target, trigger, focusTrigger)) {
         return false;
       }
+      // Browsers mark a pointer's focus on a text field focus-visible, so
+      // after a pointer press only a text field opens the tooltip.
+      if (
+        !isTextField(target) &&
+        getInteractionModality(target) === 'pointer'
+      ) {
+        return false;
+      }
       return !isTouchInteraction() && target.matches(':focus-visible');
     },
     [focusTrigger, isTouchInteraction],
@@ -591,6 +744,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       opensOnFocus,
       clearTimeouts,
       showLayer,
+      latestRef,
     ],
   );
 
@@ -647,6 +801,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
+      // A press before the first move ends that arrival too, so a later move
+      // over the pressed trigger opens nothing until the pointer leaves.
+      isArrivalUnmovedRef.current = false;
       trackTriggerPress();
       // The app's hide() closes a held tooltip. A press neither hides it here
       // nor waits for a tap verdict. A show() in a capture handler of this
@@ -681,10 +838,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     ],
   );
 
-  // The trigger's listeners call the latest handlers through this ref, so the
-  // trigger ref callback keeps one identity.
-  const handlersRef = useRef({
+  // The trigger's listeners call the committed handlers through this ref, so
+  // the trigger ref callback keeps one identity.
+  const handlersRef = useCommittedRef({
+    handleHover,
     handleMouseEnter,
+    handlePointerMove,
     handleMouseLeave,
     handleFocusIn,
     handleFocusOut,
@@ -692,6 +851,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     handlePointerEnter,
     handlePointerDown,
     focusTrigger,
+    isEnabled,
     isOpen,
     dropHold,
     hideNow,
@@ -700,23 +860,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     presentInterest,
     answerTap,
   });
-  handlersRef.current = {
-    handleMouseEnter,
-    handleMouseLeave,
-    handleFocusIn,
-    handleFocusOut,
-    handleHeldFocusOut,
-    handlePointerEnter,
-    handlePointerDown,
-    focusTrigger,
-    isOpen,
-    dropHold,
-    hideNow,
-    showNow,
-    opensOnFocus,
-    presentInterest,
-    answerTap,
-  };
 
   // Removes the attached trigger's listeners (the trigger ref callback's
   // cleanup).
@@ -725,89 +868,133 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // caller removed the wiring (DropdownMenu's Button while its menu is
   // open), so the next enabled attach reads the focus that arrived meanwhile.
   const wasSuppressedRef = useRef(false);
+  // Set by a detach until it settles on the committed flags.
+  const isDetachPendingRef = useRef(false);
+  // A caller removes the wiring as it disables the tooltip. Close an
+  // uncontrolled tooltip then, or the next attach shows a stale tooltip. A
+  // detach while enabled, such as a merged ref that changes identity on a
+  // re-render, keeps a hovered or held tooltip open.
+  const settleDetach = useCallback(() => {
+    if (!isDetachPendingRef.current) {
+      return;
+    }
+    isDetachPendingRef.current = false;
+    const latest = handlersRef.current;
+    if (!latest.isEnabled && latest.isOpen === undefined) {
+      wasSuppressedRef.current = true;
+      latest.dropHold();
+      latest.hideNow();
+    }
+  }, [handlersRef]);
+  // Synchronizes the tooltip's popover with a trigger that detached in this
+  // commit. It runs after the insertion Effects write the flags. A detach in a
+  // commit that does not render this hook settles in its microtask.
+  useIsomorphicLayoutEffect(() => {
+    settleDetach();
+  });
+
+  // Keeps the input stream of the trigger's window hearing mouse moves
+  // (isMouseMove) while a hover can open this tooltip. A hover can open it
+  // when a trigger is attached, the tooltip is enabled, and `isOpen` does not
+  // control it.
+  const mouseMoveHoldRef = useRef<{
+    view: Window;
+    release: () => void;
+  } | null>(null);
+  const syncMouseMoveHold = useCallback(() => {
+    const latest = handlersRef.current;
+    const view =
+      latest.isEnabled && latest.isOpen === undefined
+        ? (triggerRef.current?.ownerDocument.defaultView ?? null)
+        : null;
+    const held = mouseMoveHoldRef.current;
+    if ((held?.view ?? null) === view) {
+      return;
+    }
+    held?.release();
+    mouseMoveHoldRef.current =
+      view == null ? null : {view, release: holdMouseMoves(view)};
+  }, [handlersRef]);
+  const opensOnHover = isEnabled && isOpen === undefined;
+  // Effect: follows a change to `isEnabled` or `isOpen` after the trigger
+  // attached.
+  useEffect(() => {
+    syncMouseMoveHold();
+  }, [opensOnHover, syncMouseMoveHold]);
+  // Effect: releases the hold when the hook unmounts.
+  useEffect(
+    () => () => {
+      mouseMoveHoldRef.current?.release();
+      mouseMoveHoldRef.current = null;
+    },
+    [],
+  );
 
   // The trigger's ref callback owns every trigger listener, and reads the
   // trigger's state when it attaches and detaches.
-  const interactionRef = useCallback((el: HTMLElement | null) => {
-    // A caller that reports `null` by hand detaches the trigger, as the
-    // returned cleanup does.
-    if (el == null) {
+  const interactionRef = useCallback(
+    (el: HTMLElement | null) => {
+      // A caller that reports `null` by hand detaches the trigger, as the
+      // returned cleanup does.
+      if (el == null) {
+        detachTriggerRef.current?.();
+        return;
+      }
+      if (el === triggerRef.current) {
+        return;
+      }
       detachTriggerRef.current?.();
-      return;
-    }
-    if (el === triggerRef.current) {
-      return;
-    }
-    detachTriggerRef.current?.();
-    const latest = () => handlersRef.current;
-    // `pointerenter` runs before the synthesized `mouseenter` a tap produces,
-    // which is what lets the hover path know it is looking at a finger.
-    const onPointerEnter = (e: PointerEvent) => latest().handlePointerEnter(e);
-    const onMouseEnter = () => latest().handleMouseEnter();
-    const onMouseLeave = (e: Event) => latest().handleMouseLeave(e);
-    // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
-    const onPointerDown = (e: PointerEvent) => latest().handlePointerDown(e);
-    // Focus counts unless focus never opens the tooltip; `auto` decides per
-    // event (isFocusForTrigger).
-    const onFocusIn = (e: Event) => {
-      if (latest().focusTrigger !== 'never') {
-        latest().handleFocusIn(e);
-      }
-    };
-    const onFocusOut = (e: Event) => {
-      if (latest().focusTrigger !== 'never') {
-        latest().handleFocusOut(e);
-      }
-    };
-    // A held tooltip's own focus-leave close, whatever `focusTrigger` is.
-    const onHeldFocusOut = (e: FocusEvent) => latest().handleHeldFocusOut(e);
-    el.addEventListener('pointerenter', onPointerEnter);
-    el.addEventListener('mouseenter', onMouseEnter);
-    el.addEventListener('mouseleave', onMouseLeave);
-    el.addEventListener('pointerdown', onPointerDown);
-    el.addEventListener('focusin', onFocusIn);
-    el.addEventListener('focusout', onFocusOut);
-    el.addEventListener('focusout', onHeldFocusOut);
-    triggerRef.current = el;
+      const latest = () => handlersRef.current;
+      // `pointerenter` runs before the synthesized `mouseenter` a tap produces,
+      // which is what lets the hover path know it is looking at a finger.
+      const onPointerEnter = (e: PointerEvent) =>
+        latest().handlePointerEnter(e);
+      const onMouseEnter = () => latest().handleMouseEnter();
+      const onPointerMove = (e: MouseEvent) => latest().handlePointerMove(e);
+      const onMouseLeave = (e: Event) => latest().handleMouseLeave(e);
+      // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
+      const onPointerDown = (e: PointerEvent) => latest().handlePointerDown(e);
+      // Focus counts unless focus never opens the tooltip; `auto` decides per
+      // event (isFocusForTrigger).
+      const onFocusIn = (e: Event) => {
+        if (latest().focusTrigger !== 'never') {
+          latest().handleFocusIn(e);
+        }
+      };
+      const onFocusOut = (e: Event) => {
+        if (latest().focusTrigger !== 'never') {
+          latest().handleFocusOut(e);
+        }
+      };
+      // A held tooltip's own focus-leave close, whatever `focusTrigger` is.
+      const onHeldFocusOut = (e: FocusEvent) => latest().handleHeldFocusOut(e);
+      el.addEventListener('pointerenter', onPointerEnter);
+      el.addEventListener('mouseenter', onMouseEnter);
+      el.addEventListener('pointermove', onPointerMove);
+      el.addEventListener('mousemove', onPointerMove);
+      el.addEventListener('mouseleave', onMouseLeave);
+      el.addEventListener('pointerdown', onPointerDown);
+      el.addEventListener('focusin', onFocusIn);
+      el.addEventListener('focusout', onFocusOut);
+      el.addEventListener('focusout', onHeldFocusOut);
+      triggerRef.current = el;
+      syncMouseMoveHold();
 
-    // A trigger that attaches again after its wiring was removed
-    // (DropdownMenu's Button as its menu closes) missed the focus that
-    // arrived meanwhile. Show for it only if it would open the tooltip:
-    // returned keyboard focus does, focus returned after a pointer pick does
-    // not. Any other attach leaves the tooltip as it is, so a tooltip
-    // dismissed with Escape stays closed.
-    const focused = el.ownerDocument.activeElement;
-    const wasSuppressed = wasSuppressedRef.current;
-    if (isEnabledRef.current) {
-      wasSuppressedRef.current = false;
-    }
-    if (
-      wasSuppressed &&
-      isEnabledRef.current &&
-      latest().isOpen === undefined &&
-      latest().focusTrigger !== 'never' &&
-      focused instanceof HTMLElement &&
-      el.contains(focused) &&
-      latest().opensOnFocus(focused, el)
-    ) {
-      latest().showNow();
-    }
-
-    // This tooltip mounted after the interaction that wants it. It answers
-    // that interaction once, by the same rules as its listeners.
-    const state = latest().presentInterest?.current;
-    const interest = state == null || state.isRead ? null : state.interest;
-    const tapEvent = state?.tapEvent ?? null;
-    if (state != null) {
-      state.isRead = true;
-    }
-    if (isEnabledRef.current && latest().isOpen === undefined) {
-      if (interest === 'hover') {
-        latest().handleMouseEnter();
-      } else if (interest === 'tap') {
-        latest().answerTap(tapEvent);
-      } else if (
-        interest === 'focus' &&
+      // A trigger that attaches again after its wiring was removed
+      // (DropdownMenu's Button as its menu closes) missed the focus that
+      // arrived meanwhile. Show for it only if it would open the tooltip.
+      // Returned keyboard focus does; focus returned after a pointer pick does
+      // not. Any other attach leaves the tooltip as it is, so a tooltip
+      // dismissed with Escape stays closed.
+      const focused = el.ownerDocument.activeElement;
+      const wasSuppressed = wasSuppressedRef.current;
+      if (latest().isEnabled) {
+        wasSuppressedRef.current = false;
+      }
+      if (
+        wasSuppressed &&
+        latest().isEnabled &&
+        latest().isOpen === undefined &&
         latest().focusTrigger !== 'never' &&
         focused instanceof HTMLElement &&
         el.contains(focused) &&
@@ -815,36 +1002,63 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       ) {
         latest().showNow();
       }
-    }
 
-    const detach = () => {
-      if (detachTriggerRef.current === detach) {
-        detachTriggerRef.current = null;
+      // This tooltip mounted after the interaction that wants it. It answers
+      // that interaction once, by the same rules as its listeners.
+      const state = latest().presentInterest?.current;
+      const interest = state == null || state.isRead ? null : state.interest;
+      const tapEvent = state?.tapEvent ?? null;
+      if (state != null) {
+        state.isRead = true;
       }
-      el.removeEventListener('pointerenter', onPointerEnter);
-      el.removeEventListener('mouseenter', onMouseEnter);
-      el.removeEventListener('mouseleave', onMouseLeave);
-      el.removeEventListener('pointerdown', onPointerDown);
-      el.removeEventListener('focusin', onFocusIn);
-      el.removeEventListener('focusout', onFocusOut);
-      el.removeEventListener('focusout', onHeldFocusOut);
-      stopPressTrackingRef.current?.();
-      if (triggerRef.current === el) {
-        triggerRef.current = null;
+      if (latest().isEnabled && latest().isOpen === undefined) {
+        if (interest === 'hover') {
+          // The anchor saw the hover before this tooltip mounted.
+          latest().handleHover();
+        } else if (interest === 'tap') {
+          latest().answerTap(tapEvent);
+        } else if (
+          interest === 'focus' &&
+          latest().focusTrigger !== 'never' &&
+          focused instanceof HTMLElement &&
+          el.contains(focused) &&
+          latest().opensOnFocus(focused, el)
+        ) {
+          latest().showNow();
+        }
       }
-      // A caller removes the wiring as it disables the tooltip. Close an
-      // uncontrolled tooltip then, or the next attach shows a stale tooltip.
-      // A detach while enabled, such as a merged ref that changes identity
-      // on a re-render, keeps a hovered or held tooltip open.
-      if (!isEnabledRef.current && latest().isOpen === undefined) {
-        wasSuppressedRef.current = true;
-        latest().dropHold();
-        latest().hideNow();
-      }
-    };
-    detachTriggerRef.current = detach;
-    return detach;
-  }, []);
+
+      const detach = () => {
+        if (detachTriggerRef.current === detach) {
+          detachTriggerRef.current = null;
+        }
+        el.removeEventListener('pointerenter', onPointerEnter);
+        el.removeEventListener('mouseenter', onMouseEnter);
+        el.removeEventListener('pointermove', onPointerMove);
+        el.removeEventListener('mousemove', onPointerMove);
+        el.removeEventListener('mouseleave', onMouseLeave);
+        el.removeEventListener('pointerdown', onPointerDown);
+        el.removeEventListener('focusin', onFocusIn);
+        el.removeEventListener('focusout', onFocusOut);
+        el.removeEventListener('focusout', onHeldFocusOut);
+        stopPressTrackingRef.current?.();
+        if (triggerRef.current === el) {
+          triggerRef.current = null;
+          // React re-attaches a trigger whose ref changes identity in the
+          // same commit. The release waits for that, so the window keeps the
+          // mouse's last point.
+          queueMicrotask(syncMouseMoveHold);
+        }
+        // This cleanup runs before the commit's insertion Effects write the
+        // flags, so the detach settles once they are written.
+        isDetachPendingRef.current = true;
+        queueMicrotask(settleDetach);
+      };
+      detachTriggerRef.current = detach;
+      return detach;
+    },
+    [handlersRef, settleDetach, syncMouseMoveHold],
+  );
 
   // Combined ref - shorthand for calling both positionRef and interactionRef
   const ref = useCallback(
@@ -963,20 +1177,47 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         onMouseLeave: scheduleHide,
       };
 
-      return renderLayer(
-        // FR11: React bubbles a press on the surface to the trigger's
-        // ancestors, portaled or not. A registered surface counts as
-        // something else in the shared interactive-ancestor walk, so a
-        // clickable container around the trigger leaves the press alone while
-        // document listeners still see it.
-        // The hold's announcement reads this element's text.
-        <div ref={contentRefs} {...stylex.props(styles.content)}>
-          {children}
-        </div>,
-        renderProps,
+      return (
+        <>
+          {renderLayer(
+            // FR11: React bubbles a press on the surface to the trigger's
+            // ancestors, portaled or not. A registered surface counts as
+            // something else in the shared interactive-ancestor walk, so a
+            // clickable container around the trigger leaves the press alone
+            // while document listeners still see it.
+            // The hold's announcement reads this element's text.
+            <div
+              ref={contentRefs}
+              // Once the layer is mounted, its content is the trigger's
+              // description, so the text renders once.
+              id={describes ? descriptionId : undefined}
+              // Without a description, the trigger already reads this text
+              // (its own label, or a reason it names). A pinned tooltip stays
+              // readable: its text is announced and the pinning button
+              // controls it.
+              aria-hidden={describes || isHoldShown ? undefined : true}
+              {...stylex.props(styles.content)}>
+              {children}
+            </div>,
+            {
+              ...renderProps,
+              // Before the layer first mounts, a hidden copy of the text
+              // describes the trigger. The commit that mounts the layer
+              // removes it.
+              whileUnmounted: describes ? (
+                <TooltipDescription id={descriptionId}>
+                  {children}
+                </TooltipDescription>
+              ) : null,
+            },
+          )}
+        </>
       );
     },
     [
+      describes,
+      descriptionId,
+      isHoldShown,
       renderLayer,
       placement,
       alignment,
@@ -1005,7 +1246,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       return;
     }
     showLayer();
-  }, [clearTimeouts, isEnabled, setHeld, armOutsideDismiss, showLayer]);
+  }, [
+    clearTimeouts,
+    isEnabled,
+    setHeld,
+    armOutsideDismiss,
+    showLayer,
+    latestRef,
+  ]);
 
   const hide = useCallback(() => {
     clearTimeouts();
@@ -1017,7 +1265,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     positionRef: layerRef,
     interactionRef,
     anchorId: layerAnchorId,
-    describedBy: layerId,
+    describedBy: describes ? descriptionId : '',
     renderTooltip,
     show,
     hide,

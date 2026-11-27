@@ -28,11 +28,14 @@ import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
 import {InputGroup} from '../InputGroup/InputGroup';
 import {InputGroupText} from '../InputGroup/InputGroupText';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
 import {TestIcon} from '../__tests__/TestIcon';
 import {InternationalizationProvider} from '../i18n';
 import type * as TokenModule from '../Token';
+import {Token} from '../Token/Token';
 import {FormLayout} from '../FormLayout/FormLayout';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // Every Token render, in order, by label.
 //
@@ -385,6 +388,329 @@ describe('Tokenizer', () => {
     });
   });
 
+  // A touch keyboard rises when the field focuses its input during a tap. So
+  // a finger that only removes a token with the keyboard down leaves focus
+  // where it was. Every other removal keeps focusing the input.
+  describe('focus after a removal', () => {
+    beforeEach(() => {
+      __resetInteractionModalityForTest();
+    });
+
+    // A mouse case runs under a fine primary pointer (no pointer media at
+    // all counts as fine), asserted in the test's own context.
+    function expectFinePrimaryPointer() {
+      expect(window.matchMedia?.('(pointer: coarse)').matches ?? false).toBe(
+        false,
+      );
+    }
+
+    function renderPair(onChange = vi.fn()) {
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={onChange}
+        />,
+      );
+      return {
+        input: screen.getByRole('combobox'),
+        remove: screen.getByRole('button', {name: 'Remove Alice'}),
+        onChange,
+      };
+    }
+
+    it('leaves the input unfocused after a finger removes a token with the keyboard down', () => {
+      const {input, remove, onChange} = renderPair();
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.click(remove);
+      expect(onChange).toHaveBeenCalledWith([users[1]], {
+        item: users[0],
+        type: 'remove',
+      });
+      expect(input).not.toHaveFocus();
+    });
+
+    it('moves focus to the input after a pen removes a token, as a mouse removal does', () => {
+      const {input, remove, onChange} = renderPair();
+      fireEvent.pointerDown(remove, {pointerType: 'pen'});
+      // A pen's press keeps its default, as a mouse's does.
+      expect(fireEvent.mouseDown(remove)).toBe(true);
+      act(() => remove.focus());
+      fireEvent.click(remove);
+      expect(onChange).toHaveBeenCalledWith([users[1]], {
+        item: users[0],
+        type: 'remove',
+      });
+      expect(input).toHaveFocus();
+    });
+
+    it('leaves the next tap alone after a finger press on a token’s × turns into a scroll', () => {
+      const {input, remove} = renderPair();
+      // The browser takes the press over for scrolling: no mouse events follow.
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.pointerCancel(remove, {pointerType: 'touch'});
+      fireEvent.pointerDown(input, {pointerType: 'touch'});
+      expect(fireEvent.mouseDown(input)).toBe(true);
+    });
+
+    it('leaves a pen’s press on a token’s × alone after a finger tap on the input', () => {
+      const {input, remove} = renderPair();
+      fireEvent.pointerDown(input, {pointerType: 'touch'});
+      fireEvent.mouseDown(input);
+      act(() => input.focus());
+      act(() => input.blur());
+      fireEvent.pointerDown(remove, {pointerType: 'pen'});
+      expect(fireEvent.mouseDown(remove)).toBe(true);
+    });
+
+    it('focuses the input when a script activates another token’s × after a finger removal', async () => {
+      const {input} = renderPair();
+      const alice = screen.getByRole('button', {name: 'Remove Alice'});
+      const bob = screen.getByRole('button', {name: 'Remove Bob'});
+      fireEvent.pointerDown(alice, {pointerType: 'touch'});
+      fireEvent.click(alice);
+      // The tap's record ends with its click's task.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      act(() => bob.focus());
+      fireEvent.click(bob, {detail: 0});
+      expect(input).toHaveFocus();
+    });
+
+    it('leaves a mouse’s and a pen’s press on a token’s × alone after a finger press on a × turns into a scroll', () => {
+      const {remove} = renderPair();
+      const bob = screen.getByRole('button', {name: 'Remove Bob'});
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.pointerCancel(remove, {pointerType: 'touch'});
+      fireEvent.pointerDown(bob, {pointerType: 'mouse'});
+      expect(fireEvent.mouseDown(bob)).toBe(true);
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.pointerCancel(remove, {pointerType: 'touch'});
+      fireEvent.pointerDown(bob, {pointerType: 'pen'});
+      expect(fireEvent.mouseDown(bob)).toBe(true);
+    });
+
+    it('moves a script’s focus on a token’s × to the input after a finger press turns into a scroll', () => {
+      const {input, remove} = renderPair();
+      const bob = screen.getByRole('button', {name: 'Remove Bob'});
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.pointerCancel(remove, {pointerType: 'touch'});
+      act(() => bob.focus());
+      expect(input).toHaveFocus();
+    });
+
+    it('keeps the input focused after a finger removes a token while typing', () => {
+      const {input, remove} = renderPair();
+      act(() => input.focus());
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      // Chrome focuses the tapped button before the click.
+      act(() => remove.focus());
+      fireEvent.click(remove);
+      expect(input).toHaveFocus();
+    });
+
+    it('keeps a finger tap on a token’s × from taking focus while the keyboard is down, so an unfocusedInline field stays collapsed', () => {
+      const onChange = vi.fn();
+      const onFocus = vi.fn();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={onChange}
+          onFocus={onFocus}
+          tokenOverflowBehavior="unfocusedInline"
+        />,
+      );
+      const remove = screen.getByRole('button', {name: 'Remove Alice'});
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      // The tap's compatibility mouse press has its default cancelled. That
+      // default is Chrome focusing the pressed button, which would expand the
+      // field and remount the button under the finger.
+      expect(fireEvent.mouseDown(remove)).toBe(false);
+      fireEvent.click(remove);
+      expect(onChange).toHaveBeenCalledWith([users[1]], {
+        item: users[0],
+        type: 'remove',
+      });
+      expect(onFocus).not.toHaveBeenCalled();
+      expect(screen.getByRole('combobox')).not.toHaveFocus();
+    });
+
+    it('leaves other controls in the field alone: an endContent button keeps its press and the redirect', () => {
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={vi.fn()}
+          endContent={<button type="button">Filters</button>}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      const filters = screen.getByRole('button', {name: 'Filters'});
+      fireEvent.pointerDown(filters, {pointerType: 'touch'});
+      // Its press default (focusing it) is not cancelled…
+      expect(fireEvent.mouseDown(filters)).toBe(true);
+      // …and focus that lands on it moves on to the input, as before.
+      act(() => filters.focus());
+      expect(input).toHaveFocus();
+    });
+
+    it('still lets a mouse press, and a tap while typing, focus as before', () => {
+      expectFinePrimaryPointer();
+      const {input, remove} = renderPair();
+      fireEvent.pointerDown(remove, {pointerType: 'mouse'});
+      expect(fireEvent.mouseDown(remove)).toBe(true);
+      act(() => input.focus());
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      expect(fireEvent.mouseDown(remove)).toBe(true);
+    });
+
+    it('moves focus to the input when the tapped × already held focus, as after Shift+Tab', async () => {
+      const user = userEvent.setup();
+      const onBlur = vi.fn();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={vi.fn()}
+          onBlur={onBlur}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      await user.tab({shift: true});
+      const remove = screen.getByRole('button', {name: 'Remove Bob'});
+      expect(remove).toHaveFocus();
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.click(remove);
+      expect(input).toHaveFocus();
+      expect(onBlur).not.toHaveBeenCalled();
+    });
+
+    it('moves focus to the input when a finger removes a token whose own action held focus', async () => {
+      const user = userEvent.setup();
+      const onBlur = vi.fn();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={vi.fn()}
+          onBlur={onBlur}
+          renderToken={(item, onRemove) => (
+            <Token label={item.label} onClick={() => {}} onRemove={onRemove} />
+          )}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      await user.tab({shift: true});
+      await user.tab({shift: true});
+      const remove = screen.getByRole('button', {name: 'Remove Bob'});
+      expect(remove).not.toHaveFocus();
+      expect(remove.parentElement?.contains(document.activeElement)).toBe(true);
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.click(remove);
+      expect(input).toHaveFocus();
+      expect(onBlur).not.toHaveBeenCalled();
+    });
+
+    it('keeps the old refocus for a custom renderToken remove button: the removal focuses the input, with no blur', () => {
+      const onBlur = vi.fn();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={vi.fn()}
+          onBlur={onBlur}
+          renderToken={(item, onRemove) => (
+            <span>
+              {item.label}
+              <button type="button" onClick={onRemove}>
+                Drop {item.label}
+              </button>
+            </span>
+          )}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      const drop = screen.getByRole('button', {name: 'Drop Alice'});
+      fireEvent.pointerDown(drop, {pointerType: 'touch'});
+      // Its press default stays, and the focus the press puts on it stays
+      // there (Chrome focuses the pressed button).
+      expect(fireEvent.mouseDown(drop)).toBe(true);
+      act(() => drop.focus());
+      expect(drop).toHaveFocus();
+      // The removal moves focus to the input, as before.
+      fireEvent.click(drop);
+      expect(input).toHaveFocus();
+      expect(onBlur).not.toHaveBeenCalled();
+    });
+
+    it('leaves focus on another control in the field when a finger removes a token with the keyboard down', () => {
+      const onBlur = vi.fn();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={vi.fn()}
+          onBlur={onBlur}
+          endContent={<button type="button">Filters</button>}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      const filters = screen.getByRole('button', {name: 'Filters'});
+      // Keyboard focus resting on a control in the field (Tab from the input).
+      act(() => input.focus());
+      act(() => filters.focus());
+      expect(filters).toHaveFocus();
+      const remove = screen.getByRole('button', {name: 'Remove Alice'});
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      expect(fireEvent.mouseDown(remove)).toBe(false);
+      fireEvent.click(remove);
+      expect(filters).toHaveFocus();
+      expect(onBlur).not.toHaveBeenCalled();
+    });
+
+    it('focuses the input after a mouse removes a token', () => {
+      expectFinePrimaryPointer();
+      const {input, remove} = renderPair();
+      fireEvent.pointerDown(remove, {pointerType: 'mouse'});
+      fireEvent.click(remove);
+      expect(input).toHaveFocus();
+    });
+
+    it('focuses the input after a key press removes a token, even after an earlier touch', () => {
+      const {input, remove} = renderPair();
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.keyDown(remove, {key: 'Enter'});
+      fireEvent.click(remove, {detail: 0});
+      expect(input).toHaveFocus();
+    });
+
+    it('does not pull focus onto the input when a finger focuses a remove button', () => {
+      const {input, remove} = renderPair();
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      act(() => remove.focus());
+      expect(remove).toHaveFocus();
+      expect(input).not.toHaveFocus();
+    });
+
+    it('still moves keyboard focus that lands on a remove button to the input', () => {
+      const {input, remove} = renderPair();
+      fireEvent.keyDown(document.body, {key: 'Tab'});
+      act(() => remove.focus());
+      expect(input).toHaveFocus();
+    });
+  });
+
   it('visually hides input when maxEntries is reached but preserves it for keyboard access', () => {
     render(
       <Tokenizer
@@ -632,6 +958,26 @@ describe('Tokenizer', () => {
       expect(screen.getAllByText('Alice').length).toBeGreaterThanOrEqual(1);
     });
 
+    it('unfocusedInline: writes the overflow count with the provider catalog', () => {
+      render(
+        <InternationalizationProvider
+          locale="fr"
+          overrides={{
+            fr: {'@astryx.tokenizer.overflowCount': '+{count, number} autres'},
+          }}>
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={[users[0], users[1], users[2]]}
+            onChange={() => {}}
+            tokenOverflowBehavior="unfocusedInline"
+          />
+        </InternationalizationProvider>,
+      );
+      expect(screen.getAllByText(/^\+\d+ autres$/).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/^\+\d+ more$/)).not.toBeInTheDocument();
+    });
+
     it('unfocusedInline: removes truncation on focus', () => {
       render(
         <Tokenizer
@@ -669,8 +1015,9 @@ describe('Tokenizer', () => {
       // A popover element should exist for the top-layer expanded content
       const popover = container.querySelector('[popover]');
       expect(popover).toBeInTheDocument();
-      // Only one group role (the wrapper)
-      expect(container.querySelectorAll('[role="group"]').length).toBe(1);
+      // Two groups: the collapsed placeholder (the field's tab stop) and the
+      // wrapper in the layer.
+      expect(container.querySelectorAll('[role="group"]').length).toBe(2);
     });
 
     it('unfocusedLayer: shows expanded content in popover on focus', () => {
@@ -694,6 +1041,53 @@ describe('Tokenizer', () => {
       expect(screen.getByText('Bob')).toBeInTheDocument();
       expect(screen.getByText('Charlie')).toBeInTheDocument();
     });
+
+    it('unfocusedLayer: the collapsed placeholder is a named tab stop that opens the field', () => {
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={() => {}}
+          tokenOverflowBehavior="unfocusedLayer"
+        />,
+      );
+      const placeholder = screen.getAllByRole('group', {name: 'Members'})[0];
+      expect(placeholder).toHaveAttribute('tabindex', '0');
+      act(() => placeholder.focus());
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+      expect(document.activeElement).toBe(
+        screen.getByRole('combobox', {name: 'Members', hidden: true}),
+      );
+      // While open, the placeholder is no tab stop.
+      expect(placeholder).toHaveAttribute('tabindex', '-1');
+    });
+
+    it.each([undefined, 'You need edit access'])(
+      'unfocusedLayer, disabled (message %s): the placeholder keeps its stop, announces disabled, and opens nothing',
+      disabledMessage => {
+        const {container} = render(
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+            tokenOverflowBehavior="unfocusedLayer"
+            isDisabled
+            disabledMessage={disabledMessage}
+          />,
+        );
+        const placeholder = screen.getAllByRole('group', {name: 'Members'})[0];
+        expect(placeholder).toHaveAttribute('tabindex', '0');
+        expect(placeholder).toHaveAttribute('aria-disabled', 'true');
+        vi.mocked(HTMLElement.prototype.showPopover).mockClear();
+        act(() => placeholder.focus());
+        fireEvent.keyDown(placeholder, {key: 'Enter'});
+        expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+        expect(document.activeElement).toBe(placeholder);
+        expect(container.querySelector('[disabled]')).toBeNull();
+      },
+    );
 
     it('unfocusedLayer: RTL emits no justify-self into the inset-positioned popover', () => {
       // The popover positions itself with explicit anchor() insets
@@ -848,6 +1242,141 @@ describe('Tokenizer', () => {
         });
       });
       expect(await screen.findByText('Create "Kiwis"')).toBeInTheDocument();
+    });
+
+    it('creates nothing from the list of an earlier query, and creates the typed text once its own list shows', async () => {
+      const fruits = ['Apple', 'Apricot'].map(label => ({id: label, label}));
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{
+            search: (query: string) =>
+              fruits.filter(item =>
+                item.label.toLowerCase().includes(query.toLowerCase()),
+              ),
+            bootstrap: () => fruits,
+          }}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          hasEntriesOnFocus
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        input.focus();
+        fireEvent.click(input);
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      // The focus list still shows while "Zig" waits for its debounce.
+      fireEvent.change(input, {target: {value: 'Zig'}});
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith(
+        [{id: 'Zig', label: 'Zig'}],
+        expect.objectContaining({type: 'create'}),
+      );
+    });
+
+    it('creates with Enter below minQueryLength, where the rows come from the typed text', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          minQueryLength={3}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'QA'}});
+      });
+      // Text below the threshold is never searched, so Enter does not wait.
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith(
+        [expect.objectContaining({id: 'QA', label: 'QA'})],
+        expect.objectContaining({type: 'create'}),
+      );
+    });
+
+    it('creates nothing from rows for shorter text when the text grows back to the last search', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          minQueryLength={3}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Zig'}});
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      // Below the threshold, the rows come from "Zi".
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Zi'}});
+      });
+      // "Zig" again waits for its search; the "Zi" rows still show.
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Zig'}});
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith(
+        [expect.objectContaining({id: 'Zig', label: 'Zig'})],
+        expect.objectContaining({type: 'create'}),
+      );
+    });
+
+    it('creates nothing for erased text when the field is cleared and Enter is pressed at once', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          hasEntriesOnFocus
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        input.focus();
+        fireEvent.change(input, {target: {value: 'Zig'}});
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      // The "Zig" rows still show while the focus list waits.
+      await act(async () => {
+        fireEvent.change(input, {target: {value: ''}});
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).not.toHaveBeenCalled();
     });
 
     it('still offers Create below minQueryLength, and does not search', async () => {
@@ -1369,7 +1898,7 @@ describe('Tokenizer', () => {
       expect(bootstrap).toHaveBeenCalledTimes(1);
     });
 
-    it('closes after Enter on typed results while the cleared query waits for its debounce', async () => {
+    it('closes after a pick on typed results while the cleared query waits for its debounce', async () => {
       const user = userEvent.setup();
       function Debounced() {
         const [value, setValue] = useState<SearchableItem[]>([]);
@@ -1392,8 +1921,9 @@ describe('Tokenizer', () => {
         expect(option('Diana')).toBeInTheDocument();
       });
       // Clearing the text starts a focus-list reload that waits for the
-      // debounce. Enter acts before it runs.
-      await user.keyboard('{Backspace}{Enter}');
+      // debounce. A press on a row acts before it runs.
+      await user.keyboard('{Backspace}');
+      fireEvent.click(option('Diana') as HTMLElement);
       await act(async () => {
         await new Promise(r => setTimeout(r, 20));
       });
@@ -2192,24 +2722,25 @@ describe('Tokenizer', () => {
 
     it('shows the reason tooltip on hover when disabled with a reason', async () => {
       renderTokenizer();
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent(
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent(
         'You need edit access to change members',
       );
       const wrapper = screen.getByRole('group', {name: 'Members'});
       fireEvent.mouseEnter(wrapper);
-      await waitFor(() => expect(isOpen(tooltip)).toBe(true));
+      fireEvent.pointerMove(wrapper);
+      await waitFor(() => expect(isOpen(tooltip())).toBe(true));
       fireEvent.mouseLeave(wrapper);
-      await waitFor(() => expect(isOpen(tooltip)).toBe(false));
+      await waitFor(() => expect(isOpen(tooltip())).toBe(false));
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderTokenizer();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
-      await waitFor(() => expect(isOpen(tooltip)).toBe(true));
+      await waitFor(() => expect(isOpen(tooltip())).toBe(true));
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -2248,7 +2779,7 @@ describe('Tokenizer', () => {
     it('links the reason tooltip via aria-describedby', () => {
       renderTokenizer();
       const input = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -2580,7 +3111,7 @@ describe('Tokenizer', () => {
 
       const group = screen.getByRole('group', {name: 'Recipients'});
       const input = screen.getByRole('combobox', {name: 'Recipients People'});
-      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const tooltip = getTooltip();
       const describedByIDs =
         input.getAttribute('aria-describedby')?.split(' ') ?? [];
 
@@ -2756,7 +3287,7 @@ describe('Tokenizer', () => {
 
       const group = screen.getByRole('group', {name: 'Recipients'});
       const input = screen.getByRole('combobox', {name: 'Recipients People'});
-      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const tooltip = getTooltip();
 
       expect(input.getAttribute('aria-describedby')?.split(' ')).toEqual([
         ...(group.getAttribute('aria-describedby')?.split(' ') ?? []),
@@ -3852,6 +4383,149 @@ describe('Tokenizer consumer key handler order', () => {
     });
     expect(onKeyDown).toHaveBeenCalledOnce();
     expect(currentTarget).toBe(screen.getByRole('combobox'));
+  });
+});
+
+describe('Tokenizer pending search after a dismissal', () => {
+  it('keeps a dismissed menu closed when its search answers late, and shows that answer on reopen', async () => {
+    const answers = new Map<string, (items: SearchableItem[]) => void>();
+    const search = vi.fn(
+      async (query: string) =>
+        new Promise<SearchableItem[]>(resolve => answers.set(query, resolve)),
+    );
+    // No cancel: the late answer still arrives, as it does for a source that
+    // cannot abort its request.
+    const source: SearchSource = {search, bootstrap: () => []};
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, {target: {value: 'a'}});
+    await waitFor(() => expect(answers.has('a')).toBe(true));
+    await act(async () => answers.get('a')?.([users[0]]));
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.change(input, {target: {value: 'b'}});
+    await waitFor(() => expect(answers.has('b')).toBe(true));
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(input).not.toHaveAttribute('aria-busy');
+
+    await act(async () => answers.get('b')?.([users[1]]));
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(search.mock.calls.filter(([q]) => q === 'b')).toHaveLength(1);
+  });
+
+  it('searches the typed text when a press on a token dismissed it inside the debounce', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const answers = new Map<string, (items: SearchableItem[]) => void>();
+      const search = vi.fn(
+        async (query: string) =>
+          new Promise<SearchableItem[]>(resolve => answers.set(query, resolve)),
+      );
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={{search, bootstrap: () => []}}
+          value={[users[0]]}
+          onChange={vi.fn()}
+          debounceMs={200}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      input.focus();
+      fireEvent.change(input, {target: {value: 'b'}});
+      // A press on the token's text takes focus from the input with no target
+      // in the field, then focus returns to the input.
+      fireEvent.pointerDown(screen.getByText(users[0].label));
+      act(() => input.blur());
+      await act(async () => vi.advanceTimersByTime(400));
+      expect(search).not.toHaveBeenCalled();
+
+      act(() => input.focus());
+      expect(search).toHaveBeenLastCalledWith('b', expect.anything());
+      await waitFor(() => expect(answers.has('b')).toBe(true));
+      await act(async () => answers.get('b')?.([users[1]]));
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText(users[1].label)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reopens the Create entry after a query drops below minQueryLength inside the debounce', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const search = vi.fn(() => []);
+      render(
+        <Tokenizer
+          label="Labels"
+          searchSource={{search, bootstrap: () => []}}
+          value={[]}
+          onChange={vi.fn()}
+          hasCreate
+          minQueryLength={3}
+          debounceMs={200}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      input.focus();
+      fireEvent.change(input, {target: {value: 'QAX'}});
+      fireEvent.change(input, {target: {value: 'QA'}});
+      await act(async () => vi.advanceTimersByTime(400));
+      expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+
+      fireEvent.keyDown(input, {key: 'Escape'});
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+      expect(search).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reopens the Create entry for a query below minQueryLength with ArrowDown after Escape', async () => {
+    const search = vi.fn(() => []);
+    render(
+      <Tokenizer
+        label="Labels"
+        searchSource={{search, bootstrap: () => []}}
+        value={[]}
+        onChange={vi.fn()}
+        hasCreate
+        minQueryLength={3}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    await act(async () => {
+      fireEvent.change(input, {target: {value: 'QA'}});
+    });
+    expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+    expect(search).not.toHaveBeenCalled();
   });
 });
 

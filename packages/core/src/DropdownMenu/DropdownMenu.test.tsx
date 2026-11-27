@@ -17,31 +17,36 @@ import {
   beforeAll,
   beforeEach,
   afterEach,
+  onTestFinished,
 } from 'vitest';
 import {readFileSync} from 'node:fs';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {createRef, useState} from 'react';
+import {Suspense, createRef, startTransition, use, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {DropdownMenu, type DropdownMenuTriggerProps} from './DropdownMenu';
 import {DropdownMenuItem} from './DropdownMenuItem';
+import {Popover} from '../Popover/Popover';
 import {DropdownMenuDivider} from './DropdownMenuDivider';
 import {DropdownMenuGroup} from './DropdownMenuGroup';
 import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
 import {DropdownMenuSubMenu} from './DropdownMenuSubMenu';
 import {Divider} from '../Divider';
 import {Tooltip} from '../Tooltip/Tooltip';
-import {rtlStyles} from '../utils';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
 import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
-import {isInHeldLayer} from '../Layer/inputHold';
+import {holdInput, isInHeldLayer} from '../Layer/inputHold';
 import {runPopoverOperation} from '../Layer/popoverOperations';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+
+// Spied, so a case about the press model alone can stub the presentation's
+// input hold: jsdom never ends a presentation.
+vi.mock('../Layer/inputHold', {spy: true});
 
 // Mock showPopover and hidePopover methods since they're not implemented in jsdom
 beforeEach(() => {
@@ -368,6 +373,131 @@ describe('DropdownMenu', () => {
     expect(group.parentElement).toHaveRole('listitem');
   });
 
+  it('names the sheet after a node-label submenu while its level shows', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions'}}
+        presentation="bottom-sheet"
+        items={[
+          {
+            label: (
+              <>
+                <em>Move</em> to project
+              </>
+            ),
+            description: 'Pick a project',
+            items: [{label: 'Apollo launch'}],
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', {name: /Project actions/}));
+    expect(
+      screen.getByRole('dialog', {name: 'Project actions'}),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: /Move to project/}));
+
+    expect(
+      screen.getByRole('dialog', {name: 'Move to project'}),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', {name: 'Back'}));
+    expect(
+      screen.getByRole('dialog', {name: 'Project actions'}),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    {pageDir: 'rtl', menuDir: 'ltr', isFlipped: false},
+    {pageDir: 'ltr', menuDir: 'rtl', isFlipped: true},
+  ] as const)(
+    'points the sheet chevrons by the menu direction, not the page (page $pageDir, menu $menuDir)',
+    async ({pageDir, menuDir, isFlipped}) => {
+      const user = userEvent.setup();
+      render(
+        <div dir={pageDir}>
+          <div dir={menuDir}>
+            <DropdownMenu
+              button={{label: 'Project actions'}}
+              presentation="bottom-sheet"
+              items={[
+                {label: 'Move to project', items: [{label: 'Apollo launch'}]},
+              ]}
+            />
+          </div>
+        </div>,
+      );
+
+      await user.click(screen.getByRole('button', {name: /Project actions/}));
+      const row = screen.getByRole('button', {name: /Move to project/});
+      const rowChevron = row
+        .closest('li')
+        ?.querySelector<HTMLElement>('.astryx-icon:last-of-type');
+      expect(rowChevron).not.toBeNull();
+      const flipped = (element: Element) =>
+        getComputedStyle(element).transform === 'scaleX(-1)';
+      expect(flipped(rowChevron as HTMLElement)).toBe(isFlipped);
+
+      await user.click(row);
+      const backIcon = screen
+        .getByRole('button', {name: 'Back'})
+        .querySelector('.astryx-icon');
+      expect(backIcon).not.toBeNull();
+      expect(flipped(backIcon as Element)).toBe(isFlipped);
+    },
+  );
+
+  it('names the sheet after the node-label submenu that opened, also across sections', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DropdownMenu
+        button={{label: 'File actions'}}
+        presentation="bottom-sheet"
+        items={[
+          {
+            type: 'section',
+            title: 'Move',
+            items: [
+              {
+                label: (
+                  <>
+                    <em>Move</em> file
+                  </>
+                ),
+                items: [{label: 'Folder A'}],
+              },
+            ],
+          },
+          {
+            type: 'section',
+            title: 'Copy',
+            items: [
+              {
+                label: (
+                  <>
+                    <em>Copy</em> folder
+                  </>
+                ),
+                items: [{label: 'Folder B'}],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', {name: /File actions/}));
+    await user.click(screen.getByRole('button', {name: /Copy folder/}));
+
+    expect(
+      screen.getByRole('dialog', {name: 'Copy folder'}),
+    ).toBeInTheDocument();
+  });
+
   it('drills into nested data items in bottom-sheet presentation', async () => {
     const user = userEvent.setup();
 
@@ -455,9 +585,8 @@ describe('DropdownMenu', () => {
 
   it('mirrors bottom-sheet drill-in affordances under RTL', async () => {
     const user = userEvent.setup();
-    const {className: mirrorClassName} = stylex.props(rtlStyles.mirror);
-    const mirrorClasses = mirrorClassName?.split(' ') ?? [];
-    expect(mirrorClasses.length).toBeGreaterThan(0);
+    const flipped = (element: Element) =>
+      getComputedStyle(element).transform === 'scaleX(-1)';
 
     render(
       <div dir="rtl">
@@ -482,17 +611,13 @@ describe('DropdownMenu', () => {
       .closest('li')
       ?.querySelector('.astryx-icon');
     expect(forwardIcon).not.toBeNull();
-    for (const className of mirrorClasses) {
-      expect(forwardIcon).toHaveClass(className);
-    }
+    expect(flipped(forwardIcon as Element)).toBe(true);
 
     await user.click(submenuButton);
     const backButton = screen.getByRole('button', {name: 'Back'});
     const backIcon = backButton.querySelector('.astryx-icon');
     expect(backIcon).not.toBeNull();
-    for (const className of mirrorClasses) {
-      expect(backIcon).toHaveClass(className);
-    }
+    expect(flipped(backIcon as Element)).toBe(true);
   });
 
   it('uses the BottomSheet for adaptive presentation on compact touch', async () => {
@@ -610,6 +735,321 @@ describe('DropdownMenu', () => {
     );
   });
 
+  it('keeps focus on the row a keyboard user activated when the open sheet re-renders with new items', async () => {
+    const user = userEvent.setup();
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: `Bump (${count})`,
+              hasCloseOnSelect: false,
+              onClick: () => setCount(value => value + 1),
+            },
+            {label: 'Last'},
+          ]}
+        />
+      );
+    }
+    render(<Counter />);
+
+    screen.getByRole('button', {name: /Options/}).focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'First'})).toHaveFocus(),
+    );
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Bump (0)'})).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await act(async () => nextFrames(3));
+
+    expect(screen.getByRole('button', {name: 'Bump (1)'})).toHaveFocus();
+  });
+
+  it('keeps focus in an open sub-menu of the sheet when the menu re-renders with new items', async () => {
+    const user = userEvent.setup();
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: 'More',
+              items: [
+                {label: 'Inner'},
+                {
+                  label: `Bump (${count})`,
+                  hasCloseOnSelect: false,
+                  onClick: () => setCount(value => value + 1),
+                },
+              ],
+            },
+          ]}
+        />
+      );
+    }
+    render(<Counter />);
+
+    screen.getByRole('button', {name: /Options/}).focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'First'})).toHaveFocus(),
+    );
+    await user.tab();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {name: 'Bump (0)'}),
+      ).toBeInTheDocument(),
+    );
+    await act(async () => nextFrames(3));
+    const bump = screen.getByRole('button', {name: /^Bump/});
+    bump.focus();
+    await user.keyboard('{Enter}');
+    await act(async () => nextFrames(3));
+
+    expect(screen.getByRole('button', {name: /^Bump/})).toHaveFocus();
+  });
+
+  it('shows an open sub-menu of the sheet with the current items after a re-render', async () => {
+    const user = userEvent.setup();
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: 'More',
+              items: [
+                {
+                  label: `Bump (${count})`,
+                  hasCloseOnSelect: false,
+                  onClick: () => setCount(value => value + 1),
+                },
+              ],
+            },
+          ]}
+        />
+      );
+    }
+    render(<Counter />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    await user.click(await screen.findByRole('button', {name: 'Bump (0)'}));
+
+    expect(
+      await screen.findByRole('button', {name: 'Bump (1)'}),
+    ).toBeInTheDocument();
+  });
+
+  it('closes an open sub-menu of the sheet back to its parent when its row leaves the items', async () => {
+    const user = userEvent.setup();
+    function Removable() {
+      const [hasMore, setHasMore] = useState(true);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            ...(hasMore
+              ? [
+                  {
+                    label: 'More',
+                    items: [
+                      {
+                        label: 'Remove this menu',
+                        hasCloseOnSelect: false,
+                        onClick: () => setHasMore(false),
+                      },
+                    ],
+                  },
+                ]
+              : []),
+          ]}
+        />
+      );
+    }
+    render(<Removable />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    await user.click(
+      await screen.findByRole('button', {name: 'Remove this menu'}),
+    );
+
+    expect(
+      await screen.findByRole('button', {name: 'First'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Back'})).toBeNull();
+  });
+
+  it('reopens the sheet at the root after a controlled close that also removed the open nested level', async () => {
+    const user = userEvent.setup();
+    let closeAndRemove: () => void = () => {};
+    function Controlled() {
+      const [isOpen, setIsOpen] = useState(false);
+      const [hasDeeper, setHasDeeper] = useState(true);
+      closeAndRemove = () => {
+        setIsOpen(false);
+        setHasDeeper(false);
+      };
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          isMenuOpen={isOpen}
+          onOpenChange={setIsOpen}
+          items={[
+            {label: 'First'},
+            {
+              label: 'More',
+              items: [
+                {label: 'Inner'},
+                ...(hasDeeper
+                  ? [{label: 'Deeper', items: [{label: 'Deep item'}]}]
+                  : []),
+              ],
+            },
+          ]}
+        />
+      );
+    }
+    render(<Controlled />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    await user.click(await screen.findByRole('button', {name: 'Deeper'}));
+    await screen.findByRole('button', {name: 'Deep item'});
+    // One render closes the menu and removes the open nested level.
+    act(() => closeAndRemove());
+    await act(async () => nextFrames(3));
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    expect(
+      await screen.findByRole('button', {name: 'First'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Inner'})).toBeNull();
+  });
+
+  it('keeps an open sub-menu of the sheet closed when its removed row comes back', async () => {
+    const user = userEvent.setup();
+    let setHasMore: (value: boolean) => void = () => {};
+    function Returning() {
+      const [hasMore, setHasMoreState] = useState(true);
+      setHasMore = setHasMoreState;
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            ...(hasMore ? [{label: 'More', items: [{label: 'Inner'}]}] : []),
+          ]}
+        />
+      );
+    }
+    render(<Returning />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    expect(
+      await screen.findByRole('button', {name: 'Inner'}),
+    ).toBeInTheDocument();
+    act(() => setHasMore(false));
+    expect(
+      await screen.findByRole('button', {name: 'First'}),
+    ).toBeInTheDocument();
+    act(() => setHasMore(true));
+
+    expect(
+      await screen.findByRole('button', {name: 'More'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Inner'})).toBeNull();
+    expect(screen.queryByRole('button', {name: 'Back'})).toBeNull();
+  });
+
+  it('closes an open sub-menu of the sheet back to its parent when its last row leaves', async () => {
+    const user = userEvent.setup();
+    function Emptying() {
+      const [inner, setInner] = useState(['Clear this menu']);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: 'More',
+              items: inner.map(label => ({
+                label,
+                hasCloseOnSelect: false,
+                onClick: () => setInner([]),
+              })),
+            },
+          ]}
+        />
+      );
+    }
+    render(<Emptying />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    await user.click(
+      await screen.findByRole('button', {name: 'Clear this menu'}),
+    );
+
+    expect(
+      await screen.findByRole('button', {name: 'First'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Back'})).toBeNull();
+  });
+
+  it('keeps an open sub-menu of the sheet by its id when a row is inserted above it', async () => {
+    const user = userEvent.setup();
+    let insert: () => void = () => {};
+    function Growing() {
+      const [hasArchive, setHasArchive] = useState(false);
+      insert = () => setHasArchive(true);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            ...(hasArchive
+              ? [{id: 'archive', label: 'Archive', items: [{label: 'Old'}]}]
+              : []),
+            {id: 'projects', label: 'Projects', items: [{label: 'Docs'}]},
+          ]}
+        />
+      );
+    }
+    render(<Growing />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'Projects'}));
+    expect(
+      await screen.findByRole('button', {name: 'Docs'}),
+    ).toBeInTheDocument();
+    act(() => insert());
+
+    expect(
+      await screen.findByRole('button', {name: 'Docs'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Old'})).toBeNull();
+  });
+
   it('restores touch focus without painting a trigger focus ring', async () => {
     render(
       <DropdownMenu
@@ -645,9 +1085,8 @@ describe('DropdownMenu', () => {
     const popover = screen
       .getByRole('menu', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('supports explicit menu placement', () => {
@@ -661,9 +1100,8 @@ describe('DropdownMenu', () => {
     const popover = screen
       .getByRole('menu', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-start span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideAbove');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('supports explicit menu alignment', () => {
@@ -677,9 +1115,8 @@ describe('DropdownMenu', () => {
     const popover = screen
       .getByRole('menu', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-start',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineEnd');
   });
 
   it('uses block-axis viewport gutters for side placement', () => {
@@ -695,15 +1132,15 @@ describe('DropdownMenu', () => {
       .getByRole('menu', {hidden: true})
       .closest('[popover]');
     // The gutter is the layer runtime's (spec:AST-059 FR1, FR7).
-    expect(popover?.className).toContain('useLayer__styles.gutterBlockEnd');
+    expect(popover?.className).toContain('useLayer__styles.alignBlockStart');
     expect(popover?.className).not.toContain(
-      'useLayer__styles.gutterInlineEnd',
+      'useLayer__styles.alignInlineStart',
     );
   });
 
   it('emits the direction-independent logical mapping under an RTL ancestor (#3389)', async () => {
-    // The self-* position-area keywords resolve against the popover's own
-    // inherited direction in the browser, so RTL emits the same string as
+    // The logical anchor insets resolve against the popover's own
+    // inherited direction in the browser, so RTL emits the same styles as
     // LTR and the mirroring is pure CSS. jsdom can't verify the geometry —
     // the DropdownMenu RTL Storybook story is the visual proof surface.
     const user = userEvent.setup();
@@ -716,9 +1153,8 @@ describe('DropdownMenu', () => {
     await user.click(screen.getByRole('button', {name: /Actions/}));
 
     const popover = container.querySelector('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('caps default and custom widths to the available viewport', () => {
@@ -775,7 +1211,7 @@ describe('DropdownMenu', () => {
         'DropdownMenu__styles.popoverCustomIntrinsicWidth',
       );
       expect(popover?.getAttribute('style')).toContain(menuWidth);
-      expect(popover?.className).toContain('useLayer__styles.gutterInlineEnd');
+      expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
       expect(popover?.getAttribute('style')).not.toContain(`min(${menuWidth},`);
     },
   );
@@ -869,6 +1305,26 @@ describe('DropdownMenu', () => {
       'aria-expanded',
       'false',
     );
+  });
+
+  it('notifies onOpenChange once when closing an open menu by clicking the trigger', async () => {
+    const user = userEvent.setup();
+    const handleOpenChange = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        items={[{label: 'Edit'}, {label: 'Delete'}]}
+        onOpenChange={handleOpenChange}
+      />,
+    );
+
+    const trigger = screen.getByRole('button', {name: /Actions/});
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(handleOpenChange.mock.calls).toEqual([[true]]);
+
+    await user.click(trigger);
+    expect(handleOpenChange.mock.calls).toEqual([[true], [false]]);
   });
 
   it('restores focus to the trigger after keyboard dismissal', async () => {
@@ -3160,6 +3616,84 @@ describe('DropdownMenu entrance under a finger', () => {
     expect(isInHeldLayer(item('Edit'))).toBe(false);
   });
 
+  it('takes no touch while it enters, after React discards a render that pins it to a popover', async () => {
+    // A transition that suspends for good: React renders it, then keeps the
+    // committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    function Screen({
+      presentation,
+      isPending = false,
+    }: {
+      presentation?: 'popover';
+      isPending?: boolean;
+    }) {
+      return (
+        <Suspense fallback={null}>
+          <DropdownMenu
+            button={{label: 'Actions'}}
+            presentation={presentation}
+            items={[
+              {label: 'Edit', onClick: () => {}},
+              {label: 'Delete', onClick: () => {}},
+            ]}
+          />
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+    }
+    stubPointer('coarse');
+    stubEntrance();
+    const {rerender} = render(<Screen />);
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen presentation="popover" isPending />);
+      });
+    });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+
+    // The committed menu is not pinned, so its entrance holds the layer.
+    expect(isInHeldLayer(item('Edit'))).toBe(true);
+  });
+
+  it('takes no touch while it enters, when the commit that opens it also unpins it from a popover', () => {
+    stubPointer('coarse');
+    stubEntrance();
+    function Screen({
+      presentation,
+      isMenuOpen,
+    }: {
+      presentation?: 'popover';
+      isMenuOpen: boolean;
+    }) {
+      return (
+        <DropdownMenu
+          button={{label: 'Actions'}}
+          presentation={presentation}
+          isMenuOpen={isMenuOpen}
+          onOpenChange={() => {}}
+          items={[
+            {label: 'Edit', onClick: () => {}},
+            {label: 'Delete', onClick: () => {}},
+          ]}
+        />
+      );
+    }
+    const {rerender} = render(<Screen presentation="popover" isMenuOpen />);
+    rerender(<Screen presentation="popover" isMenuOpen={false} />);
+
+    // One commit unpins the menu and opens it. A layout effect shows it in
+    // that commit, and the show starts this commit's entrance hold.
+    rerender(<Screen isMenuOpen />);
+
+    expect(isInHeldLayer(item('Edit'))).toBe(true);
+  });
+
   it('lets go at once when it closes during its entrance', async () => {
     stubPointer('coarse');
     stubEntrance();
@@ -3187,6 +3721,62 @@ describe('DropdownMenu entrance under a finger', () => {
     const user = userEvent.setup();
     await user.click(renderMenu('popover'));
     expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+});
+
+describe('a Popover that a menu row opens takes focus within the pick (layer-runtime INV7a)', () => {
+  const mouse = {pointerType: 'mouse', pointerId: 1, button: 0};
+  const touch = {pointerType: 'touch', pointerId: 1};
+
+  function RowOpensPopover() {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <DropdownMenu button={{label: 'Actions'}}>
+          <DropdownMenuItem label="Rename" onClick={() => setIsOpen(true)} />
+        </DropdownMenu>
+        <Popover
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Rename"
+          content={<input aria-label="New name" />}>
+          <button type="button">Anchor</button>
+        </Popover>
+      </>
+    );
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Opens the menu, then holds every animation frame so none runs. */
+  async function openMenuWithoutFrames() {
+    const user = userEvent.setup();
+    render(<RowOpensPopover />);
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    // Renders the popover's content once, so it is mounted when it opens.
+    await act(async () => {});
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 0);
+    return screen.getByRole('menuitem', {name: 'Rename', hidden: true});
+  }
+
+  const field = () =>
+    screen.getByRole('textbox', {name: 'New name', hidden: true});
+
+  it('under a finger, focuses the text field within the release, so the on-screen keyboard opens', async () => {
+    const row = await openMenuWithoutFrames();
+    fireEvent.pointerDown(row, touch);
+    fireEvent.pointerUp(row, touch);
+    expect(field()).toHaveFocus();
+  });
+
+  it('with a mouse, focuses the text field within the click that ends the press', async () => {
+    const row = await openMenuWithoutFrames();
+    fireEvent.pointerDown(row, mouse);
+    fireEvent.pointerUp(row, mouse);
+    fireEvent.click(row, {detail: 1});
+    expect(field()).toHaveFocus();
   });
 });
 
@@ -3379,27 +3969,34 @@ describe('DropdownMenu press model', () => {
     expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
   });
 
-  it('a held touch on the trigger opens with the finger down, and a slide past the handoff picks (spec:AST-094 FR29, FR43)', () => {
+  it('under a coarse pointer a finger opens the menu as it presses the trigger (no scroll view), and a slide picks', () => {
+    stubCoarsePointer();
+    // The press model alone: jsdom never ends the grow, so its input hold
+    // would hold this gesture to its end.
+    vi.mocked(holdInput).mockImplementation(() => () => {});
+    onTestFinished(() => vi.mocked(holdInput).mockRestore());
     vi.useFakeTimers();
     try {
       const onPick = vi.fn();
       const trigger = renderMenu(onPick);
+      // A trigger in no scroll view opens on the press.
       fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
-      expect(trigger).toHaveAttribute('aria-expanded', 'false');
-      act(() => {
-        vi.advanceTimersByTime(500);
-      });
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
-      // The handoff counts from the first position the open menu sees.
+      // UIMenu's handoff: the finger picks once it travels from the first
+      // sample the menu saw.
       fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 3});
-      const past = {
+      expect(item('Delete')).not.toHaveFocus();
+      fireEvent.pointerMove(item('Delete'), {
         ...touch,
         clientX: 0,
         clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
-      };
-      fireEvent.pointerMove(item('Delete'), past);
+      });
       expect(item('Delete')).toHaveFocus();
-      fireEvent.pointerUp(item('Delete'), past);
+      fireEvent.pointerUp(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
       expect(onPick).toHaveBeenCalledWith('Delete');
       // The click the browser aims at the trigger for this gesture is spent.
       fireEvent.click(trigger, {detail: 1});
@@ -3477,8 +4074,24 @@ describe('DropdownMenu press model', () => {
     }
   });
 
+  it('presentation="popover": a blur during a finger\u2019s tap on the trigger still lets the tap\u2019s click open the menu', () => {
+    render(
+      <DropdownMenu button={{label: 'Pinned'}} presentation="popover">
+        <DropdownMenuItem label="Edit" />
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole('button', {name: /Pinned/});
+    fireEvent.pointerDown(trigger, touch);
+    act(() => {
+      window.dispatchEvent(new FocusEvent('blur'));
+    });
+    fireEvent.pointerUp(trigger, touch);
+    fireEvent.click(trigger, {detail: 1});
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('presentation="popover" pins the settle rule under a finger: once the opening press has settled, a still lift picks the row under it', () => {
-    // spec:AST-094 FR25: a moved touch default comes back through
+    // A moved touch default comes back through
     // `presentation`, never through a public threshold.
     stubCoarsePointer();
     vi.useFakeTimers();
@@ -3499,6 +4112,37 @@ describe('DropdownMenu press model', () => {
       fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 2});
       fireEvent.pointerUp(item('Delete'), {...touch, clientX: 0, clientY: 2});
       expect(onPick).toHaveBeenCalledWith('Delete');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('presentation="popover" pins the released trigger under a finger: it opens at 500 ms, not on the press', () => {
+    // A moved touch default comes back through
+    // `presentation`, never through a public threshold.
+    stubCoarsePointer();
+    vi.useFakeTimers();
+    try {
+      const onPick = vi.fn<(label: string) => void>();
+      render(
+        <DropdownMenu button={{label: 'Pinned'}} presentation="popover">
+          <DropdownMenuItem label="Edit" onClick={() => onPick('Edit')} />
+          <DropdownMenuItem label="Delete" onClick={() => onPick('Delete')} />
+        </DropdownMenu>,
+      );
+      const trigger = screen.getByRole('button', {name: /Pinned/});
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      // Not on the press, as the touch modes would open it.
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS - 1);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(MENU_PRESS_LONG_PRESS_MS).toBe(500);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
     } finally {
       vi.useRealTimers();
     }
@@ -3594,10 +4238,12 @@ describe('DropdownMenu press model', () => {
         fireEvent.pointerDown(trigger, mouse);
         fireEvent.pointerUp(trigger, mouse);
       });
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      // The replay lands while the release is handled, so the show waits for
+      // the release's click, or the next task when none comes (layer-runtime
+      // INV7a).
+      await waitFor(() =>
+        expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+      );
       expect(captured).toEqual([]);
       expect(trigger).not.toHaveAttribute('popovertarget');
     });
@@ -3630,12 +4276,186 @@ describe('DropdownMenu press model', () => {
     });
   });
 
-  it('a tap on the trigger still opens through its click', () => {
+  it('a tap on the trigger opens the menu on the press, and its click does not close it', () => {
     const trigger = renderMenu();
     fireEvent.pointerDown(trigger, touch);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
     fireEvent.pointerUp(trigger, touch);
     fireEvent.click(trigger, {detail: 1});
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  // A finger follows the menus' finger rules on every device: a touchscreen
+  // laptop (a fine primary pointer) as on a phone. Each gesture is still read
+  // as a finger or a mouse. `presentation="popover"` keeps the released
+  // finger behavior.
+  describe('a finger follows the same rules on every device; each gesture is still a finger or a mouse', () => {
+    function stubFinePointer() {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn().mockImplementation((query: string) => ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      );
+      expect(window.matchMedia(TOUCH_QUERY).matches).toBe(false);
+    }
+    const touchmoveIsPrevented = () => {
+      const event = new Event('touchmove', {bubbles: true, cancelable: true});
+      document.body.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+
+    it('fine primary pointer: a finger opens the menu as it presses the trigger, as on a phone (spec:AST-094 FR29, FR43)', () => {
+      stubFinePointer();
+      const trigger = renderMenu();
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.pointerUp(trigger, {...touch, clientX: 0, clientY: 0});
+      // The tap's own click comes after the lift; it must not toggle.
+      fireEvent.click(trigger, {detail: 1});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('fine primary pointer: a pen opens the menu as it presses the trigger, as a finger does (spec:AST-094 FR29, FR43; spec:AST-017 FR59)', () => {
+      stubFinePointer();
+      const trigger = renderMenu();
+      const pen = {pointerType: 'pen', pointerId: 7, clientX: 0, clientY: 0};
+      fireEvent.pointerDown(trigger, pen);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.pointerUp(trigger, pen);
+      // The pen's own click comes after the lift; it must not toggle.
+      fireEvent.click(trigger, {detail: 1});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('fine primary pointer, presentation="popover": a finger keeps the released behavior, its press opening nothing and its tap opening the menu through the click (spec:AST-094 FR25)', () => {
+      stubFinePointer();
+      render(
+        <DropdownMenu button={{label: 'Pinned'}} presentation="popover">
+          <DropdownMenuItem label="Edit" />
+          <DropdownMenuItem label="Delete" />
+        </DropdownMenu>,
+      );
+      const trigger = screen.getByRole('button', {name: /Pinned/});
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.pointerUp(trigger, {...touch, clientX: 0, clientY: 0});
+      fireEvent.click(trigger, {detail: 1});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('fine primary pointer: the finger that opened the menu picks only once it travels the handoff, as on a phone (spec:AST-094 FR29, FR43)', () => {
+      stubFinePointer();
+      const onPick = vi.fn<(label: string) => void>();
+      const trigger = renderMenu(onPick);
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      // The finger's later touchmoves are the menu's, not a scroll.
+      expect(touchmoveIsPrevented()).toBe(true);
+      // A finger that barely moved lights nothing, however long it rests.
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 3});
+      expect(item('Delete')).not.toHaveFocus();
+      // UIMenu's handoff: the finger picks once it travels from the first
+      // sample the menu saw.
+      const handoff = 3 + UIKIT_GESTURES.menuPress.handoff.value;
+      fireEvent.pointerMove(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: handoff,
+      });
+      expect(item('Delete')).toHaveFocus();
+      fireEvent.pointerUp(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: handoff,
+      });
+      expect(onPick).toHaveBeenCalledWith('Delete');
+      expect(touchmoveIsPrevented()).toBe(false);
+    });
+
+    it('fine primary pointer: a finger that lifts outside the menu leaves it open; a mouse released outside closes it', async () => {
+      stubFinePointer();
+      const user = userEvent.setup();
+      const trigger = renderMenu();
+      await user.click(trigger);
+      fireEvent.pointerDown(item('Edit'), touch);
+      fireEvent.pointerUp(document.body, touch);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.pointerDown(item('Edit'), mouse);
+      fireEvent.pointerUp(document.body, mouse);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    function renderCountingMenu() {
+      const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+      const onPick = vi.fn<(label: string) => void>();
+      render(
+        <DropdownMenu button={{label: 'Actions'}} onOpenChange={onOpenChange}>
+          <DropdownMenuItem label="Edit" onClick={() => onPick('Edit')} />
+          <DropdownMenuItem label="Delete" onClick={() => onPick('Delete')} />
+        </DropdownMenu>,
+      );
+      return {
+        trigger: screen.getByRole('button', {name: /Actions/}),
+        onOpenChange,
+        onPick,
+      };
+    }
+
+    it('coarse primary pointer: a finger opens the menu once, as it presses, and it closes once at a pick (module AR5)', () => {
+      stubCoarsePointer();
+      // The press model alone: jsdom never ends the grow, so its input hold
+      // would hold this gesture to its end.
+      vi.mocked(holdInput).mockImplementation(() => () => {});
+      onTestFinished(() => vi.mocked(holdInput).mockRestore());
+      const {trigger, onOpenChange, onPick} = renderCountingMenu();
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      fireEvent.pointerUp(trigger, {...touch, clientX: 0, clientY: 0});
+      // The tap's own click comes after the lift; it must not toggle.
+      fireEvent.click(trigger, {detail: 1});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(onOpenChange.mock.calls).toEqual([[true]]);
+      fireEvent.pointerDown(item('Delete'), touch);
+      fireEvent.pointerUp(item('Delete'), touch);
+      expect(onPick).toHaveBeenCalledWith('Delete');
+      expect(onOpenChange.mock.calls).toEqual([[true], [false]]);
+    });
+
+    it('fine primary pointer: a finger opens the menu once, as it presses, and it closes once at a pick, as on a phone (module AR5, spec:AST-094 FR43)', () => {
+      stubFinePointer();
+      const {trigger, onOpenChange, onPick} = renderCountingMenu();
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.pointerUp(trigger, {...touch, clientX: 0, clientY: 0});
+      // The tap's own click comes after the lift; it must not toggle.
+      fireEvent.click(trigger, {detail: 1});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(onOpenChange.mock.calls).toEqual([[true]]);
+      fireEvent.pointerDown(item('Delete'), touch);
+      fireEvent.pointerUp(item('Delete'), touch);
+      expect(onPick).toHaveBeenCalledWith('Delete');
+      expect(onOpenChange.mock.calls).toEqual([[true], [false]]);
+    });
+
+    it('coarse primary pointer: a mouse keeps the mouse path: it opens on its press, and a press in the menu released outside closes it', () => {
+      stubCoarsePointer();
+      const trigger = renderMenu();
+      fireEvent.pointerDown(trigger, mouse);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.pointerUp(trigger, mouse);
+      fireEvent.click(trigger, {detail: 1});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.pointerDown(item('Edit'), mouse);
+      fireEvent.pointerUp(document.body, mouse);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
   });
 });
 
@@ -3691,6 +4511,57 @@ describe('DropdownMenu custom trigger', () => {
     await waitFor(() =>
       expect(trigger).toHaveAttribute('aria-expanded', 'false'),
     );
+  });
+
+  it('a custom trigger named by aria-labelledby names the open menu by the same ids (FR9, AR1)', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <h2 id="project-heading">Project actions</h2>
+        <DropdownMenu
+          renderTrigger={props => (
+            <button type="button" {...props} aria-labelledby="project-heading">
+              <span aria-hidden="true">⋯</span>
+            </button>
+          )}>
+          <DropdownMenuItem label="Rename" onClick={() => {}} />
+        </DropdownMenu>
+      </>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Project actions'});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    const menu = screen.getByRole('menu', {
+      name: 'Project actions',
+      hidden: true,
+    });
+    expect(menu).toHaveAttribute('aria-labelledby', 'project-heading');
+  });
+
+  it('a custom trigger whose aria-labelledby resolves to nothing still names the menu by its own text', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        renderTrigger={props => (
+          <button type="button" {...props} aria-labelledby="missing">
+            Project actions
+          </button>
+        )}>
+        <DropdownMenuItem label="Rename" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Project actions'});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    const menu = screen.getByRole('menu', {
+      name: 'Project actions',
+      hidden: true,
+    });
+    expect(menu).toHaveAttribute('aria-labelledby', trigger.id);
   });
 
   it('a disabled custom trigger never opens the bottom sheet', async () => {
@@ -3985,17 +4856,20 @@ describe('DropdownMenu focus return after a pointer pick', () => {
       expect(focus.mock.calls.at(-1)).toEqual([{preventScroll: true}]);
     });
 
-    it('clears a ring the browser already drew before refocusing after a pointer pick', async () => {
+    it('returns focus without a ring after a pointer pick, before the browser can draw one', async () => {
       const user = userEvent.setup();
       const trigger = renderCustomMenu();
       await user.click(trigger);
-      // WebKit's own popover focus restoration can focus the trigger, with a
-      // ring, before the menu moves focus, and focusing the focused element
-      // changes nothing.
+      // The browser's own popover focus restoration focuses the trigger, with
+      // a ring, while focus is still inside the closing popover. The menu
+      // returns focus as it starts to close, so that restore has nothing to do.
       const hidePopover = HTMLElement.prototype.hidePopover;
       HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+        const hadFocus = this.contains(document.activeElement);
         hidePopover.call(this);
-        trigger.focus();
+        if (hadFocus) {
+          trigger.focus();
+        }
       });
       const matches = HTMLElement.prototype.matches;
       vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
@@ -4003,19 +4877,16 @@ describe('DropdownMenu focus return after a pointer pick', () => {
         selector: string,
       ) {
         return selector === ':focus-visible'
-          ? this === trigger
+          ? this === trigger && document.activeElement === trigger
           : matches.call(this, selector);
       });
       const blur = vi.spyOn(trigger, 'blur');
       const focus = vi.spyOn(trigger, 'focus');
       await user.click(item('Edit'));
-      expect(blur).toHaveBeenCalledTimes(1);
+      expect(blur).not.toHaveBeenCalled();
       expect(focus.mock.calls.at(-1)).toEqual([
         {preventScroll: true, focusVisible: false},
       ]);
-      expect(blur.mock.invocationCallOrder[0]).toBeLessThan(
-        focus.mock.invocationCallOrder.at(-1) ?? 0,
-      );
       expect(trigger).toHaveFocus();
     });
   });
@@ -5130,3 +6001,16 @@ describe('DropdownMenu trigger refs across renders', () => {
     expect(refs.at(-1)).toBe(refs[0]);
   });
 });
+
+async function nextFrames(count: number): Promise<void> {
+  return new Promise(resolve => {
+    const step = (left: number) => {
+      if (left === 0) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(() => step(left - 1));
+    };
+    step(count);
+  });
+}

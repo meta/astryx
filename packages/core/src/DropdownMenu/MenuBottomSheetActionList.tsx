@@ -9,23 +9,85 @@
  * @position Shared implementation for menu bottom-sheet presentations
  */
 
-import React, {useRef, type ReactElement} from 'react';
+import React, {useId, useRef, type ReactElement} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Divider} from '../Divider/Divider';
 import {Heading} from '../Heading/Heading';
 import {Icon, renderIconSlot} from '../Icon/Icon';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {pressBelongsToControl} from '../hooks/useClickableContainer';
+import {elementAtMenuPoint, useMenuPressInternal} from '../hooks/useMenuPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
-import {rtlStyles} from '../utils/rtlStyles';
+import {menuDirectionMirror} from './menuDirectionMirror.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import type {DropdownMenuItemData, DropdownMenuOption} from './DropdownMenu';
 import {isModifiedClick} from './menuItemRoles';
+import {visibleText} from '../utils/accessibleName';
 
 /** The action rows: ListItem renders its action as a button (or a link). */
 const SHEET_ROW_SELECTOR = 'button:not(:disabled), a[href]';
+
+/** Whether the document can hit-test a point (jsdom cannot). */
+function canHitTestByPoint(): boolean {
+  return (
+    typeof document !== 'undefined' &&
+    typeof document.elementFromPoint === 'function'
+  );
+}
+
+/**
+ * The element a press at a point resolves in the sheet. ListItem renders its
+ * action as a direct child of its `li`, with the icon and the end content
+ * beside the action, not in it. So a point anywhere in a row (its icon, end
+ * content or padding) is that row's action. Any control in the row's content,
+ * enabled or not, keeps its own press. A row that holds other rows, as a
+ * section does, has no action of its own.
+ */
+function sheetElementAtPoint(
+  list: HTMLElement | null,
+  x: number,
+  y: number,
+): Element | null {
+  const doc = list?.ownerDocument ?? document;
+  const element = elementAtMenuPoint(list, doc, x, y);
+  if (element == null || element.closest(SHEET_ROW_SELECTOR) != null) {
+    return element;
+  }
+  const row = element.closest('li');
+  // A control in the row's content keeps its own press, as in Item's click.
+  if (row != null && pressBelongsToControl(element, row)) {
+    return element;
+  }
+  if (row != null) {
+    for (const child of row.children) {
+      if (child.matches(SHEET_ROW_SELECTOR)) {
+        return child;
+      }
+    }
+  }
+  return element;
+}
+
+/**
+ * Whether a press that starts on `target` is on a control in a row's content.
+ * Such a control, other than the row's own action, handles its own press. A
+ * switch decides its own drag.
+ */
+function isRowContentControl(target: Element): boolean {
+  const row = target.closest('li');
+  if (row == null || !pressBelongsToControl(target, row)) {
+    return false;
+  }
+  for (const child of row.children) {
+    if (child.matches('button, a') && child.contains(target)) {
+      // The row's own action.
+      return false;
+    }
+  }
+  return true;
+}
 
 const styles = stylex.create({
   // The row under a held finger is the highlight; the browser's held-press
@@ -66,26 +128,43 @@ export function MenuBottomSheetActionList({
 }: {
   items: DropdownMenuOption[];
   onSelect: (item: DropdownMenuItemData, event: React.MouseEvent) => void;
-  onOpenSubmenu: (item: DropdownMenuItemData) => void;
+  /** `title` is the label's text, also for a label that is not a string. */
+  onOpenSubmenu: (item: DropdownMenuItemData, title?: string) => void;
 }) {
+  const labelIdPrefix = useId();
   const listRef = useRef<HTMLUListElement>(null);
   const {ref: modalityRef, readModality} = useInteractionModalityTracking();
   const listComposedRef = useMergedRefs(listRef, modalityRef);
   // The press model: the row under a finger's RELEASE acts, and the
   // highlight (focus) follows the finger across the rows. The sheet is modal,
   // so a release outside it is the scrim's, not a dismissal of ours.
-  const menuPress = useMenuPress({
-    menuRef: listRef,
-    itemSelector: SHEET_ROW_SELECTOR,
-  });
+  const {press: menuPress} = useMenuPressInternal(
+    {
+      menuRef: listRef,
+      itemSelector: SHEET_ROW_SELECTOR,
+      // A document without elementFromPoint (jsdom) keeps the hook's own
+      // lookup, which reads the event's target.
+      hitTest: canHitTestByPoint()
+        ? (x, y) => sheetElementAtPoint(listRef.current, x, y)
+        : undefined,
+    },
+    {ownsPress: isRowContentControl},
+  );
 
+  // `rowPath` names the row within the whole list: an index alone restarts in
+  // every section.
   const renderItem = (
     item: DropdownMenuItemData,
     index: number,
+    rowPath: string = String(index),
   ): ReactElement => {
     const isSubmenu = item.items != null && item.items.length > 0;
     const isDestructive = item.variant === 'destructive';
     const isLink = !isSubmenu && item.href != null;
+    // A sub-menu row's node label renders in its own element, so the level
+    // it opens can take the label's text as its title.
+    const labelId = `${labelIdPrefix}-label-${rowPath}`;
+    const hasNodeLabel = isSubmenu && typeof item.label !== 'string';
 
     const handleActivate = (event: React.MouseEvent) => {
       if (isLink && item.isDisabled) {
@@ -97,7 +176,17 @@ export function MenuBottomSheetActionList({
         (event.currentTarget as HTMLElement).blur();
       }
       if (isSubmenu) {
-        onOpenSubmenu(item);
+        const labelElement = hasNodeLabel
+          ? event.currentTarget.ownerDocument.getElementById(labelId)
+          : null;
+        onOpenSubmenu(
+          item,
+          typeof item.label === 'string'
+            ? item.label
+            : labelElement != null
+              ? visibleText(labelElement)
+              : undefined,
+        );
       } else if (isLink && isModifiedClick(event)) {
         // A modified click on a link row is the browser's (a new tab); the
         // row's handler stays out of it, the sheet still closes.
@@ -110,7 +199,9 @@ export function MenuBottomSheetActionList({
     return (
       <ListItem
         key={getItemKey(item, index)}
-        label={item.label}
+        label={
+          hasNodeLabel ? <span id={labelId}>{item.label}</span> : item.label
+        }
         description={item.description}
         startContent={
           item.icon
@@ -126,7 +217,7 @@ export function MenuBottomSheetActionList({
               icon="chevronRight"
               size="sm"
               color="secondary"
-              xstyle={rtlStyles.mirror}
+              xstyle={menuDirectionMirror.mirror}
             />
           ) : (
             item.endContent
@@ -151,6 +242,9 @@ export function MenuBottomSheetActionList({
     <List
       ref={listComposedRef}
       density="spacious"
+      // Focus parks on the list when no row is lit, as in DropdownMenu's own
+      // menu, so a row a cancelled finger lit loses its highlight.
+      tabIndex={-1}
       xstyle={styles.list}
       {...menuPress.menuProps}>
       {items.map((option, index) => {
@@ -180,7 +274,11 @@ export function MenuBottomSheetActionList({
                     {option.title}
                   </Heading>
                 )}
-                <List density="spacious">{option.items.map(renderItem)}</List>
+                <List density="spacious">
+                  {option.items.map((item, itemIndex) =>
+                    renderItem(item, itemIndex, `${index}-${itemIndex}`),
+                  )}
+                </List>
               </div>
             </li>
           );

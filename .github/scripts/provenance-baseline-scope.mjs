@@ -29,7 +29,7 @@ export const RULE_FILES = [
   'internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs',
   'internal/eslint-plugin-astryx/rule-baseline.mjs',
   'internal/eslint-plugin-astryx/index.js',
-  'eslint.config.js',
+  'eslint.config.mjs',
 ];
 
 /**

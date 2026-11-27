@@ -19,6 +19,9 @@ const anatomy = [
 
 export const docs = {
   name: 'StatusDot',
+  playground: {
+    defaults: {label: 'Online'},
+  },
   displayName: 'Status Dot',
   category: 'Feedback & Status',
   keywords: [
@@ -62,6 +65,28 @@ export const docs = {
       type: 'ReactNode',
       description:
         "Optional icon rendered centered inside the dot, painted in currentColor (the variant's ink). Gives the status a non-color mark, so use a different icon per status. Booleans and empty strings are ignored, so `cond && <Icon />` is safe. Same contract as AvatarStatusDot.",
+      slotElements: [
+        {
+          __element: 'svg',
+          props: {
+            viewBox: '0 0 24 24',
+            width: 6,
+            height: 6,
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: 3,
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round',
+            'aria-hidden': true,
+          },
+          children: [
+            {
+              __element: 'path',
+              props: {d: 'M5 13l4 4L19 7'},
+            },
+          ],
+        },
+      ],
     },
     {
       name: 'xstyle',

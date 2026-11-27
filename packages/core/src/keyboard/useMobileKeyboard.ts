@@ -16,6 +16,7 @@
 import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
 import {flushSync} from 'react-dom';
 import {useAttachment} from '../hooks/useAttachment';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {
   animatorFor,
@@ -50,6 +51,7 @@ import type {KeyboardTransition} from './keyboardModel';
 import {
   FIELD_OFFSET,
   drawnOffsetOf,
+  FIELD_CLEARANCE_AT_REPORT,
   followKeyboard,
   keepFieldAboveKeyboard,
   registerKeyboardTarget,
@@ -57,13 +59,7 @@ import {
 } from './keyboardTarget';
 import {distanceIntoBand} from './revealBand';
 import {rideKeyboard} from './rideKeyboard';
-
-// Chrome on Android pans the page itself if the keyboard still covers the
-// focused field about 100 to 170 ms after the report. A field a fraction of a
-// pixel under the keyboard's top still counts as covered. So the reveal sets
-// the field 4 px above that top in the report's own commit, and only the rest
-// rides.
-const FIELD_CLEARANCE_AT_REPORT = 4;
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 /** How a target keeps a focused field above the on-screen keyboard. */
 export interface MobileKeyboardOptions {
@@ -186,12 +182,12 @@ export function useMobileKeyboard(
   const [keyboardInset, setKeyboardInset] = useState(0);
   const hasKeyboardLayoutRef = useRef(false);
   const retainKeyboardLayoutRef = useRef(false);
-  const isEnabledRef = useRef(isEnabled);
-  const isExpandedRef = useRef(isExpanded);
-  const isOpenRef = useRef(isOpen);
-  isEnabledRef.current = isEnabled;
-  isExpandedRef.current = isExpanded;
-  isOpenRef.current = isOpen;
+  // The committed options, which the listeners and the dismissal read. They
+  // are current before any layout effect, where an earlier sibling can move
+  // focus.
+  const isEnabledRef = useCommittedRef(isEnabled);
+  const isExpandedRef = useCommittedRef(isExpanded);
+  const isOpenRef = useCommittedRef(isOpen);
   // Touch-only work, the ride and the reveal-pan watch, attaches only under a
   // coarse primary pointer (the touch query). Under a fine one, the hook
   // registers no touch listener.
@@ -220,7 +216,7 @@ export function useMobileKeyboard(
         focusTarget.focus({preventScroll: true});
       }
     },
-    [targetRef],
+    [isEnabledRef, targetRef],
   );
 
   // Syncs the on-screen keyboard with closing: a target that closes blurs its
@@ -385,10 +381,9 @@ export function useMobileKeyboard(
           body.scrollTop += distance;
           return;
         }
-        // Reduce Motion applies on any pointer.
-        const reduceMotion =
-          typeof window.matchMedia === 'function' &&
-          window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        // Reduce Motion (the setting, or a theme's reducedMotion: 'always')
+        // applies on any pointer.
+        const reduceMotion = reducesMotion(body);
         const behavior = smoothly && !reduceMotion ? 'smooth' : 'instant';
         if (behavior === 'smooth') {
           smoothTarget = body.scrollTop + distance;

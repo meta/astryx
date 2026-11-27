@@ -33,6 +33,10 @@ echo ""
 echo -e "${DIM}Fetching and pruning remote refs...${NC}"
 git fetch origin --prune --quiet 2>/dev/null
 
+list_remote_branches() {
+  git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin | grep -vx 'HEAD' || true
+}
+
 # Active release branches are protected by their checked-in marker. A release/*
 # branch without a readable matching marker is uncertainty, not permission to
 # delete: stop the entire cleanup before producing a kill list.
@@ -45,7 +49,7 @@ while IFS= read -r b; do
   fi
   state=$(node -e 'console.log(JSON.parse(process.argv[1]).state)' "$marker")
   [ "$state" = active ] && release_branches+=("$b")
-done < <(git branch -r | sed 's|^[[:space:]]*origin/||' | grep '^release/v' || true)
+done < <(list_remote_branches | grep '^release/v' || true)
 
 is_protected_branch() {
   case "$1" in main|gh-pages) return 0 ;; esac
@@ -59,16 +63,22 @@ is_protected_branch() {
 # Get all remote branches, excluding protected
 branches=()
 while IFS= read -r b; do
+  [ -n "$b" ] || continue
   is_protected_branch "$b" || branches+=("$b")
-done < <(git branch -r | grep -v HEAD | sed 's|  origin/||')
+done < <(list_remote_branches)
 total=${#branches[@]}
 echo -e "Found ${BOLD}$total${NC} remote branches (active release branches protected)"
 echo ""
 
+if [ "$total" -eq 0 ]; then
+  echo -e "${GREEN}Nothing to prune.${NC}"
+  exit 0
+fi
+
 # Temp dirs — one file per branch avoids concurrent write corruption
 tmp_dir=$(mktemp -d)
 mkdir -p "$tmp_dir/delete" "$tmp_dir/keep" "$tmp_dir/stale"
-trap "rm -rf $tmp_dir" EXIT
+trap 'rm -rf -- "$tmp_dir"' EXIT
 
 # Stale cutoff (epoch seconds)
 if date -v-1d >/dev/null 2>&1; then
@@ -85,33 +95,36 @@ echo -e "${DIM}Checking PR status ($PARALLEL parallel)...${NC}"
 # Use a wrapper script file instead of export -f (works on zsh + bash)
 cat > "$tmp_dir/checker.sh" << 'CHECKER'
 #!/usr/bin/env bash
+set -euo pipefail
 branch="$1"
 tmp_dir="$2"
 stale_cutoff="$3"
 repo="$4"
-safe_name=$(echo "$branch" | tr '/' '_')
+safe_name=$(printf '%s' "$branch" | (sha256sum 2>/dev/null || shasum -a 256) | cut -d' ' -f1)
 
 # An `assets/pr-<n>` branch the PR report created (it carries the
 # `.pr-report-frames` marker) goes with PR #<n>. Every other branch, including
 # assets branches pushed by hand, keeps the rule below.
 if [[ "$branch" =~ ^assets/pr-([0-9]+)$ ]] && git cat-file -e "origin/$branch:.pr-report-frames" 2>/dev/null; then
   state=$(gh pr view "${BASH_REMATCH[1]}" --repo "$repo" --json state --jq '.state' 2>/dev/null || echo "error")
-  [ "$state" = "error" ] && state="OPEN"
 else
-  state=$(gh pr list --repo "$repo" --head "$branch" --state all --json state --jq '.[0].state // "none"' 2>/dev/null || echo "error")
+  state=$(gh pr list --repo "$repo" --head "$branch" --state all \
+    --json state,isCrossRepository \
+    --jq '[.[] | select(.isCrossRepository | not)][0].state // "none"' 2>/dev/null || echo "error")
 fi
 
 if [ "$state" = "MERGED" ] || [ "$state" = "CLOSED" ]; then
-  echo "$branch" > "$tmp_dir/delete/$safe_name"
-elif [ "$state" = "none" ] || [ "$state" = "error" ]; then
-  commit_epoch=$(git log -1 --format='%ct' "origin/$branch" 2>/dev/null || echo "0")
-  if [ "$commit_epoch" -lt "$stale_cutoff" ]; then
-    echo "$branch" > "$tmp_dir/stale/$safe_name"
+  printf '%s\n' "$branch" > "$tmp_dir/delete/$safe_name"
+elif [ "$state" = "none" ]; then
+  commit_epoch=$(git log -1 --format='%ct' "origin/$branch" -- 2>/dev/null || echo "")
+  if [[ "$commit_epoch" =~ ^[1-9][0-9]*$ ]] && [ "$commit_epoch" -lt "$stale_cutoff" ]; then
+    printf '%s\n' "$branch" > "$tmp_dir/stale/$safe_name"
   else
-    echo "$branch" > "$tmp_dir/keep/$safe_name"
+    printf '%s\n' "$branch" > "$tmp_dir/keep/$safe_name"
   fi
 else
-  echo "$branch" > "$tmp_dir/keep/$safe_name"
+  # Fail closed on OPEN or API/auth errors so transient gh failures never delete branches.
+  printf '%s\n' "$branch" > "$tmp_dir/keep/$safe_name"
 fi
 
 # Progress (count files in all dirs)
@@ -120,7 +133,7 @@ printf "\r  %s/%s checked" "$done_count" "$5" >&2
 CHECKER
 chmod +x "$tmp_dir/checker.sh"
 
-printf '%s\n' "${branches[@]}" | xargs -P "$PARALLEL" -I {} \
+printf '%s\0' "${branches[@]}" | xargs -0 -P "$PARALLEL" -I {} \
   bash "$tmp_dir/checker.sh" {} "$tmp_dir" "$stale_cutoff" "$REPO" "$total"
 
 echo "" # newline after progress
@@ -160,26 +173,27 @@ if [ "$MODE" = "--delete" ]; then
   echo -e "${BOLD}Deleting $total_delete branches ($PARALLEL parallel)...${NC}"
 
   # Parallel deletion
-  printf '%s\n' "${all_delete[@]}" > "$tmp_dir/kill-list.txt"
+  printf '%s\0' "${all_delete[@]}" > "$tmp_dir/kill-list.bin"
   mkdir -p "$tmp_dir/results"
 
   cat > "$tmp_dir/deleter.sh" << 'DELETER'
 #!/usr/bin/env bash
+set -euo pipefail
 branch="$1"
 tmp_dir="$2"
-safe_name=$(echo "$branch" | tr '/' '_')
-if git push origin --delete "$branch" 2>/dev/null; then
+safe_name=$(printf '%s' "$branch" | (sha256sum 2>/dev/null || shasum -a 256) | cut -d' ' -f1)
+if git push origin --delete -- "$branch" 2>/dev/null; then
   echo "ok" > "$tmp_dir/results/$safe_name"
 else
   echo "fail" > "$tmp_dir/results/$safe_name"
 fi
-done_count=$(ls "$tmp_dir/results" 2>/dev/null | wc -l | tr -d ' ')
+done_count=$(find "$tmp_dir/results" -type f 2>/dev/null | wc -l | tr -d ' ')
 printf "\r  %s/%s deleted" "$done_count" "$3" >&2
 DELETER
   chmod +x "$tmp_dir/deleter.sh"
 
-  cat "$tmp_dir/kill-list.txt" | xargs -P "$PARALLEL" -I {} \
-    bash "$tmp_dir/deleter.sh" {} "$tmp_dir" "$total_delete"
+  xargs -0 -P "$PARALLEL" -I {} \
+    bash "$tmp_dir/deleter.sh" {} "$tmp_dir" "$total_delete" < "$tmp_dir/kill-list.bin"
 
   echo "" # newline after progress
 

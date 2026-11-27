@@ -1,6 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import {Link} from '@astryxdesign/core/Link';
 import {Token, type TokenColor} from '@astryxdesign/core/Token';
 
 const meta: Meta<typeof Token> = {
@@ -52,6 +54,30 @@ export const Default: Story = {
   args: {
     label: 'Token',
   },
+};
+
+/**
+ * Caller text that holds only weak and neutral characters, or that mixes a
+ * Latin word into right-to-left text. `MixedDirectionText.a11y.chromium.spec.ts`
+ * reads its character order under RTL and LTR.
+ */
+const MIXED_DIRECTION_TEXTS = [
+  'https://',
+  '.com',
+  '+3',
+  '@alice',
+  'iPhone جديد',
+  'example.com موقع',
+];
+
+export const MixedDirection: Story = {
+  render: () => (
+    <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+      {MIXED_DIRECTION_TEXTS.map(text => (
+        <Token key={text} label={text} />
+      ))}
+    </div>
+  ),
 };
 
 const allColors: TokenColor[] = [
@@ -121,16 +147,8 @@ export const WithRemove: Story = {
   render: () => (
     <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
       <Token label="Removable" onRemove={() => alert('Removed!')} />
-      <Token
-        label="Red tag"
-        color="red"
-        onRemove={() => alert('Removed!')}
-      />
-      <Token
-        label="Blue tag"
-        color="blue"
-        onRemove={() => alert('Removed!')}
-      />
+      <Token label="Red tag" color="red" onRemove={() => alert('Removed!')} />
+      <Token label="Blue tag" color="blue" onRemove={() => alert('Removed!')} />
     </div>
   ),
 };
@@ -144,6 +162,20 @@ export const Clickable: Story = {
         color="green"
         onClick={() => alert('Clicked!')}
       />
+    </div>
+  ),
+};
+
+/**
+ * A token with its own action and a remove button: each of the two tab stops
+ * shows one focus ring, the token's around the token and the remove button's
+ * around the X.
+ */
+export const ClickableWithRemove: Story = {
+  render: () => (
+    <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+      <Token label="Design" onClick={() => {}} onRemove={() => {}} />
+      <Token label="Docs" href="#" onRemove={() => {}} />
     </div>
   ),
 };
@@ -270,12 +302,7 @@ export const AllVariations: Story = {
         <h4 style={{margin: '0 0 8px'}}>Clickable</h4>
         <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
           {allColors.map(color => (
-            <Token
-              key={color}
-              label={color}
-              color={color}
-              onClick={() => {}}
-            />
+            <Token key={color} label={color} color={color} onClick={() => {}} />
           ))}
         </div>
       </div>
@@ -287,6 +314,70 @@ export const AllVariations: Story = {
           ))}
         </div>
       </div>
+    </div>
+  ),
+};
+
+function RemovableRow({
+  label,
+  value,
+  isClickable = false,
+  href,
+}: {
+  label: string;
+  value: string;
+  isClickable?: boolean;
+  href?: string;
+}) {
+  const [isRemoved, setIsRemoved] = useState(false);
+  if (isRemoved) {
+    return <p>Removed {label}</p>;
+  }
+  return (
+    <Token
+      label={label}
+      onClick={isClickable ? () => {} : undefined}
+      href={href}
+      endContent={<span style={{fontWeight: 700}}>{value}</span>}
+      onRemove={() => setIsRemoved(true)}
+    />
+  );
+}
+
+/**
+ * Long end content in a narrow space: the value shrinks with the label, so
+ * the Remove button stays inside the token at any text size.
+ */
+export const LongEndContentInNarrowSpace: Story = {
+  render: () => (
+    <div
+      style={{
+        width: '200px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: '8px',
+      }}>
+      <RemovableRow label="Static range:" value="Dec 30, 2024 – Jan 2, 2025" />
+      <RemovableRow
+        label="Clickable range:"
+        value="Dec 30, 2024 – Jan 2, 2025"
+        isClickable
+      />
+      <RemovableRow
+        label="Link range:"
+        value="Dec 30, 2024 – Jan 2, 2025"
+        href="#link-range"
+      />
+      <Token
+        label="With a control:"
+        endContent={
+          <Link label="Range details" onClick={() => {}}>
+            i
+          </Link>
+        }
+        onRemove={() => {}}
+      />
     </div>
   ),
 };

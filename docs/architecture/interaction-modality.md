@@ -154,10 +154,12 @@ work.
   takes the one shared focus-owner style and owner attribute from
   `privateAttributes/focusOwner.stylex.ts`, so the wrapper rings only while that control
   has keyboard focus, and a nested owner or a sibling control rings itself;
-  no component writes the attribute or its selector itself. Implementation
-  gap: Item, Token, the clickable and selectable cards, Thumbnail,
-  MultiSelector, SideNavItem, and ChatComposer's body write their own ring
-  conditions.
+  no component writes the attribute or its selector itself. When layout puts
+  the control one level down, as in a numbered Item whose own button or link
+  sits in the cell beside its marker, the wrapper marks that cell with the
+  module's group props, so the ring still reaches the control. Implementation
+  gap: Thumbnail, MultiSelector, SideNavItem, and ChatComposer's body write
+  their own ring conditions.
 - **INV4 — Every modality has an operable path.** Keyboard, pointer, and touch or
   pen can reach each supported interaction. Hover is never the only discovery or
   activation path. A tooltip's scrolling overflow is the one exception, as
@@ -337,6 +339,11 @@ review (`architecture:knowledge-contracts` change coupling step 6).
 - The action-group tracker (INV13) — the one press tracker for action groups
   outside menus and Selector's and MultiSelector's options, with its one-axis
   tracking (INV14); not exported.
+- `useTapStop` in `Layer/useTouchTrigger.ts` — swallows the click or mousedown
+  that follows a touch press on a control that must not act on taps; not
+  exported. Tokenizer runs it on every press and passes it a token's remove
+  button's mousedown only after a finger's press with the keyboard down. A pen's
+  press keeps its default, as a mouse's does.
 
 ## Deciding specs
 
@@ -360,7 +367,7 @@ reachability, newer-intent precedence, and the evidence/scope guard were approve
 | INV8       | Owner-defined intent order, pending, close, cancellation, disablement, and unmount mutations                                                                                                                                                                                          | Older work changes current content, selection, status or announcement, visibility, focus, or activation after owner-defined supersession                                                                                                                                                                    |
 | INV9       | Concrete-harm reproduction, representative normal/legacy/no-new-prop paths, and coincident public-delta inventory                                                                                                                                                                     | Unsupported or aesthetic preference is treated as harm, unaffected behavior changes, or an API, layout, sizing, default, sticky, or exception delta escapes direct authority                                                                                                                                |
 | INV10      | Source boundary check over Core and Lab, a Lab-to-Core comparison on one recorded stream, and release-filter unit tests over recorded iOS pan and scroll-view streams                                                                                                                 | A Core component with its own sample buffer, velocity math, or release filter; a Lab component with its own sample buffer, velocity math, or release filter; a Lab component reporting a different velocity than Core for the same stream; an export of the tracker; a non-zero release after a still pause |
-| INV11      | Evidence gap: not implemented yet; the shared hover recognizer and its adopters' move onto it are pending. Then: unit tests of the hover recognizer's intent and browser tests of its adopters with a mouse, a pen, a finger, and the keyboard                                        | A show without the owner's entry delay, a missed handoff within a group, a delayed keyboard show, a hover-shown surface that closes before the pointer reaches it, a finger served by it, or a second hover-timing implementation fails                                                                     |
+| INV11      | INV11 gap: each adopter runs its own hover timers. The verification is unit tests of the shared hover recognizer's intent and browser tests of its adopters with a mouse, a pen, a finger, and the keyboard                                                                           | A show without the owner's entry delay, a missed handoff within a group, a delayed keyboard show, a hover-shown surface that closes before the pointer reaches it, a finger served by it, or a second hover-timing implementation fails                                                                     |
 | INV12      | Unit tests of native scroll's progress and real-browser proofs of its adopters                                                                                                                                                                                                        | Progress routed through React state, a missing edge, travel under Reduce Motion, use where native scroll-driven animation is supported, or a public export fails                                                                                                                                            |
 | INV13      | Source boundary check over Core and each family member's pointer-stream tests                                                                                                                                                                                                         | A member outside menus and Selector's and MultiSelector's options that tracks a held pointer across its actions with its own code, or a public export of the tracker, fails                                                                                                                                 |
 | INV14      | `actionGroupTracker.test.ts` one-axis cases and SegmentedControl's drift, past-the-end, cancel and Escape browser cases                                                                                                                                                               | A one-axis group that cancels a press on a drift off it, loses its end action past an end, or keeps its highlight after a cancel or Escape, fails                                                                                                                                                           |

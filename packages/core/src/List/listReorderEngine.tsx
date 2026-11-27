@@ -33,8 +33,10 @@
  * position. UIKit's edit-mode reorder (iOS 26.2, measured) supplies the
  * clocks. They are the hold, the rows' glide to their new places after the
  * drop, and autoscroll. Autoscroll is a 20 ms timer whose step grows with how
- * far the preview's edge is past the scroll edge. With a mouse (the theme's
- * presentation) or Reduce Motion, the rows jump to their new places.
+ * far the preview's edge is past the scroll edge. A drop's glide plays under
+ * every pointer. With a mouse (the theme's presentation), a cancelled drag
+ * and reorder mode's moves put the rows in place at once. Under Reduce
+ * Motion, the rows jump to their new places.
  *
  * HOW IT RUNS. Everything after the drag begins is imperative: no React
  * render and no layout read until the drop, but one. After a scroll the
@@ -72,6 +74,8 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import type {StyleXStyles} from '@stylexjs/stylex';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   useAnnounce,
@@ -94,6 +98,7 @@ import type {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecog
 import {VelocityTracker} from '../gestures/VelocityTracker';
 import {inertClone, paintedBackground} from '../motion/inertClone';
 import {reorder} from '../motion/uikit/reorder';
+import {reducedMotionCrossFade} from '../motion/uikit/timing';
 import {
   animatorFor,
   isMoving,
@@ -102,12 +107,14 @@ import {
   releaseMotion,
 } from '../utils/rowMotion';
 import {edgeAutoscroll, type EdgeAutoscroll} from '../utils/edgeAutoscroll';
+import {msSinceInput} from '../utils/inputAge';
 import {subscribeInput} from '../utils/inputStream';
 import {nearestScroller} from '../utils/scrollingAncestor';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {createDevWarnings, devWarn} from '../utils/devWarning';
+import {observeMutations} from '../utils/sharedMutationObserver';
 import {isLeaving, markLeaving} from '../privateAttributes/leaving.stylex';
 import {
   closestReorderHandle,
@@ -118,6 +125,12 @@ import {
   markReorderSource,
 } from '../privateAttributes/reorderSource.stylex';
 import {markReorderPreview} from '../privateAttributes/reorderPreview.stylex';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {
+  markTravelling,
+  setTravellingBackdrop,
+  travellingStyles,
+} from '../privateAttributes/travelling.stylex';
 import {
   hideReorderLine,
   showReorderLine,
@@ -131,7 +144,10 @@ import {
   INSERTION_LINE_THICKNESS,
   ListReorderHandle,
   ListReorderRowName,
+  UNREAD_HANDLE_NAME,
+  reorderListLayout,
   reorderListStyle,
+  reorderRowLayout,
   reorderRowStyle,
 } from './ListReorderHandle';
 import {attachTouchHold, touchMotion} from './ListReorderTouch';
@@ -140,6 +156,7 @@ import type {
   ListReorderEngine,
   ListReorderOptions,
   ListReorderSession,
+  ReorderRows,
 } from './listReorderContext';
 import {
   autoscrollStep,
@@ -224,6 +241,42 @@ function settleAtRest(
 }
 
 /**
+ * Whether the row's label element names it: it shows text, or holds an icon
+ * or image with an accessible name of its own.
+ */
+function namesRow(element: HTMLElement | null): boolean {
+  if (element == null) {
+    return false;
+  }
+  return (
+    (element.textContent ?? '').trim() !== '' ||
+    element.querySelector(
+      '[aria-label]:not([aria-label=""]), [aria-labelledby], img[alt]:not([alt=""])',
+    ) != null
+  );
+}
+
+/** What a label element's change that can rename its row looks like. */
+const LABEL_WATCH: MutationObserverInit = {
+  subtree: true,
+  childList: true,
+  characterData: true,
+  attributes: true,
+  attributeFilter: ['aria-label', 'aria-labelledby', 'alt'],
+};
+
+/**
+ * What names a handle besides its own text, as the list last showed it. Its
+ * row's 1-based place among the list's rows, null until the session reads
+ * it. And whether Item's label element shows no name: an unread label counts
+ * as one that shows a name, so a first read that finds a name changes nothing.
+ */
+export interface ListReorderHandleName {
+  readonly position: number | null;
+  readonly labelShowsNoName: boolean;
+}
+
+/**
  * The list's rows: its element children. A removed row put back for its exit
  * holds no place in the order, so it is left out (`markLeaving`).
  */
@@ -233,6 +286,12 @@ function rowsOf(list: HTMLElement): HTMLElement[] {
       child instanceof HTMLElement && !isLeaving(child),
   );
 }
+
+/** A List's rows: its element children. */
+const CHILD_ROWS: ReorderRows = {
+  read: rowsOf,
+  holds: (element, container) => element.parentElement === container,
+};
 
 /**
  * Which rows bound the drop range: the rows that cannot move at either end
@@ -467,6 +526,8 @@ interface DragSession {
   readonly rows: ReadonlyArray<HTMLElement>;
   /** Their layout tops at the begin, for the commit's rebase. */
   readonly tops: ReadonlyArray<number>;
+  /** Each row's handle top inside the row at the begin (see `handleInset`). */
+  readonly insets: ReadonlyArray<number>;
   readonly geometry: ReorderGeometry;
   readonly dragged: number;
   /** The dragged row's span, where the insertion line runs. */
@@ -493,6 +554,8 @@ interface DragSession {
   readonly restore: RowRestore;
   /** The copy of the dragged row that follows the pointer. */
   readonly preview: HTMLElement;
+  /** The preview's backdrop: the surface behind the list, or none. */
+  readonly background: string | null;
   /** The preview's offset from its row's place, as last written. */
   previewOffset: number;
   /**
@@ -533,6 +596,7 @@ interface PendingDrop {
   readonly list: HTMLElement;
   readonly rows: ReadonlyArray<HTMLElement>;
   readonly tops: ReadonlyArray<number>;
+  readonly insets: ReadonlyArray<number>;
   readonly dragged: number;
   /** Where the preview was at the drop: the dragged row glides from there. */
   readonly droppedTop: number;
@@ -541,6 +605,10 @@ interface PendingDrop {
    */
   readonly velocity: number;
   readonly restore: RowRestore;
+  /** The release's time, when the gesture reported one. */
+  readonly releasedAt: number | undefined;
+  /** The preview's backdrop: the dropped row travels on it. */
+  readonly background: string | null;
 }
 
 /** A reorder mode move, reported and waiting for its commit. */
@@ -631,6 +699,8 @@ export interface ReorderGestureEvent {
    * dropped row's glide starts at.
    */
   readonly velocity?: number;
+  /** At a release, its time on the motion clock. */
+  readonly time?: number;
 }
 
 /** A long press's state as a reorder gesture's; null while it waits. */
@@ -658,8 +728,12 @@ export class ListReorderController implements ListReorderSession {
   readonly Host = ListReorderHost;
   readonly Handle = ListReorderHandle;
   readonly RowName = ListReorderRowName;
-  readonly rowStyle = reorderRowStyle;
+  // A row that is not a ListItem travels with the same styles as one.
+  readonly rowStyle = [reorderRowStyle, travellingStyles.row] as StyleXStyles;
   readonly listStyle = reorderListStyle;
+  readonly rowLayout = reorderRowLayout;
+  readonly listLayout = reorderListLayout;
+
   options: ListReorderOptions | null = null;
   announce: AnnounceFn = () => {};
   messages: ReorderMessages | null = null;
@@ -672,6 +746,30 @@ export class ListReorderController implements ListReorderSession {
    * text) and each handle-less row's own.
    */
   private readonly names = new Map<Element, string>();
+  /**
+   * For each handle: the id of Item's label element, when that element names
+   * the row. Also whether the handle is named some other way.
+   */
+  private readonly handleLabels = new Map<
+    Element,
+    {labelId: string | null; isNamed: boolean}
+  >();
+  /** Each handle's place and label naming, as the list last showed them. */
+  private readonly handleNames = new Map<Element, ListReorderHandleName>();
+  private readonly nameListeners = new Set<() => void>();
+  /**
+   * The list's rows and the label elements, watched through Core's shared
+   * mutation observer while the list is up, with each registration's release.
+   */
+  private namesWatch: {
+    list: HTMLElement;
+    unwatchRows: () => void;
+    labels: Map<Element, () => void>;
+  } | null = null;
+  private namesQueued = false;
+  /** The handles already warned for being named after their place. */
+  private readonly warnedNameless = new WeakSet<Element>();
+  private namelessCount = 0;
   /** The handle whose row is in reorder mode, if any. */
   private modeHandle: HTMLElement | null = null;
   private readonly modeListeners = new Set<() => void>();
@@ -696,6 +794,8 @@ export class ListReorderController implements ListReorderSession {
   private claimFocusUntil = 0;
   private session: DragSession | null = null;
   private pending: PendingDrop | null = null;
+  /** A re-grab or the rest step ends the mark that the drop started. */
+  private readonly travelEnds = new WeakMap<HTMLElement, () => void>();
   private fallback: ReturnType<typeof setTimeout> | null = null;
   /** The row whose handle keeps focus across a reorder mode move's commit. */
   private focusRow: HTMLElement | null = null;
@@ -710,6 +810,8 @@ export class ListReorderController implements ListReorderSession {
   constructor(
     private readonly getList: () => HTMLElement | null,
     readonly hintId: string,
+    /** Finds the collection's rows. A List's rows are its element children. */
+    private readonly rows: ReorderRows = CHILD_ROWS,
   ) {}
 
   /** The List's latest options, announcer, strings and presentation. */
@@ -773,6 +875,185 @@ export class ListReorderController implements ListReorderSession {
         this.names.delete(row);
       }
     };
+  }
+
+  /**
+   * Records how `handle` is named besides its place: by Item's label element
+   * `labelId`, or otherwise (`isNamed`). Returns the removal.
+   */
+  registerHandleLabel(
+    handle: Element | null,
+    labelId: string | null,
+    isNamed: boolean,
+  ): () => void {
+    if (handle == null) {
+      return () => {};
+    }
+    const label = {labelId, isNamed};
+    this.handleLabels.set(handle, label);
+    this.queueNames();
+    return () => {
+      if (this.handleLabels.get(handle) === label) {
+        this.handleLabels.delete(handle);
+        this.queueNames();
+      }
+    };
+  }
+
+  /** `handle`'s place and label naming, as the list last showed them. */
+  handleNameOf(handle: Element | null): ListReorderHandleName {
+    return (
+      (handle == null ? null : this.handleNames.get(handle)) ??
+      UNREAD_HANDLE_NAME
+    );
+  }
+
+  /** Calls `listener` when a handle's place or label naming changes. */
+  subscribeHandleNames = (listener: () => void): (() => void) => {
+    this.nameListeners.add(listener);
+    return () => {
+      this.nameListeners.delete(listener);
+    };
+  };
+
+  /**
+   * Watches the list's rows and the handles' label elements through Core's
+   * shared mutation observer. A row's place, and whether its label names it,
+   * come from the DOM. Returns the release.
+   */
+  attachNames(): () => void {
+    const list = this.getList();
+    if (list == null) {
+      return () => {};
+    }
+    const watch = {
+      list,
+      unwatchRows: observeMutations(
+        list,
+        {childList: true},
+        this.onNamesMutation,
+      ),
+      labels: new Map<Element, () => void>(),
+    };
+    this.namesWatch = watch;
+    this.refreshNames();
+    return () => {
+      watch.unwatchRows();
+      for (const unwatch of watch.labels.values()) {
+        unwatch();
+      }
+      watch.labels.clear();
+      if (this.namesWatch === watch) {
+        this.namesWatch = null;
+      }
+    };
+  }
+
+  private readonly onNamesMutation = (): void => {
+    this.refreshNames();
+  };
+
+  /** Reads the names once the current commit is done, for every handle. */
+  private queueNames(): void {
+    if (this.namesQueued) {
+      return;
+    }
+    this.namesQueued = true;
+    queueMicrotask(() => {
+      this.namesQueued = false;
+      this.refreshNames();
+    });
+  }
+
+  /**
+   * Reads each handle's place and label naming from the DOM. Only a change
+   * reaches the handles. A handle named after its place warns, once.
+   */
+  private refreshNames(): void {
+    const list = this.getList();
+    if (list == null) {
+      return;
+    }
+    const places = new Map(
+      this.rows.read(list).map((row, index) => [row, index + 1]),
+    );
+    const watch = this.namesWatch;
+    // The List renders a new element when its numbering turns on or off (an
+    // `ol` or a `ul`). Its remounted handles refresh the names, which moves
+    // the watch onto it.
+    if (watch != null && watch.list !== list) {
+      watch.unwatchRows();
+      watch.list = list;
+      watch.unwatchRows = observeMutations(
+        list,
+        {childList: true},
+        this.onNamesMutation,
+      );
+    }
+    const watched = new Set<Element>();
+    let changed = false;
+    for (const handle of this.keys.keys()) {
+      const label = this.handleLabels.get(handle);
+      const element =
+        label?.labelId == null
+          ? null
+          : list.ownerDocument.getElementById(label.labelId);
+      if (element != null && watch != null) {
+        watched.add(element);
+        if (!watch.labels.has(element)) {
+          watch.labels.set(
+            element,
+            observeMutations(element, LABEL_WATCH, this.onNamesMutation),
+          );
+        }
+      }
+      const labelShowsNoName = label?.labelId != null && !namesRow(element);
+      const byPlace =
+        label != null &&
+        (label.labelId != null ? labelShowsNoName : !label.isNamed);
+      // Only a handle named after its place keeps it, so a reorder leaves
+      // the handles named some other way alone.
+      const row = byPlace ? this.rowOf(handle) : null;
+      const position = row == null ? null : (places.get(row) ?? null);
+      const previous = this.handleNameOf(handle);
+      if (
+        previous.position !== position ||
+        previous.labelShowsNoName !== labelShowsNoName
+      ) {
+        this.handleNames.set(handle, {position, labelShowsNoName});
+        changed = true;
+      }
+      if (byPlace && position != null && !this.warnedNameless.has(handle)) {
+        // Named after its place only: a person hears "Reorder item 3" with
+        // nothing to tell the rows apart.
+        this.warnedNameless.add(handle);
+        this.namelessCount += 1;
+        this.warn(
+          'ListItem',
+          'A reorderable row has no accessible name, so its reorder handle is ' +
+            'named after its place ("Reorder item N"). Give the row a text ' +
+            'label or an aria-label.',
+          `nameless-row-${this.namelessCount}`,
+        );
+      }
+    }
+    for (const handle of this.handleNames.keys()) {
+      if (!this.keys.has(handle)) {
+        this.handleNames.delete(handle);
+        changed = true;
+      }
+    }
+    for (const [element, unwatch] of watch?.labels ?? []) {
+      if (!watched.has(element)) {
+        unwatch();
+        watch?.labels.delete(element);
+      }
+    }
+    if (changed) {
+      for (const listener of [...this.nameListeners]) {
+        listener();
+      }
+    }
   }
 
   /** What the announcements call the row at `index`. */
@@ -866,7 +1147,7 @@ export class ListReorderController implements ListReorderSession {
     if (list == null || row == null) {
       return;
     }
-    const rows = rowsOf(list);
+    const rows = this.rows.read(list);
     const index = rows.indexOf(row);
     this.announce(
       this.messages?.modeDone(
@@ -918,6 +1199,17 @@ export class ListReorderController implements ListReorderSession {
     const dragged = handle != null && this.draggedHandle === handle;
     this.draggedHandle = null;
     return dragged;
+  }
+
+  /**
+   * The row's handle top inside the row, or 0 without a handle. It reads
+   * layout; a transform on the row moves both boxes alike.
+   */
+  private handleInset(row: HTMLElement): number {
+    const handle = this.handleIn(row);
+    return handle == null
+      ? 0
+      : handle.getBoundingClientRect().top - row.getBoundingClientRect().top;
   }
 
   /** This list's handle in `row`, if it has one: a nested list's are its own. */
@@ -1024,6 +1316,8 @@ export class ListReorderController implements ListReorderSession {
             state: 'ended',
             y: up.clientY,
             velocity: velocity.velocity(up.timeStamp).y,
+            // The release on the motion clock, from the pointer's own stamp.
+            time: motionNow() - msSinceInput(up.timeStamp, up),
           });
         }
       };
@@ -1093,6 +1387,10 @@ export class ListReorderController implements ListReorderSession {
               state === 'ended' && touch != null
                 ? velocity.velocity(touch.time).y
                 : undefined,
+            // A tracked touch keeps the time of its last move, which can be
+            // long before the lift. The recognizer ends in the lift's own
+            // task, so now is the lift.
+            time: state === 'ended' ? motionNow() : undefined,
           });
         }
       },
@@ -1114,7 +1412,7 @@ export class ListReorderController implements ListReorderSession {
         this.track(event.y);
         break;
       case 'ended':
-        this.drop(event.velocity ?? 0);
+        this.drop(event.velocity ?? 0, event.time);
         break;
       case 'cancelled':
         this.cancel();
@@ -1153,7 +1451,7 @@ export class ListReorderController implements ListReorderSession {
     }
     // A drop still waiting for its commit is settled where it is.
     this.flushPending();
-    const rows = rowsOf(list);
+    const rows = this.rows.read(list);
     const dragged = rows.indexOf(row);
     const movable = rows.map(element => this.handleIn(element) != null);
     if (dragged < 0 || !movable[dragged]) {
@@ -1161,6 +1459,7 @@ export class ListReorderController implements ListReorderSession {
     }
     const at = motionNow();
     const tops = rows.map(element => layoutTop(element, list));
+    const insets = rows.map(element => this.handleInset(element));
     const heights = rows.map(element => element.offsetHeight);
     const lineSpan = lineSpanOf(row, list);
     const previewSpan = previewSpanOf(row, list);
@@ -1179,6 +1478,9 @@ export class ListReorderController implements ListReorderSession {
     const shown = shownY(row, at);
     const origin = row.getBoundingClientRect().top - shown - tops[dragged];
     const scroller = scrollerOf(list);
+    // A row grabbed again mid-glide still travels. Its preview rides above
+    // the rows now, so the mark ends.
+    this.endTravel(row);
     // Every row gets an identity offset for the session. Otherwise a row's
     // first offset changes how it paints in the middle of the drag, with a
     // layout and a paint. With one in place, neither a move nor a slide lays
@@ -1222,6 +1524,7 @@ export class ListReorderController implements ListReorderSession {
       list,
       rows,
       tops,
+      insets,
       geometry,
       dragged,
       lineSpan,
@@ -1247,6 +1550,7 @@ export class ListReorderController implements ListReorderSession {
       step: 0,
       restore,
       preview,
+      background,
       previewOffset: 0,
       scrollStale: false,
       ownScroll: false,
@@ -1503,7 +1807,7 @@ export class ListReorderController implements ListReorderSession {
    * The drop: the move is reported, and on its commit the row glides into
    * its place, starting at the release's y `velocity` in px/s.
    */
-  private drop(velocity: number): void {
+  private drop(velocity: number, releasedAt?: number): void {
     const session = this.session;
     if (session == null) {
       return;
@@ -1545,10 +1849,13 @@ export class ListReorderController implements ListReorderSession {
       list,
       rows,
       tops: session.tops,
+      insets: session.insets,
       dragged,
       droppedTop,
       velocity,
       restore: session.restore,
+      releasedAt,
+      background: session.background,
     };
     options.onReorder({key, to: position});
     // A consumer that does not apply the move by the end of the task gets
@@ -1631,7 +1938,7 @@ export class ListReorderController implements ListReorderSession {
     if (pending == null) {
       return;
     }
-    const current = rowsOf(pending.list);
+    const current = this.rows.read(pending.list);
     if (!sameOrder(current, pending.rows)) {
       // The commit came but its layout effect has not run yet.
       return;
@@ -1643,6 +1950,24 @@ export class ListReorderController implements ListReorderSession {
       pending.dragged,
       pending.restore,
     );
+  }
+
+  /**
+   * Marks a dropped row as travelling for the length of its glide: it rides
+   * above the rows it passes, on its preview's backdrop.
+   */
+  private travel(row: HTMLElement, backdrop: string | null): void {
+    setTravellingBackdrop(row, backdrop);
+    this.travelEnds.set(row, markTravelling(row));
+  }
+
+  private endTravel(row: HTMLElement): void {
+    const end = this.travelEnds.get(row);
+    if (end != null) {
+      this.travelEnds.delete(row);
+      end();
+      setTravellingBackdrop(row, null);
+    }
   }
 
   /** Clears the dragged row's stacking once its motion has come to rest. */
@@ -1657,6 +1982,7 @@ export class ListReorderController implements ListReorderSession {
         void running.handle.finished.then(settle);
         return;
       }
+      this.endTravel(element);
       element.style.zIndex = restore.zIndex;
       element.style.backgroundColor = restore.backgroundColor;
       // Identity offsets go; a row still moving keeps its own.
@@ -1704,12 +2030,12 @@ export class ListReorderController implements ListReorderSession {
       );
     }
     const session = this.session;
-    if (session != null && !sameOrder(rowsOf(list), session.rows)) {
+    if (session != null && !sameOrder(this.rows.read(list), session.rows)) {
       // The rows changed under the drag.
       this.cancel();
     }
     const pending = this.pending;
-    if (pending != null && !sameOrder(rowsOf(list), pending.rows)) {
+    if (pending != null && !sameOrder(this.rows.read(list), pending.rows)) {
       this.pending = null;
       if (this.fallback != null) {
         clearTimeout(this.fallback);
@@ -1720,7 +2046,7 @@ export class ListReorderController implements ListReorderSession {
     const announcement = this.announcement;
     if (
       announcement != null &&
-      rowsOf(list).indexOf(announcement.row) === announcement.to
+      this.rows.read(list).indexOf(announcement.row) === announcement.to
     ) {
       this.announcement = null;
       if (this.announcementFallback != null) {
@@ -1731,7 +2057,7 @@ export class ListReorderController implements ListReorderSession {
     }
     const move = this.committedMove;
     let slide: (() => void) | null = null;
-    if (move != null && !sameOrder(rowsOf(list), move.rows)) {
+    if (move != null && !sameOrder(this.rows.read(list), move.rows)) {
       this.committedMove = null;
       if (this.moveFallback != null) {
         clearTimeout(this.moveFallback);
@@ -1760,7 +2086,7 @@ export class ListReorderController implements ListReorderSession {
     const {list} = move;
     const at = motionNow();
     const shifts = move.rows.map((element, index) =>
-      element.parentElement === list
+      this.rows.holds(element, list)
         ? move.tops[index] - layoutTop(element, list)
         : 0,
     );
@@ -1783,16 +2109,35 @@ export class ListReorderController implements ListReorderSession {
 
   private rebase(pending: PendingDrop): void {
     const {list} = pending;
-    const at = motionNow();
+    // Under Reduce Motion the fade starts at the release. A late commit then
+    // shortens the fade but never extends it past 200 ms. Nothing travels
+    // there, so the rows read the same at the release as now. The release is
+    // on the motion clock and never after now.
+    const now = motionNow();
+    const releasedAt = reducesMotion(list) ? pending.releasedAt : undefined;
+    const isReduced = releasedAt != null;
+    const at = releasedAt ?? now;
+    // A commit that comes after the fade's first half has passed would show
+    // the rows faded out where they were. They land at once instead, which
+    // also ends the change within the fade's time from the release.
+    // SYNC: the half is where the Reduce Motion dip lands
+    // (motion/reducedMotionPlan.ts).
+    const landsAtOnce =
+      isReduced && now - at >= reducedMotionCrossFade.durationMs / 2;
     // Every read comes before the first write, so the drop lays out once.
     const rows = pending.rows.map((element, index) => {
-      if (element.parentElement !== list) {
+      if (!this.rows.holds(element, list)) {
         return null;
       }
       // The dragged row glides from where its preview was dropped, the rows
       // it passed from their old places.
+      // A row whose own layout changed with its place (ListInput's first
+      // record carries the column labels) glides by its handle's travel, so
+      // its content starts where it was shown.
       const from =
-        index === pending.dragged ? pending.droppedTop : pending.tops[index];
+        (index === pending.dragged ? pending.droppedTop : pending.tops[index]) +
+        pending.insets[index] -
+        this.handleInset(element);
       return {
         element,
         index,
@@ -1807,8 +2152,10 @@ export class ListReorderController implements ListReorderSession {
       Math.abs(row.value + row.shift) < MIN_MOVE_PX && !row.moving;
     const glides = (row: {shift: number; value: number; moving: boolean}) =>
       !settles(row) && Math.abs(row.shift) >= MIN_MOVE_PX;
+    // A drop glides under every pointer: the gesture's settle plays its
+    // spring from the release's velocity, as a finger's drop does.
     const spring =
-      this.animates && rows.some(row => row != null && glides(row))
+      !landsAtOnce && rows.some(row => row != null && glides(row))
         ? touchMotion.glideBase(list)
         : null;
     for (const row of rows) {
@@ -1825,7 +2172,13 @@ export class ListReorderController implements ListReorderSession {
       }
       if (spring != null && index === pending.dragged) {
         // The dragged row glides from where its preview was dropped into its
-        // new layout place, starting at the release's velocity.
+        // new layout place, starting at the release's velocity. It rides
+        // above the rows it passes until it rests, as its preview did, on
+        // the preview's backdrop. A row with its own background keeps it.
+        // Under Reduce Motion the drop does not travel, so nothing rides.
+        if (!reducesMotion(list)) {
+          this.travel(element, pending.background ?? 'transparent');
+        }
         touchMotion.glide(element, shift, spring, at, pending.velocity);
       } else if (spring != null) {
         // Every other row's place after the drop is its new layout place. So
@@ -1861,7 +2214,7 @@ export class ListReorderController implements ListReorderSession {
       return () => this.clearModeLine();
     }
     const step = this.lastStep ?? -1;
-    const rows = rowsOf(list);
+    const rows = this.rows.read(list);
     const index = rows.indexOf(row);
     const top = layoutTop(row, list);
     const bottom = top + row.offsetHeight;
@@ -1903,23 +2256,19 @@ export class ListReorderController implements ListReorderSession {
   }
 
   /**
-   * The row that holds `element` (a handle): the list's child that contains
-   * it, whatever its tag. Null outside the list.
+   * The row that holds `element` (a handle): the row that contains it,
+   * whatever its tag. Null outside the list.
    */
   rowOf(element: Element | null): HTMLElement | null {
     const list = this.getList();
+    if (list == null) {
+      return null;
+    }
     let node = element;
-    while (node != null && node.parentElement !== list) {
+    while (node != null && !this.rows.holds(node, list)) {
       node = node.parentElement;
     }
-    return list != null && node instanceof HTMLElement ? node : null;
-  }
-
-  /** The 1-based place of the row that holds `element`, or null. */
-  positionOf(element: Element | null): number | null {
-    const list = this.getList();
-    const row = this.rowOf(element);
-    return list == null || row == null ? null : rowsOf(list).indexOf(row) + 1;
+    return node instanceof HTMLElement ? node : null;
   }
 
   // --- Keys ------------------------------------------------------------
@@ -1979,7 +2328,7 @@ export class ListReorderController implements ListReorderSession {
     ) {
       return;
     }
-    const rows = rowsOf(list);
+    const rows = this.rows.read(list);
     const index = rows.indexOf(row);
     const to = index + delta;
     if (to < 0 || to >= rows.length) {
@@ -1994,7 +2343,7 @@ export class ListReorderController implements ListReorderSession {
     this.announceWhenCommitted({
       row,
       to,
-      landed: () => this.placeIn(rowsOf(list), to),
+      landed: () => this.placeIn(this.rows.read(list), to),
       kept: this.placeIn(rows, index),
       politeness: undefined,
     });
@@ -2159,7 +2508,8 @@ function ListReorderHost({reorder}: {reorder: ListReorderContextValue}) {
   const announce = useAnnounce();
   const t = useComponentTranslator();
   // UIKit's motion under a finger (one touch model on every touch device);
-  // with a mouse, rows take their places at once.
+  // with a mouse, a cancelled drag and reorder mode's moves put the rows in
+  // place at once.
   const isTouch = useTouchPresentation().isTouch;
   // Syncs the reorder session, which lives outside React, with this render's
   // options, strings and presentation.
@@ -2173,6 +2523,9 @@ function ListReorderHost({reorder}: {reorder: ListReorderContextValue}) {
   });
   // The list's own pointer listeners, on its DOM element.
   useIsomorphicLayoutEffect(() => controller.attachMouse(), [controller]);
+  // Syncs the handles' names with the list's rows and their label elements
+  // in the DOM, through the session's observer.
+  useIsomorphicLayoutEffect(() => controller.attachNames(), [controller]);
   // The owner's options, for an object a Lab collection adapted from the
   // owner's.
   const startedBy = options.startedBy ?? options;
@@ -2288,8 +2641,7 @@ function ListReorderModeHint({
   const layer = useLayer({mode: 'context'});
   // The latest layer handle, for the effect below, which re-runs only when
   // the mode's row changes.
-  const layerRef = useRef(layer);
-  layerRef.current = layer;
+  const layerRef = useCommittedRef(layer);
   const hintRef = useRef<HTMLElement | null>(null);
   // External system: the hint's popover in the top layer (useLayer),
   // anchored to the handle of the row in reorder mode. Shown while that row
@@ -2344,8 +2696,8 @@ function ListReorderModeHint({
 
 /** The machinery a reorderable object carries (createReorderable). */
 export const listReorderEngine: ListReorderEngine = {
-  createSession: (getList, hintId) =>
-    new ListReorderController(getList, hintId),
+  createSession: (getList, hintId, rows) =>
+    new ListReorderController(getList, hintId, rows),
   start: (options, key) => {
     const sessions = sessionsByOptions.get(options) ?? [];
     if (sessions.length > 1) {

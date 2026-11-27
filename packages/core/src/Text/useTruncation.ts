@@ -5,15 +5,17 @@
 /**
  * @file useTruncation.ts
  * @input Uses React hooks, sharedResizeObserver, sharedMutationObserver
- * @output Exports useTruncation hook for detecting text overflow
- * @position Hook; consumed by Text.tsx, Heading.tsx
+ * @output Exports useTruncation hook for detecting text overflow, and
+ *   useTruncationMeasure, its internal form with Core's measure-on-interest
+ *   mode
+ * @position Hook; consumed by Text.tsx, Heading.tsx and Lightbox.tsx
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Text/Text.doc.mjs
  */
 
 import {useCallback, useRef, useState, type RefCallback} from 'react';
-import {isResizeObserved, observeResize} from '../utils/sharedResizeObserver';
+import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import {observeContent} from '../utils/sharedMutationObserver';
 
 export interface UseTruncationOptions {
@@ -22,6 +24,12 @@ export interface UseTruncationOptions {
    * 0 = no truncation, hook returns isTruncated: false
    */
   maxLines: number;
+
+  /**
+   * Pass true while the text is shown in full; the hook keeps reporting
+   * whether it is cut off when clamped.
+   */
+  isExpanded?: boolean;
 }
 
 export interface UseTruncationReturn {
@@ -39,6 +47,28 @@ export interface UseTruncationReturn {
    * Full text content for tooltip display
    */
   fullText: string;
+}
+
+/**
+ * Whether an element's text overflows its line clamp. Single-line text
+ * overflows horizontally. Multi-line text compares the content's real
+ * height: with -webkit-line-clamp, browsers may report the clamped size as
+ * scrollHeight, so Range.getBoundingClientRect() measures the content.
+ */
+function measureTruncation(element: HTMLElement, maxLines: number): boolean {
+  if (maxLines === 1) {
+    return element.scrollWidth > element.offsetWidth;
+  }
+  let contentHeight = element.scrollHeight;
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    contentHeight = range.getBoundingClientRect().height;
+    range.detach();
+  } catch {
+    // Fallback to scrollHeight (e.g. jsdom in tests)
+  }
+  return contentHeight > element.offsetHeight;
 }
 
 /**
@@ -69,12 +99,60 @@ export interface UseTruncationReturn {
 export function useTruncation(
   options: UseTruncationOptions,
 ): UseTruncationReturn {
-  const {maxLines} = options;
-  const [isTruncated, setIsTruncated] = useState(false);
-  const [fullText, setFullText] = useState('');
+  const {ref, isTruncated, fullText} = useTruncationMeasure(options);
+  return {ref, isTruncated, fullText};
+}
+
+/** @internal */
+export interface TruncationMeasureOptions extends UseTruncationOptions {
+  /**
+   * Measures at each hover, tap or focus (`measure`), not at mount, for
+   * text that mounts many times at once, such as a Table's default cells.
+   * After the first measurement, a content change measures again.
+   */
+  measuresOnInterest?: boolean;
+}
+
+/** @internal */
+export interface TruncationMeasureReturn extends UseTruncationReturn {
+  /** With `measuresOnInterest`: measures now and returns the answer. */
+  measure: (() => boolean) | undefined;
+}
+
+/**
+ * useTruncation with Core's internal modes. Text calls this; the public hook
+ * calls it without them.
+ * @internal
+ */
+export function useTruncationMeasure(
+  options: TruncationMeasureOptions,
+): TruncationMeasureReturn {
+  const {maxLines, isExpanded = false, measuresOnInterest = false} = options;
+  const [isTruncated, setTruncatedState] = useState(false);
+  const [fullText, setFullTextState] = useState('');
+  // The values last set as state. A measurement that finds the same values
+  // sets nothing, so a list that mounts many texts dispatches no updates
+  // that would change nothing.
+  const shownRef = useRef({isTruncated: false, fullText: ''});
+  const setIsTruncated = useCallback((value: boolean) => {
+    if (shownRef.current.isTruncated !== value) {
+      shownRef.current.isTruncated = value;
+      setTruncatedState(value);
+    }
+  }, []);
+  const setFullText = useCallback((value: string) => {
+    if (shownRef.current.fullText !== value) {
+      shownRef.current.fullText = value;
+      setFullTextState(value);
+    }
+  }, []);
   const elementRef = useRef<HTMLElement | null>(null);
   const unobserveRef = useRef<(() => void) | null>(null);
   const unobserveContentRef = useRef<(() => void) | null>(null);
+  // The last measured answer, which the text keeps while it is expanded.
+  const answerRef = useRef({isTruncated: false, fullText: ''});
+  // The text an expanded element kept its answer for when it went.
+  const keptForRef = useRef<HTMLElement | null>(null);
 
   const checkTruncation = useCallback(
     (element: HTMLElement) => {
@@ -84,31 +162,13 @@ export function useTruncation(
       }
 
       // Capture full text content
-      setFullText(element.textContent ?? '');
+      answerRef.current.fullText = element.textContent ?? '';
+      setFullText(answerRef.current.fullText);
 
-      // Check for overflow
-      if (maxLines === 1) {
-        // Single-line: check horizontal overflow
-        setIsTruncated(element.scrollWidth > element.offsetWidth);
-      } else {
-        // Multi-line: use Range to measure actual content height.
-        // When -webkit-line-clamp is active, browsers may report
-        // scrollHeight === offsetHeight (the clamped size), so the
-        // naive scrollHeight check fails. Range.getBoundingClientRect()
-        // measures the real text content regardless of clamping.
-        let contentHeight = element.scrollHeight;
-        try {
-          const range = document.createRange();
-          range.selectNodeContents(element);
-          contentHeight = range.getBoundingClientRect().height;
-          range.detach();
-        } catch {
-          // Fallback to scrollHeight (e.g. jsdom in tests)
-        }
-        setIsTruncated(contentHeight > element.offsetHeight);
-      }
+      answerRef.current.isTruncated = measureTruncation(element, maxLines);
+      setIsTruncated(answerRef.current.isTruncated);
     },
-    [maxLines],
+    [maxLines, setIsTruncated, setFullText],
   );
 
   const ref: RefCallback<HTMLElement> = useCallback(
@@ -120,39 +180,49 @@ export function useTruncation(
       unobserveContentRef.current?.();
       unobserveContentRef.current = null;
 
+      const previous = elementRef.current;
       elementRef.current = element;
 
-      if (element && maxLines > 0) {
-        // Observe via the shared singleton, if available. The call that
-        // observeResize makes on registration runs inside React's commit, so
-        // it measures nothing. The observer's first notification measures a
-        // new element. The browser sends it after its own layout, so mounting
-        // text forces no layout pass. An element another subscriber already
-        // observes gets no new first notification, so a microtask after the
-        // commit measures it. The truncated state only decides whether to
-        // compose the tooltip, so nothing paints differently.
-        if (typeof ResizeObserver !== 'undefined') {
-          let registered = false;
-          const wasObserved = isResizeObserved(element);
-          const unobserve = observeResize(element, () => {
-            if (registered) {
-              checkTruncation(element);
-            }
-          });
-          registered = true;
-          unobserveRef.current = unobserve;
-          // Skipped when this registration has ended by then (measuring
-          // turned off, or the element replaced, in the same task).
-          if (wasObserved) {
-            queueMicrotask(() => {
-              if (unobserveRef.current === unobserve) {
-                checkTruncation(element);
-              }
-            });
-          }
+      // Shown in full, the text keeps the answer it had when clamped.
+      if (isExpanded) {
+        if (element != null) {
+          setIsTruncated(answerRef.current.isTruncated);
+          setFullText(answerRef.current.fullText);
         } else {
+          keptForRef.current = previous;
+        }
+        return;
+      }
+
+      // A kept answer is about the text it measured. Other text starts from
+      // none, as it does after its old element goes.
+      const keptFor = keptForRef.current;
+      keptForRef.current = null;
+      if (keptFor != null && element !== keptFor) {
+        answerRef.current = {isTruncated: false, fullText: ''};
+        setIsTruncated(false);
+        setFullText('');
+      }
+
+      // Text that measures on interest waits for its first hover, tap or
+      // focus: it measures and observes nothing at mount.
+      if (element && maxLines > 0 && measuresOnInterest) {
+        return;
+      }
+
+      if (element && maxLines > 0) {
+        // Observe via the shared singleton, if available. The observer's
+        // first notification measures a new element. The browser sends it
+        // after its own layout, so mounting text forces no layout pass. The
+        // truncated state only decides whether to compose the tooltip, so
+        // nothing paints differently.
+        const unobserve = observeResizeAfterLayout(element, () => {
+          checkTruncation(element);
+        });
+        if (unobserve == null) {
           checkTruncation(element);
         }
+        unobserveRef.current = unobserve;
         // New text in a box that keeps its size fires no resize, so the
         // captured text and truncated state would otherwise stay stale.
         unobserveContentRef.current = observeContent(element, () => {
@@ -163,12 +233,34 @@ export function useTruncation(
         setFullText('');
       }
     },
-    [maxLines, checkTruncation],
+    [
+      maxLines,
+      isExpanded,
+      measuresOnInterest,
+      checkTruncation,
+      setIsTruncated,
+      setFullText,
+    ],
   );
+
+  // Measures the attached text at a hover, tap or focus. The first call also
+  // follows content changes from then on, so an open tooltip follows the text.
+  const measureNow = useCallback((): boolean => {
+    const element = elementRef.current;
+    if (element == null || maxLines === 0) {
+      return false;
+    }
+    checkTruncation(element);
+    unobserveContentRef.current ??= observeContent(element, () => {
+      checkTruncation(element);
+    });
+    return answerRef.current.isTruncated;
+  }, [maxLines, checkTruncation]);
 
   return {
     ref,
     isTruncated,
     fullText,
+    measure: measuresOnInterest ? measureNow : undefined,
   };
 }

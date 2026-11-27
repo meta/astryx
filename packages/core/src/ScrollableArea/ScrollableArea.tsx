@@ -32,6 +32,7 @@ import {
   containerPaddingBlockStartVarStyles,
   containerPaddingBlockEndVarStyles,
 } from '../Layout/padding.stylex';
+import {containerBlockBleedStyles} from '../Layout/containerBlockBleed.stylex';
 import type {SizeValue, SpacingStep} from '../utils/types';
 import {
   useScrollableArea,
@@ -250,6 +251,7 @@ export function ScrollableArea({
             paddingBlockEnd != null && paddingBlockEndStyles[paddingBlockEnd],
             paddingBlockEnd != null &&
               containerPaddingBlockEndVarStyles[paddingBlockEnd],
+            containerBlockBleedStyles.publish,
           ),
         })}>
         {children}

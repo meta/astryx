@@ -31,9 +31,10 @@ import {useCallback, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useHoverCard} from '../HoverCard/useHoverCard';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {ButtonTooltipInNameContext} from '../Button/Button';
 import {IconButton} from '../IconButton/IconButton';
 import {ComponentIcon} from '../Icon/ComponentIcon';
-import {useClipboard} from '../hooks/useClipboard';
+import {useClipboardCopy} from '../hooks/useClipboard';
 import {themeProps} from '../utils/themeProps';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {
@@ -132,9 +133,8 @@ const COPY_FEEDBACK_MS = 1500;
  * The per-row copy affordance: a compact ghost `IconButton` that writes the
  * row's value to the clipboard, flips `copy` → `check` for a moment, and
  * announces the copy to a polite live region (a swapped aria-label alone
- * isn't reliably announced). A clipboard rejection is a silent no-op. The
- * clipboard write, copied flag, reset timer, and announcement are owned by
- * `useClipboard` — shared with CodeBlock's built-in copy button.
+ * isn't reliably announced). The error detail of a failed write is never
+ * shown.
  *
  * Kept as its own component so its state/timer/effect only exist for rows that
  * actually opt into copying — read-only rows render no button and carry none
@@ -142,8 +142,14 @@ const COPY_FEEDBACK_MS = 1500;
  */
 function CopyButton({value}: {value: string}) {
   const t = useComponentTranslator();
-  const {copy, isCopied: copied} = useClipboard({
+  const copyFailedLabel = t('@astryx.timestamp.copyFailed');
+  const {
+    copy,
+    isCopied: copied,
+    isFailed: copyFailed,
+  } = useClipboardCopy({
     announce: t('@astryx.timestamp.copied'),
+    announceFailure: copyFailedLabel,
     resetAfterMs: COPY_FEEDBACK_MS,
   });
 
@@ -152,31 +158,39 @@ function CopyButton({value}: {value: string}) {
   }, [copy, value]);
 
   return (
-    <IconButton
-      variant="ghost"
-      size="sm"
-      icon={
-        <ComponentIcon
-          slot="timestamp-copy"
-          state={{copied}}
-          fallback={{icon: copied ? 'check' : 'copy', size: 'sm'}}
-          color="inherit"
-        />
-      }
-      // Visible hover/focus hint via Button's built-in tooltip: 'Copy',
-      // flipping to 'Copied' after a successful copy in step with the icon.
-      // The full 'Copy <value>' string stays the aria-label for assistive tech.
-      tooltip={t(
-        copied ? '@astryx.timestamp.copied' : '@astryx.timestamp.copy',
-      )}
-      label={
-        copied
-          ? t('@astryx.timestamp.copied')
-          : t('@astryx.timestamp.copyValue', {value})
-      }
-      onClick={handleCopy}
-      {...themeProps('timestamp-copy-button')}
-    />
+    <ButtonTooltipInNameContext value>
+      <IconButton
+        variant="ghost"
+        size="sm"
+        icon={
+          <ComponentIcon
+            slot="timestamp-copy"
+            state={{copied: copied && !copyFailed}}
+            fallback={{
+              icon: copyFailed ? 'close' : copied ? 'check' : 'copy',
+              size: 'sm',
+            }}
+            color="inherit"
+          />
+        }
+        // The tooltip stays short. At rest the name carries the full value for
+        // assistive technology.
+        tooltip={
+          copyFailed
+            ? copyFailedLabel
+            : t(copied ? '@astryx.timestamp.copied' : '@astryx.timestamp.copy')
+        }
+        label={
+          copyFailed
+            ? copyFailedLabel
+            : copied
+              ? t('@astryx.timestamp.copied')
+              : t('@astryx.timestamp.copyValue', {value})
+        }
+        onClick={handleCopy}
+        {...themeProps('timestamp-copy-button')}
+      />
+    </ButtonTooltipInNameContext>
   );
 }
 
@@ -223,8 +237,11 @@ function EntryRow({
 }
 
 export interface TimestampHoverCardProps {
-  /** The rows to render, each a labelled instant, optionally copyable. */
-  lines: ReadonlyArray<TimestampTooltipLine>;
+  /**
+   * The rows to render, each a labelled instant, optionally copyable. The card
+   * reads them only while it shows, so a closed card formats nothing.
+   */
+  getLines: () => ReadonlyArray<TimestampTooltipLine>;
   /** Accessible name for the card. */
   label: string;
   /** Persistent anchor, rendered outside the lazy boundary. */
@@ -253,6 +270,43 @@ function gridTemplateFor(
 }
 
 /**
+ * The card's rows, as a semantic `<dl>` grid. The layer renders it only while
+ * the card shows, so the rows are formatted then.
+ */
+function CardLines({
+  getLines,
+}: {
+  getLines: () => ReadonlyArray<TimestampTooltipLine>;
+}): ReactNode {
+  const lines = getLines();
+  // A label column is only reserved when some row is labelled; otherwise the
+  // value sits flush at the card's leading edge. An action column is only
+  // reserved when some row is copyable (option B), so a fully read-only card
+  // has no trailing gutter.
+  const hasLabelColumn = lines.some(
+    line => line.label != null && line.label !== '',
+  );
+  const hasActionColumn = lines.some(line => line.isCopyable);
+  return (
+    <dl
+      {...stylex.props(
+        styles.dl,
+        gridTemplateFor(hasLabelColumn, hasActionColumn),
+      )}>
+      {lines.map((line, index) => (
+        <EntryRow
+          // eslint-disable-next-line @eslint-react/no-array-index-key -- rows are fixed positional slots and two entries may legitimately be identical
+          key={index}
+          line={line}
+          hasLabelColumn={hasLabelColumn}
+          hasActionColumn={hasActionColumn}
+        />
+      ))}
+    </dl>
+  );
+}
+
+/**
  * The copyable hover card for Timestamp. Renders a semantic `<dl>` as a grid:
  * an optional label column, the value, and — when any row is copyable — a
  * trailing action column carrying that row's copy button, so buttons align
@@ -262,7 +316,7 @@ function gridTemplateFor(
  * interactive.
  */
 export default function TimestampHoverCard({
-  lines,
+  getLines,
   label,
   triggerRef,
   onCardOpenChange,
@@ -309,34 +363,7 @@ export default function TimestampHoverCard({
     };
   }, [triggerRef, positionRef, interactionRef, show, id]);
 
-  // A label column is only reserved when some row is labelled; otherwise the
-  // value sits flush at the card's leading edge. An action column is only
-  // reserved when some row is copyable (option B), so a fully read-only card
-  // has no trailing gutter.
-  const hasLabelColumn = lines.some(
-    line => line.label != null && line.label !== '',
-  );
-  const hasActionColumn = lines.some(line => line.isCopyable);
-
-  const cardContent = (
-    <dl
-      {...stylex.props(
-        styles.dl,
-        gridTemplateFor(hasLabelColumn, hasActionColumn),
-      )}>
-      {lines.map((line, index) => (
-        <EntryRow
-          // eslint-disable-next-line @eslint-react/no-array-index-key -- rows are fixed positional slots and two entries may legitimately be identical
-          key={index}
-          line={line}
-          hasLabelColumn={hasLabelColumn}
-          hasActionColumn={hasActionColumn}
-        />
-      ))}
-    </dl>
-  );
-
-  return renderHoverCard(cardContent);
+  return renderHoverCard(<CardLines getLines={getLines} />);
 }
 
 TimestampHoverCard.displayName = 'TimestampHoverCard';

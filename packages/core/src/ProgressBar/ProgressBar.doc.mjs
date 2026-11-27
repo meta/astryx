@@ -42,6 +42,9 @@ const anatomy = [
 
 export const docs = {
   name: 'ProgressBar',
+  playground: {
+    defaults: {label: 'Uploading files', value: 60},
+  },
   displayName: 'Progress Bar',
   category: 'Feedback & Status',
   keywords: [
@@ -95,7 +98,8 @@ export const docs = {
     {
       name: 'variant',
       type: "'accent' | 'success' | 'warning' | 'error' | 'neutral'",
-      description: 'Semantic color variant.',
+      description:
+        'Semantic color variant. A variant a theme adds paints the accent fill until the theme styles it.',
       default: "'accent'",
     },
     {
@@ -109,7 +113,7 @@ export const docs = {
       name: 'marks',
       type: 'ReadonlyArray<{value: number; label: string}>',
       description:
-        "Fixed target marks drawn on the track at values in the same 0..max scale as value (e.g. a goal line). They stay visible whether progress is below or past them, and take their color from what they sit on: a mark inside the filled area uses the fill variant's on-color (on-accent, on-warning, on-error, and so on), a mark still out on the bare track uses the primary text color (the secondary one on a disabled bar, which dims everything it draws). Each mark requires a label: it is the mark's accessible name and the text revealed via a tooltip on hover/focus. Ignored when indeterminate.",
+        "Fixed target marks drawn on the track at values in the same 0..max scale as value (e.g. a goal line). They stay visible whether progress is below or past them, and take their color from what they sit on: a mark inside the filled area uses the color that reads on the fill (on-accent on an accent fill, the surface color on the others), a mark still out on the bare track uses the primary text color (the secondary one on a disabled bar, whose track and fill dim). Each mark requires a label: it is the mark's accessible name and the text revealed via a tooltip on hover/focus. Ignored when indeterminate.",
     },
     {
       name: 'isDisabled',
@@ -179,6 +183,11 @@ export const docs = {
           "Always provide a label, even if hidden; screen readers need it to announce what's loading.",
       },
       {
+        guidance: true,
+        description:
+          'Screen readers announce the track as a progressbar: the label is its name and the value text is what they read. Pass formatValueLabel when a percentage would mislead, such as "3 of 5 files".',
+      },
+      {
         guidance: false,
         description:
           'Place icons or labels inside the bar; compose them alongside it using layout components.',
@@ -240,20 +249,22 @@ export const docsZh = {
     {
       name: 'variant',
       type: "'accent' | 'success' | 'warning' | 'error' | 'neutral'",
-      description: '语义颜色变体。',
+      description:
+        '语义颜色变体。主题新增的变体在主题为其设置样式之前使用强调色填充。',
       default: "'accent'",
     },
     {
       name: 'isIndeterminate',
       type: 'boolean',
-      description: '用于未知进度的动画加载指示器。',
+      description:
+        '用于未知进度的动画加载指示器。在减少动态效果的设置下，它在原处脉动而不是滑动。',
       default: 'false',
     },
     {
       name: 'marks',
       type: 'ReadonlyArray<{value: number; label: string}>',
       description:
-        '在轨道上按与 value 相同的 0..max 刻度绘制的固定目标标记（例如目标线）。无论进度低于还是超过它们都保持可见，并根据所处位置取色：位于已填充区域内的标记使用与填充变体配对的前景色（on-accent、on-warning、on-error 等），仍位于空轨道上的标记使用主文本颜色（禁用状态下会降为次要文本颜色，与其整体弱化的呈现保持一致）。每个标记都必须提供 label——它既是标记的无障碍名称，也是悬停/聚焦时通过工具提示显示的文本。不确定模式下忽略。',
+        '在轨道上按与 value 相同的 0..max 刻度绘制的固定目标标记（例如目标线）。无论进度低于还是超过它们都保持可见，并根据所处位置取色：位于已填充区域内的标记使用能在填充上读清的颜色（强调填充上为 on-accent，其他填充上为表面颜色），仍位于空轨道上的标记使用主文本颜色（禁用状态下会降为次要文本颜色，此时轨道和填充会变淡）。每个标记都必须提供 label——它既是标记的无障碍名称，也是悬停/聚焦时通过工具提示显示的文本。不确定模式下忽略。',
     },
     {
       name: 'isDisabled',
@@ -323,6 +334,11 @@ export const docsZh = {
           "Always provide a label, even if hidden; screen readers need it to announce what's loading.",
       },
       {
+        guidance: true,
+        description:
+          'Screen readers announce the track as a progressbar: the label is its name and the value text is what they read. Pass formatValueLabel when a percentage would mislead, such as "3 of 5 files".',
+      },
+      {
         guidance: false,
         description:
           'Place icons or labels inside the bar; compose them alongside it using layout components.',
@@ -366,6 +382,11 @@ export const docsDense = {
           "Always provide a label, even if hidden; screen readers need it to announce what's loading.",
       },
       {
+        guidance: true,
+        description:
+          'Screen readers announce the track as a progressbar: the label is its name and the value text is what they read. Pass formatValueLabel when a percentage would mislead, such as "3 of 5 files".',
+      },
+      {
         guidance: false,
         description:
           'Place icons or labels inside the bar; compose them alongside it using layout components.',
@@ -390,11 +411,12 @@ export const docsDense = {
     hasValueLabel: 'Show formatted value text (ignored when indeterminate).',
     formatValueLabel:
       'Custom value label formatter; defaults to percentage string.',
-    variant: 'Semantic color variant.',
+    variant:
+      'Semantic color variant; a theme-added variant paints the accent fill until styled.',
     isIndeterminate:
       'Animated loading indicator for unknown progress. Under reduced motion it pulses in place instead of sliding.',
     marks:
-      'Fixed target marks ({value, label?}) drawn on the track in the 0..max scale; stay visible past the fill. Marks inside the fill take the variant on-color; marks on the bare track take the primary text color (secondary when disabled). A label reveals a tooltip on hover/focus. Ignored when indeterminate.',
+      'Fixed target marks ({value, label}) drawn on the track in the 0..max scale; stay visible past the fill. Marks inside the fill take the variant on-color; marks on the bare track take the primary text color (secondary when disabled). A label reveals a tooltip on hover/focus. Ignored when indeterminate.',
     isDisabled: 'Visually disabled: grays out fill and text.',
     xstyle:
       'StyleX styles for layout customization. Must be stylex.create() value.',

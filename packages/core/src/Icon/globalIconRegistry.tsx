@@ -40,6 +40,8 @@ import {getRegisteredTheme} from '../theme/themeRegistry';
 import {warnOnce} from '../utils/devWarning';
 import {sharedForReact} from '../utils/sharedForReact';
 
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -80,7 +82,8 @@ export type IconName =
   | 'checkDouble'
   | 'wrench'
   | 'stop'
-  | 'microphone';
+  | 'microphone'
+  | 'drag';
 
 /**
  * A namespaced extension key, `'<namespace>:<name>'`.
@@ -109,8 +112,14 @@ export type ExtendedIconName = IconName | (string & {});
 
 /**
  * A complete icon registry: every semantic name mapped to a React node.
+ *
+ * `drag` is the one name a complete registry may still omit. Requiring it
+ * would break registries written before it existed, so it becomes required
+ * in 0.8.0. An omitted `drag` resolves the default artwork, so
+ * resolved registry snapshots are always complete.
  */
-export type IconRegistry = Record<IconName, ReactNode>;
+export type IconRegistry = Record<Exclude<IconName, 'drag'>, ReactNode> &
+  Partial<Record<'drag', ReactNode>>;
 
 /**
  * What `Icon` asks a function icon entry for: the final Icon size, resolved
@@ -467,7 +476,22 @@ function getThemeComponentIcons(
   return theme.__componentIcons ?? theme.componentIcons ?? null;
 }
 
-function warnMalformedRequest(slot: string, problem: string): void {
+function warnMalformedRequest(
+  slot: string,
+  prefix: string,
+  value: unknown,
+  suffix = '',
+): void {
+  if (process.env.NODE_ENV === 'production') {
+    return;
+  }
+  let formatted: string | undefined;
+  try {
+    formatted = JSON.stringify(value);
+  } catch {
+    formatted = '[unserializable value]';
+  }
+  const problem = `${prefix} ${formatted}${suffix}`;
   warnOnce(
     `component-icons:${slot}:${problem}`,
     'Icon',
@@ -494,10 +518,7 @@ function applyComponentIconRequest(
     return {...fallback, icon: null};
   }
   if (typeof request !== 'object' || Array.isArray(request)) {
-    warnMalformedRequest(
-      slot,
-      `returned ${JSON.stringify(request)}, which is not a request`,
-    );
+    warnMalformedRequest(slot, 'returned', request, ', which is not a request');
     return fallback;
   }
   const {icon, variant, size} = request as Record<string, unknown>;
@@ -505,26 +526,22 @@ function applyComponentIconRequest(
   if (icon === null || isIconName(icon)) {
     resolved = {...resolved, icon};
   } else if (icon !== undefined) {
-    warnMalformedRequest(
-      slot,
-      `requests the unknown icon ${JSON.stringify(icon)}`,
-    );
+    warnMalformedRequest(slot, 'requests the unknown icon', icon);
   }
   if (typeof variant === 'string' && theme?.iconVariants?.includes(variant)) {
     resolved = {...resolved, variant};
   } else if (variant !== undefined) {
     warnMalformedRequest(
       slot,
-      `requests the variant ${JSON.stringify(variant)}, which the theme does not list`,
+      'requests the variant',
+      variant,
+      ', which the theme does not list',
     );
   }
   if (ICON_SIZES.has(size)) {
     resolved = {...resolved, size: size as IconSize};
   } else if (size !== undefined) {
-    warnMalformedRequest(
-      slot,
-      `requests the unsupported size ${JSON.stringify(size)}`,
-    );
+    warnMalformedRequest(slot, 'requests the unsupported size', size);
   }
   return resolved;
 }
@@ -562,7 +579,9 @@ export function resolveComponentIcon<Slot extends ComponentIconSlotName>(
     if (typeof result === 'string') {
       warnMalformedRequest(
         slot,
-        `returned ${JSON.stringify(result)}, which is not a request`,
+        'returned',
+        result,
+        ', which is not a request',
       );
       return own;
     }

@@ -40,7 +40,7 @@ import {createFileProtectionResolver} from '../../foundation/fs/file-protection.
  * @param {string} options.path source directory to scan
  * @param {string} [options.codemod] run only this codemod id
  * @param {Set<string>} [options.skipCodemods] codemod ids to exclude
- * @param {import('../../authoring/codemod/type').JscodeshiftFactory} options.jscodeshift
+ * @param {typeof import('jscodeshift').default} options.jscodeshift
  * @param {boolean} [options.silent]
  * @param {string} [options.root]
  * @param {Map<string, string>} [options.contents] staged bytes from earlier dry-run phases

@@ -28,10 +28,12 @@ import {
 } from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
-import {Button} from '../Button';
-import {Icon} from '../Icon';
-import {useAnnounce, useGridFocus} from '../hooks';
-import {useCalendarConstraints, type CalendarDay} from './hooks';
+import {Button} from '../Button/Button';
+import {Icon} from '../Icon/Icon';
+import {useAnnounce} from '../hooks/useAnnounce';
+import {useGridFocus} from '../hooks/useGridFocus';
+import {useCalendarConstraints} from './hooks/useCalendarConstraints';
+import type {CalendarDay} from './hooks/useCalendarDays';
 import {useCalendarDays} from './hooks/useCalendarDays';
 import {
   calendarStyles,
@@ -45,6 +47,7 @@ import {
   plainDateToISO,
   plainDateToDate,
   plainDateAddDays,
+  plainDateDayOfWeek,
   plainDateDiffDays,
   plainDateIsAfter,
   plainDateIsBefore,
@@ -66,7 +69,9 @@ import {
   formatCalendarMonthLabel,
   isInCalendarMonth,
 } from '../utils/calendarSystem';
-import {mergeProps, composeEventHandlers, rtlStyles} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {rtlStyles} from '../utils/rtlStyles';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
@@ -100,9 +105,9 @@ import type {
 } from '../utils/dateTypes';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {themeProps} from '../utils/themeProps';
-import {useLocale} from '../i18n';
+import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
-import {VisuallyHidden} from '../VisuallyHidden';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -271,6 +276,15 @@ function formatDateLabel(
   locale: string,
 ): string {
   return formatCalendarDate(calendar, date, DATE_FORMAT_WITH_WEEKDAY, locale);
+}
+
+/**
+ * ISO 8601 numbers a week by its Thursday. For any week start, the row's
+ * Thursday is in the ISO week that holds most of the row's days.
+ */
+function rowThursday(week: ReadonlyArray<CalendarDay>): PlainDate {
+  const first = week[0].date;
+  return plainDateAddDays(first, (4 - plainDateDayOfWeek(first) + 7) % 7);
 }
 
 // =============================================================================
@@ -1208,7 +1222,7 @@ function MonthGrid({
 
         {weeks.map(week => {
           const weekDate = week.find(d => !d.isOutside)?.date || week[0].date;
-          const weekNum = plainDateGetWeekNumber(weekDate);
+          const weekNum = plainDateGetWeekNumber(rowThursday(week));
 
           return (
             <div
@@ -1408,19 +1422,25 @@ function DayCell({
       {/* Range background */}
       {state.isInRange && (
         <div
-          {...stylex.props(
-            dayCellStyles.rangeBg,
-            dayCellTheme.rangeBg,
-            rangeRounding.roundStart && dayCellStyles.rangeBgRadiusStart,
-            rangeRounding.roundEnd && dayCellStyles.rangeBgRadiusEnd,
-            state.isRangeStart && dayCellStyles.rangeInsetStart,
-            state.isRangeStart &&
-              rangeRounding.roundEnd &&
-              dayCellStyles.rangeInsetEnd,
-            state.isRangeEnd && dayCellStyles.rangeInsetEnd,
-            state.isRangeStart &&
-              rangeRounding.roundStart &&
-              dayCellStyles.rangeInsetStart,
+          {...mergeProps(
+            themeProps('calendar-range', {
+              start: state.isRangeStart ? 'start' : null,
+              end: state.isRangeEnd ? 'end' : null,
+            }),
+            stylex.props(
+              dayCellStyles.rangeBg,
+              dayCellTheme.rangeBg,
+              rangeRounding.roundStart && dayCellStyles.rangeBgRadiusStart,
+              rangeRounding.roundEnd && dayCellStyles.rangeBgRadiusEnd,
+              state.isRangeStart && dayCellStyles.rangeInsetStart,
+              state.isRangeStart &&
+                rangeRounding.roundEnd &&
+                dayCellStyles.rangeInsetEnd,
+              state.isRangeEnd && dayCellStyles.rangeInsetEnd,
+              state.isRangeStart &&
+                rangeRounding.roundStart &&
+                dayCellStyles.rangeInsetStart,
+            ),
           )}
         />
       )}
@@ -1428,13 +1448,19 @@ function DayCell({
       {/* Preview range background */}
       {state.isInPreview && (
         <div
-          {...stylex.props(
-            dayCellStyles.previewBg,
-            dayCellTheme.previewBg,
-            previewRounding.roundStart && dayCellStyles.previewBgRadiusStart,
-            previewRounding.roundEnd && dayCellStyles.previewBgRadiusEnd,
-            state.isPreviewStart && dayCellStyles.previewStart,
-            state.isPreviewEnd && dayCellStyles.previewEnd,
+          {...mergeProps(
+            themeProps('calendar-range-preview', {
+              start: state.isPreviewStart ? 'start' : null,
+              end: state.isPreviewEnd ? 'end' : null,
+            }),
+            stylex.props(
+              dayCellStyles.previewBg,
+              dayCellTheme.previewBg,
+              previewRounding.roundStart && dayCellStyles.previewBgRadiusStart,
+              previewRounding.roundEnd && dayCellStyles.previewBgRadiusEnd,
+              state.isPreviewStart && dayCellStyles.previewStart,
+              state.isPreviewEnd && dayCellStyles.previewEnd,
+            ),
           )}
         />
       )}

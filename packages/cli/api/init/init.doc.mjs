@@ -30,7 +30,7 @@ export const doc = {
     'counts as a project, even with a package.json; a folder below it with a package.json does. ' +
     'The managed block is Astryx-owned: it is written, refreshed, and removed whatever ignore rules ' +
     'or generated markers say, and the text around it is never changed. It then ' +
-    "prints getting-started guidance; `features` / `all` print only the chosen features' " +
+    "prints getting-started guidance (the build and search commands instead when every agent-docs block was already current, since the app is set up; an outdated block is still refreshed); `features` / `all` print only the chosen features' " +
     'guidance instead (the theme feature also writes the annotated theme template). ' +
     'With `removeAgents` it removes the managed agent-docs block, at the project root and in `ctx.cwd`, instead of installing. ' +
     'Outside a project it writes the same files but prints no getting-started steps and no step that adds a theme to an app, since those set up a project the folder does not have. ' +
@@ -54,10 +54,21 @@ export const doc = {
       description: 'Install all features (agents, theme, template).',
     },
     {
-      name: 'options.removeAgents',
+      name: 'options.remove',
       type: 'boolean',
       description:
-        'Remove the managed agent-docs block, at the project root and in `ctx.cwd`, instead of installing. With `user`, remove the computer-level agent text instead.',
+        'Remove instead of installing: the Astryx skill from every place the project saves (with `to`, the places named, which may be a folder saved for this computer or `user`) and drop each from what is saved, and the managed block at the project root and in `ctx.cwd` when no `to` is given or `to` names `agents-md`. An edited skill file, or one Astryx did not write (in a linked skill folder too), is kept; in the project, linked copy folders share one file, removed once. Folders saved for this computer stay unless `to` names them. With `user`, remove the computer-level agent text instead.',
+    },
+    {
+      name: 'options.removeAgents',
+      type: 'boolean',
+      description: 'The same as `remove`.',
+    },
+    {
+      name: 'options.once',
+      type: 'boolean',
+      description:
+        'With `to`, write a copy that is saved nowhere, so no later init, upgrade, or background refresh touches it. Refused without `to`, with `user`, with `remove`, and for `agents-md` or a place the project or this computer already saves.',
     },
     {
       name: 'options.user',
@@ -68,6 +79,14 @@ export const doc = {
         'Records the links it made, or with `removeAgents` that the text is turned off, in `astryx/settings.json` in the per-user configuration folder. ' +
         'A file without the Astryx markers, one edited since Astryx wrote it, or a symlink, is kept as it is, and so is anything at a link target that Astryx did not create. When no `astryx` command on the computer runs the Astryx CLI, the text is still written and the receipt carries a warning to install the CLI for the computer (`npm i -g @astryxdesign/cli`). ' +
         'Cannot be combined with `features`, `all`, `agent`, or `agentDocsPath`.',
+    },
+    {
+      name: 'options.to',
+      type: 'string | string[]',
+      description:
+        'Where the Astryx skill goes, one place, a comma list, or several: `agents-md` (the managed block, the default), `skills` (`.agents/skills/astryx-project/SKILL.md` and a byte-identical copy in `.claude/skills/astryx-project` at the project root), `user` (the computer-level skill, the same as the `user` option), or a folder written as a path (`./team`, `~/team`): one in the project gets `<folder>/astryx-project/SKILL.md`, any other the computer-level skill at `<folder>/astryx/SKILL.md`. ' +
+        "The project places are saved in astryx.config `skills.to`, so a later `init` writes the same places; a folder outside the project is saved in the settings file, and the CLI installed for the computer refreshes its copy while it is there. Naming project places moves the project to them: the old places are cleared once a new one holds the text. " +
+        'An edited skill file, or one Astryx did not write, is kept. A project root in the home folder or a settings folder in it takes no project place, as it takes no agent docs.',
     },
     {
       name: 'options.agent',
@@ -100,12 +119,12 @@ export const doc = {
     {
       type: 'init.run',
       description:
-        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, any soft docsError, the theme-template outcome (`created` | `skipped` | `failed`) plus its path, the page-template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted (never outside a project).',
+        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, `agentDocsStatus` (the agent docs before the write: `missing` | `stale` | `current`; null when agent docs were not installed or the write failed), what changed in each (`docsChanges`: `{path, change, from, to}`, change `created` | `updated` | `unchanged` | `removed`, from and to the Astryx versions the block names, path relative to the project root), any soft docsError, the theme-template outcome (`created` | `skipped` | `failed`) plus its path, the page-template outcome (`workflow` | `created` | `skipped`) plus its path, whether the next-steps were emitted (never outside a project, and not when `agentDocsStatus` was `current`: a set-up app gets the build and search commands instead), the places written (`to`), one `{path, place, action, reason?}` row per skill file (`skills`; action `created` | `updated` | `unchanged` | `removed` | `kept`, reason `edited` | `not-astryx` | `pair-kept` | `computer-skill`), the `user` place\'s `init.user` data (`user`, null without it), and `once` (true when the copy is saved nowhere). In a project whose saved places hold no `agents-md`, `agentDocsStatus` describes the project skill files.',
     },
     {
       type: 'init.remove',
       description:
-        'The removal receipt, returned when `removeAgents` is set: `data.removed` is true when a managed agent-docs block was found and removed, and false when there was none to remove.',
+        'The removal receipt, returned when `remove` (or `removeAgents`, the same option) is set: `data.removed` is true when it removed an Astryx block or skill file; `data.from`, the places it removed from (each saved place, or the ones `to` named); `data.skills`, one `{path, place, action, reason?}` row per skill file (action `removed` | `kept`, reason `edited` | `not-astryx` | `computer-skill`); `data.user`, the `init.user` data when the `user` place was named (null otherwise). Folders saved for this computer are kept unless `to` names them.',
     },
     {
       type: 'init.user',
@@ -116,7 +135,11 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-            when: '--remove-agents is combined with --features, --all, --agent, or --agent-docs-path; --user is combined with --features, --all, --agent, or --agent-docs-path; or --all is combined with --features',
+            when: '--remove-agents is combined with --features, --all, --agent, or --agent-docs-path; --user is combined with --features, --all, --agent, or --agent-docs-path; or --all is combined with --features; or `to` names an unknown place, `skills` outside a project, or no place, is combined with `user`, is `user` alone with `features`, `all`, `agent`, or `agentDocsPath`, leaves out `agents-md` while `agent` or `agentDocsPath` is set, or comes with `features` that leave out agents; or `once` comes without `to`, with `user`, with `remove`, or with `agents-md` or a place already saved',
+    },
+    {
+      code: 'ERR_WRITE_FAILED',
+      when: 'with `user`, the file system refuses a write or removal of the computer-level agent text (as a `~/.agents/skills` the user cannot write); the message names the path, the errno, and what to change',
     },
     {
       code: 'ERR_UNKNOWN_AGENT',
@@ -136,13 +159,14 @@ export const doc = {
     },
     {
       code: 'ERR_PATH_TRAVERSAL',
-      when: 'the template output path resolves outside cwd (for example through a symlinked src directory), or, with removeAgents, a managed agent-docs file in cwd, or at the project root when run there, resolves outside that folder through a symlink (run below the root, a project-root file is left as it is with a note)',
+      when: 'a project skill file `to` would write or clear resolves outside the project (as through a skills folder linked out of it), with nothing changed; the template output path resolves outside cwd (for example through a symlinked src directory), or, with removeAgents, a managed agent-docs file in cwd, or at the project root when run there, resolves outside that folder through a symlink (run below the root, a project-root file is left as it is with a note)',
     },
   ],
   examples: [
     {label: 'Default setup', code: 'const r = await init();'},
     {label: 'All features', code: 'await init({all: true});'},
     {label: 'Remove agent docs', code: 'await init({removeAgents: true});'},
+    {label: 'The skill in the project skills folders', code: "await init({to: 'skills'});"},
         {label: 'Agent text for the whole computer', code: 'const r = await init({user: true});\nfor (const w of r.data.warnings) console.warn(w);'},
   ],
   command: 'init',

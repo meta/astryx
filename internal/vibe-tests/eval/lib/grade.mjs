@@ -4,7 +4,7 @@
  * @file Grades one workspace: type check, build, then the task probe in Chromium.
  * @input a workspace, its arm, its task, and a shared browser
  * @output a pass or fail with the reason, probe steps, screenshots, axe counts
- * @position Called by the self-test in run.mjs
+ * @position Called by run.mjs after each agent run, and by its self-test
  */
 
 import fs from 'node:fs';
@@ -23,6 +23,18 @@ const VIEWPORTS = {
 };
 
 const ACTION_TIMEOUT_MS = 5000;
+
+// The probe steps wait at most ACTION_TIMEOUT_MS. Probes that share the browser
+// at the same time can miss that limit because of each other, not because of
+// the app, so the probes of concurrent runs take turns.
+let browserTurn = Promise.resolve();
+
+/** Runs `probe` after every probe that started before it has settled. */
+export function inBrowserTurn(probe) {
+  const result = browserTurn.then(probe);
+  browserTurn = result.catch(() => {});
+  return result;
+}
 
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -221,7 +233,7 @@ export async function gradeWorkspace({workspace, arm, task, browser, outDir}) {
 
   const server = await serveStatic(dist);
   try {
-    Object.assign(grade, await probeInBrowser({browser, url: server.url, task, outDir}));
+    Object.assign(grade, await inBrowserTurn(() => probeInBrowser({browser, url: server.url, task, outDir})));
   } catch (error) {
     grade.failure ??= 'browser';
     grade.browserError = String(error);

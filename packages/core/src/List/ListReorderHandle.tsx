@@ -5,28 +5,15 @@
 /**
  * @file ListReorderHandle.tsx
  * @input The List's reorder session (List/listReorderEngine.tsx, through
- *   ListContext's `reorder`), the translator and theme tokens
- * @output `ListReorderHandle`, `ListReorderRowName` and `reorderRowStyle`.
- *   The handle ends a reorderable List row. A finger held still on it drags
- *   it, and so does a pen where the primary pointer is coarse. A mouse, or a
- *   pen where it is fine, drags it at once. It is also a toggle
- *   (`aria-pressed`): a click, Space or Enter turns its row's reorder mode on
- *   and off. The row name serves a row without one, and the style a row that
- *   has one
+ *   ListContext's `reorder`), the translator, theme tokens and the theme's
+ *   `list-reorder-handle` icon slot
+ * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle`,
+ *   `reorderListStyle`, `INSERTION_LINE_THICKNESS`, `reorderRowLayout`,
+ *   `reorderListLayout`, `UNREAD_HANDLE_NAME` and `reorderHandleGrowth`
  * @position Part of the reorder machinery that createReorderable carries.
- *   ListItem renders it, from the List's context, at the end of each row
- *   that can move
- *
- * UIKit's reorder control (iOS 26.2, measured) is three gray lines at the
- * trailing edge of a row in edit mode. A finger held still on it for the
- * scroll view's content-touch delay (150 ms) claims the drag. A flick that
- * starts on it scrolls the table instead. So until the claim, the handle
- * leaves the browser everything but double-tap zoom (`manipulation`). That
- * `touch-action` applies only where the primary pointer is coarse. Elsewhere
- * a finger gets the browser's defaults until the hold claims it. The handle is the one element the reorder
- * adds to a row. Its lines are a pseudo-element, and it listens to nothing
- * itself. The session's listeners take its drags. Its keys go through
- * React's.
+ *   ListItem renders it, from the List's context, in each row that can move.
+ *   Its row and list layout come with it, so a List without `reorderable`
+ *   loads none of them
  *
  * SYNC: When modified, update List/listReorderEngine.tsx and
  * List/ListItem.tsx.
@@ -34,9 +21,7 @@
 
 import {
   use,
-  useEffect,
   useRef,
-  useState,
   useSyncExternalStore,
   useId,
   type KeyboardEvent,
@@ -44,7 +29,13 @@ import {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, focusVars, typeScaleVars} from '../theme/tokens.stylex';
+import type {StyleXStyles} from '@stylexjs/stylex';
+import {
+  colorVars,
+  focusVars,
+  spacingVars,
+  typeScaleVars,
+} from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {
   ownRingContainerStyles,
@@ -53,72 +44,127 @@ import {
 import {listReorderHandleProps} from '../privateAttributes/listReorder.stylex';
 import {reorderingHandleStyles} from '../privateAttributes/reordering.stylex';
 import {reorderLineStyles} from '../privateAttributes/reorderLine.stylex';
-import {useTouchHitArea} from '../utils/touchHitArea';
+import {useTouchHitArea, type TouchHitAreaOptions} from '../utils/touchHitArea';
+import {
+  centeredGrowth,
+  MIN_TOUCH_TARGET,
+  type HitInsets,
+  type HitRect,
+} from '../utils/hitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
+import {reorderHandle} from '../internal/reorderHandle.stylex';
+import {styles as revealStyles} from '../hooks/containerReveal.stylex';
 import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/List/ListReorderHandle.generated';
-import {createDevWarnings} from '../utils/devWarning';
+import {ComponentIcon} from '../Icon/ComponentIcon';
 import {getNodeText} from '../utils/getNodeText';
 import {ItemLabelContext} from '../Item/ItemLabelContext';
 import {ListContext} from './ListContext';
 import type {
   ListReorderHandleProps,
   ListReorderRowNameProps,
+  ReorderListFacts,
+  ReorderRowFacts,
+  ReorderRowLayout,
 } from './listReorderContext';
-import type {ListReorderController} from './listReorderEngine';
+import type {
+  ListReorderController,
+  ListReorderHandleName,
+} from './listReorderEngine';
 
 registerEnglishFallback(english);
 
+/** The grip a handle draws when the theme maps nothing to its slot. */
+const REORDER_GRIP_FALLBACK = {icon: 'drag', size: 'sm'} as const;
+// The grip's box, and how far its target reaches past it, for a fine pointer
+// (at least the WCAG 2.5.8 minimum) and for a finger. A finger's target is a
+// coarse-only hit layer, clamped so it never takes from a neighbour or
+// reaches past its list (utils/hitArea.ts, `reorderHandleGrowth`). A theme's
+// slot size changes only the icon, which stays centred on the box.
+const GRIP = reorderHandle.grip;
+const TARGET_REACH = reorderHandle.targetReach;
+const TOUCH_REACH = reorderHandle.touchReach;
 /**
- * The handle's side, for every pointer: a small control's size. A finger's
- * 44 px target is an invisible coarse-only hit layer, clamped so it never
- * takes from a neighbour (utils/hitArea.ts), not a bigger handle.
+ * The handle stays clear of the row's inline end by its target's reach, less
+ * the row's own inset. So a list that clips never cuts its target or ring.
+ * Under a coarse pointer, the finger's target reaches further.
  */
-const HANDLE_SIZE = 28;
-/** The three lines' height: the handle's share of its row's height. */
-const LINES_HEIGHT = 14;
-/** The lines' length and thickness, and the distance between them. */
-const LINE_WIDTH = 20;
-const LINE_THICKNESS = 2;
-const LINE_GAP = (LINES_HEIGHT - LINE_THICKNESS) / 2;
+const INSET = 'var(--_item-inset-inline, 0px)';
+const EDGE_GUARD = `max(0px, calc(${TARGET_REACH} - ${INSET}))`;
+const TOUCH_EDGE_GUARD = `max(0px, calc(${TOUCH_REACH} - ${INSET}))`;
+/**
+ * How far a hanging handle sits outside its row's content: its grip, then
+ * its target's reach, so the target stops at the content.
+ */
+const HANG = `calc(${GRIP} + ${TARGET_REACH})`;
+/**
+ * The hanging handle's inner margin: it gives back the row's gap, less the
+ * target's reach, which ends at the row's content.
+ */
+const HANG_GIVE_BACK = `calc(${TARGET_REACH} - ${spacingVars['--spacing-2']})`;
+const COARSE = '@media (pointer: coarse)';
+
+/**
+ * A finger's target grows toward 44 px, centred on the grip, but it stays
+ * inside its list on the block axis. On the first and last rows, a control
+ * right against the list's top or bottom edge then keeps its taps, as it does
+ * next to the rows' own targets. `toLayout` maps a client rect to
+ * the handle's layout px.
+ */
+export function reorderHandleGrowth(
+  target: HitRect,
+  toLayout: (rect: HitRect) => HitRect,
+  element: HTMLElement,
+): HitInsets {
+  const full = centeredGrowth(target, MIN_TOUCH_TARGET);
+  const list = element.closest('ul, ol');
+  if (list == null) {
+    return full;
+  }
+  const {top, bottom, left, right} = list.getBoundingClientRect();
+  const box = toLayout({top, bottom, left, right});
+  return {
+    ...full,
+    top: Math.max(0, Math.min(full.top, target.top - box.top)),
+    bottom: Math.max(0, Math.min(full.bottom, box.bottom - target.bottom)),
+  };
+}
+
+const HANDLE_HIT_AREA: TouchHitAreaOptions = {growth: reorderHandleGrowth};
 
 const styles = stylex.create({
   handle: {
-    // Centred on its row, with the lines in its middle. It takes only the
-    // lines' height in the row's layout (the negative block margins). So a
-    // compact row stays compact. The handle and its focus ring reach past
-    // that into the row's padding, never past it. They go no further than the
-    // row's own inline inset, so a flush row's handle stays inside the clip.
+    // Centred on its row: the grip alone, so a compact row stays compact.
+    // The box keeps its size; a larger icon overflows it evenly.
     position: 'relative',
     alignSelf: 'center',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    width: HANDLE_SIZE,
-    height: HANDLE_SIZE,
-    marginBlock: (LINES_HEIGHT - HANDLE_SIZE) / 2,
-    marginInlineEnd: 'calc(-1 * min(8px, var(--_item-inset-inline, 8px)))',
+    inlineSize: GRIP,
+    blockSize: GRIP,
     padding: 0,
     borderWidth: 0,
     borderRadius: 4,
-    // The ring sits inside the handle: the handle reaches the row's inline
-    // end, and the list clips what passes it.
+    backgroundColor: 'transparent',
+    // The ring's outer edge is the target's edge, clear of the grip.
     outlineOffset: {
       default: '0',
-      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+      ':focus-visible': `calc(${TARGET_REACH} - ${focusVars['--focus-outline-width']})`,
     },
-    // Pressed while its row is in reorder mode, as a pressed toggle button
-    // is; in forced colors, the system's highlight.
-    backgroundColor: {
-      default: 'transparent',
-      ':is([aria-pressed="true"])': {
-        default: colorVars['--color-overlay-pressed'],
-        '@media (forced-colors: active)': 'Highlight',
-      },
+    // The target: an invisible square round the grip, so a pointer hits it to
+    // its corners. Only reorder mode fills it (`pressed`). The fill paints
+    // under the grip, inside the handle's own stacking context.
+    isolation: 'isolate',
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      inset: `calc(-1 * ${TARGET_REACH})`,
+      zIndex: -1,
     },
     forcedColorAdjust: {
       default: null,
@@ -135,9 +181,11 @@ const styles = stylex.create({
     // Where the primary pointer is coarse, the page keeps its scrolling and
     // its pinch-zoom until the hold claims the drag. A flick on the handle
     // scrolls, as on iOS. That is `manipulation`, what a long press leaves the
-    // browser. The hold's selection lock stops text selection while the
-    // finger is down, so a mouse keeps the page's selection. Where the
-    // pointer is fine, a finger gets the browser's defaults.
+    // browser. On iOS 26.2 (measured), UIKit's reorder control claims the
+    // drag only after a finger holds still for the scroll view's 150 ms
+    // content-touch delay. The hold's selection lock stops text selection
+    // while the finger is down, so a mouse keeps the page's selection. Where
+    // the pointer is fine, a finger gets the browser's defaults.
     touchAction: {
       default: null,
       '@media (pointer: coarse)': 'manipulation',
@@ -146,23 +194,73 @@ const styles = stylex.create({
       default: null,
       '@media (pointer: coarse)': 'transparent',
     },
-    // The three lines: one bar and its two shadows, in the handle's color.
-    // Forced colors keep them (shadows and backgrounds go there otherwise),
-    // drawn in the system's button text.
+  },
+  // Reorder mode fills the target, as a pressed toggle button, and rounds its
+  // corners; in forced colors, the system's highlight.
+  pressed: {
     '::before': {
-      content: '""',
-      display: 'block',
-      width: LINE_WIDTH,
-      height: LINE_THICKNESS,
-      borderRadius: LINE_THICKNESS / 2,
-      backgroundColor: 'currentColor',
-      boxShadow: `0 -${LINE_GAP}px currentColor, 0 ${LINE_GAP}px currentColor`,
+      borderRadius: 4,
+      backgroundColor: {
+        default: colorVars['--color-overlay-pressed'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
       forcedColorAdjust: 'none',
-      pointerEvents: 'none',
+    },
+  },
+  // Presses on the grip land on the handle.
+  grip: {
+    pointerEvents: 'none',
+  },
+  // In its place at the row's end, after the row's content or in its end
+  // slot, clear of the row's edge.
+  endInRow: {
+    marginInlineEnd: {default: EDGE_GUARD, [COARSE]: TOUCH_EDGE_GUARD},
+  },
+  // In its place at the row's start, clear of the row's edge.
+  startInRow: {
+    marginInlineStart: {default: EDGE_GUARD, [COARSE]: TOUCH_EDGE_GUARD},
+  },
+  // Where it shows only on hover or focus (a fine primary pointer), it hangs
+  // outside the row's content. It takes no width, so the content keeps its
+  // place. The inner margin gives back the row's gap. Under a coarse pointer
+  // it always shows, so it takes its place in the row.
+  hangAtStart: {
+    marginInlineStart: {
+      default: `calc(-1 * ${HANG})`,
+      [COARSE]: TOUCH_EDGE_GUARD,
+    },
+    marginInlineEnd: {default: HANG_GIVE_BACK, [COARSE]: 0},
+  },
+  hangAtEnd: {
+    marginInlineStart: {default: HANG_GIVE_BACK, [COARSE]: 'auto'},
+    marginInlineEnd: {
+      default: `calc(-1 * ${HANG})`,
+      [COARSE]: TOUCH_EDGE_GUARD,
+    },
+  },
+  // Shown while its row is hovered or holds the focus (the row is the reveal
+  // container), and always in reorder mode. It keeps its tab stop while
+  // hidden. A disabled row dims its label and end content to half. The
+  // handle is outside them, so it dims itself to match.
+  reveal: {
+    opacity: {
+      default: 'var(--_reveal-opacity, 1)',
+      ':is([aria-pressed="true"])': 1,
+      ':is([aria-disabled="true"])': 'calc(0.5 * var(--_reveal-opacity, 1))',
+    },
+  },
+  // Shown outside an end slot, and outside the label: it dims itself as the
+  // row does.
+  shown: {
+    opacity: {
+      default: 1,
+      ':is([aria-disabled="true"])': 0.5,
     },
   },
   // The row's own child, in a row without end content. It ends the row, as
   // the end slot would. It aligns as the row's `align` would align that slot.
+  // A hanging handle keeps its give-back instead: the row's content, which
+  // grows, already ends the row.
   inRow: {
     marginInlineStart: 'auto',
   },
@@ -172,10 +270,9 @@ const styles = stylex.create({
   },
   // `first-line`: centred on the label's first line, a line of body text at
   // the top of the row's content. Item's first-line slots centre on it too.
-  // Its layout height stays the lines' height (the end margin).
   inRowFirstLine: {
     alignSelf: 'flex-start',
-    marginBlockStart: `calc((${typeScaleVars['--text-body-leading']} - ${HANDLE_SIZE}px) / 2)`,
+    marginBlockStart: `calc((${typeScaleVars['--text-body-leading']} - ${GRIP}) / 2)`,
   },
 });
 
@@ -218,6 +315,191 @@ const listStyles = stylex.create({
 /** The style of a reorderable list (List applies it): its insertion line. */
 export const reorderListStyle = [listStyles.list, reorderLineStyles.list];
 
+// The list publishes, for its rows: whether their handles take a place in
+// them (`--_reorder-shown`, 1 or 0), and how far a handle's target reaches
+// past its grip (`--_reorder-reach`). A bleeding list also publishes its
+// container's start padding. A row computes its handle room from these and
+// its own inset, so every room is one class.
+const LIST_REACH = TARGET_REACH;
+const LIST_TOUCH_REACH = TOUCH_REACH;
+// The room a hanging handle needs beside a row's text: the hang, then its
+// target's reach past it, which holds its focus ring.
+const GUTTER = `calc(${HANG} + ${TARGET_REACH})`;
+// A padded row's own inset holds part of that room. SYNC: Item/Item.tsx.
+const PADDED_ROOM = `calc(${GUTTER} - ${spacingVars['--spacing-2']})`;
+const SPACIOUS_ROOM = `calc(${GUTTER} - ${spacingVars['--spacing-3']})`;
+const FLUSH_ROOM = GUTTER;
+// As much of each room as the container's padding holds. Outside a container
+// that publishes its padding, none: the rows move in by the whole room, and
+// no handle reaches past the list's host.
+const PADDED_REACH = `min(${PADDED_ROOM}, var(--container-padding-inline-start, 0px))`;
+const SPACIOUS_REACH = `min(${SPACIOUS_ROOM}, var(--container-padding-inline-start, 0px))`;
+const FLUSH_REACH = `min(${FLUSH_ROOM}, var(--container-padding-inline-start, 0px))`;
+const PADDED_REACH_END = `min(${PADDED_ROOM}, var(--container-padding-inline-end, 0px))`;
+const SPACIOUS_REACH_END = `min(${SPACIOUS_ROOM}, var(--container-padding-inline-end, 0px))`;
+const FLUSH_REACH_END = `min(${FLUSH_ROOM}, var(--container-padding-inline-end, 0px))`;
+
+const listLayoutStyles = stylex.create({
+  reach: {
+    '--_reorder-reach': {default: LIST_REACH, [COARSE]: LIST_TOUCH_REACH},
+  },
+  shown: {
+    '--_reorder-shown': '1',
+  },
+  shownWhenCoarse: {
+    '--_reorder-shown': {default: '0', [COARSE]: '1'},
+  },
+  bleed: {
+    '--_reorder-bleed-start': 'var(--container-padding-inline-start, 0px)',
+  },
+  // Where handles show only on hover or focus, they hang outside their rows'
+  // text. The list pads that room on the handles' side and reaches out into
+  // its container's padding by as much of it as the padding holds. So its
+  // inline clip keeps the handles, a clipping container never cuts them, and
+  // the rows move in only by the room the padding lacks. Under a coarse
+  // pointer the handles sit in their rows.
+  gutterPadded: {
+    marginInlineStart: {
+      default: `calc(-1 * ${PADDED_REACH})`,
+      [COARSE]: 0,
+    },
+    paddingInlineStart: {default: PADDED_ROOM, [COARSE]: 0},
+  },
+  gutterSpacious: {
+    marginInlineStart: {
+      default: `calc(-1 * ${SPACIOUS_REACH})`,
+      [COARSE]: 0,
+    },
+    paddingInlineStart: {default: SPACIOUS_ROOM, [COARSE]: 0},
+  },
+  gutterFlush: {
+    marginInlineStart: {
+      default: `calc(-1 * ${FLUSH_REACH})`,
+      [COARSE]: 0,
+    },
+    paddingInlineStart: {default: FLUSH_ROOM, [COARSE]: 0},
+  },
+  gutterPaddedAtEnd: {
+    marginInlineEnd: {
+      default: `calc(-1 * ${PADDED_REACH_END})`,
+      [COARSE]: 0,
+    },
+    paddingInlineEnd: {default: PADDED_ROOM, [COARSE]: 0},
+  },
+  gutterSpaciousAtEnd: {
+    marginInlineEnd: {
+      default: `calc(-1 * ${SPACIOUS_REACH_END})`,
+      [COARSE]: 0,
+    },
+    paddingInlineEnd: {default: SPACIOUS_ROOM, [COARSE]: 0},
+  },
+  gutterFlushAtEnd: {
+    marginInlineEnd: {
+      default: `calc(-1 * ${FLUSH_REACH_END})`,
+      [COARSE]: 0,
+    },
+    paddingInlineEnd: {default: FLUSH_ROOM, [COARSE]: 0},
+  },
+});
+
+const gutters = {
+  padded: listLayoutStyles.gutterPadded,
+  spacious: listLayoutStyles.gutterSpacious,
+  flush: listLayoutStyles.gutterFlush,
+};
+const guttersAtEnd = {
+  padded: listLayoutStyles.gutterPaddedAtEnd,
+  spacious: listLayoutStyles.gutterSpaciousAtEnd,
+  flush: listLayoutStyles.gutterFlushAtEnd,
+};
+
+// A handle's place in its row: its distance from the row's edge, its grip,
+// and the row's gap after it. A row reads the list's published values.
+const ROW_GUARD =
+  'max(0px, calc(var(--_reorder-reach, 4px) - var(--_item-inset-inline)))';
+const ROW_ROOM = `calc(${ROW_GUARD} + ${GRIP} + ${spacingVars['--spacing-2']})`;
+
+const rowRoomStyles = stylex.create({
+  // A row that stays put keeps the place its neighbours' handles take at
+  // their start, while they take one: always, or under a coarse pointer.
+  atStart: {
+    paddingInlineStart: `calc(max(var(--_reorder-bleed-start, 0px), var(--_item-inset-inline)) + var(--_reorder-shown, 1) * ${ROW_ROOM})`,
+  },
+  // After a list marker the handles always take their place. Item pads the
+  // content after the marker by this room.
+  afterMarker: {
+    '--_item-marker-room': ROW_ROOM,
+  },
+});
+
+/** A row with a handle that shows only on hover or focus reveals it. */
+const revealingRowStyle = [
+  ownRingContainerStyles.focusWithin,
+  revealStyles.container,
+] as StyleXStyles;
+
+/**
+ * Where a List row's handle sits, and the row's own style for it: the
+ * session's `rowLayout`.
+ */
+export function reorderRowLayout({
+  edge,
+  handle,
+  hasHandle,
+  hasMarker,
+  hasEndContent,
+}: ReorderRowFacts): ReorderRowLayout {
+  const isAtStart = handle?.placement === 'start';
+  const isAlwaysVisible = (handle?.revealBehavior ?? 'always') === 'always';
+  // A handle cannot hang after a list marker, which it would cover, or in a
+  // row that reaches the container's padding edge, where nothing keeps it.
+  const isAfterMarker = isAtStart && hasMarker;
+  const isInRow = isAfterMarker || edge === 'outset' || edge === 'bleed';
+  return {
+    placement: isAtStart ? 'start' : 'end',
+    isAlwaysVisible,
+    isInRow,
+    isInEndSlot: !isAtStart && isAlwaysVisible && hasEndContent,
+    rowStyle: (hasHandle
+      ? isAlwaysVisible
+        ? reorderRowStyle
+        : revealingRowStyle
+      : isAfterMarker
+        ? rowRoomStyles.afterMarker
+        : isAtStart
+          ? rowRoomStyles.atStart
+          : null) as StyleXStyles,
+  };
+}
+
+/**
+ * The List's own style while it reorders: the session's `listLayout`.
+ */
+export function reorderListLayout({
+  edge,
+  density,
+  handle,
+  hasMarkers,
+}: ReorderListFacts): StyleXStyles {
+  const isAtStart = handle?.placement === 'start';
+  const isAlwaysVisible = (handle?.revealBehavior ?? 'always') === 'always';
+  // Rows that reach the container's padding, and rows after a marker, keep
+  // their handles in the rows, so the list keeps no room for them.
+  // Under `outset` and `bleed` the handles sit in their rows, so a row that
+  // stays put keeps their room whenever they show.
+  const sitsInRows = isAlwaysVisible || edge === 'outset' || edge === 'bleed';
+  const hangs = !sitsInRows && !(isAtStart && hasMarkers);
+  const room =
+    edge === 'flush' ? 'flush' : density === 'spacious' ? 'spacious' : 'padded';
+  return [
+    reorderListStyle,
+    listLayoutStyles.reach,
+    sitsInRows ? listLayoutStyles.shown : listLayoutStyles.shownWhenCoarse,
+    edge === 'bleed' && listLayoutStyles.bleed,
+    hangs && (isAtStart ? gutters : guttersAtEnd)[room],
+  ] as StyleXStyles;
+}
+
 /** The text the row's label element shows, collapsed; empty without one. */
 function labelTextOf(handle: HTMLElement | null, labelID: string | null) {
   const element =
@@ -228,24 +510,12 @@ function labelTextOf(handle: HTMLElement | null, labelID: string | null) {
 }
 
 /**
- * Whether the row's label element names it: it shows text, or holds an icon
- * or image with an accessible name of its own.
- */
-function namesRow(element: HTMLElement | null): boolean {
-  if (element == null) {
-    return false;
-  }
-  return (
-    (element.textContent ?? '').trim() !== '' ||
-    element.querySelector(
-      '[aria-label]:not([aria-label=""]), [aria-labelledby], img[alt]:not([alt=""])',
-    ) != null
-  );
-}
-
-/**
  * The reorder handle of a List row. Renders nothing outside a reorderable
- * List.
+ * List. It ends its row, or starts it, as the reorderable's `handle` option
+ * places it. A finger held still on it drags it, and so does a pen where the
+ * primary pointer is coarse. A mouse, or a pen where it is fine, drags it at
+ * once. It is also a toggle (`aria-pressed`): a click, Space or Enter turns
+ * its row's reorder mode on and off.
  */
 export function ListReorderHandle({
   label,
@@ -254,8 +524,14 @@ export function ListReorderHandle({
   rowLabel,
   rowLabelledBy,
   rowAlign,
+  placement = 'end',
+  isAlwaysVisible = true,
+  isInRow = false,
+  isInEndSlot = false,
 }: ListReorderHandleProps) {
   const ref = useRef<HTMLButtonElement>(null);
+  const isAtEnd = placement === 'end';
+  const hangs = !isAlwaysVisible && !isInRow;
   const t = useComponentTranslator();
   const controller = use(ListContext)?.reorder?.session as
     ListReorderController | undefined;
@@ -273,7 +549,9 @@ export function ListReorderHandle({
     callerLabel != null ? undefined : (rowLabelledBy ?? labelID ?? undefined);
   const named = callerLabel != null || labelledBy != null || text !== '';
   const verb = t('@astryx.list.reorderHandleVerb');
-  const [warn] = useState(createDevWarnings);
+  // Named by Item's label element only while it shows a name: a label of an
+  // unnamed icon alone falls back to the place.
+  const byLabel = labelID != null && labelledBy === labelID;
   // Syncs the handle into the reorder session, which lives outside React. The
   // session moves the row only with its handle recorded, and reports its
   // moves with the row's key.
@@ -284,12 +562,29 @@ export function ListReorderHandle({
   // Syncs the row's name into the session, which announces the moves with
   // it. A new name keeps the handle recorded, so its row stays in reorder
   // mode. A component label's text is read from its element, rendered by now.
+  // The session also reads, from the DOM, whether the label element names the
+  // row and where the row sits, for the handle's name.
   useIsomorphicLayoutEffect(() => {
+    const handle = ref.current;
     const spoken =
       callerLabel ??
-      (text !== '' ? text : labelTextOf(ref.current, labelID ?? null));
-    return controller?.registerName(ref.current, spoken);
-  }, [controller, callerLabel, text, labelID]);
+      (text !== '' ? text : labelTextOf(handle, labelID ?? null));
+    const unname = controller?.registerName(handle, spoken);
+    const unlabel = controller?.registerHandleLabel(
+      handle,
+      byLabel ? (labelID ?? null) : null,
+      named,
+    );
+    return () => {
+      unname?.();
+      unlabel?.();
+    };
+  }, [controller, callerLabel, text, labelID, byLabel, named]);
+  const shown = useSyncExternalStore(
+    controller?.subscribeHandleNames ?? subscribeNothing,
+    () => controller?.handleNameOf(ref.current) ?? UNREAD_HANDLE_NAME,
+    () => UNREAD_HANDLE_NAME,
+  );
   const isPressed = useSyncExternalStore(
     controller?.subscribeMode ?? subscribeNothing,
     () => controller?.isInMode(ref.current) ?? false,
@@ -298,7 +593,7 @@ export function ListReorderHandle({
   const isEnabled = controller != null && !isDisabled;
   // A finger's target: the shared touch hit area grows the handle's hit
   // layer where the primary pointer is coarse.
-  const hitAreaRef = useTouchHitArea(true);
+  const hitAreaRef = useTouchHitArea(true, HANDLE_HIT_AREA);
   const handleRef = useMergedRefs(ref, hitAreaRef);
   // A handle that stops taking gestures mid-drag sends a drag of its row
   // home, whichever pointer or key drives it. Its row may be disabled or no
@@ -310,61 +605,30 @@ export function ListReorderHandle({
     }
     return () => controller.release(handle);
   }, [controller, isEnabled]);
-  // That place is read from the DOM after each commit (the row does not
-  // know its index). A passive effect: the list's own ref is attached after
-  // its rows' layout effects run.
-  useEffect(() => {
-    const handle = ref.current;
-    if (handle == null) {
-      return;
-    }
-    // Named by Item's label element only while it shows a name: a label of
-    // an unnamed icon alone falls back to the place.
-    if (labelID != null && labelledBy === labelID) {
-      if (namesRow(handle.ownerDocument.getElementById(labelID))) {
-        handle.setAttribute('aria-labelledby', `${verbID} ${labelID}`);
-        handle.setAttribute('aria-label', verb);
-        return;
-      }
-      handle.removeAttribute('aria-labelledby');
-    } else if (named) {
-      return;
-    }
-    const position = controller?.positionOf(handle) ?? null;
-    if (position == null) {
-      return;
-    }
-    // Named after its place only: a person hears "Reorder item 3" with
-    // nothing to tell the rows apart. Development says so, once a handle.
-    warn(
-      'ListItem',
-      'A reorderable row has no accessible name, so its reorder handle is ' +
-        'named after its place ("Reorder item N"). Give the row a text ' +
-        'label or an aria-label.',
-    );
-    handle.setAttribute(
-      'aria-label',
-      t('@astryx.list.reorderHandleAt', {position}),
-    );
-  });
   if (controller == null) {
     return null;
   }
+  // A label element that shows no name falls back to the row's place.
+  const labelShowsName = byLabel && !shown.labelShowsNoName;
+  const byPlace = byLabel ? !labelShowsName : !named;
+  const shownLabelledBy = byLabel && !labelShowsName ? undefined : labelledBy;
   // Named through the label element. The handle's own `aria-label` is the
   // verb. It lists itself first in its `aria-labelledby`, which reads its
   // `aria-label` there: "Reorder", then the row's label.
   const name =
-    callerLabel != null
-      ? t('@astryx.list.reorderHandle', {label: callerLabel})
-      : labelledBy != null
-        ? verb
-        : text !== ''
-          ? t('@astryx.list.reorderHandle', {label: text})
-          : undefined;
+    byPlace && shown.position != null
+      ? t('@astryx.list.reorderHandleAt', {position: shown.position})
+      : callerLabel != null
+        ? t('@astryx.list.reorderHandle', {label: callerLabel})
+        : labelledBy != null
+          ? verb
+          : text !== ''
+            ? t('@astryx.list.reorderHandle', {label: text})
+            : undefined;
   return (
     <button
       ref={handleRef}
-      id={labelledBy == null ? undefined : verbID}
+      id={shownLabelledBy == null ? undefined : verbID}
       type="button"
       {...listReorderHandleProps}
       // The handle takes its own press, so the row does not highlight under
@@ -374,7 +638,7 @@ export function ListReorderHandle({
       {...ownRingProps}
       aria-label={name}
       aria-labelledby={
-        labelledBy == null ? undefined : `${verbID} ${labelledBy}`
+        shownLabelledBy == null ? undefined : `${verbID} ${shownLabelledBy}`
       }
       aria-describedby={controller.hintId}
       aria-disabled={isDisabled || undefined}
@@ -411,17 +675,45 @@ export function ListReorderHandle({
         styles.handle,
         reorderingHandleStyles.cursor,
         touchHitAreaStyles.layer,
-        rowAlign != null && styles.inRow,
+        isPressed && styles.pressed,
+        isAlwaysVisible
+          ? !isInEndSlot && styles.shown
+          : [revealStyles.revealLayoutPreserved, styles.reveal],
+        hangs
+          ? isAtEnd
+            ? styles.hangAtEnd
+            : styles.hangAtStart
+          : isAtEnd
+            ? styles.endInRow
+            : styles.startInRow,
+        rowAlign != null && isAtEnd && !hangs && styles.inRow,
         rowAlign === 'start' && styles.inRowStart,
         rowAlign === 'first-line' && styles.inRowFirstLine,
-      )}
-    />
+      )}>
+      <ComponentIcon
+        slot="list-reorder-handle"
+        state={undefined}
+        fallback={REORDER_GRIP_FALLBACK}
+        color="inherit"
+        xstyle={styles.grip}
+      />
+    </button>
   );
 }
 
 ListReorderHandle.displayName = 'ListReorderHandle';
 
 const subscribeNothing = () => () => {};
+
+/**
+ * A handle's name before the session reads it: its server snapshot, and the
+ * session's answer for a handle it has not read. One object keeps the
+ * snapshot through hydration and the first read.
+ */
+export const UNREAD_HANDLE_NAME: ListReorderHandleName = {
+  position: null,
+  labelShowsNoName: false,
+};
 
 /**
  * Names a reorderable List's row that has no handle, for the announcements

@@ -5,7 +5,7 @@
 /**
  * @file useTableStickyColumns.tsx
  * @input React, StyleX, theme tokens, Table types
- * @output Exports useTableStickyColumns hook and UseTableStickyColumnsConfig type
+ * @output Exports useTableStickyColumns hook and UseTableStickyColumnsConfig type; declares its pinned runs to Table
  * @position Sticky-columns plugin; consumed by Table via plugins prop
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -24,6 +24,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
+import {scrollEdgeFadeOff} from '../../../hooks/scrollEdgeFade';
 
 import {colorVars, durationVars, easeVars} from '../../../theme/tokens.stylex';
 import type {
@@ -38,6 +39,10 @@ import {
   getLogicalPositionExtraVar,
   getLogicalPositionRenderer,
 } from '../../tableColumnAdmission';
+import {
+  registerPinnedColumnRuns,
+  type PinnedColumnRuns,
+} from '../../tablePinnedColumnRuns';
 import {collapsedBottom} from '../../rowDivider';
 import {GLIDING_ATTRIBUTE, PINNED_ATTRIBUTE} from '../../glidingDivider';
 import {useTheme, useThemeName} from '../../../theme/useTheme';
@@ -163,28 +168,78 @@ function computeEndOffsets(
   return offsets;
 }
 
+/**
+ * The pinned runs as column counts. A column in both runs pins to the start,
+ * as resolveStickySide does.
+ */
+function countPinnedRuns(
+  columns: ReadonlyArray<TableColumn<Record<string, unknown>>>,
+  startKeys: string[],
+  endKeys: string[],
+): PinnedColumnRuns {
+  let startCount = 0;
+  columns.forEach((column, index) => {
+    if (startKeys.includes(column.key)) {
+      startCount = index + 1;
+    }
+  });
+  const firstEnd = columns.findIndex(column => endKeys.includes(column.key));
+  return {
+    startCount,
+    endCount:
+      firstEnd === -1 ? 0 : columns.length - Math.max(firstEnd, startCount),
+  };
+}
+
 type StickySide = {edge: 'start' | 'end'; offset: string};
 
 /**
- * Resolve how a single column should be pinned given the start/end configs and
- * the full column list. A key (mis)configured on both edges resolves to start.
- * Returns `null` for columns that should not be pinned.
+ * Resolves how one column is pinned from the precomputed offsets. A key on
+ * both edges resolves to start. Returns `null` for a column that is not
+ * pinned.
  */
 function resolveStickySide(
-  columns: ReadonlyArray<TableColumn<Record<string, unknown>>> | undefined,
+  offsets: PinnedOffsets,
   columnKey: string,
-  startKeys: string[],
-  endKeys: string[],
 ): StickySide | null {
-  const startOffsets = computeStartOffsets(columns, startKeys);
-  if (startOffsets?.has(columnKey)) {
-    return {edge: 'start', offset: startOffsets.get(columnKey) ?? '0px'};
+  if (offsets.start?.has(columnKey)) {
+    return {edge: 'start', offset: offsets.start.get(columnKey) ?? '0px'};
   }
-  const endOffsets = computeEndOffsets(columns, endKeys);
-  if (endOffsets?.has(columnKey)) {
-    return {edge: 'end', offset: endOffsets.get(columnKey) ?? '0px'};
+  if (offsets.end?.has(columnKey)) {
+    return {edge: 'end', offset: offsets.end.get(columnKey) ?? '0px'};
   }
   return null;
+}
+
+interface PinnedOffsets {
+  start: Map<string, string> | null;
+  end: Map<string, string> | null;
+}
+
+/**
+ * Returns a reader of the pinned offsets for a column list. The offsets
+ * depend only on the columns and the pinned keys. Each cell of a render reads
+ * one result.
+ */
+function createPinnedOffsetsReader(
+  startKeys: string[],
+  endKeys: string[],
+): (
+  columns: ReadonlyArray<TableColumn<Record<string, unknown>>> | undefined,
+) => PinnedOffsets {
+  let lastColumns:
+    ReadonlyArray<TableColumn<Record<string, unknown>>> | undefined;
+  let last: PinnedOffsets | undefined;
+  return columns => {
+    if (last === undefined || columns !== lastColumns) {
+      lastColumns = columns;
+      last = {
+        start: computeStartOffsets(columns, startKeys),
+        end: computeEndOffsets(columns, endKeys),
+      };
+    }
+    return last;
+  };
 }
 
 // =============================================================================
@@ -497,6 +552,17 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
   // render, so we never want array identity in the deps.
   const stateRef = useRef({start, end, hasStart, hasEnd});
   stateRef.current = {start, end, hasStart, hasEnd};
+  // The pinned keys by value. Table reuses rows and cells whose inputs keep
+  // their identity, so the plugin object changes when, and only when, the
+  // pinned keys do: every body cell then reads the new pinning.
+  const pinnedKeys = JSON.stringify([start, end]);
+  const pinned = useMemo(() => {
+    const [pinnedStart, pinnedEnd] = JSON.parse(pinnedKeys) as [
+      string[],
+      string[],
+    ];
+    return {start: pinnedStart, end: pinnedEnd};
+  }, [pinnedKeys]);
 
   // Scroll-aware shadows: toggle CSS variables on the scroll container so each
   // edge's shadow only paints when there is hidden, horizontally-scrolled
@@ -637,6 +703,10 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
     refreshRef.current?.();
   });
 
+  const readOffsets = useMemo(
+    () => createPinnedOffsetsReader(pinned.start, pinned.end),
+    [pinned],
+  );
   const plugin = useMemo(
     (): TablePlugin<T> => ({
       rowModel: 'flat',
@@ -652,8 +722,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         props: HeaderCellRenderProps,
         column: TableColumn<T>,
       ): HeaderCellRenderProps {
-        const {start: s, end: e} = stateRef.current;
-        const side = resolveStickySide(props.columns, column.key, s, e);
+        const side = resolveStickySide(readOffsets(props.columns), column.key);
         if (!side) {
           return props;
         }
@@ -693,8 +762,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         props: BodyCellRenderProps,
         column: TableColumn<T>,
       ): BodyCellRenderProps {
-        const {start: s, end: e} = stateRef.current;
-        const side = resolveStickySide(props.columns, column.key, s, e);
+        const side = resolveStickySide(readOffsets(props.columns), column.key);
         if (!side) {
           return props;
         }
@@ -752,13 +820,23 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         return {
           ...props,
           htmlProps: {...props.htmlProps, ref: mergedRef},
+          // A pinned edge marks its hidden columns with its own shadow, and
+          // the pinned column sits at that edge, so the edge does not fade.
+          xstyle: [
+            ...props.xstyle,
+            ...(stateRef.current.hasStart ? [scrollEdgeFadeOff.start] : []),
+            ...(stateRef.current.hasEnd ? [scrollEdgeFadeOff.end] : []),
+          ],
         };
       },
     }),
-    // The returned plugin's transforms read live config from `stateRef` and
-    // `attachScrollShadow` is stable (empty deps), so the plugin object can be
-    // computed once and reused across renders.
-    [attachScrollShadow],
+    // `attachScrollShadow` is stable, and `readOffsets` changes only with the
+    // pinned keys. So the plugin object changes only when the pinned keys
+    // change.
+    [attachScrollShadow, readOffsets],
+  );
+  registerPinnedColumnRuns(plugin, columns =>
+    countPinnedRuns(columns, pinned.start, pinned.end),
   );
   return registerCountIndependentPlugin(plugin);
 }

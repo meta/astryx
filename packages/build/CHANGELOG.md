@@ -1,5 +1,32 @@
 # @astryxdesign/build
 
+# 0.7.17
+
+#### Fixes
+
+- A `Theme` in `system` mode now takes the light or dark scheme of the page around it. A host that draws the page dark, such as an artifact viewer in its dark theme, now gets the dark theme inside the `Theme` too; before, everything inside it followed the device's setting, so a reader on a light device saw dark text on the host's dark page. `useTheme()` and `useSyntaxTheme()` report the same mode, so charts and canvas match: a `system` Theme resolves to the scheme the page root names (light when it names none), else the device's setting, and under a `Theme` that forces light or dark it follows the device. If your app sets the page root's `color-scheme` to `light` or `dark` itself, that setting now decides what a `system` Theme shows. `useSyntaxTheme()` also follows a `Theme` that forces light or dark, as code blocks do. `reset.css` makes the page root follow the device's light or dark setting. Core's stylesheet, prebuilt or from a source build, sets no scheme on the page root. An app that does not load `reset.css` and names no scheme (no `color-scheme` on the page root and no `<meta name="color-scheme">`) stays light, and so do Astryx's tokens and `useTheme()` there; a theme's own `@dark` component styles still follow the device on such a page. To follow the device everywhere, import `@astryxdesign/core/reset.css`, or set `color-scheme: light dark` on `html`. `useTheme()` also reads the page's `<meta name="color-scheme">`, as the browser does.
+- In a Vite source build with `astryxStylex()`, importing `@astryxdesign/core/astryx.css`, from a module or with a CSS `@import`, no longer fails the build or the dev server. `reset.css` resolves to its file, and `astryx.css`, the prebuilt stylesheet a source build replaces, loads an empty stylesheet, because StyleX already compiles those rules from source.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @josephfarina
+
+---
+
+# 0.7.16
+
+---
+
+# 0.7.15
+
+---
+
+# 0.7.14
+
+---
+
 # 0.7.13
 
 #### Fixes
@@ -379,11 +406,11 @@ Thanks to everyone who contributed to this release:
 
 #### Breaking Changes
 
-- Rename `@xds/build` exports off the xds name
+- Rename `@astryxdesign/build` exports off the xds name
   The Vite integration's public exports are renamed: `xdsStylex` -> `astryxStylex`,
   and the option types `XDSVitePluginOptions` / `XDSVitePluginLegacyOptions` ->
   `AstryxVitePluginOptions` / `AstryxVitePluginLegacyOptions`. Update imports from
-  `@xds/build/vite` accordingly. Internal plugin names and the babel wrapper are
+  `@astryxdesign/build/vite` accordingly. Internal plugin names and the babel wrapper are
   also rebranded. Part of removing `xds` naming from the public API.
 - Rename Next.js helper `withXDS` to `withAstryx`
   The Next.js configuration wrapper is renamed `withXDS` -> `withAstryx`
@@ -446,8 +473,8 @@ Thanks to everyone who contributed to this release:
 
   ```
 
-- Rename the npm package scope from `@xds/*` to `@astryxdesign/*`
-  All published packages move to the new `@astryxdesign` scope (e.g. `@xds/core` → `@astryxdesign/core`), along with the workspace lockfile, build/runtime scope-directory scans, and docsite slug derivation. Consumers must update their imports and dependency names. The internal ESLint plugin namespace (`@xds/*` rules) is intentionally untouched and tracked separately. Existing `@xds/*` codemods continue to target the old scope so projects still on `@xds/*` can migrate.
+- Move every package to the npm package scope `@astryxdesign/*`
+  All published packages move to the new `@astryxdesign` scope, along with the workspace lockfile, build/runtime scope-directory scans, and docsite slug derivation. Consumers must update their imports and dependency names. The ESLint plugin namespace is unchanged. The existing upgrade codemods still migrate projects from the earlier scope.
 
 #### Contributors
 
@@ -462,7 +489,7 @@ Thanks to everyone who contributed to this release:
 
 #### Fixes
 
-- **Unprefix migration alignment** — Build output and Vite plugin updated for the XDS-prefix migration (bare names canonical, `XDS*` compat aliases) so generated CSS stays in sync with `@xds/core` (#2941).
+- **Unprefix migration alignment** — Build output and Vite plugin updated for the XDS-prefix migration (bare names canonical, `XDS*` compat aliases) so generated CSS stays in sync with `@astryxdesign/core` (#2941).
 
 #### Contributors
 
@@ -477,7 +504,7 @@ Thanks to everyone who contributed to this release:
 
 # 0.0.14
 
-_First public release_ — `@xds/build` is now published to the npm registry.
+_First release_ — the build package is now published.
 
 #### New Features
 

@@ -12,7 +12,8 @@
  * starts in.
  *
  * @input  the home folder, the platform, and those standard settings
- * @output absolute folder paths
+ * @output absolute folder paths, among them the transpile cache's folder and
+ *   the single folder earlier CLIs used for it
  * @position packages/cli/foundation/env
  */
 
@@ -20,12 +21,17 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 /**
- * An environment folder setting, when it names an absolute path.
+ * An environment folder setting, when it names an absolute path on the given
+ * platform. A `win32` setting is read with Windows path rules on any host, so
+ * the Windows folders can be tested anywhere.
  * @param {string | undefined} value
+ * @param {NodeJS.Platform} [platform]
  * @returns {string | null}
  */
-export function absoluteDirSetting(value) {
-  return typeof value === 'string' && value !== '' && path.isAbsolute(value)
+export function absoluteDirSetting(value, platform = process.platform) {
+  const isAbsolute =
+    platform === 'win32' ? path.win32.isAbsolute : path.isAbsolute;
+  return typeof value === 'string' && value !== '' && isAbsolute(value)
     ? value
     : null;
 }
@@ -52,7 +58,8 @@ export function userCacheDir({
   const join = platform === 'win32' ? path.win32.join : path.join;
   if (platform === 'win32') {
     return join(
-      absoluteDirSetting(env.LOCALAPPDATA) ?? join(home, 'AppData', 'Local'),
+      absoluteDirSetting(env.LOCALAPPDATA, platform) ??
+        join(home, 'AppData', 'Local'),
       'astryx',
       'Cache',
     );
@@ -79,7 +86,8 @@ export function userConfigDir({
   const join = platform === 'win32' ? path.win32.join : path.join;
   if (platform === 'win32') {
     return join(
-      absoluteDirSetting(env.APPDATA) ?? join(home, 'AppData', 'Roaming'),
+      absoluteDirSetting(env.APPDATA, platform) ??
+        join(home, 'AppData', 'Roaming'),
       'astryx',
     );
   }
@@ -90,4 +98,36 @@ export function userConfigDir({
     absoluteDirSetting(env.XDG_CONFIG_HOME) ?? join(home, '.config'),
     'astryx',
   );
+}
+
+/**
+ * The folder of the CLI's copies of transpiled code, in the per-user cache
+ * folder (foundation/fs/jiti-cache.mjs).
+ * @param {UserDirOptions} [options]
+ * @returns {string}
+ */
+export function transpiledCacheDir(options) {
+  return cacheChild(options, 'transpiled');
+}
+
+/**
+ * The single folder where earlier CLIs left jiti's own copies. This CLI
+ * never reads, lists or writes it; project doctor names it.
+ * @param {UserDirOptions} [options]
+ * @returns {string}
+ */
+export function oldTranspileCacheDir(options) {
+  return cacheChild(options, 'jiti');
+}
+
+/**
+ * A folder in the per-user cache folder, joined as the platform joins paths.
+ * @param {UserDirOptions | undefined} options
+ * @param {string} name
+ * @returns {string}
+ */
+function cacheChild(options, name) {
+  const platform = options?.platform ?? process.platform;
+  const join = platform === 'win32' ? path.win32.join : path.join;
+  return join(userCacheDir(options), name);
 }

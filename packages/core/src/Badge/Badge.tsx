@@ -27,6 +27,7 @@ import {
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {isRenderable} from '../utils/isRenderable';
+import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
 import type {BadgeVariantMap} from './index';
 
 /**
@@ -47,6 +48,11 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-supporting-leading'],
     fontWeight: fontWeightVars['--font-weight-medium'],
     whiteSpace: 'nowrap',
+    // A badge is as wide as its label. A grid cell and the cross axis of a
+    // stack stretch a child whose width is `auto`. In a flex row the badge
+    // still shrinks: its flex basis follows this width, and the minimum below
+    // lets it go under.
+    width: 'fit-content',
     // A badge is one line by construction — one line tall, `nowrap` — so a
     // label wider than the space available has to go somewhere. Without these
     // it went *outside* its container: `nowrap` with nothing to clip it
@@ -75,6 +81,7 @@ const styles = stylex.create({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     minWidth: 0,
+    unicodeBidi: 'isolate',
   },
 });
 
@@ -84,9 +91,12 @@ const styles = stylex.create({
  */
 const variants = stylex.create({
   // Semantic variants
+  // In a primary or destructive Button, the neutral tint over the fill misses
+  // 4.5:1. There the badge paints the Button's colour pair inverted, which
+  // keeps its contrast.
   neutral: {
-    backgroundColor: colorVars['--color-neutral'],
-    color: colorVars['--color-text-primary'],
+    backgroundColor: `var(--_button-on-fill, ${colorVars['--color-neutral']})`,
+    color: `var(--_button-fill, ${colorVars['--color-text-primary']})`,
   },
   info: {
     backgroundColor: colorVars['--color-info'],
@@ -252,6 +262,9 @@ export function Badge({
   // Whether the label renders anything, which is when the badge grows with it.
   const hasLabel = isRenderable(label);
 
+  // The label cuts its own text, so a label in one script takes its direction.
+  const labelDirection = cutTextDirection(label);
+
   return (
     <span
       ref={ref}
@@ -269,7 +282,14 @@ export function Badge({
       title={labelTitle}
       {...props}>
       {icon}
-      <span {...stylex.props(styles.label)}>{label}</span>
+      <span
+        {...labelDirection}
+        {...stylex.props(
+          styles.label,
+          labelDirection.dir != null && truncatedTextStyles.pageAlign,
+        )}>
+        {label}
+      </span>
     </span>
   );
 }

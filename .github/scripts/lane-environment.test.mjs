@@ -24,6 +24,7 @@ import {
   staleHead,
   versionIn,
 } from './lane-environment.mjs';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const ci = yaml.parse(
@@ -143,7 +144,10 @@ describe('the check', () => {
 
   for (const {lane, job: id, keep, after, dir} of lanes) {
     it(`stops ${id} right after its head checkout, before any setup, when the head is older`, () => {
-      const job = ci.jobs[id];
+      const job = {
+        ...ci.jobs[id],
+        steps: withoutCheckoutRetries(ci.jobs[id].steps),
+      };
       const check = step(job, CHECK);
       const headCheckout = job.steps.findIndex(
         each =>

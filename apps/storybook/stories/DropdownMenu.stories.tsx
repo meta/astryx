@@ -17,6 +17,8 @@ import {
   type DropdownMenuProps,
 } from '@astryxdesign/core/DropdownMenu';
 import {Button} from '@astryxdesign/core/Button';
+import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {Switch} from '@astryxdesign/core/Switch';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
@@ -99,6 +101,16 @@ const readinessStyles = stylex.create({
   edgeAnchorRow: {
     display: 'flex',
     justifyContent: 'flex-end',
+  },
+  // A closed `<dialog>` the page displays itself, in the document's flow. It
+  // never opens, so it never enters the top layer.
+  inFlowDialog: {
+    position: 'static',
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-3'],
+    margin: 0,
+    padding: spacingVars['--spacing-4'],
   },
 });
 
@@ -808,7 +820,7 @@ export const RTL: Story = {
     docs: {
       description: {
         story:
-          'In RTL contexts (CSS direction property or dir attribute) the menu right-edge-aligns to the trigger and grows toward the left — the logical mirror of the LTR default (#3389). Both direction mechanisms are shown; the popover inherits direction from the trigger subtree and the self-* position-area keywords mirror it in pure CSS.',
+          'In RTL contexts (CSS direction property or dir attribute) the menu right-edge-aligns to the trigger and grows toward the left — the logical mirror of the LTR default (#3389). Both direction mechanisms are shown; the popover inherits direction from the trigger subtree and the logical anchor() insets mirror it in pure CSS.',
       },
     },
   },
@@ -953,6 +965,37 @@ export const Submenu: Story = {
       description: {
         story:
           'DropdownMenuSubMenu is a single menu row that reveals a nested flyout of its own children. Hover or Right arrow (Left in RTL) / Enter / Space opens it and moves focus to its first item; Left arrow / Escape closes it and returns focus to the trigger. The flyout opens inline-end by default and auto-flips at the viewport edge.',
+      },
+    },
+  },
+};
+
+export const SubmenuRadioGroup: Story = {
+  render: function SubmenuRadioGroupStory({
+    presentation: _,
+    ...args
+  }: StoryArgs) {
+    const [sort, setSort] = useState('newest');
+    return (
+      <DropdownMenu button={{label: 'View'}} {...args}>
+        <DropdownMenuItem label="Refresh" onClick={() => {}} />
+        <DropdownMenuSubMenu label="Sort by">
+          <DropdownMenuRadioGroup
+            value={sort}
+            onChange={setSort}
+            label="Sort by">
+            <DropdownMenuRadioItem value="newest" label="Newest" />
+            <DropdownMenuRadioItem value="oldest" label="Oldest" />
+          </DropdownMenuRadioGroup>
+        </DropdownMenuSubMenu>
+      </DropdownMenu>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A DropdownMenuRadioGroup inside a DropdownMenuSubMenu. Picking a value closes the whole menu.',
       },
     },
   },
@@ -1109,6 +1152,73 @@ export const ActionSheetPresentation: Story = {
       />
     </div>
   ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector('button');
+    if (trigger instanceof HTMLElement) {
+      trigger.click();
+    }
+  },
+};
+
+function SheetEndContentControls(args: StoryArgs) {
+  const [isPinned, setIsPinned] = useState(false);
+  const [isStarred, setIsStarred] = useState(false);
+  return (
+    <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
+      <DropdownMenu
+        presentation="bottom-sheet"
+        button={{label: 'Note settings'}}
+        {...args}
+        items={[
+          {
+            label: 'Pin note',
+            onClick: () => console.log('Pin note selected'),
+            endContent: (
+              <Switch
+                label="Pinned"
+                isLabelHidden
+                value={isPinned}
+                onChange={setIsPinned}
+              />
+            ),
+          },
+          {
+            label: 'Star note',
+            onClick: () => console.log('Star note selected'),
+            endContent: (
+              <CheckboxInput
+                label="Starred"
+                isLabelHidden
+                value={isStarred}
+                onChange={setIsStarred}
+              />
+            ),
+          },
+          {
+            label: 'Archive note',
+            onClick: () => console.log('Archive note selected'),
+            endContent: <input type="checkbox" aria-label="Archived" />,
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+export const ActionSheetEndContentControls: Story = {
+  name: 'Presentation / action sheet, end-content controls',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '560px'},
+      description: {
+        story:
+          'A press fixture for the sheet’s end-content handling, not a recommended layout. A press on an end-content control toggles it and runs no row. For a toggle in an action sheet, put the control in the menu header or footer; in a popover menu, a DropdownMenuCheckboxItem row also works.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: (args: StoryArgs) => <SheetEndContentControls {...args} />,
   play: async ({canvasElement}) => {
     const trigger = canvasElement.querySelector('button');
     if (trigger instanceof HTMLElement) {
@@ -1701,6 +1811,30 @@ export const SubMenuHeaderChoice: Story = {
         </DropdownMenu>
         <output data-testid="match">{match}</output>
       </div>
+    );
+  },
+};
+
+/**
+ * A menu in a native `<dialog>` that the page displays closed, as a card. The
+ * layer opens one commit after the press, still within it. The menu then
+ * takes focus, and `onClick` fires once.
+ */
+export const InClosedInFlowDialog: Story = {
+  render: ({presentation: _, ...args}: StoryArgs) => {
+    const [clicks, setClicks] = useState(0);
+    return (
+      <dialog {...stylex.props(readinessStyles.inFlowDialog)}>
+        <DropdownMenu
+          button={{label: 'Actions'}}
+          {...args}
+          onClick={() => setClicks(count => count + 1)}>
+          <DropdownMenuItem label="Rename" onClick={() => {}} />
+          <DropdownMenuItem label="Duplicate" onClick={() => {}} />
+          <DropdownMenuItem label="Delete" onClick={() => {}} />
+        </DropdownMenu>
+        <output data-testid="clicks">{clicks}</output>
+      </dialog>
     );
   },
 };

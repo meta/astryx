@@ -5,7 +5,8 @@
  * @input Uses vitest, @testing-library/react, RichTextEditor + RichTextView
  * @output Unit tests for the opt-in Lexical editor components, including
  *   accessible label wiring, shared input visuals/status variants, theme-target
- *   metadata, placeholder semantics, canonical link-dialog layout, top-toolbar
+ *   metadata, placeholder semantics, the link popover in place of the browser
+ *   prompt, top-toolbar
  *   ordering and horizontal scrolling, and the read-only vs disabled split
  *   with editable-state sync across prop toggles
  * @position Testing; validates RichTextEditor.tsx and RichTextView.tsx
@@ -14,7 +15,7 @@
  */
 
 import {$createLinkNode} from '@lexical/link';
-import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
+import {describe, it, expect, vi, beforeAll} from 'vitest';
 import {
   render,
   screen,
@@ -75,46 +76,6 @@ import {docs as richTextEditorDoc} from './RichTextEditor.doc.mjs';
 // Closed popover-backed tooltips are intentionally hidden from the default
 // accessibility tree until their trigger opens them.
 const h = {hidden: true} as const;
-
-const originalShowModal = Object.getOwnPropertyDescriptor(
-  HTMLDialogElement.prototype,
-  'showModal',
-);
-const originalDialogClose = Object.getOwnPropertyDescriptor(
-  HTMLDialogElement.prototype,
-  'close',
-);
-
-beforeAll(() => {
-  // JSDOM does not implement the native dialog lifecycle used by Dialog.
-  HTMLDialogElement.prototype.showModal = function () {
-    this.setAttribute('open', '');
-  };
-  HTMLDialogElement.prototype.close = function () {
-    this.removeAttribute('open');
-  };
-});
-
-afterAll(() => {
-  if (originalShowModal) {
-    Object.defineProperty(
-      HTMLDialogElement.prototype,
-      'showModal',
-      originalShowModal,
-    );
-  } else {
-    delete (HTMLDialogElement.prototype as {showModal?: unknown}).showModal;
-  }
-  if (originalDialogClose) {
-    Object.defineProperty(
-      HTMLDialogElement.prototype,
-      'close',
-      originalDialogClose,
-    );
-  } else {
-    delete (HTMLDialogElement.prototype as {close?: unknown}).close;
-  }
-});
 
 // jsdom's Range does not implement getBoundingClientRect, which Lexical
 // calls (via scroll-into-view) whenever it reconciles a selection while the
@@ -403,7 +364,8 @@ describe('RichTextEditor', () => {
   it('renders a labelled editable textbox', () => {
     render(<RichTextEditor label="Notes" />);
     const textbox = screen.getByRole('textbox', {name: 'Notes'});
-    const label = screen.getByText('Notes');
+    // The label text sits in a direction span inside the label element.
+    const label = screen.getByText('Notes').parentElement!;
 
     expect(textbox).toBeInTheDocument();
     expect(textbox).toHaveAttribute('contenteditable', 'true');
@@ -600,7 +562,11 @@ describe('RichTextEditor', () => {
     const statusButton = screen.getByRole('button', {
       name: /error details/i,
     });
-    const tooltip = screen.getByRole('tooltip', h);
+    // The status tooltip's layer mounts at its first show; until then a
+    // hidden copy of its text describes the field.
+    const tooltip = document.getElementById(
+      statusButton.getAttribute('aria-describedby') ?? '',
+    ) as HTMLElement;
     const textbox = screen.getByRole('textbox');
     expect(statusButton).toHaveAttribute('type', 'button');
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
@@ -1409,7 +1375,9 @@ describe('RichTextEditorToolbar', () => {
     const textbox = screen.getByRole('textbox');
     const editor = container.querySelector('.astryx-rich-text-editor');
     const toolbarRegion = toolbar.parentElement?.parentElement;
-    const editorBody = toolbarRegion?.nextElementSibling;
+    // The toolbar's link popover renders beside it, hidden while closed, so
+    // the body is found from the editable text it holds.
+    const editorBody = textbox.parentElement?.parentElement;
 
     expect(toolbar).toHaveClass('astryx-toolbar');
     expect(toolbar).toHaveAttribute('data-size', 'sm');
@@ -1424,6 +1392,7 @@ describe('RichTextEditorToolbar', () => {
     expect(toolbarRegion?.parentElement).toBe(editor);
     expect(toolbarRegion).toBeInstanceOf(HTMLElement);
     expect(editorBody).toBeInstanceOf(HTMLElement);
+    expect(editorBody?.parentElement).toBe(editor);
     // The compact gutter is emitted by StyleX; do not regress to a component
     // inline-style escape hatch. Browser coverage below owns the geometry.
     expect(toolbarRegion).not.toHaveAttribute('style');
@@ -1523,6 +1492,58 @@ describe('RichTextEditorToolbar', () => {
       />,
     );
     expect(screen.getByRole('button', {name: 'Custom'})).toBeInTheDocument();
+  });
+
+  async function renderToolbarWithText(text: string) {
+    let editor!: LexicalEditor;
+    render(
+      <RichTextEditor
+        label="Notes"
+        toolbar={<RichTextEditorToolbar />}
+        plugins={<CaptureEditor onReady={e => (editor = e)} />}
+      />,
+    );
+    await waitFor(() => expect(editor).toBeDefined());
+    act(() => {
+      editor.update(
+        () => {
+          const paragraph = $createParagraphNode();
+          paragraph.append($createTextNode(text));
+          $getRoot().clear().append(paragraph);
+          paragraph.select(0, text.length);
+        },
+        {discrete: true},
+      );
+    });
+    return editor;
+  }
+
+  it('bolds the selected text and shows Bold pressed', async () => {
+    const user = userEvent.setup();
+    const editor = await renderToolbarWithText('Ship the notes');
+    const bold = screen.getByRole('button', {name: 'Bold'});
+    await user.click(bold);
+    expect(
+      editor.read(() =>
+        $getRoot()
+          .getAllTextNodes()
+          .every(node => node.hasFormat('bold')),
+      ),
+    ).toBe(true);
+    await waitFor(() => expect(bold).toHaveAttribute('aria-pressed', 'true'));
+  });
+
+  it('makes the selected block a heading from the block-format selector', async () => {
+    const user = userEvent.setup();
+    const editor = await renderToolbarWithText('Release notes');
+    await user.click(screen.getByRole('combobox', {name: 'Block format'}));
+    await user.click(screen.getByRole('option', {name: 'Heading 1', ...h}));
+    expect(
+      editor.read(() => {
+        const block = $getRoot().getFirstChild();
+        return block instanceof HeadingNode ? block.getTag() : block?.getType();
+      }),
+    ).toBe('h1');
   });
 
   it('keeps every formatting action directly available in the scroll row', () => {
@@ -1634,9 +1655,21 @@ describe('linkUtils', () => {
       expect(sanitizeUrl('example.com')).toBe('https://example.com/');
     });
 
+    it('defaults a scheme-less host with a port to https', () => {
+      expect(sanitizeUrl('example.com:8080')).toBe('https://example.com:8080/');
+      expect(sanitizeUrl('example.com:8080/docs?q=1')).toBe(
+        'https://example.com:8080/docs?q=1',
+      );
+      expect(sanitizeUrl('www.example.com:8080')).toBe(
+        'https://www.example.com:8080/',
+      );
+      expect(sanitizeUrl('localhost:3000')).toBe('https://localhost:3000/');
+    });
+
     it('preserves mailto and tel schemes', () => {
       expect(sanitizeUrl('mailto:a@b.com')).toBe('mailto:a@b.com');
       expect(sanitizeUrl('tel:+15551234')).toBe('tel:+15551234');
+      expect(sanitizeUrl('tel:911')).toBe('tel:911');
     });
 
     it('rejects javascript: and other unsafe schemes as about:blank', () => {
@@ -1656,6 +1689,9 @@ describe('linkUtils', () => {
       expect(validateUrl('https://example.com')).toBe(true);
       expect(validateUrl('example.com')).toBe(true);
       expect(validateUrl('mailto:a@b.com')).toBe(true);
+      expect(validateUrl('example.com:8080')).toBe(true);
+      expect(validateUrl('localhost:3000')).toBe(true);
+      expect(validateUrl('tel:911')).toBe(true);
     });
 
     it('rejects unsafe schemes and empty input', () => {
@@ -1673,7 +1709,8 @@ describe('RichTextEditorToolbar — links', () => {
     expect(screen.getByRole('button', {name: 'Link'})).toBeInTheDocument();
   });
 
-  it('opens an Astryx Dialog instead of the browser prompt by default', async () => {
+  // RichTextEditorToolbarLink.test.tsx covers the popover's behavior.
+  it('opens the link popover instead of the browser prompt by default', async () => {
     const browserPrompt = vi.spyOn(window, 'prompt').mockReturnValue(null);
     try {
       render(
@@ -1683,20 +1720,13 @@ describe('RichTextEditorToolbar — links', () => {
       fireEvent.click(screen.getByRole('button', {name: 'Link'}));
 
       expect(browserPrompt).not.toHaveBeenCalled();
-      await waitFor(() =>
-        expect(
-          screen.getByRole('dialog', {name: 'Insert link', ...h}),
-        ).toBeInTheDocument(),
-      );
-      const dialog = screen.getByRole('dialog', {
+      const popover = await screen.findByRole('dialog', {
         name: 'Insert link',
         ...h,
       });
-      expect(dialog.querySelector('.astryx-layout-header')).toBeInTheDocument();
-      expect(
-        dialog.querySelector('.astryx-layout-content'),
-      ).toBeInTheDocument();
-      expect(dialog.querySelector('.astryx-layout-footer')).toBeInTheDocument();
+      // A popover, not a modal dialog.
+      expect(popover).not.toHaveAttribute('aria-modal');
+      expect(document.querySelector('dialog')).toBeNull();
       expect(
         screen.getByRole('textbox', {name: 'URL', ...h}),
       ).toBeInTheDocument();
@@ -2032,6 +2062,25 @@ describe('RichTextEditorAutoLinkPlugin', () => {
     expect(emailMatch).not.toBeNull();
     expect(emailMatch?.url).toBe('mailto:a@b.com');
     expect(emailMatch?.attributes).toEqual(NEW_TAB_LINK_ATTRIBUTES);
+  });
+
+  it.each([
+    ['first.last+tag@sub.example.co.uk', 'first.last+tag@sub.example.co.uk'],
+    ['"john doe"@example.com', '"john doe"@example.com'],
+    ['user@[192.168.0.1]', 'user@[192.168.0.1]'],
+    ['(a@b.com)', 'a@b.com'],
+  ])('matches the email in %s', (text, email) => {
+    expect(DEFAULT_LINK_MATCHERS[1](text)?.text).toBe(email);
+  });
+
+  it.each([
+    ['a long word', 'a'.repeat(100_000)],
+    ['a run of quotes', '"'.repeat(100_000)],
+    ['dotted atoms', 'a.'.repeat(50_000)],
+  ])('scans %s without an email in linear time', (_, text) => {
+    const start = performance.now();
+    expect(DEFAULT_LINK_MATCHERS[1](text)).toBeNull();
+    expect(performance.now() - start).toBeLessThan(500);
   });
 
   it('auto-links a typed URL as an AutoLinkNode', async () => {

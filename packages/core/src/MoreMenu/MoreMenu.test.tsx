@@ -15,6 +15,7 @@ import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {MoreMenu} from './MoreMenu';
 import {DropdownMenu} from '../DropdownMenu/DropdownMenu';
+import {SizeProvider} from '../SizeContext/SizeContext';
 import {warmMenuBottomSheet} from '../DropdownMenu/__tests__/warmMenuBottomSheet';
 
 // DropdownMenu's touch sheet is loaded lazily; resolve it once up front.
@@ -288,9 +289,82 @@ describe('MoreMenu', () => {
   it('defaults to ghost variant', () => {
     render(<MoreMenu items={defaultItems} />);
     const button = screen.getByRole('button', {name: 'More options'});
-    // Ghost variant should render a button element
-    expect(button).toBeInTheDocument();
-    expect(button.tagName).toBe('BUTTON');
+    expect(button).toHaveAttribute('data-variant', 'ghost');
+  });
+
+  it('gives the trigger the variant it is passed', () => {
+    render(<MoreMenu items={defaultItems} variant="secondary" />);
+    expect(screen.getByRole('button', {name: 'More options'})).toHaveAttribute(
+      'data-variant',
+      'secondary',
+    );
+  });
+
+  describe('size', () => {
+    it('is md with no size and no surrounding size', () => {
+      render(<MoreMenu items={defaultItems} />);
+      expect(
+        screen.getByRole('button', {name: 'More options'}),
+      ).toHaveAttribute('data-size', 'md');
+    });
+
+    it('takes the surrounding size when it has no size of its own', () => {
+      render(
+        <SizeProvider value="sm">
+          <MoreMenu items={defaultItems} />
+        </SizeProvider>,
+      );
+      expect(
+        screen.getByRole('button', {name: 'More options'}),
+      ).toHaveAttribute('data-size', 'sm');
+    });
+
+    it('keeps its own size over the surrounding size', () => {
+      render(
+        <SizeProvider value="sm">
+          <MoreMenu items={defaultItems} size="lg" />
+        </SizeProvider>,
+      );
+      expect(
+        screen.getByRole('button', {name: 'More options'}),
+      ).toHaveAttribute('data-size', 'lg');
+    });
+  });
+
+  it('follows a controlled isMenuOpen and reports requests through onOpenChange', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const {rerender} = render(
+      <MoreMenu
+        items={defaultItems}
+        isMenuOpen={false}
+        onOpenChange={onOpenChange}
+      />,
+    );
+    const button = screen.getByRole('button', {name: 'More options'});
+    await user.click(button);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    rerender(
+      <MoreMenu items={defaultItems} isMenuOpen onOpenChange={onOpenChange} />,
+    );
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('puts className after more-menu on the menu panel, and style on the panel', () => {
+    render(
+      <MoreMenu
+        items={defaultItems}
+        className="row-menu"
+        style={{minWidth: 200}}
+      />,
+    );
+    const menu = screen.getByRole('menu', {hidden: true});
+    expect(menu.className).toMatch(/astryx-more-menu row-menu/);
+    expect(menu.style.minWidth).toBe('200px');
+    expect(
+      screen.getByRole('button', {name: 'More options'}).className,
+    ).not.toContain('row-menu');
   });
 
   it('renders astryx-more-menu class on dropdown panel for theme targeting', () => {
@@ -327,11 +401,12 @@ describe('MoreMenu', () => {
   });
 
   describe('placement and alignment', () => {
-    const positionAreaOf = (menu: HTMLElement) =>
-      menu
-        .closest('[popover]')
-        ?.getAttribute('style')
-        ?.match(/position-area:[^;]*/)?.[0];
+    const geometryOf = (menu: HTMLElement) =>
+      (menu.closest('[popover]')?.className ?? '')
+        .split(' ')
+        .filter(name => /useLayer__styles\.(side|align|center)/.test(name))
+        .sort()
+        .join(' ');
 
     it('resolves the same default position as DropdownMenu', () => {
       render(
@@ -344,24 +419,50 @@ describe('MoreMenu', () => {
         hidden: true,
       });
 
-      expect(positionAreaOf(moreMenu)).toBe(positionAreaOf(dropdownMenu));
-      expect(positionAreaOf(moreMenu)).toBe(
-        'position-area: self-block-end span-self-inline-end',
+      expect(geometryOf(moreMenu)).toBe(geometryOf(dropdownMenu));
+      expect(geometryOf(moreMenu)).toBe(
+        'useLayer__styles.alignInlineStart useLayer__styles.sideBelow',
       );
     });
 
     it('forwards alignment to the menu layer', () => {
       render(<MoreMenu items={defaultItems} alignment="end" />);
-      expect(positionAreaOf(screen.getByRole('menu', {hidden: true}))).toBe(
-        'position-area: self-block-end span-self-inline-start',
+      expect(geometryOf(screen.getByRole('menu', {hidden: true}))).toBe(
+        'useLayer__styles.alignInlineEnd useLayer__styles.sideBelow',
       );
     });
 
     it('forwards placement to the menu layer', () => {
       render(<MoreMenu items={defaultItems} placement="above" />);
-      expect(positionAreaOf(screen.getByRole('menu', {hidden: true}))).toBe(
-        'position-area: self-block-start span-self-inline-end',
+      expect(geometryOf(screen.getByRole('menu', {hidden: true}))).toBe(
+        'useLayer__styles.alignInlineStart useLayer__styles.sideAbove',
       );
     });
+  });
+
+  it('passes data-* attributes to the trigger button, not the menu', () => {
+    render(
+      <MoreMenu items={[{label: 'Edit', onClick: () => {}}]} data-tag="m" />,
+    );
+    expect(document.querySelectorAll('[data-tag="m"]')).toHaveLength(1);
+    expect(screen.getByRole('button', {name: 'More options'})).toHaveAttribute(
+      'data-tag',
+      'm',
+    );
+  });
+
+  it('passes data-* attributes to the bottom-sheet trigger, not the sheet', () => {
+    render(
+      <MoreMenu
+        items={[{label: 'Edit', onClick: () => {}}]}
+        presentation="bottom-sheet"
+        data-tag="m"
+      />,
+    );
+    expect(document.querySelectorAll('[data-tag="m"]')).toHaveLength(1);
+    expect(screen.getByRole('button', {name: 'More options'})).toHaveAttribute(
+      'data-tag',
+      'm',
+    );
   });
 });
