@@ -103,7 +103,7 @@ export const docs = {
       name: 'hasSurface',
       type: 'boolean',
       description:
-        'Whether to apply the default popover surface background, radius, and shadow.',
+        'Whether to apply the default popover surface background, text color, radius, and shadow.',
       default: 'true',
     },
     {
@@ -241,7 +241,7 @@ export const docsDense = {
       'whether a dialog-role popover is modal (aria-modal); Tab stays inside either way.',
     tabBehavior:
       "'contain' cycles Tab inside; 'pageOrder' lets Tab pass through in page order (popover after its trigger, or after a focusable anchor when it has no trigger; needs browser popover invokers; lost until it reopens when another layer opened from the same element closes), scopes Escape to focus in the popover or on its trigger/anchor, never aria-modal.",
-    hasSurface: 'apply default surface background/radius/shadow.',
+    hasSurface: 'apply default surface background/text color/radius/shadow.',
     padding: 'spacing-scale padding on the painted surface; omit for none.',
     surfaceTarget:
       'optional owned refinement target; document it when distinct reachability is needed.',
