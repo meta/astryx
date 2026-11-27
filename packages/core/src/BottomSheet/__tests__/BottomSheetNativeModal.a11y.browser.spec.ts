@@ -324,11 +324,18 @@ test('the lock keeps the page where it is on a page whose body sets its own over
 const DRAG_START = {x: 195, y: 120};
 
 /**
- * A finger drag down the backdrop as trusted touch events, one move per frame;
- * Chromium only (CDP). `Input.synthesizeScrollGesture` delivers the touch's
- * start but none of its moves to the page, so it cannot show a cancelled move.
+ * A finger drag down the backdrop, one move per frame. Chromium gets trusted
+ * touch events through CDP: `Input.synthesizeScrollGesture` delivers the
+ * touch's start but none of its moves to the page, so it cannot show a
+ * cancelled move. WebKit under Playwright has no way to send a touch move, so
+ * the page dispatches the same events itself. They do not drive WebKit's own
+ * scrolling, but whether the lock cancels each move is the evidence here.
  */
-async function touchDragDown(page: Page) {
+async function touchDragDown(page: Page, browserName: string) {
+  if (browserName !== 'chromium') {
+    await dispatchTouchDrag(page);
+    return;
+  }
   const session = await page.context().newCDPSession(page);
   await session.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
@@ -355,17 +362,72 @@ async function touchDragDown(page: Page) {
   );
 }
 
+/**
+ * The same drag as page-dispatched touch events on the element under the
+ * finger. WebKit builds a touch only through `document.createTouch`, and its
+ * `TouchEvent` takes lists from `document.createTouchList`, not arrays.
+ */
+async function dispatchTouchDrag(page: Page) {
+  const send = async (type: string, step: number | null) =>
+    page.evaluate(
+      ({type, step, start}) => {
+        const doc = document as Document & {
+          createTouch: (...args: unknown[]) => Touch;
+          createTouchList: (...touches: Touch[]) => TouchList;
+        };
+        const target = document.elementFromPoint(start.x, start.y);
+        if (target == null) {
+          throw new Error('nothing under the finger');
+        }
+        const y = start.y + (step ?? 0) * 20;
+        const touch = doc.createTouch(
+          window,
+          target,
+          1,
+          start.x,
+          y,
+          start.x,
+          y,
+        );
+        const held = type === 'touchend' ? [] : [touch];
+        target.dispatchEvent(
+          new TouchEvent(type, {
+            touches: doc.createTouchList(...held) as unknown as Touch[],
+            targetTouches: doc.createTouchList(...held) as unknown as Touch[],
+            changedTouches: doc.createTouchList(touch) as unknown as Touch[],
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+          }),
+        );
+      },
+      {type, step, start: DRAG_START},
+    );
+  await send('touchstart', 0);
+  for (let step = 1; step <= 12; step += 1) {
+    await send('touchmove', step);
+    await page.evaluate(async () => new Promise(requestAnimationFrame));
+  }
+  await send('touchend', 12);
+  await page.evaluate(
+    async () =>
+      new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+}
+
 test('the lock holds a backdrop drag when the flow renders inside a scrolling container', async ({
   page,
   browserName,
 }) => {
-  test.skip(browserName !== 'chromium', 'touch input needs CDP');
   await mountScrollable(page);
   // The sheets render their dialogs in place, so moving the story root into a
   // scroller puts the open flow inside it. A modal dialog's pans still go to
   // the viewport, never to that scroller, so the lock cancels them here too.
   // iOS Safari scrolls the page under a move that goes through.
-  // Chromium never does, so the cancelled moves are the evidence here.
+  // Chromium and desktop WebKit never do, so the cancelled moves are the
+  // evidence here.
   await page.evaluate(() => {
     const root = document.getElementById('storybook-root');
     const container = document.createElement('div');
@@ -417,7 +479,7 @@ test('the lock holds a backdrop drag when the flow renders inside a scrolling co
     };
   }, DRAG_START);
   expect(start).toEqual({openDialogs: 1, hitIsOpenDialog: true, painted: true});
-  await touchDragDown(page);
+  await touchDragDown(page, browserName);
 
   const moves = await page.evaluate(
     () => (window as {__moves?: {judged: number; cancelled: number}}).__moves,
