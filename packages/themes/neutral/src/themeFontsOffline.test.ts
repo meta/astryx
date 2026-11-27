@@ -54,7 +54,7 @@ describe('a theme font stylesheet', () => {
       }
     }
     // Each family it loads has its license beside its files.
-    for (const family of new Set(all.map(f => f.family)))
+    for (const family of new Set(all.map(f => f.family))) {
       expect(
         fs.existsSync(
           path.join(
@@ -65,10 +65,12 @@ describe('a theme font stylesheet', () => {
         ),
         family,
       ).toBe(true);
+    }
     // Every file it ships is a face it loads, or a license.
     const named = new Set(all.flatMap(f => f.urls.map(u => path.basename(u))));
-    for (const file of fs.readdirSync(path.join(dir, 'fonts')))
+    for (const file of fs.readdirSync(path.join(dir, 'fonts'))) {
       expect(named.has(file) || file.endsWith('.LICENSE.txt'), file).toBe(true);
+    }
   });
 
   it.each(themes)('of %s ships its fonts', theme => {

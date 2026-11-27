@@ -14,7 +14,11 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {collectUnloadedFonts, formatFontLoadingHelp} from './font-warning.mjs';
+import {
+  appleFaceGeneric,
+  collectUnloadedFonts,
+  formatFontLoadingHelp,
+} from './font-warning.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
 describe('collectUnloadedFonts', () => {
@@ -41,6 +45,17 @@ describe('collectUnloadedFonts', () => {
   it('treats bare system keywords like ui-monospace as loaded', () => {
     expect(
       collectUnloadedFonts({tokens: {'--font-family-code': 'ui-monospace'}}),
+    ).toEqual([]);
+  });
+
+  it("treats SFMono-Regular, SF Mono's PostScript name, as Apple's face", () => {
+    expect(
+      collectUnloadedFonts({
+        tokens: {
+          '--font-family-code':
+            'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        },
+      }),
     ).toEqual([]);
   });
 
@@ -221,6 +236,17 @@ describe('collectUnloadedFonts', () => {
         tokens: {'--font-family-body': '"Space\n      Grotesk",\n  serif'},
       }),
     ).toEqual(['Space Grotesk']);
+  });
+});
+
+describe('appleFaceGeneric', () => {
+  it("reaches SFMono-Regular, SF Mono's PostScript name, by SF Mono's generic", () => {
+    expect(appleFaceGeneric('SF Mono')).toBe('ui-monospace');
+    expect(appleFaceGeneric('SFMono-Regular')).toBe('ui-monospace');
+  });
+
+  it('gives no generic for a family that is not one of the faces', () => {
+    expect(appleFaceGeneric('Menlo')).toBeNull();
   });
 });
 
