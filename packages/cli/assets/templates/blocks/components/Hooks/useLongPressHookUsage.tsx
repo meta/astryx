@@ -48,7 +48,10 @@ const styles = stylex.create({
   },
   // A panel below the button can reach past the surface's bottom. The surface
   // then scrolls instead of growing, so the layout around it does not move.
-  surfaceScrollsPanel: {overflowY: 'auto'},
+  // A scrollbar that takes space would narrow the card and can wrap the Actions
+  // button to a new row under the panel, so the scrollbar is hidden. Wheel,
+  // touch, and focus still scroll the surface.
+  surfaceScrollsPanel: {overflowY: 'auto', scrollbarWidth: 'none'},
   // The card fills the surface, so the area that listens for the press is
   // the area a person sees.
   card: {flexGrow: 1},

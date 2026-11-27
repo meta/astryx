@@ -366,6 +366,7 @@ describe('useLongPressHookUsage example', () => {
     expect(openSurfaceStyle).toMatchObject({
       minHeight: 216,
       overflowY: 'auto',
+      scrollbarWidth: 'none',
     });
 
     // A button too near the end edge: the panel's end edge meets the button's.
@@ -382,6 +383,7 @@ describe('useLongPressHookUsage example', () => {
     expect(openSurfaceStyle).toMatchObject({
       minHeight: 216,
       overflowY: 'auto',
+      scrollbarWidth: 'none',
     });
 
     // Right to left: the button starts the row at the right edge, and the
@@ -401,6 +403,7 @@ describe('useLongPressHookUsage example', () => {
     expect(openSurfaceStyle).toMatchObject({
       minHeight: 216,
       overflowY: 'auto',
+      scrollbarWidth: 'none',
     });
   });
 
