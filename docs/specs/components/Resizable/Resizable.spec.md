@@ -89,9 +89,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   `aria-controls` only when its caller passes one; an unbounded Handle in a
   container that no percentage bound observes carries no `aria-valuemax`; and
   End does not move an unbounded Handle (`spec:AST-020` FR15).
-- **No `collapsedLabel` yet (AR1).** `createResizable` and the options form
-  of `useResizable` are not built, so a caller without a provider cannot
-  replace the English "Collapsed" announcement, where
+- **No `collapsedLabel` on the hook (AR1).** `createResizable` takes
+  `collapsedLabel`, but `useResizable` has no options form, so a hook caller
+  without a provider cannot replace the English "Collapsed" announcement, where
   `architecture:internationalization` INV3a gives it a per-message option.
 - **`shrinkOrder` is inert.** useResizable accepts and documents
   `shrinkOrder`, but no code reads it, so it has no effect.
@@ -193,8 +193,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   takes, has `collapsedLabel?: string`, announced as the Handle's
   `aria-valuetext` while collapsed; absent, the catalog's "Collapsed"
   (`architecture:internationalization` INV3a). Implementation gap:
-  `CreateResizableOptions` and the options form of `useResizable` are not
-  built, so `collapsedLabel` does not exist yet.
+  `createResizable` takes `collapsedLabel`, but `useResizable` has no
+  options form, so a hook caller cannot pass it.
   ArrowRight and ArrowDown move the divider toward the end of its axis and
   ArrowLeft and ArrowUp toward the start, the inline arrows following the
   reading direction under RTL, with Shift for a larger step, so the pane grows

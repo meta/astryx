@@ -14,8 +14,9 @@
  * feature branch off the branch point that touches exactly one component.
  * A shallow single-branch clone of the feature (depth 5) has no merge base
  * with origin/main, reproducing the CI failure; running analyze-pr.js against
- * it must exit 0 and report the Core, Rich Text, and Vega components the branch
- * touched.
+ * it must exit 0, name its recovery on stderr, and report the Core, Rich Text,
+ * and Vega components the branch touched. Each run keeps its stderr, so an
+ * expected failure's output stays out of the test run.
  *
  * The base and head size tests keep their fixtures under the checkout's
  * `node_modules/.cache`, not the system temporary directory: esbuild reads the listing of every
@@ -23,7 +24,7 @@
  * directory can hold hundreds of thousands of entries.
  */
 
-import {execFileSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -43,7 +44,12 @@ function git(dir, args) {
 /** Run a git command that is allowed to fail; return {status, stdout, stderr}. */
 function gitTry(dir, args) {
   try {
-    const stdout = execFileSync('git', args, {cwd: dir, encoding: 'utf8'});
+    // An explicit stdio keeps an expected failure's stderr out of the run.
+    const stdout = execFileSync('git', args, {
+      cwd: dir,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    });
     return {status: 0, stdout, stderr: ''};
   } catch (e) {
     return {status: e.status, stdout: e.stdout || '', stderr: e.stderr || ''};
@@ -216,16 +222,21 @@ describe('analyze-pr shallow-clone recovery', () => {
       const mb = gitTry(clone, ['merge-base', 'HEAD', 'origin/main']);
       expect(mb.status).not.toBe(0);
 
-      const stdout = execFileSync(
+      const run = spawnSync(
         process.execPath,
         [SCRIPT, '--base', 'origin/main', '--head', 'HEAD', '--output', 'analysis.json'],
         {cwd: clone, encoding: 'utf8'},
+      );
+      expect(run.status, run.stderr).toBe(0);
+      const {stdout} = run;
+      // The recovery names itself on stderr, where CI shows it as a warning.
+      expect(run.stderr).toContain(
+        '::warning::three-dot diff origin/main...HEAD failed - attempting to deepen the clone and retry',
       );
       const analysis = JSON.parse(
         fs.readFileSync(path.join(clone, 'analysis.json'), 'utf8'),
       );
 
-      // Reaching the assertions proves exit 0 (execFileSync throws otherwise).
       expect(stdout).toContain('diff mode: three-dot');
       expect(analysis.diffMode).toBe('three-dot');
       expect(analysis.modifiedComponents).toEqual([
@@ -718,10 +729,14 @@ describe('analyze-pr base and head sizes', () => {
       expect(analysis.baseComponentSizes['core/Chat'].importGzipBytes).toBeGreaterThan(0);
 
       // Without a readable record, Before stays empty rather than failing.
-      execFileSync(
+      const withoutRecordRun = spawnSync(
         process.execPath,
         [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-record', 'missing.json.out', '--output', 'analysis.json'],
         {cwd: repo, encoding: 'utf8', env},
+      );
+      expect(withoutRecordRun.status, withoutRecordRun.stderr).toBe(0);
+      expect(withoutRecordRun.stderr).toContain(
+        "::warning::could not read the merge base's size record: ENOENT",
       );
       const withoutRecord = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
       expect(withoutRecord.baseComponentSizes).toBeUndefined();
@@ -835,4 +850,49 @@ describe('analyze-pr folder membership oracle', () => {
       if (canonical.has(name)) expect(owners).toContain(name);
     }
   });
+});
+
+describe('analyze-pr shallow-clone recovery output', () => {
+  it("names git's failed three-dot diff once, in the warning's detail", () => {
+    const {base, clone} = buildFixture();
+    try {
+      const run = spawnSync(
+        process.execPath,
+        [SCRIPT, '--base', 'origin/main', '--head', 'HEAD', '--output', 'analysis.json'],
+        {cwd: clone, encoding: 'utf8'},
+      );
+      expect(run.status, run.stderr).toBe(0);
+      const warning = run.stderr.indexOf(
+        '::warning::three-dot diff origin/main...HEAD failed - attempting to deepen the clone and retry',
+      );
+      const fatal = "fatal: ambiguous argument 'origin/main...HEAD'";
+      expect(warning, run.stderr).toBeGreaterThanOrEqual(0);
+      expect(run.stderr.split(fatal).length - 1, run.stderr).toBe(1);
+      expect(run.stderr.indexOf(fatal)).toBeGreaterThan(warning);
+    } finally {
+      fs.rmSync(base, {recursive: true, force: true});
+    }
+  }, 60_000);
+
+  it("names git's failed two-dot diff once, in the error, when no step finds the base", () => {
+    const {base, clone} = buildFixture();
+    try {
+      // No such branch upstream, so the deepen and the two-dot diff fail too.
+      const run = spawnSync(
+        process.execPath,
+        [SCRIPT, '--base', 'origin/no-such-branch', '--head', 'HEAD', '--output', 'analysis.json'],
+        {cwd: clone, encoding: 'utf8'},
+      );
+      expect(run.status, run.stderr).toBe(1);
+      const error = run.stderr.indexOf(
+        '::error::git diff origin/no-such-branch..HEAD failed',
+      );
+      const fatal = "fatal: ambiguous argument 'origin/no-such-branch..HEAD'";
+      expect(error, run.stderr).toBeGreaterThanOrEqual(0);
+      expect(run.stderr.split(fatal).length - 1, run.stderr).toBe(1);
+      expect(run.stderr.indexOf(fatal)).toBeGreaterThan(error);
+    } finally {
+      fs.rmSync(base, {recursive: true, force: true});
+    }
+  }, 60_000);
 });

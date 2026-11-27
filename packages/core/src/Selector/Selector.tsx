@@ -906,10 +906,10 @@ interface SelectorPropsBase<
    * Content shown in the panel when a search query matches no options, and
    * announced in a polite live region at the same time.
    *
-   * The panel message is `role="presentation"`, so the live region is the
-   * only route to assistive tech. It announces the text this content renders,
-   * read from the DOM, so an element is announced as written and anything
-   * marked `aria-hidden` is left out of both.
+   * The panel shows the message as its content, and the live region also
+   * announces it. It announces the text this content renders, read from the
+   * DOM, so an element is announced as written and anything marked
+   * `aria-hidden` is left out of both.
    * @default 'No results found'
    */
   emptySearchText?: ReactNode;
@@ -1552,9 +1552,8 @@ export function Selector<T extends SelectorOptionType>(
     [announceSearchResults],
   );
 
-  // The panel's empty message is role="presentation" — role="listbox" permits
-  // only option and group children — so this region is its only route to
-  // assistive tech, and the region has to say what the panel says. Both
+  // The panel shows its empty message as content, and this region announces
+  // it, so the region has to say what the panel says. Both
   // `emptyText` and `emptySearchText` take a ReactNode, so the words are read
   // off the rendered element rather than guessed from the prop: a caller who
   // puts a link in the dead end is announced their link, not a default
@@ -1564,8 +1563,8 @@ export function Selector<T extends SelectorOptionType>(
   // case the old keystroke-time announcement could not: a fetch that lands
   // with nothing matching an active query left the message on screen and the
   // region silent.
-  const isPanelEmpty =
-    surface.isOpen && !isLoading && filteredItems.length === 0;
+  const isListEmpty = !isLoading && filteredItems.length === 0;
+  const isPanelEmpty = surface.isOpen && isListEmpty;
   useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery);
 
   const {
@@ -2036,15 +2035,13 @@ export function Selector<T extends SelectorOptionType>(
     // isLoading the options have not arrived yet, so asserting either would be
     // a claim the component cannot make; the trigger's spinner covers it.
     if (filteredItems.length === 0 && !isLoading) {
-      // role="presentation" keeps the message out of the listbox's
-      // accessibility tree (role="listbox" only permits option/group
-      // children); the no-results outcome is announced via the
-      // result-count live region instead.
+      // With no options, the popup is a group, named as the listbox is. An
+      // empty listbox is invalid. The message is the group's content, and the
+      // live region also announces it.
       return [
         <div
           key="empty"
           ref={emptyStateRef}
-          role="presentation"
           {...mergeProps(
             themeProps('selector-empty-state'),
             stylex.props(styles.emptyState),
@@ -2209,7 +2206,7 @@ export function Selector<T extends SelectorOptionType>(
       <div
         ref={surface.attachListbox}
         id={listboxId}
-        role="listbox"
+        role={isListEmpty ? 'group' : 'listbox'}
         aria-label={label}
         {...listboxPress.menuProps}
         {...stylex.props(
@@ -2228,7 +2225,7 @@ export function Selector<T extends SelectorOptionType>(
     <div
       ref={surface.attachListbox}
       id={listboxId}
-      role="listbox"
+      role={isListEmpty ? 'group' : 'listbox'}
       {...listboxPress.menuProps}
       // The trigger shows the value, so it cannot name the list.
       // A modal sheet removes an outside label from the accessibility tree.
