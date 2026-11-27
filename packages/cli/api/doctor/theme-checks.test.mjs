@@ -1844,6 +1844,41 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 9 names the next/font fix only when the root layout imports next/font', async () => {
+    const nextFontLayout = from =>
+      `import {Geist} from '${from}';\nconst geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n`;
+    const google = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(google.dir, 'app/layout.tsx'),
+      nextFontLayout('next/font/google'),
+    );
+    const googleCheck = check(await checkAppThemes(google.dir), 'theme-fonts');
+    expect(googleCheck.status).toBe('warn');
+    expect(googleCheck.fix).toContain('This app loads fonts with next/font');
+    expect(googleCheck.fix).toContain('docs font-setup');
+    expect(googleCheck.fix).not.toContain('fonts.googleapis.com');
+
+    const local = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(local.dir, 'src/app/layout.tsx'),
+      nextFontLayout('next/font/local'),
+    );
+    expect(check(await checkAppThemes(local.dir), 'theme-fonts').fix).toContain(
+      'This app loads fonts with next/font',
+    );
+
+    const commented = await fixture([
+      {slug: 'ocean', fontFamily: 'Ocean Sans'},
+    ]);
+    write(
+      path.join(commented.dir, 'app/layout.tsx'),
+      "// import {Geist} from 'next/font/google';\nexport default function RootLayout({children}) {\n  return <html><body>{children}</body></html>;\n}\n",
+    );
+    const plain = check(await checkAppThemes(commented.dir), 'theme-fonts');
+    expect(plain.status).toBe('warn');
+    expect(plain.fix).not.toContain('next/font');
+  });
+
   it('check 9 reads a Next.js root layout, and never a commented link or a preload', async () => {
     const layout = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
     write(

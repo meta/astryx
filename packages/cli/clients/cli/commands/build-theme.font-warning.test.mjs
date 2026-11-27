@@ -113,6 +113,54 @@ describe('theme build font-loading warning', () => {
     expect(result.stdout).toContain('Run with --detail full');
   });
 
+  it('names the next/font fix when the root layout imports next/font', async () => {
+    const project = path.join(tmpDir, 'project');
+    const themeFile = writeTheme(
+      project,
+      'fonty',
+      `export default {
+  name: 'fonty',
+  typography: {
+    body: {family: 'Space Grotesk', fallbacks: 'Arial, sans-serif'},
+    code: {family: 'JetBrains Mono'},
+  },
+};\n`,
+    );
+    fs.mkdirSync(path.join(project, 'app'), {recursive: true});
+    fs.writeFileSync(
+      path.join(project, 'app/layout.tsx'),
+      "import {Geist} from 'next/font/google';\nconst geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n",
+    );
+
+    const compact = await runCli(
+      ['theme', 'build', path.relative(project, themeFile)],
+      project,
+    );
+    expect(compact.code).toBe(0);
+    expect(compact.stdout).toMatch(
+      /\[note\] Fonts named but not loaded: "Space Grotesk", "JetBrains Mono"\. This app loads fonts with next\/font, .+ \(recipe: .+ docs font-setup\)\.\n/,
+    );
+    expect(compact.stdout).not.toContain('Load them in your app');
+
+    const full = await runCli(
+      ['--detail', 'full', 'theme', 'build', path.relative(project, themeFile)],
+      project,
+    );
+    expect(full.code).toBe(0);
+    expect(full.stdout).toContain('This app loads fonts with next/font');
+    expect(full.stdout).not.toContain('fonts.googleapis.com');
+
+    const json = await runCli(
+      ['--json', 'theme', 'build', path.relative(project, themeFile)],
+      project,
+    );
+    expect(JSON.parse(json.stdout).data.notices).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('(recipe: astryx docs font-setup)'),
+      ]),
+    );
+  });
+
   it('keeps --json stdout one valid envelope: notices inside, snippet suppressed', async () => {
     const project = path.join(tmpDir, 'project');
     const themeFile = writeTheme(
