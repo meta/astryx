@@ -5109,11 +5109,6 @@
       "aliases": []
     },
     {
-      "name": "showcase-infinity-list-one-billion-archive-records",
-      "path": "showcases/infinity-list/one-billion-archive-records",
-      "aliases": []
-    },
-    {
       "name": "showcase-info-tip-default",
       "path": "showcases/info-tip/default",
       "aliases": []
@@ -5431,6 +5426,11 @@
     {
       "name": "showcase-table-default",
       "path": "showcases/table/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-table-two-axis-archive",
+      "path": "showcases/table/two-axis-archive",
       "aliases": []
     },
     {
