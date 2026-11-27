@@ -316,9 +316,9 @@ const styles = stylex.create({
   // always or under a coarse pointer, it has a track of its own, and the
   // record's content lines up past it. A record without a handle fills the
   // track with its `::before`, so every first field starts in one column.
-  // Under a coarse pointer, the handle is centred in its track. Its finger
-  // target then reaches as far toward the first field as an end handle's
-  // target reaches toward Remove.
+  // Under a coarse pointer, the track centres the handle. Its finger target
+  // then reaches as far toward the first field as an end handle's target
+  // reaches toward Remove.
   handleControls: {
     display: 'grid',
     gridTemplateColumns: {
