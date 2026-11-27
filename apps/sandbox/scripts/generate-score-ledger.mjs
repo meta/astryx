@@ -22,6 +22,8 @@
  *   without a rebuild — and the page labels which of the two you are reading.
  *   If the fetch here fails — offline build, wiki down — the snapshot is null
  *   and the page relies on the live fetch alone; it never fails the build.
+ *   Nor does a bad row: an item that the snapshot cannot carry is skipped,
+ *   and `snapshotSkipped` in the generated file lists each skip.
  *
  * SYNC: When the ledger schema changes, update scripts/score-ledger.mjs and the
  *   Component-Audit-Rubric wiki page too.
@@ -42,6 +44,7 @@ import {
   isEvidenceItem,
   listComponents,
 } from '../../../scripts/score-ledger.mjs';
+import {readSectionBlocks} from './score-ledger-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -121,31 +124,9 @@ const KNOWN_SECTION_KEYS = new Set([
 /** Drop keys `LedgerEntry` doesn't declare, or whose shape it rejects. */
 const droppedKeys = new Set();
 const malformedKeys = new Set();
-
-/** A section's BLOCKs that the snapshot cannot read. The build stops on it. */
-class LedgerShapeError extends Error {}
-
-/**
- * A section's `blocks` lists BLOCK objects, the shape of the entry's
- * `blocks.open`. A bare id string in their place is losslessly repairable
- * while the entry lists a BLOCK with that id, so repair it. Any other item is
- * not a BLOCK, so stop and name the component, the section and the item.
- */
-function readSectionBlocks(blocks, openBlocks, component, sectionId) {
-  const where = `${component}: sections.${sectionId}.blocks`;
-  if (!Array.isArray(blocks)) {
-    throw new LedgerShapeError(`${where} is ${JSON.stringify(blocks)}, not a list of BLOCKs`);
-  }
-  return blocks.map(item => {
-    if (typeof item === 'string') {
-      const match = openBlocks.find(block => block?.id === item);
-      if (match) return match;
-      throw new LedgerShapeError(`${where} names "${item}", which blocks.open does not list`);
-    }
-    if (item != null && typeof item === 'object' && !Array.isArray(item)) return item;
-    throw new LedgerShapeError(`${where} holds ${JSON.stringify(item)}, which is not a BLOCK`);
-  });
-}
+/** Every item the snapshot skipped. The generated file lists them. */
+const skipped = [];
+const skip = item => skipped.push(item);
 
 /** Prune each section object to the keys `LedgerSection` declares. */
 function pruneSections(sections, openBlocks, component) {
@@ -161,8 +142,10 @@ function pruneSections(sections, openBlocks, component) {
     const kept_section = {};
     for (const [k, v] of Object.entries(section)) {
       if (!KNOWN_SECTION_KEYS.has(k)) droppedKeys.add(`sections.*.${k}`);
-      else if (k === 'blocks') kept_section[k] = readSectionBlocks(v, openBlocks, component, id);
-      else kept_section[k] = v;
+      else if (k === 'blocks') {
+        const where = `${component}: sections.${id}.blocks`;
+        kept_section[k] = readSectionBlocks(v, openBlocks, where, skip);
+      } else kept_section[k] = v;
     }
     kept[id] = kept_section;
   }
@@ -194,6 +177,7 @@ function pruneEntry(entry) {
 
 let snapshot = null;
 let snapshotFetchedAt = null;
+let parsed = null;
 try {
   // Bounded on purpose. A 404 or a refused connection lands in the catch
   // immediately, but a STALLED connection would not: a bare fetch inherits
@@ -206,22 +190,33 @@ try {
     signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const parsed = JSON.parse(await res.text());
+  parsed = JSON.parse(await res.text());
   if (!Array.isArray(parsed.components)) throw new Error('missing a components array');
-  snapshot = {...parsed, components: parsed.components.map(pruneEntry)};
-  snapshotFetchedAt = new Date().toISOString();
-  console.log(
-    `componentScores: snapshot of ${parsed.components.length} audited component(s) from the wiki`,
-  );
 } catch (e) {
-  // A section BLOCK that the snapshot cannot read stops the build. The error
-  // names the wiki row to fix.
-  if (e instanceof LedgerShapeError) throw e;
+  parsed = null;
   // Never fail the build over this — and never hang it either. The page
   // fetches the same URL at runtime and says which copy it is showing.
   const why = e.name === 'TimeoutError' ? 'no response within 5000ms' : e.message;
   console.warn(
     `componentScores: could not snapshot the ledger (${why}) — the page will rely on its runtime fetch.`,
+  );
+}
+
+// Outside the catch: a bad row is skipped and recorded, so an error here is a
+// fault in this script, and it stops the build.
+if (parsed != null) {
+  snapshot = {...parsed, components: parsed.components.map(pruneEntry)};
+  snapshotFetchedAt = new Date().toISOString();
+  console.log(
+    `componentScores: snapshot of ${parsed.components.length} audited component(s) from the wiki`,
+  );
+}
+
+if (skipped.length > 0) {
+  console.warn(
+    `componentScores: skipped ${skipped.length} ledger item(s) the snapshot cannot carry: ` +
+      skipped.map(({where, item, reason}) => `${where} ${item} (${reason})`).join('; ') +
+      '. snapshotSkipped lists them. Fix each row in the wiki.',
   );
 }
 
@@ -365,6 +360,25 @@ export const snapshot: Ledger | null = ${JSON.stringify(snapshot, null, 2)};
 
 /** When the snapshot above was taken, so the fallback can date itself. */
 export const snapshotFetchedAt: string | null = ${JSON.stringify(snapshotFetchedAt)};
+
+/** One ledger item that the snapshot skipped. */
+export interface SkippedItem {
+  /** The row and the place in it, e.g. \`Button: sections.behavior.blocks[0]\`. */
+  where: string;
+  /** The item as the wiki wrote it, as JSON. */
+  item: string;
+  reason: string;
+}
+
+/**
+ * Every ledger item that the snapshot above skipped because it could not carry
+ * it. Each one is an error in its wiki row: fix the row.
+ */
+export const snapshotSkipped: {count: number; entries: SkippedItem[]} = ${JSON.stringify(
+  {count: skipped.length, entries: skipped},
+  null,
+  2,
+)};
 `;
 
 fs.mkdirSync(OUT_DIR, {recursive: true});
