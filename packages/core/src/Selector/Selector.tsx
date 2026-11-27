@@ -2035,9 +2035,9 @@ export function Selector<T extends SelectorOptionType>(
     // isLoading the options have not arrived yet, so asserting either would be
     // a claim the component cannot make; the trigger's spinner covers it.
     if (filteredItems.length === 0 && !isLoading) {
-      // With no options, the popup is a group named by the label, not a
-      // listbox (an empty listbox is invalid). The message is its content, next
-      // to the input, and the live region also announces it.
+      // With no options, the popup is a group, named as the listbox is. An
+      // empty listbox is invalid. The message is the group's content, and the
+      // live region also announces it.
       return [
         <div
           key="empty"

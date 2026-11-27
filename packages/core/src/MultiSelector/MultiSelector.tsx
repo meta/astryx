@@ -2512,8 +2512,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const listboxLabelProps = hasExternalTrigger
     ? {'aria-label': label}
     : {'aria-labelledby': triggerId};
-  // With no options, the popup is a group named by the label, not an empty
-  // listbox or grid, which is invalid. With options it keeps its one role.
+  // With no options, the popup is a group, named as the listbox is. An empty
+  // listbox or grid is invalid. With options it keeps its one role.
   const listboxRoleProps = isListEmpty
     ? {role: 'group' as const}
     : {
