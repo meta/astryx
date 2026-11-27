@@ -6,7 +6,8 @@
  *   frame held until the test releases it, counting each request for it
  * @output Tests that a second press, Enter or Space made while an open waits
  *   for the sheet's frame keeps that open, picks nothing, and that the sheet
- *   then opens once
+ *   then opens once; and that the keys that move the highlight leave it at
+ *   the opening option
  * @position Tests; Selector's touch presentation on first open, alongside
  *   Selector.sheetActiveDescendant.test.tsx
  */
@@ -76,7 +77,7 @@ afterEach(() => {
 });
 
 describe('Selector inputs during a held sheet open', () => {
-  it('keeps the held open through a second press, Enter and Space, and picks nothing', async () => {
+  it('keeps the held open through a second press, Enter, Space and the highlight keys, and picks nothing', async () => {
     const onChange = vi.fn();
     render(
       <Selector
@@ -97,6 +98,11 @@ describe('Selector inputs during a held sheet open', () => {
     fireEvent.click(trigger);
     fireEvent.keyDown(trigger, {key: 'Enter'});
     fireEvent.keyDown(trigger, {key: ' '});
+    // The keys that move the highlight have no list to move across.
+    for (const key of ['ArrowDown', 'End', 'PageDown', 'ArrowUp', 'Home']) {
+      fireEvent.keyDown(trigger, {key});
+    }
+    fireEvent.keyDown(trigger, {key: 'End'});
     expect(onChange).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -108,5 +114,12 @@ describe('Selector inputs during a held sheet open', () => {
     );
     expect(screen.getAllByRole('dialog', {hidden: true})).toHaveLength(1);
     expect(onChange).not.toHaveBeenCalled();
+    // The sheet opens at its opening option, not where the keys would have
+    // taken the highlight.
+    expect(
+      document.getElementById(
+        trigger.getAttribute('aria-activedescendant') ?? '',
+      ),
+    ).toHaveTextContent('Red');
   });
 });
