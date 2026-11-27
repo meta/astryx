@@ -554,7 +554,10 @@ const styles = stylex.create({
 // inside its borders, but never below 1.5em of the trigger's own font. The
 // padding is what is left of the token, so it reaches 0 before the floor lets
 // the trigger grow. Ghost and grouped triggers keep the uncapped line box.
-// Keep these calculations inline: StyleX must evaluate them as constants.
+// Keep these calculations inline: StyleX must evaluate them as constants, and
+// a shared helper can reach StyleX as a function a consumer's Babel preset
+// lowered, which StyleX cannot evaluate.
+// SYNC: keep equal to Selector's `sizeStyles` (/packages/core/src/Selector/Selector.tsx).
 const sizeStyles = stylex.create({
   sm: {
     minHeight: sizeVars['--size-element-sm'],
