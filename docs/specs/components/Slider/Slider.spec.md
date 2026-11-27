@@ -253,6 +253,8 @@ separately listed value tooltip retains Tooltip's target.
   base props reach its primary control, `container*` reaches the Field box where
   one renders (in a `horizontal-labels` FormLayout none renders, and
   `container*` has no effect and warns), and `control*` reaches the control box.
+  Implementation gap: inside an InputGroup Slider's Field box still renders, but
+  `container*` is dropped with a development warning that no Field box renders.
   Slider is not a member of that family, so the family's geometry rules do not
   apply to it.
 - `architecture:component-theming-surface` owns anatomy qualification, factual
