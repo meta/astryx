@@ -27,7 +27,15 @@ export interface Hotkey {
    * 'mod' = ⌘ on macOS, Ctrl elsewhere.
    *
    * Format: '+'-separated modifiers (mod, ctrl, meta, shift, alt) followed
-   * by a final key compared case-insensitively against event.key.
+   * by a final key compared case-insensitively against event.key. On Apple
+   * platforms (macOS, and iPadOS or iOS with a hardware keyboard), where
+   * Option changes the typed character, an 'alt' combo whose final key
+   * is a letter, digit, punctuation key or space also matches that key's US
+   * position (event.code), whatever the layout, when Option typed a dead key
+   * or a non-ASCII character. When Option types a plain ASCII character, the
+   * combo matches that character: on a German Mac Option+L types '@', so it
+   * fires 'alt+@', not 'alt+l'. On Apple platforms, name punctuation that shift changes
+   * with shift: 'alt+shift+/', not 'alt+?'.
    * Named keys: 'escape', 'enter', 'space', 'up', 'down', 'left', 'right'
    * (arrow names map to ArrowUp/ArrowDown/ArrowLeft/ArrowRight).
    * Use 'plus' for a literal '+' key.
@@ -61,6 +69,47 @@ const KEY_ALIASES: Record<string, string> = {
   return: 'enter',
   plus: '+',
 };
+
+/** `event.code` of the punctuation keys, by the character they type unshifted. */
+const PUNCTUATION_CODES: Record<string, string> = {
+  ',': 'Comma',
+  '.': 'Period',
+  '/': 'Slash',
+  ';': 'Semicolon',
+  "'": 'Quote',
+  '[': 'BracketLeft',
+  ']': 'BracketRight',
+  '\\': 'Backslash',
+  '-': 'Minus',
+  '=': 'Equal',
+  '`': 'Backquote',
+};
+
+/**
+ * The physical key (`event.code`) that types `key` on a US layout, for a
+ * letter, digit or punctuation key; null for any other key.
+ */
+function physicalKeyCode(key: string): string | null {
+  if (key === ' ') {
+    return 'Space';
+  }
+  if (/^[a-z]$/.test(key)) {
+    return `Key${key.toUpperCase()}`;
+  }
+  if (/^[0-9]$/.test(key)) {
+    return `Digit${key}`;
+  }
+  return PUNCTUATION_CODES[key] ?? null;
+}
+
+/**
+ * A browser may report an Option dead key (Option+E on macOS) with the IME
+ * key code 229 although it starts no composition there, so an alt combo may
+ * still match it. A dead key that composes text in a field is not this case.
+ */
+function isOptionDeadKey(event: KeyboardEvent): boolean {
+  return event.key === 'Dead' && event.altKey && event.isComposing !== true;
+}
 
 /**
  * Whether the event target is a typing surface where global shortcuts
@@ -119,7 +168,24 @@ function matchesCombo(
   }
 
   const expected = KEY_ALIASES[key] ?? key;
-  return event.key.toLowerCase() === expected;
+  if (event.key.toLowerCase() === expected) {
+    return true;
+  }
+  // On Apple platforms (macOS, and iPadOS or iOS with a hardware keyboard),
+  // Option changes the character a key types: Option+A types "å",
+  // Option+1 types "¡", and some keys are dead keys. Elsewhere Alt changes no
+  // character, and AltGr (Ctrl+Alt) types letters that must not fire
+  // shortcuts.
+  const isRewrittenByOption =
+    event.key === 'Dead' ||
+    (event.key.length === 1 && event.key.charCodeAt(0) > 0x7e);
+  return (
+    isApple &&
+    wantsAlt &&
+    isRewrittenByOption &&
+    event.code !== '' &&
+    event.code === physicalKeyCode(expected)
+  );
 }
 
 /**
@@ -163,7 +229,10 @@ export function useHotkeys(hotkeys: Hotkey[]): void {
     const isApple = isApplePlatform();
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isImeKeyEvent(event)) {
+      if (
+        event.defaultPrevented ||
+        (isImeKeyEvent(event) && !isOptionDeadKey(event))
+      ) {
         return;
       }
       const isTyping = isTypingTarget(event.target);

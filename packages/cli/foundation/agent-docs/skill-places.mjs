@@ -34,11 +34,12 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  MARKER_END,
   MARKER_START,
   PROJECT_SKILL_FOLDERS,
   PROJECT_SKILL_NAME,
 } from './agent-doc-state.mjs';
-import {withHash} from './managed-skill-file.mjs';
+import {renderSkillFile} from './managed-skill-file.mjs';
 import {absoluteFolder, folderScope, inside} from './folder-scope.mjs';
 import {PROJECT_PLACE_KEYWORDS} from '../../authoring/config/skill-places.mjs';
 
@@ -47,7 +48,10 @@ import {PROJECT_PLACE_KEYWORDS} from '../../authoring/config/skill-places.mjs';
  * astryx.config accepts in `skills.to`, and `user`. One list, so the config
  * check and init never disagree.
  */
-export const PLACE_KEYWORDS = Object.freeze([...PROJECT_PLACE_KEYWORDS, 'user']);
+export const PLACE_KEYWORDS = Object.freeze([
+  ...PROJECT_PLACE_KEYWORDS,
+  'user',
+]);
 
 /** The project place that holds the block; the default. */
 export const AGENTS_MD_PLACE = 'agents-md';
@@ -90,8 +94,6 @@ export class SkillPlaceError extends Error {
  *   | {scope: 'project' | 'computer', kind: 'folder', dir: string, saved: string}} SkillPlace
  */
 
-
-
 /**
  * How a computer folder is saved: `~/` and its path in the home folder, else
  * its absolute path, so a later run finds it from any folder.
@@ -113,9 +115,12 @@ function homePath(dir, home) {
  * @returns {string}
  */
 export function savedComputerFolderSkillFile(saved, home = os.homedir()) {
-  return path.join(absoluteFolder(saved, home, home), COMPUTER_SKILL_NAME, 'SKILL.md');
+  return path.join(
+    absoluteFolder(saved, home, home),
+    COMPUTER_SKILL_NAME,
+    'SKILL.md',
+  );
 }
-
 
 /**
  * Split a `--to` value (a comma list, or several) into its names.
@@ -148,17 +153,23 @@ export function parsePlaces(names, {cwd, projectRoot, home = os.homedir()}) {
     let place;
     if (name === 'user') {
       place = {scope: 'computer', kind: 'user'};
-    } else if (/** @type {readonly string[]} */ (PROJECT_PLACE_KEYWORDS).includes(name)) {
+    } else if (
+      /** @type {readonly string[]} */ (PROJECT_PLACE_KEYWORDS).includes(name)
+    ) {
       if (projectRoot == null && name === 'skills') {
         throw new SkillPlaceError(
           '`--to skills` writes the project skills folders, and this folder is not in a project.',
         );
       }
-      place = {scope: 'project', kind: /** @type {'agents-md' | 'skills'} */ (name)};
+      place = {
+        scope: 'project',
+        kind: /** @type {'agents-md' | 'skills'} */ (name),
+      };
     } else if (folderScope(name, {cwd, projectRoot, home})) {
-      const {dir, scope} = /** @type {{dir: string, scope: 'project' | 'computer'}} */ (
-        folderScope(name, {cwd, projectRoot, home})
-      );
+      const {dir, scope} =
+        /** @type {{dir: string, scope: 'project' | 'computer'}} */ (
+          folderScope(name, {cwd, projectRoot, home})
+        );
       if (scope === 'project' && projectRoot != null) {
         const rel = path.relative(projectRoot, dir).split(path.sep).join('/');
         place = {
@@ -168,7 +179,12 @@ export function parsePlaces(names, {cwd, projectRoot, home = os.homedir()}) {
           saved: rel ? `./${rel}` : '.',
         };
       } else {
-        place = {scope: 'computer', kind: 'folder', dir, saved: homePath(dir, home)};
+        place = {
+          scope: 'computer',
+          kind: 'folder',
+          dir,
+          saved: homePath(dir, home),
+        };
       }
     } else {
       throw new SkillPlaceError(`Unknown place "${name}".`);
@@ -240,24 +256,24 @@ export function projectPlacesValue(projectPlaces) {
 }
 
 /**
- * The skill files a place holds, absolute. `agents-md` holds none: its files
- * are the agent docs. `user` holds the computer-level skill, which
- * `computer-agent-text.mjs` writes with its links.
+ * The files one skill has in a place, absolute: `<folder>/<name>/SKILL.md`
+ * in each of its skills folders. Without `skill`, the Astryx skill: the
+ * project skill in a project place, the computer-level skill in a folder
+ * outside the project. `agents-md` holds none: its files are the agent docs.
+ * `user` holds the computer-level skill, which `computer-agent-text.mjs`
+ * writes with its links.
  * @param {SkillPlace} place
  * @param {string | null} projectRoot
+ * @param {string} [skill] an integration skill's name
  * @returns {string[]}
  */
-export function placeSkillFiles(place, projectRoot) {
-  if (place.kind === 'skills' && projectRoot != null) {
-    return PROJECT_SKILL_FOLDERS.map(folder =>
-      path.join(projectRoot, folder, PROJECT_SKILL_NAME, 'SKILL.md'),
-    );
-  }
-  if (place.kind === 'folder') {
-    const name = place.scope === 'project' ? PROJECT_SKILL_NAME : COMPUTER_SKILL_NAME;
-    return [path.join(place.dir, name, 'SKILL.md')];
-  }
-  return [];
+export function placeSkillFiles(place, projectRoot, skill) {
+  const name =
+    skill ??
+    (place.scope === 'computer' ? COMPUTER_SKILL_NAME : PROJECT_SKILL_NAME);
+  return placeFolders(place, projectRoot).map(folder =>
+    path.join(folder, name, 'SKILL.md'),
+  );
 }
 
 /**
@@ -267,20 +283,39 @@ export function placeSkillFiles(place, projectRoot) {
  * @returns {string}
  */
 export function renderProjectSkill(block) {
-  if (!block.startsWith(MARKER_START)) {
-    throw new Error('The project skill needs the managed block.');
+  return renderSkillFile({
+    name: PROJECT_SKILL_NAME,
+    description: PROJECT_SKILL_DESCRIPTION,
+    block,
+  });
+}
+
+/**
+ * The skills folders a place holds: both project skills folders for
+ * `skills`, the folder itself for a folder place, none for the others.
+ * @param {SkillPlace} place
+ * @param {string | null} projectRoot
+ * @returns {string[]}
+ */
+export function placeFolders(place, projectRoot) {
+  if (place.kind === 'skills' && projectRoot != null) {
+    return PROJECT_SKILL_FOLDERS.map(folder => path.join(projectRoot, folder));
   }
-  return withHash(
-    [
-      '---',
-      `name: ${PROJECT_SKILL_NAME}`,
-      // Quoted: the description holds `: ` and `;`, which strict YAML parsers
-      // can misread, and an agent tool that fails to parse drops the skill.
-      `description: ${JSON.stringify(PROJECT_SKILL_DESCRIPTION)}`,
-      '---',
-      '',
-      block,
-      '',
-    ].join('\n'),
-  );
+  if (place.kind === 'folder') return [place.dir];
+  return [];
+}
+
+/**
+ * An integration's skill: its doc as text under skill frontmatter, inside the
+ * Astryx markers, with the hash line that tells an edited file from an older
+ * rendering.
+ * @param {{name: string, description: string, body: string}} skill
+ * @returns {string}
+ */
+export function renderIntegrationSkill({name, description, body}) {
+  return renderSkillFile({
+    name,
+    description,
+    block: [MARKER_START, body.trimEnd(), MARKER_END].join('\n'),
+  });
 }

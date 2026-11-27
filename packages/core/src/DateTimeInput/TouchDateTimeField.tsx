@@ -34,6 +34,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
@@ -71,6 +72,8 @@ import {rtlStyles} from '../utils/rtlStyles';
 import {themeProps} from '../utils/themeProps';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {formatLocaleTime} from '../utils/timeFormat';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {localeTextStyles} from '../utils/textDirection';
 import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
 import {
   formatISOTime,
@@ -172,17 +175,7 @@ function getDefaultTime(hasSeconds: boolean): ISOTimeString {
   );
 }
 
-const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
-});
+const sizeStyles = inputRowSizeStyles;
 
 const HORIZONTAL_SEGMENT_BASIS = 196;
 
@@ -488,6 +481,7 @@ export function TouchDateTimeField({
   const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {locale} = use(InternationalizationContext);
+  const textDirection = getLocaleDirection(locale);
   const placeholder =
     placeholderFromProps ?? t('@astryx.dateTimeInput.placeholder');
   const timePlaceholder =
@@ -1386,9 +1380,11 @@ export function TouchDateTimeField({
             aria-haspopup="dialog"
             aria-autocomplete="none"
             autoComplete="off"
+            dir={controlProps.dir ?? textDirection}
             {...stylex.props(
               styles.input,
               styles.touchInput,
+              localeTextStyles.pageAlign,
               isEffectivelyDisabled && styles.inputDisabled,
             )}
           />
@@ -1469,9 +1465,11 @@ export function TouchDateTimeField({
             aria-haspopup="dialog"
             aria-autocomplete="none"
             autoComplete="off"
+            dir={textDirection}
             {...stylex.props(
               styles.input,
               styles.touchInput,
+              localeTextStyles.pageAlign,
               isEffectivelyDisabled && styles.inputDisabled,
             )}
           />

@@ -48,15 +48,6 @@ export const monthlyData = [
   {month: 'Jun', revenue: 70, costs: 40, trend: 52},
 ];
 
-export const profitLossData = [
-  {month: 'Jan', profit: 20, trend: 15},
-  {month: 'Feb', profit: -10, trend: 5},
-  {month: 'Mar', profit: 35, trend: 20},
-  {month: 'Apr', profit: -25, trend: -5},
-  {month: 'May', profit: 15, trend: 10},
-  {month: 'Jun', profit: -5, trend: 8},
-];
-
 export const salesData = [
   {month: 'Jan', sales: 45, target: 50, errorHigh: 48, errorLow: 42},
   {month: 'Feb', sales: 52, target: 50, errorHigh: 56, errorLow: 48},

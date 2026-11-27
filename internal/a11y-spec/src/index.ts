@@ -61,6 +61,7 @@ export {
   type CheckAccessibilitySpecOptions,
   type ExpectationResult,
   type KnownFailure,
+  type KnownFailureEngine,
   type ResultStatus,
 } from './check';
 

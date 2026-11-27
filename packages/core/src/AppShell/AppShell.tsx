@@ -40,6 +40,7 @@ import {
   spacingVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {isModifiedClick} from '../DropdownMenu/menuItemRoles';
 import {Layout} from '../Layout/Layout';
 import {LayoutHeader} from '../Layout/LayoutHeader';
 import {LayoutPanel} from '../Layout/LayoutPanel';
@@ -52,8 +53,10 @@ import {
   LayoutSlotsContext,
 } from '../Layout/LayoutSlotsContext';
 import {layoutReset} from '../Layout/layoutReset';
-import {MobileNavToggle} from '../MobileNav/MobileNavToggle';
-import {MAX_CLOSE_DELAY_MS as MOBILE_NAV_MAX_CLOSE_DELAY_MS} from '../MobileNav/MobileNav';
+import {
+  MobileNavDrawerLoad,
+  MobileNavToggle,
+} from '../MobileNav/MobileNavToggle';
 import {SideNavRenderContext} from '../SideNav/SideNavRenderContext';
 import {SideNavShellContext, type SideNavShell} from '../SideNav/railMotion';
 import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
@@ -62,6 +65,7 @@ import {
   landLayoutGlide,
   layoutMotionFor,
   layoutStartFor,
+  layoutStartReaderFor,
   playLayoutFrames,
   playLayoutSwap,
   reportLayoutChange,
@@ -73,7 +77,10 @@ import {
   TopNavUnreadRegionContext,
 } from '../TopNav/TopNavRenderContext';
 import {TopNavMobileContentContext} from '../TopNav/TopNavMobileContentContext';
-import {AppShellMobileContext} from './AppShellMobileContext';
+import {
+  AppShellMobileContext,
+  MAX_CLOSE_DELAY_MS as MOBILE_NAV_MAX_CLOSE_DELAY_MS,
+} from './AppShellMobileContext';
 import {UNREAD_STYLES, unreadWidthPoint} from './unreadWidthPoint';
 import {AppShellNestingContext, useAppShellMainId} from './useAppShellMainId';
 import type {AppShellMobileContextValue} from './AppShellMobileContext';
@@ -86,7 +93,6 @@ import {
 } from '../utils/focusOutline.stylex';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useMediaQuery} from '../hooks/useMediaQuery';
-import {matchesMediaQuery} from '../utils/coarsePointer';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {themeProps} from '../utils/themeProps';
 import {useThemeDefinition} from '../theme/useTheme';
@@ -94,7 +100,7 @@ import {
   DEFAULT_WIDTH_BREAKPOINTS,
   type WidthBreakpointName,
   widthBelowFeature,
-} from '../theme/themeAdaptations';
+} from '../theme/breakpoints';
 import type {AppShellVariantMap} from './index';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -105,6 +111,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/AppShell/AppShell.generated';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 const HasActivity = typeof React.Activity !== 'undefined';
@@ -671,23 +678,23 @@ export function AppShell({
   if (isMobileNavOpen && !isMobileNavCloseHeld) {
     setIsMobileNavCloseHeld(true);
   }
+  // Under reduced motion (the setting, or a theme's reducedMotion: 'always')
+  // the drawer closes at once, so the hold ends at once.
+  const reducedMotion = useReducesMotion();
   // Syncs the mobile-nav close hold with a timer. The hold ends after the
   // slide-out delay.
   useEffect(() => {
     if (!HasActivity || isMobileNavOpen) {
       return;
     }
-    const delayMs = matchesMediaQuery(
-      window,
-      '(prefers-reduced-motion: reduce)',
-    )
+    const delayMs = reducedMotion
       ? 0
       : MOBILE_NAV_MAX_CLOSE_DELAY_MS + ACTIVITY_HIDE_BUFFER_MS;
     const timeout = setTimeout(() => {
       setIsMobileNavCloseHeld(false);
     }, delayMs);
     return () => clearTimeout(timeout);
-  }, [isMobileNavOpen]);
+  }, [isMobileNavOpen, reducedMotion]);
   const isMobileNavActivityVisible = isMobileNavOpen || isMobileNavCloseHeld;
 
   const mobileNavOnOpenChange = mobileNavConfig?.onOpenChange;
@@ -706,12 +713,19 @@ export function AppShell({
   );
 
   const mainContentId = useAppShellMainId();
-  // Move focus to the main content container when the skip link is activated.
-  // Hash navigation alone doesn't reliably move focus in every browser, so
-  // focus the target explicitly (it's focusable via tabIndex={-1}).
-  const handleSkipLinkClick = useCallback(() => {
-    document.getElementById(mainContentId)?.focus();
-  }, [mainContentId]);
+  // Hash navigation alone does not move focus in every browser, so the skip
+  // link focuses main itself (main has tabIndex={-1}). A plain activation
+  // does not follow the href: a hash router reads the new hash as a route
+  // and leaves the page. The href stays for a page without script.
+  const handleSkipLinkClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (!isModifiedClick(event)) {
+        event.preventDefault();
+      }
+      document.getElementById(mainContentId)?.focus();
+    },
+    [mainContentId],
+  );
 
   // Main draws its focus ring only for focus a Tab press moved onto it, and
   // keeps it for as long as that focus stays, even once the content fits.
@@ -1016,8 +1030,10 @@ export function AppShell({
   } | null>(null);
   // The running swap: when it started and its wraps' starting opacities, so a
   // change made during it starts its cross-fade from what the content shows.
+  // Its start can still move after the swap is made (layoutStartReaderFor),
+  // so it is read when needed.
   const lastSwapRef = useRef<{
-    startedAt: number;
+    startedAt: () => number;
     held: number;
     entering: number;
   } | null>(null);
@@ -1059,7 +1075,7 @@ export function AppShell({
           // timeline still reads.
           const elapsed = Math.max(
             0,
-            layoutStartFor(main.ownerDocument) - last.startedAt,
+            layoutStartFor(main.ownerDocument) - last.startedAt(),
           );
           if (elapsed < motion.progress.durationMs) {
             const p = 1 - motion.progress.remaining(elapsed);
@@ -1120,7 +1136,7 @@ export function AppShell({
         }
         const {held, entering} = pending;
         lastSwapRef.current = {
-          startedAt: layoutStartFor(main.ownerDocument),
+          startedAt: layoutStartReaderFor(main.ownerDocument),
           held,
           entering,
         };
@@ -1360,91 +1376,95 @@ export function AppShell({
 
   return (
     <AppShellMobileContext value={mobileContextValue}>
-      <div
-        {...rest}
-        ref={useMergedRefs(ref, shellRef)}
-        data-testid={dataTestId}
-        {...mergeProps(
-          themeProps('app-shell', {variant}),
-          stylex.props(
-            styles.root,
-            // A layout root (FR18): nothing an ancestor Layout, Card or
-            // Section publishes reaches the shell (component:Layout FR8).
-            layoutReset,
-            variant === 'wash'
-              ? styles.variantWash
-              : variant === 'surface'
-                ? styles.variantSurface
-                : variant === 'section'
-                  ? styles.variantSection
-                  : styles.variantElevated,
-            isFill ? styles.rootFill : styles.rootAuto,
-            xstyle,
-          ),
-          className,
-          style,
-        )}>
-        {/* The Layout area, slot and divider defaults an ancestor Layout
+      <MobileNavDrawerLoad>
+        <div
+          {...rest}
+          ref={useMergedRefs(ref, shellRef)}
+          data-testid={dataTestId}
+          {...mergeProps(
+            themeProps('app-shell', {variant}),
+            stylex.props(
+              styles.root,
+              // A layout root (FR18): nothing an ancestor Layout, Card or
+              // Section publishes reaches the shell (component:Layout FR8).
+              layoutReset,
+              variant === 'wash'
+                ? styles.variantWash
+                : variant === 'surface'
+                  ? styles.variantSurface
+                  : variant === 'section'
+                    ? styles.variantSection
+                    : styles.variantElevated,
+              isFill ? styles.rootFill : styles.rootAuto,
+              xstyle,
+            ),
+            className,
+            style,
+          )}>
+          {/* The Layout area, slot and divider defaults an ancestor Layout
             provides stop at the root too, for every child (FR18). */}
-        <LayoutAreaContext value={null}>
-          <LayoutSlotsContext value={DEFAULT_LAYOUT_SLOTS}>
-            <LayoutDividerContext value={null}>
-              <LayoutContainerContext value={null}>
-                {/* Skip-to-content link */}
-                <a
-                  href={`#${mainContentId}`}
-                  onClick={handleSkipLinkClick}
-                  {...focusOutlineProps.focusVisible(styles.skipLink)}
-                  data-testid="skip-to-content">
-                  {t('@astryx.appShell.skipToContent')}
-                </a>
+          <LayoutAreaContext value={null}>
+            <LayoutSlotsContext value={DEFAULT_LAYOUT_SLOTS}>
+              <LayoutDividerContext value={null}>
+                <LayoutContainerContext value={null}>
+                  {/* Skip-to-content link */}
+                  <a
+                    href={`#${mainContentId}`}
+                    onClick={handleSkipLinkClick}
+                    {...focusOutlineProps.focusVisible(styles.skipLink)}
+                    data-testid="skip-to-content">
+                    {t('@astryx.appShell.skipToContent')}
+                  </a>
 
-                <Layout
-                  height={height}
-                  padding={0}
-                  header={
-                    <>
-                      {headerContent}
-                      {autoMobileTopBar}
-                    </>
-                  }
-                  start={sideNavContent}
-                  content={mainContent}
-                />
+                  <Layout
+                    height={height}
+                    padding={0}
+                    header={
+                      <>
+                        {headerContent}
+                        {autoMobileTopBar}
+                      </>
+                    }
+                    start={sideNavContent}
+                    content={mainContent}
+                  />
 
-                {/* Mobile nav — always mounted below breakpoint via Activity so DOM
+                  {/* Mobile nav — always mounted below breakpoint via Activity so DOM
             presence detection works. Hidden until the drawer opens. */}
-                {shouldRenderMobileNavReactNode && mobileNavReactNode}
-                {shouldRenderConfigContent && mobileNavConfigContent}
-                {isBelowBreakpoint &&
-                  !mobileNavDisabled &&
-                  mobileNavReactNode == null &&
-                  !mobileNavConfigContent && (
-                    <ActivityWrapper
-                      mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
-                      {/* SideNav drawer — always mounted so presence detection works.
+                  {shouldRenderMobileNavReactNode && mobileNavReactNode}
+                  {shouldRenderConfigContent && mobileNavConfigContent}
+                  {isBelowBreakpoint &&
+                    !mobileNavDisabled &&
+                    mobileNavReactNode == null &&
+                    !mobileNavConfigContent && (
+                      <ActivityWrapper
+                        mode={
+                          isMobileNavActivityVisible ? 'visible' : 'hidden'
+                        }>
+                        {/* SideNav drawer — always mounted so presence detection works.
                 Hidden when TopNav owns the drawer (combined mode passes
                 sideNav via TopNav's mobile content context instead). */}
-                      {hasSideNav && !hasTopNav && (
-                        <SideNavRenderContext value="drawer">
-                          {sideNav}
-                        </SideNavRenderContext>
-                      )}
-                      {hasTopNav && (
-                        <TopNavMobileContentContext
-                          value={drawerMobileContentValue}>
-                          <TopNavRenderContext value="drawer">
-                            {topNav}
-                          </TopNavRenderContext>
-                        </TopNavMobileContentContext>
-                      )}
-                    </ActivityWrapper>
-                  )}
-              </LayoutContainerContext>
-            </LayoutDividerContext>
-          </LayoutSlotsContext>
-        </LayoutAreaContext>
-      </div>
+                        {hasSideNav && !hasTopNav && (
+                          <SideNavRenderContext value="drawer">
+                            {sideNav}
+                          </SideNavRenderContext>
+                        )}
+                        {hasTopNav && (
+                          <TopNavMobileContentContext
+                            value={drawerMobileContentValue}>
+                            <TopNavRenderContext value="drawer">
+                              {topNav}
+                            </TopNavRenderContext>
+                          </TopNavMobileContentContext>
+                        )}
+                      </ActivityWrapper>
+                    )}
+                </LayoutContainerContext>
+              </LayoutDividerContext>
+            </LayoutSlotsContext>
+          </LayoutAreaContext>
+        </div>
+      </MobileNavDrawerLoad>
     </AppShellMobileContext>
   );
 }

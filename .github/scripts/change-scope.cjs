@@ -33,13 +33,14 @@ const CHANGESET_PATTERN = /^\.changeset\/(?!README\.md$)[^/]+\.md$/;
 // runs the Lab tests and the Storybook build (spec:AST-030 FR26).
 const LAB_ROOT = 'packages/lab/';
 
-// A new Lab component also adds its routes, its CLI discovery entry and its
-// Storybook story. These three files still count toward a Lab-only change when
-// their diff names only Lab components the change itself carries. The diff is
-// read as data (GitHub's patch text, never run); a missing patch, or any line
-// the checks do not recognize, keeps the change out of the Lab-only lane.
+// A new Lab component also adds its routes and its Storybook story. These two
+// files still count toward a Lab-only change when their diff names only Lab
+// components the change itself carries. The CLI's official package list is
+// not one of them: it is derived when the CLI is packed, never committed. The
+// diff is read as data (GitHub's patch text, never run); a missing patch, or
+// any line the checks do not recognize, keeps the change out of the Lab-only
+// lane.
 const ROUTES_LOCK = 'internal/shadcn-registry/routes.lock.json';
-const OFFICIAL_PACKAGES = 'packages/cli/assets/discover/official-packages.json';
 const LAB_STORY =
   /^apps\/storybook\/stories\/([A-Z][A-Za-z0-9]*)\.stories\.tsx$/;
 const LAB_COMPONENT_DIR = /^packages\/lab\/src\/([A-Z][A-Za-z0-9]*)\//;
@@ -102,45 +103,6 @@ function routesLockNamesLabOnly(patch, slugs) {
   );
 }
 
-// The Lab package's line range in the base's official-packages.json.
-function labPackageLines(baseText) {
-  const lines = baseText.split('\n');
-  const start = lines.findIndex(line =>
-    line.includes('"package": "@astryxdesign/lab"'),
-  );
-  if (start === -1) return null;
-  const next = lines.findIndex(
-    (line, index) => index > start && line.includes('"package": "'),
-  );
-  return {first: start + 1, last: next === -1 ? lines.length : next};
-}
-
-function officialPackagesNamesLabOnly(patch, names, baseText) {
-  if (typeof baseText !== 'string') return false;
-  const range = labPackageLines(baseText);
-  if (range == null) return false;
-  const hunks = [
-    ...patch.matchAll(/^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/gm),
-  ];
-  if (hunks.length === 0) return false;
-  // Every hunk edits inside the Lab package's entry of the base file.
-  const inLab = hunks.every(([, start, count = '1']) => {
-    const first = Number(start);
-    const last = first + Math.max(Number(count), 1) - 1;
-    return first > range.first && last < range.last;
-  });
-  const lines = changedLines(patch);
-  return (
-    inLab &&
-    lines.length > 0 &&
-    lines.every(({text}) => {
-      if (['{', '}', '"kind": "component"'].includes(text)) return true;
-      const name = /^"name": "([^"]+)"$/.exec(text);
-      return name != null && names.has(name[1]);
-    })
-  );
-}
-
 function storyImportsLab(patch) {
   const added = patch
     .split('\n')
@@ -153,10 +115,9 @@ function storyImportsLab(patch) {
 /**
  * Whether a Lab entry file's change belongs to the Lab components this change
  * carries (spec:AST-030 FR26). `names` are the Lab component folders the change
- * touches; `patches` maps a path to GitHub's patch text; `officialPackagesBase`
- * is the base's official-packages.json.
+ * touches; `patches` maps a path to GitHub's patch text.
  */
-function isLabEntryChange(change, {names, patches, officialPackagesBase}) {
+function isLabEntryChange(change, {names, patches}) {
   const patch = patches?.[change.filename];
   if (
     typeof patch !== 'string' ||
@@ -167,8 +128,6 @@ function isLabEntryChange(change, {names, patches, officialPackagesBase}) {
   const slugs = new Set([...names].map(labRouteSlug));
   if (change.filename === ROUTES_LOCK)
     return routesLockNamesLabOnly(patch, slugs);
-  if (change.filename === OFFICIAL_PACKAGES)
-    return officialPackagesNamesLabOnly(patch, names, officialPackagesBase);
   const story = LAB_STORY.exec(change.filename);
   // Only a new story: its whole text is in the patch.
   return (
@@ -187,12 +146,13 @@ const SURFACES = Object.freeze({
   SHARED_OR_UNKNOWN: 'shared-or-unknown',
 });
 
-// The recorded Node test times. They decide only how the Node legs are
-// scheduled, never what a test checks, so a change to them alone runs the
-// Node leg plan's check and the tests that read the times (spec:AST-030
-// FR13). Beside any other change they count as test configuration and run the
-// full suite.
-const RECORDED_TIMES = /^scripts\/vitest-node-durations(?:\.[\w-]+)?\.json$/;
+// The recorded test times: the Node legs' and the interaction legs'. They
+// decide only how the legs are scheduled, never what a test checks, so a
+// change to them alone runs the Node leg plan's check and the tests that read
+// the times (spec:AST-030 FR13). Beside any other change they count as test
+// configuration and run the full suite.
+const RECORDED_TIMES =
+  /^(?:scripts\/vitest-node-durations(?:\.[\w-]+)?\.json|\.github\/playwright-leg-durations\.json)$/;
 
 const RUNTIME_PACKAGE_SURFACES = Object.freeze([
   ['packages/core/', 'runtime:core'],
@@ -348,10 +308,7 @@ function normalizeChange(change) {
   };
 }
 
-function classifyChanges(
-  changes,
-  {expectedCount, patches = null, officialPackagesBase = null} = {},
-) {
+function classifyChanges(changes, {expectedCount, patches = null} = {}) {
   const normalized = changes
     .map(normalizeChange)
     .filter(change => change.filename);
@@ -434,7 +391,6 @@ function classifyChanges(
         isLabEntryChange(change, {
           names: labNames,
           patches,
-          officialPackagesBase,
         }),
       )
       .map(change => change.filename),
@@ -539,20 +495,17 @@ if (require.main === module) {
     process.stdout.write(`${JSON.stringify(classifyPaths(paths))}\n`);
   } else {
     // `--patches <file>`: GitHub's patch text per path, as JSON, for the Lab
-    // entry files. `--official-packages-base <file>`: the base's copy.
+    // entry files. An older caller's `--official-packages-base` is ignored.
     const flag = name => {
       const index = process.argv.indexOf(name);
       return index === -1 ? null : process.argv[index + 1];
     };
     const readJson = file =>
       file ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
-    const readText = file =>
-      file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
     const result = classifyChanges(
       parseNameStatus(fs.readFileSync(0, 'utf8')),
       {
         patches: readJson(flag('--patches')),
-        officialPackagesBase: readText(flag('--official-packages-base')),
       },
     );
     if (result.specChangesetConflict) {
@@ -576,7 +529,6 @@ if (require.main === module) {
 
 module.exports = {
   LAB_ROOT,
-  OFFICIAL_PACKAGES,
   ROUTES_LOCK,
   NODE_TOOLING_PATHS,
   SURFACES,

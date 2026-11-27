@@ -66,6 +66,7 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 // =============================================================================
 // Styles
 // =============================================================================
@@ -116,7 +117,10 @@ const styles = stylex.create({
     height: '1em',
     fontSize: 'inherit',
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   chevronOpen: {
@@ -159,9 +163,9 @@ const styles = stylex.create({
     },
   },
   // Clamp the anchored layer to the space available below the nav so a tall
-  // menu never runs off the bottom of the viewport. The layer is positioned
-  // with position-area: self-block-end, so its containing block spans from
-  // the nav's block-end to the viewport edge — 100% is exactly that space.
+  // menu never runs off the bottom of the viewport. The layer's insets span
+  // from the nav's block-end to the viewport edge, so `stretch` is exactly
+  // that space less the layer's clearance and gutter margins.
   // The layer is a flex column so panelContainer can shrink and scroll its
   // own content, keeping the surface radius/shadow static at the edges.
   // Internal scroll is a stopgap until the mobile bottom-sheet lands.
@@ -171,7 +175,7 @@ const styles = stylex.create({
       ':popover-open': 'flex',
     },
     flexDirection: 'column',
-    maxHeight: `calc(100% - ${spacingVars['--spacing-3']})`,
+    maxHeight: stylex.firstThatWorks('stretch', '-webkit-fill-available'),
   },
   // Visual styles for the panel content container.
   panelContainer: {
@@ -242,7 +246,10 @@ const styles = stylex.create({
     height: '1em',
     fontSize: 'inherit',
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   drawerChevronExpanded: {

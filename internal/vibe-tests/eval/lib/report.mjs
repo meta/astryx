@@ -64,10 +64,11 @@ export function summarizeRecords(records, armIds, taskIds, spentUsd) {
     if (record.status !== 'graded') notGraded[record.status] = (notGraded[record.status] ?? 0) + 1;
   }
   const recordCost = records.reduce((sum, record) => sum + (record.agent?.costUsd ?? 0), 0);
-  const warned = graded
-    .filter(record => (record.audit?.warnings?.length ?? 0) > 0)
-    .map(record => `${record.task} ${record.arm} r${record.rep}`);
-  return {arms, tasks, difference, notGraded, warned, totalCostUsd: spentUsd ?? recordCost};
+  const runsWith = key =>
+    graded.filter(record => (record.audit?.[key]?.length ?? 0) > 0).map(record => `${record.task} ${record.arm} r${record.rep}`);
+  const warned = runsWith('warnings');
+  const usedTemp = runsWith('tempPaths');
+  return {arms, tasks, difference, notGraded, warned, usedTemp, totalCostUsd: spentUsd ?? recordCost};
 }
 
 export function renderMarkdown(meta, summary) {
@@ -99,6 +100,10 @@ export function renderMarkdown(meta, summary) {
   if (notGraded.length > 0) lines.push('', `Not graded and not in the pass rates: ${notGraded.join(', ')}. See records.`);
   // The audit cannot see every read, so a person reviews each run that named a path outside.
   if (summary.warned.length > 0) lines.push('', `Audit warnings to review (${summary.warned.length} runs): ${summary.warned.join(', ')}.`);
+  // The agents that run at the same time share the system temp folder, so a file one agent puts there another can read.
+  if (summary.usedTemp?.length > 0) {
+    lines.push('', `Paths in the shared temp folder, outside every run (${summary.usedTemp.length} runs): ${summary.usedTemp.join(', ')}.`);
+  }
   return `${lines.join('\n')}\n`;
 }
 
@@ -118,7 +123,7 @@ export function renderHtml(meta, summary, records, runDir) {
         .map(step => `<li class="${step.passed ? 'ok' : 'bad'}">${escapeHtml(step.name)}${step.error ? `: ${escapeHtml(step.error)}` : ''}</li>`)
         .join('');
       const verdict = record.status !== 'graded' ? record.status : record.passed ? 'pass' : `fail: ${record.failure}`;
-      return `<section class="run ${record.passed ? 'pass' : 'fail'}"><h3>${escapeHtml(record.task)} · ${escapeHtml(record.arm)} · run ${record.rep}</h3><p>${escapeHtml(verdict)} · ${money(record.agent?.costUsd)} · ${record.agent?.turns ?? 'n/a'} turns · audit warnings ${record.audit?.warnings?.length ?? 0}</p><ol>${steps}</ol><div class="shots">${images}</div></section>`;
+      return `<section class="run ${record.passed ? 'pass' : 'fail'}"><h3>${escapeHtml(record.task)} · ${escapeHtml(record.arm)} · run ${record.rep}</h3><p>${escapeHtml(verdict)} · ${money(record.agent?.costUsd)} · ${record.agent?.turns ?? 'n/a'} turns · audit warnings ${record.audit?.warnings?.length ?? 0} · temp paths ${record.audit?.tempPaths?.length ?? 0}</p><ol>${steps}</ol><div class="shots">${images}</div></section>`;
     })
     .join('\n');
   const markdown = escapeHtml(renderMarkdown(meta, summary));

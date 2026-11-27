@@ -20,7 +20,13 @@ import {computerAgentTextSettings} from '../env/user-settings.mjs';
 import {PathSafetyError, assertWithin} from '../fs/path-safety.mjs';
 import {loadModuleWithParser} from '../fs/module-loader.mjs';
 import {parseConfig} from '../../authoring/config/parse.mjs';
-import {placeSkillFiles, savedProjectPlaces} from './skill-places.mjs';
+import {
+  COMPUTER_SKILL_NAME,
+  PROJECT_SKILL_NAME,
+  placeFolders,
+  placeSkillFiles,
+  savedProjectPlaces,
+} from './skill-places.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 import {
   keptReason,
@@ -62,17 +68,21 @@ export async function readProjectPlaces(projectRoot) {
  *   folder in its table holding only an unedited Astryx skill file while the
  *   text is installed and the skill file exists), as
  *   through `~/.claude/skills`; `astryx init --remove --to user` removes it.
+ * - `not-astryx`: in a project place, a skill folder that resolves outside
+ *   the project (an integration skill's folder linked out; init refuses that
+ *   for the project skill); a link inside the project joins copies that
+ *   share one file, written once.
  * Any other file, a linked skill folder included, is read by its own
  * markers and hash: an unedited Astryx file is the place's own, and a file
- * Astryx did not write is kept. In a project place a link stays inside the
- * project (init refuses one that leaves it), so the copies it joins share one
- * file, written once.
+ * Astryx did not write is kept.
  * A folder at an agent's skills path that the computer-level text never
  * made is the saved folder's own.
  * @param {string} file
- * @returns {'computer-skill' | null}
+ * @param {import('./skill-places.mjs').SkillPlace} place
+ * @param {string | null} projectRoot
+ * @returns {'computer-skill' | 'not-astryx' | null}
  */
-function otherPlacesFile(file) {
+function otherPlacesFile(file, place, projectRoot) {
   const dir = path.dirname(file);
   const realOf = (/** @type {string} */ p) => {
     try {
@@ -96,6 +106,11 @@ function otherPlacesFile(file) {
       }
     }
   }
+  if (place.scope !== 'computer') {
+    const root = projectRoot == null ? null : realOf(projectRoot);
+    const within = root != null && (at === root || at.startsWith(root + path.sep));
+    return root == null || within ? null : 'not-astryx';
+  }
   return null;
 }
 
@@ -103,31 +118,35 @@ function otherPlacesFile(file) {
  * A skill file's state, a file that belongs to another place
  * (otherPlacesFile) reading as one Astryx did not write for this place.
  * @param {string} file
- * @param {string} text
- * @returns {import('./managed-skill-file.mjs').ManagedFileState}
- */
-function placeFileState(file, text) {
-  return otherPlacesFile(file) ? 'foreign' : managedFileState(file, text);
-}
-
-/**
- * What writing `text` to `place` would do to each of its skill files. The
- * copies of one place are written together or not at all: when any is a
- * person's own (edited, or not Astryx's), each is kept, so every agent reads
- * one text. `writeSkillPlace` writes this plan, and `upgrade` reports it.
  * @param {import('./skill-places.mjs').SkillPlace} place
  * @param {string | null} projectRoot
  * @param {string} text
+ * @returns {import('./managed-skill-file.mjs').ManagedFileState}
+ */
+function placeFileState(file, place, projectRoot, text) {
+  return otherPlacesFile(file, place, projectRoot) ? 'foreign' : managedFileState(file, text);
+}
+
+/**
+ * What writing `text` to `place` would do to each file one skill has there:
+ * the Astryx skill, or an integration's (`skill`). The copies of one skill
+ * are written together or not at all: when any is a person's own (edited, or
+ * not Astryx's), each is kept, so every agent reads one text.
+ * `writeSkillPlace` writes this plan, and `upgrade` reports it.
+ * @param {import('./skill-places.mjs').SkillPlace} place
+ * @param {string | null} projectRoot
+ * @param {string} text
+ * @param {string} [skill] an integration skill's name
  * @returns {Array<{file: string, state: import('./managed-skill-file.mjs').ManagedFileState, plan: 'current' | 'create' | 'update' | 'kept', reason?: 'edited' | 'not-astryx' | 'pair-kept' | 'computer-skill'}>}
  */
-export function planSkillPlace(place, projectRoot, text) {
-  const files = placeSkillFiles(place, projectRoot);
-  const states = files.map(file => ({file, state: placeFileState(file, text)}));
+export function planSkillPlace(place, projectRoot, text, skill) {
+  const files = placeSkillFiles(place, projectRoot, skill);
+  const states = files.map(file => ({file, state: placeFileState(file, place, projectRoot, text)}));
   const owned = (/** @type {string} */ state) => state === 'edited' || state === 'foreign';
   const pairKept = files.length > 1 && states.some(each => owned(each.state));
   return states.map(({file, state}) => {
     if (owned(state)) {
-      const reason = otherPlacesFile(file) ?? keptReason(/** @type {'edited' | 'foreign'} */ (state));
+      const reason = otherPlacesFile(file, place, projectRoot) ?? keptReason(/** @type {'edited' | 'foreign'} */ (state));
       return {file, state, plan: /** @type {const} */ ('kept'), reason};
     }
     if (pairKept) return {file, state, plan: /** @type {const} */ ('kept'), reason: /** @type {const} */ ('pair-kept')};
@@ -140,16 +159,19 @@ export function planSkillPlace(place, projectRoot, text) {
 }
 
 /**
- * Write `text` to each skill file of `place`, as `planSkillPlace` plans it.
+ * Write `text` to each file one skill has in `place`, as `planSkillPlace`
+ * plans it; an integration skill's rows name it.
  * @param {import('./skill-places.mjs').SkillPlace} place
  * @param {string | null} projectRoot
  * @param {string} text
- * @returns {Array<{file: string, action: import('./managed-skill-file.mjs').ManagedFileAction, reason?: 'edited' | 'not-astryx' | 'pair-kept' | 'computer-skill'}>}
+ * @param {string} [skill] an integration skill's name
+ * @returns {Array<{file: string, skill?: string, action: import('./managed-skill-file.mjs').ManagedFileAction, reason?: 'edited' | 'not-astryx' | 'pair-kept' | 'computer-skill'}>}
  */
-export function writeSkillPlace(place, projectRoot, text) {
-  const plan = planSkillPlace(place, projectRoot, text);
+export function writeSkillPlace(place, projectRoot, text, skill) {
+  const named = skill ? {skill} : {};
+  const plan = planSkillPlace(place, projectRoot, text, skill);
   if (plan.some(each => each.reason === 'pair-kept')) {
-    return plan.map(({file, reason}) => ({file, action: /** @type {const} */ ('kept'), reason}));
+    return plan.map(({file, reason}) => ({file, ...named, action: /** @type {const} */ ('kept'), reason}));
   }
   // Every copy must be writable before the first is written, so a refused
   // copy never leaves the place on two texts.
@@ -158,8 +180,8 @@ export function writeSkillPlace(place, projectRoot, text) {
   }
   return plan.map(({file, plan: planned, reason}) =>
     planned === 'kept'
-      ? {file, action: /** @type {const} */ ('kept'), reason}
-      : {file, ...writeManagedFile(file, text)},
+      ? {file, ...named, action: /** @type {const} */ ('kept'), reason}
+      : {file, ...named, ...writeManagedFile(file, text)},
   );
 }
 
@@ -183,19 +205,24 @@ function assertWritable(file) {
  * each folder that leaves empty, up to the folder the place names.
  * @param {import('./skill-places.mjs').SkillPlace} place
  * @param {string | null} projectRoot
- * @returns {Array<{file: string, action: import('./managed-skill-file.mjs').ManagedFileAction, reason?: 'edited' | 'not-astryx' | 'computer-skill'}>}
+ * @returns {Array<{file: string, skill?: string, action: import('./managed-skill-file.mjs').ManagedFileAction, reason?: 'edited' | 'not-astryx' | 'computer-skill'}>}
  */
 export function removeSkillPlace(place, projectRoot) {
   // Folders the removal empties go too, below the folder the place names
   // (or the project root): that folder may be a person's, so it stays.
   const stop = place.kind !== 'folder' ? projectRoot : place.dir;
-  return placeSkillFiles(place, projectRoot).map(file => {
-    const other = otherPlacesFile(file);
-    if (other) return {file, action: /** @type {const} */ ('kept'), reason: other};
+  // The integration skills Astryx wrote there go with the project skill;
+  // their rows name the skill.
+  const own = placeSkillFiles(place, projectRoot);
+  const files = [...own, ...leftoverIntegrationSkills(place, projectRoot, new Set())];
+  return files.map(file => {
+    const named = own.includes(file) ? {} : {skill: path.basename(path.dirname(file))};
+    const other = otherPlacesFile(file, place, projectRoot);
+    if (other) return {file, ...named, action: /** @type {const} */ ('kept'), reason: other};
     const result = removeManagedFileIfOwned(file);
     if (result.action === 'removed' && stop)
       removeEmptyFolders(path.dirname(file), stop);
-    return {file, ...result};
+    return {file, ...named, ...result};
   });
 }
 
@@ -259,16 +286,17 @@ export function skillPlaceEscape(place, projectRoot) {
 }
 
 /**
- * The state of each skill file of `place` against `text`.
+ * The state of each file one skill has in `place` against `text`.
  * @param {import('./skill-places.mjs').SkillPlace} place
  * @param {string | null} projectRoot
  * @param {string} text
+ * @param {string} [skill] an integration skill's name; the Astryx skill without it
  * @returns {Array<{file: string, state: import('./managed-skill-file.mjs').ManagedFileState}>}
  */
-export function inspectSkillPlace(place, projectRoot, text) {
-  return placeSkillFiles(place, projectRoot).map(file => ({
+export function inspectSkillPlace(place, projectRoot, text, skill) {
+  return placeSkillFiles(place, projectRoot, skill).map(file => ({
     file,
-    state: placeFileState(file, text),
+    state: placeFileState(file, place, projectRoot, text),
   }));
 }
 
@@ -290,4 +318,57 @@ export function keptText(reason, editedHint, cwd) {
   }
   if (reason === 'not-written') return 'not written: a copy of this place could not be written, so neither was';
   return 'kept, not created by Astryx';
+}
+
+/**
+ * The integration skills Astryx wrote in `place` that no loaded integration
+ * declares any more, as after a package was removed: each skill folder whose
+ * SKILL.md is an unedited Astryx file, other than the project and computer
+ * skills and the names in `keep`.
+ * @param {import('./skill-places.mjs').SkillPlace} place
+ * @param {string | null} projectRoot
+ * @param {ReadonlySet<string>} keep
+ * @returns {string[]} the SKILL.md files
+ */
+export function leftoverIntegrationSkills(place, projectRoot, keep) {
+  /** @type {string[]} */
+  const files = [];
+  // Integration skills are written only into project places; a folder saved
+  // for this computer may hold another project's, which stay.
+  if (place.scope !== 'project') return files;
+  for (const folder of placeFolders(place, projectRoot)) {
+    let names;
+    try {
+      names = fs.readdirSync(folder);
+    } catch {
+      continue;
+    }
+    for (const name of names.sort()) {
+      if (name === PROJECT_SKILL_NAME || name === COMPUTER_SKILL_NAME || keep.has(name)) continue;
+      const file = path.join(folder, name, 'SKILL.md');
+      // Astryx writes integration skills as real folders: a linked skill
+      // folder is someone else's, so the sweep never reaches through it.
+      let linked;
+      try {
+        linked = fs.lstatSync(path.dirname(file)).isSymbolicLink();
+      } catch {
+        continue;
+      }
+      if (!linked && placeFileState(file, place, projectRoot, '') === 'differs') files.push(file);
+    }
+  }
+  return files;
+}
+
+/**
+ * Remove integration skill files, and each skill folder that leaves empty.
+ * @param {readonly string[]} files
+ * @returns {Array<{file: string, skill: string, action: import('./managed-skill-file.mjs').ManagedFileAction, reason?: 'edited' | 'not-astryx'}>}
+ */
+export function removeIntegrationSkillFiles(files) {
+  return files.map(file => ({
+    file,
+    skill: path.basename(path.dirname(file)),
+    ...removeManagedFileIfOwned(file),
+  }));
 }

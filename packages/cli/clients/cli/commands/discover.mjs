@@ -67,6 +67,7 @@ const ITEM_FIELDS = [
   'themes',
   'codemods',
   'agentDocs',
+  'skills',
   'iconSets',
 ];
 

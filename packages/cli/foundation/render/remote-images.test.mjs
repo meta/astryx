@@ -9,7 +9,7 @@
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {JSDOM} from 'jsdom';
 import {render} from '../../api/render/render.mjs';
 import {imageRequest, imageTypeOf, remoteImages} from './remote-images.mjs';
@@ -21,6 +21,7 @@ import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
+import {pageDom, pageDrawn, pageTasks} from '../../test-utils/page-dom.mjs';
 
 /** A fetch answer. @param {any} body @param {ResponseInit} [init] */
 const respond = (body, init) => new globalThis.Response(body, init);
@@ -389,8 +390,13 @@ describe('imageRequest', () => {
     await heldArrived;
     stop.abort();
     await expect(asked).rejects.toThrow();
-    await new Promise(resolve => setTimeout(resolve, 100));
-    expect(holdClosed).toBe(true);
+    // The server sees the closed socket in a later turn of the event loop,
+    // which a loaded machine can delay past any fixed wait. The request has
+    // no timeout, so nothing but the stop closes this socket.
+    await vi.waitFor(() => expect(holdClosed).toBe(true), {
+      timeout: 10_000,
+      interval: 10,
+    });
   });
 });
 
@@ -440,8 +446,7 @@ describe('imageSinks', () => {
     );
     // A style takes the carried data before the browser next draws: set on
     // an element in the page, or on one the script then adds.
-    const settle = () =>
-      new Promise(resolve => dom.window.setTimeout(resolve, 0));
+    const settle = () => pageTasks(dom);
     const box = doc.createElement('div');
     doc.body.append(box);
     box.style.backgroundImage = 'url("https://x.example/a.png")';
@@ -487,13 +492,9 @@ describe('imageSinks', () => {
  * @param {string} html
  */
 async function opened(html) {
-  const dom = new JSDOM(html, {
-    runScripts: 'dangerously',
-    pretendToBeVisual: true,
-  });
-  const settle = () =>
-    new Promise(resolve => dom.window.setTimeout(resolve, 100));
-  await settle();
+  const dom = await pageDom(html);
+  const settle = () => pageTasks(dom);
+  await pageDrawn(dom);
   const doc = dom.window.document;
   return {
     doc,
@@ -507,6 +508,27 @@ async function opened(html) {
 }
 
 describe('a render with images from the web', () => {
+  it('fetches nothing for a page it refuses as not Astryx', async () => {
+    const dir = makeLinkedFixture('astryx-render-remote-refused-', [
+      'react',
+      'react-dom',
+    ]);
+    try {
+      const file = path.join(dir, 'page.jsx');
+      fs.writeFileSync(
+        file,
+        'export default function Page() {\n  return <img src="https://example.com/shoe.png" alt="Shoe" />;\n}\n',
+      );
+      const {fetch, asked} = fetchFrom({'https://example.com/shoe.png': png()});
+      await expect(
+        renderPage(file, {cwd: dir, remoteImages: {fetch}}),
+      ).rejects.toMatchObject({code: 'ERR_RENDER_NOT_ASTRYX'});
+      expect(asked).toEqual([]);
+    } finally {
+      removeLinkedFixture(dir);
+    }
+  });
+
   it('carries a fetched image in the markup and the script, and keeps the address in the source', async () => {
     const dir = makeLinkedFixture('astryx-render-remote-', [
       'react',
@@ -527,7 +549,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({'https://example.com/shoe.png': png()});
@@ -537,11 +559,14 @@ describe('a render with images from the web', () => {
       expect(markup).toContain(`src="${data}"`);
       expect(markup).toContain('src="http://example.com/plain.png"');
       expect(asked.map(a => a.url)).toEqual(['https://example.com/shoe.png']);
-      // The script keeps the page's address, and carries the same data for
+      // The script keeps the page's address; the image sinks give the data
       // where the browser takes an image's address.
-      const script = page.html.slice(page.html.indexOf('<script>'));
+      const script = page.html.slice(page.html.indexOf('<script type="module">'));
       expect(script).toContain('"https://example.com/shoe.png"');
-      expect(script).toContain(`["https://example.com/shoe.png","${data}"]`);
+      // The first paint shows it, so the image sinks read its data there:
+      // the file holds it once.
+      expect(script).toContain('[["https://example.com/shoe.png",0]]');
+      expect(script).not.toContain(data);
       expect(page.remoteImages).toEqual({
         fetched: ['https://example.com/shoe.png'],
         failed: [
@@ -597,7 +622,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({
@@ -622,22 +647,19 @@ describe('a render with images from the web', () => {
       const file = path.join(dir, 'page.jsx');
       fs.writeFileSync(
         file,
-        'export default function Page() { return <div style={{backgroundImage: "url(https://example.com/bg.png)"}}>Hero</div>; }\n',
+        'export default function Page() { return <div style={{backgroundImage: "url(https://example.com/bg.png)"}}>Hero</div>; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const {fetch} = fetchFrom({'https://example.com/bg.png': png()});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
       const data = `data:image/png;base64,${PNG.toString('base64')}`;
       expect(renderedMarkupOf(page.html)).toContain(data);
       // Drawn again by the script, the style still shows the carried data.
-      const dom = new JSDOM(page.html, {
-        runScripts: 'dangerously',
-        pretendToBeVisual: true,
-      });
-      await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+      const dom = await pageDom(page.html);
+      await pageDrawn(dom);
       const box = dom.window.document.querySelector(`#${ROOT_ID} div`);
       /** @type {any} */ (box).style.backgroundImage =
         'url(https://example.com/bg.png)';
-      await new Promise(resolve => dom.window.setTimeout(resolve, 0));
+      await pageTasks(dom);
       expect(/** @type {any} */ (box).style.backgroundImage).toContain(data);
       dom.window.close();
     } finally {
@@ -658,7 +680,7 @@ describe('a render with images from the web', () => {
           '  const [sent, setSent] = useState(false);',
           "  return <main><button onClick={() => fetch(config.imageUploadUrl, {method: 'POST'}).then(() => setSent(true))}>Upload</button>{sent && <p>Sent</p>}</main>;",
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({
@@ -671,7 +693,7 @@ describe('a render with images from the web', () => {
       expect(page.remoteImages?.failed).toEqual([
         {url: 'https://api.example.com/v1/upload', reason: 'not an image'},
       ]);
-      expect(page.html.slice(page.html.lastIndexOf('<script>'))).toContain(
+      expect(page.html.slice(page.html.lastIndexOf('<script type="module">'))).toContain(
         '"https://api.example.com/v1/upload"',
       );
     } finally {
@@ -700,7 +722,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({});
@@ -709,7 +731,7 @@ describe('a render with images from the web', () => {
       expect(renderedMarkupOf(page.html)).toContain(
         'href="https://example.com/first.png"',
       );
-      expect(page.html.slice(page.html.lastIndexOf('<script>'))).toContain(
+      expect(page.html.slice(page.html.lastIndexOf('<script type="module">'))).toContain(
         '"https://example.com/brochure.png"',
       );
     } finally {
@@ -733,7 +755,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Me</button>{open && <img src={user.avatarUrl} alt="Me" />}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({
@@ -766,7 +788,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Show</button>{open && rows.map(r => <img key={r.url} src={r.url} alt="" />)}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({
@@ -802,13 +824,13 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>More</button>{open && <a href={fullSize}>Full size</a>}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
       expect(asked).toEqual([]);
-      expect(page.html.slice(page.html.lastIndexOf('<script>'))).toContain(
+      expect(page.html.slice(page.html.lastIndexOf('<script type="module">'))).toContain(
         '"https://cdn.example.com/shoe-large.png"',
       );
     } finally {
@@ -831,13 +853,13 @@ describe('a render with images from the web', () => {
           '  const [size, setSize] = useState(0);',
           '  return <main><button onClick={() => setSize(640)}>Show</button>{size > 0 && <img src={\'https://cdn.example.com/hero.png?size=\' + size} alt="" />}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
       expect(asked).toEqual([]);
-      expect(page.html.slice(page.html.lastIndexOf('<script>'))).toContain(
+      expect(page.html.slice(page.html.lastIndexOf('<script type="module">'))).toContain(
         'https://cdn.example.com/hero.png?size=',
       );
       expect(
@@ -867,7 +889,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Show</button>{open && <img srcSet="https://example.com/a.png 1x, https://example.com/a@2x.png 2x" alt="" />}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({
@@ -916,7 +938,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       fs.writeFileSync(path.join(dir, 'local.png'), PNG);
@@ -967,7 +989,7 @@ describe('a render with images from the web', () => {
           '  const [id, setId] = useState(0);',
           '  return <main><button onClick={() => setId(3)}>Show</button>{id > 0 && <img alt="" srcSet={`./${id}.png 1x, https://cdn.example.com/${id}@2x.png 2x`} />}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({});
@@ -980,6 +1002,146 @@ describe('a render with images from the web', () => {
       );
       expect(built).toHaveLength(1);
       expect(built[0].message).toContain('https://cdn.example.com/${id}@2x.png');
+    } finally {
+      removeLinkedFixture(dir);
+    }
+  }, 120_000);
+
+  it('reads an https image a first-paint srcset lists from that srcset, so the file holds it once', async () => {
+    const dir = makeLinkedFixture('astryx-render-srcset-read-', ['react', 'react-dom']);
+    try {
+      const file = path.join(dir, 'page.jsx');
+      fs.writeFileSync(
+        file,
+        [
+          "import {useState} from 'react';",
+          "const b = 'https://cdn.example.com/b.png';",
+          "const a1 = 'https://cdn.example.com/a1.png';",
+          "const a2 = 'https://cdn.example.com/a2.png';",
+          'export default function Page() {',
+          '  const [open, setOpen] = useState(false);',
+          '  return (',
+          '    <main>',
+          '      <img srcSet="https://cdn.example.com/b.png 2x" alt="B" />',
+          '      <img srcSet={`${a1} 1x, ${a2} 2x`} alt="A" />',
+          '      <button onClick={() => setOpen(true)}>Show</button>',
+          '      {open && <img src={b} alt="LaterB" />}',
+          '      {open && <img src={a2} alt="LaterA2" />}',
+          '    </main>',
+          '  );',
+          '}',
+          "import '@astryxdesign/core/astryx.css';",
+          '',
+        ].join('\n'),
+      );
+      /** @param {number} n */
+      const image = n => respond(Buffer.concat([PNG, Buffer.from([n])]), {headers: {'content-type': 'image/png'}});
+      const {fetch} = fetchFrom({
+        'https://cdn.example.com/b.png': image(1),
+        'https://cdn.example.com/a1.png': image(2),
+        'https://cdn.example.com/a2.png': image(3),
+      });
+      const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
+      const dataOf = (/** @type {number} */ n) => `data:image/png;base64,${Buffer.concat([PNG, Buffer.from([n])]).toString('base64')}`;
+      // Each image's data is in the file once: in the first paint's srcset.
+      for (const n of [1, 2, 3]) expect(page.html.split(dataOf(n)).length - 1, String(n)).toBe(1);
+      const dom = await pageDom(page.html);
+      const settle = () => pageTasks(dom);
+      await pageDrawn(dom);
+      const doc = dom.window.document;
+      expect(doc.querySelector(`#${ROOT_ID} img[alt="B"]`)?.getAttribute('srcset')).toBe(`${dataOf(1)} 2x`);
+      expect(doc.querySelector(`#${ROOT_ID} img[alt="A"]`)?.getAttribute('srcset')).toBe(`${dataOf(2)} 1x, ${dataOf(3)} 2x`);
+      /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
+      await settle();
+      expect(doc.querySelector(`#${ROOT_ID} img[alt="LaterB"]`)?.getAttribute('src')).toBe(dataOf(1));
+      expect(doc.querySelector(`#${ROOT_ID} img[alt="LaterA2"]`)?.getAttribute('src')).toBe(dataOf(3));
+      dom.window.close();
+    } finally {
+      removeLinkedFixture(dir);
+    }
+  }, 120_000);
+
+  it('keeps a srcSet literal that lists an https candidate and a local one as written in the script, so the code reads the address it wrote', async () => {
+    const dir = makeLinkedFixture('astryx-render-mixed-srcset-', ['react', 'react-dom']);
+    try {
+      fs.writeFileSync(path.join(dir, 'b.png'), Buffer.concat([PNG, Buffer.from([5])]));
+      const file = path.join(dir, 'page.jsx');
+      fs.writeFileSync(
+        file,
+        [
+          "import {useState} from 'react';",
+          "const SET = 'https://cdn.example.com/a.png 1x, ./b.png 2x';",
+          'export default function Page() {',
+          "  const [first, setFirst] = useState('');",
+          '  return (',
+          '    <main>',
+          '      <img srcSet={SET} alt="M" />',
+          "      <button onClick={() => setFirst(SET.split(' ')[0])}>Read</button>",
+          '      <p>{first}</p>',
+          '    </main>',
+          '  );',
+          '}',
+          "import '@astryxdesign/core/astryx.css';",
+          '',
+        ].join('\n'),
+      );
+      const {fetch} = fetchFrom({
+        'https://cdn.example.com/a.png': respond(Buffer.concat([PNG, Buffer.from([4])]), {headers: {'content-type': 'image/png'}}),
+      });
+      const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
+      const dataOf = (/** @type {number} */ n) => `data:image/png;base64,${Buffer.concat([PNG, Buffer.from([n])]).toString('base64')}`;
+      const dom = await pageDom(page.html);
+      const settle = () => pageTasks(dom);
+      await pageDrawn(dom);
+      const doc = dom.window.document;
+      expect(doc.querySelector(`#${ROOT_ID} img[alt="M"]`)?.getAttribute('srcset')).toBe(`${dataOf(4)} 1x, ${dataOf(5)} 2x`);
+      /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
+      await settle();
+      expect(doc.querySelector(`#${ROOT_ID} p`)?.textContent).toBe('https://cdn.example.com/a.png');
+      dom.window.close();
+    } finally {
+      removeLinkedFixture(dir);
+    }
+  }, 120_000);
+
+  it('gives a first-paint https image its data from the first paint, with no second copy, and leaves an address the code extends as written', async () => {
+    const dir = makeLinkedFixture('astryx-render-extend-carried-', [
+      'react',
+      'react-dom',
+    ]);
+    try {
+      const file = path.join(dir, 'page.jsx');
+      fs.writeFileSync(
+        file,
+        [
+          "import {useState} from 'react';",
+          "const hero = 'https://cdn.example.com/hero.png';",
+          'export default function Page() {',
+          '  const [open, setOpen] = useState(false);',
+          '  return <main><img src={hero} alt="Now" /><button onClick={() => setOpen(true)}>Show</button>{open && <img src={`${hero}?w=640`} alt="Later" />}</main>;',
+          '}',
+          "import '@astryxdesign/core/astryx.css';",
+          '',
+        ].join('\n'),
+      );
+      const {fetch} = fetchFrom({'https://cdn.example.com/hero.png': png()});
+      const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
+      const data = `data:image/png;base64,${PNG.toString('base64')}`;
+      const script = page.html.slice(page.html.indexOf('<script type="module">', page.html.indexOf('application/x-astryx-source')));
+      // The script holds no copy: the image sinks read the first paint's.
+      expect(script).not.toContain(data);
+      expect(script).toContain('__astryxCarried[i]');
+      const dom = await pageDom(page.html);
+      const settle = () => pageTasks(dom);
+      await pageDrawn(dom);
+      const doc = dom.window.document;
+      expect(doc.querySelector(`#${ROOT_ID} img[alt="Now"]`)?.getAttribute('src')).toBe(data);
+      /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
+      await settle();
+      // An address the code extends with a query keeps it, as the sinks read
+      // only the exact address or one with a fragment.
+      expect(doc.querySelector(`#${ROOT_ID} img[alt="Later"]`)?.getAttribute('src')).toBe('https://cdn.example.com/hero.png?w=640');
+      dom.window.close();
     } finally {
       removeLinkedFixture(dir);
     }
@@ -1006,7 +1168,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({
@@ -1045,7 +1207,7 @@ describe('a render with images from the web', () => {
       const file = path.join(dir, 'page.jsx');
       fs.writeFileSync(
         file,
-        'export default function Page() { return <main><iframe src="https://example.com/embed.png" title="x" /><video src="https://example.com/clip.png" /></main>; }\n',
+        'export default function Page() { return <main><iframe src="https://example.com/embed.png" title="x" /><video src="https://example.com/clip.png" /></main>; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const {fetch, asked} = fetchFrom({});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
@@ -1073,7 +1235,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Show</button>{open && <><img src={logoUrl} alt="Logo" /><iframe src={embed} title="Clip" /></>}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({
@@ -1107,7 +1269,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Play</button>{open && <><iframe src={player.src} title="Player" /><video src={clip.src} /></>}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({
@@ -1143,7 +1305,7 @@ describe('a render with images from the web', () => {
           'export default function Page() {',
           '  return <main><iframe src={player.src} title="Player" /></main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const frameWarnings = (/** @type {any} */ page) =>
@@ -1208,7 +1370,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Show</button>{open && <><img src={DEFAULT_AVATAR} alt="" /><img src={own} alt="" /></>}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({
@@ -1244,7 +1406,7 @@ describe('a render with images from the web', () => {
           '  const [ids, setIds] = useState([]);',
           '  return <main><button onClick={() => setIds([1, 2])}>Show</button>{ids.map(id => <img key={id} src={avatar(id)} alt="" />)}{ids.map(id => <a key={`a${id}`} href={`https://cdn.example.com/${id}.png`}>Full</a>)}{ids.map(id => <video key={`v${id}`} src={\'https://cdn.example.com/\' + id + \'.mp4\'} />)}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({});
@@ -1278,7 +1440,7 @@ describe('a render with images from the web', () => {
           '  const [id, setId] = useState(0);',
           '  return <main><button onClick={() => setId(7)}>Show</button>{id > 0 && <><img src={`https://cdn.example.com/${id}.png`} alt="" /><video src={`https://cdn.example.com/${id}.mp4`} /><iframe src={`https://player.example.com/${id}`} title="Player" /></>}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch, asked} = fetchFrom({});
@@ -1328,7 +1490,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({
@@ -1388,7 +1550,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({'https://cdn.example.com/h.png': png()});
@@ -1435,7 +1597,7 @@ describe('a render with images from the web', () => {
           '    </main>',
           '  );',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({});
@@ -1464,7 +1626,7 @@ describe('a render with images from the web', () => {
       const file = path.join(dir, 'page.jsx');
       fs.writeFileSync(
         file,
-        'export default function Page() { return <main><img src="https://example.com/a.png?w=1" alt="" /><img src="https://example.com/a.png?w=2" alt="" /></main>; }\n',
+        'export default function Page() { return <main><img src="https://example.com/a.png?w=1" alt="" /><img src="https://example.com/a.png?w=2" alt="" /></main>; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const {fetch} = fetchFrom({});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
@@ -1488,7 +1650,7 @@ describe('a render with images from the web', () => {
       const file = path.join(dir, 'page.jsx');
       fs.writeFileSync(
         file,
-        'export default function Page() { return <img src="https://example.com/a.png?w=2" alt="" />; }\n',
+        'export default function Page() { return <img src="https://example.com/a.png?w=2" alt="" />; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const {fetch} = fetchFrom({});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
@@ -1516,7 +1678,7 @@ describe('a render with images from the web', () => {
           '  const [open, setOpen] = useState(false);',
           '  return <main><button onClick={() => setOpen(true)}>Me</button>{open && <img src={user.avatarUrl} alt="Me" />}</main>;',
           '}',
-          '',
+          '', "import '@astryxdesign/core/astryx.css';",
         ].join('\n'),
       );
       const {fetch} = fetchFrom({});
@@ -1540,7 +1702,7 @@ describe('a render with images from the web', () => {
       const file = path.join(dir, 'page.jsx');
       fs.writeFileSync(
         file,
-        'export default function Page() { return <img src="https://example.com/away.png" alt="Away" />; }\n',
+        'export default function Page() { return <img src="https://example.com/away.png" alt="Away" />; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const {fetch} = fetchFrom({});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
@@ -1596,7 +1758,7 @@ describe('a render with images from the web', () => {
         '    </main>',
         '  );',
         '}',
-        '',
+        '', "import '@astryxdesign/core/astryx.css';",
       ].join('\n');
       fs.writeFileSync(file, source);
       const {fetch, asked} = fetchFrom({
@@ -1632,13 +1794,9 @@ describe('a render with images from the web', () => {
       });
       // Opened after the click, offline: the avatars draw from the carried data.
       fs.writeFileSync(path.join(dir, 'page.html'), page.html);
-      const dom = new JSDOM(page.html, {
-        runScripts: 'dangerously',
-        pretendToBeVisual: true,
-      });
-      const settle = () =>
-        new Promise(resolve => dom.window.setTimeout(resolve, 100));
-      await settle();
+      const dom = await pageDom(page.html);
+      const settle = () => pageTasks(dom);
+      await pageDrawn(dom);
       const doc = dom.window.document;
       expect(doc.querySelectorAll(`#${ROOT_ID} img`)).toHaveLength(0);
       /** @type {HTMLButtonElement} */ (
@@ -1681,7 +1839,7 @@ describe('a render with images from the web', () => {
       const file = path.join(dir, 'page.jsx');
       fs.writeFileSync(
         file,
-        'export default function Page() { return <img src="https://example.com/shoe.png" alt="Shoe" />; }\n',
+        'export default function Page() { return <img src="https://example.com/shoe.png" alt="Shoe" />; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const {fetch, asked} = fetchFrom({'https://example.com/shoe.png': png()});
       const page = await renderPage(file, {

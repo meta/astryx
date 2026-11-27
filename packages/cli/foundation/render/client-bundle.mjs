@@ -17,6 +17,7 @@ import {builtinModules} from 'node:module';
 import * as path from 'node:path';
 import {stripVTControlCharacters} from 'node:util';
 import vm from 'node:vm';
+import {packageOf} from '../doc-compiler/source.mjs';
 import {SOURCE_TYPE} from './source-block.mjs';
 import {showsImage} from './image-attributes.mjs';
 import {formatSrcset, parseSrcset} from './srcset.mjs';
@@ -138,14 +139,18 @@ const moveTo = link => {
 const add = EventTarget.prototype.addEventListener;
 const pastHost = new WeakSet();
 const markPastHost = () => add.call(document, 'click', event => pastHost.add(event), true);
-if (document.readyState === 'loading') add.call(document, 'DOMContentLoaded', markPastHost, {once: true});
+// The file's script runs before DOMContentLoaded whether it is a classic
+// script (the document still loading) or a module script (parsed, so
+// readyState is already 'interactive').
+const beforeLoaded = document.readyState !== 'complete';
+if (beforeLoaded) add.call(document, 'DOMContentLoaded', markPastHost, {once: true});
 else markPastHost();
 let inPage = 0;
 // The page's modules load until the document has loaded: this capture listener
 // on the window runs before any listener a viewer adds on the document for the
 // same event, and after every module and promise callback that ran while the
 // document was still loading (an \`import()\` included).
-let loading = document.readyState === 'loading';
+let loading = beforeLoaded;
 if (loading) add.call(window, 'DOMContentLoaded', () => {
   loading = false;
 }, {capture: true, once: true});
@@ -444,10 +449,20 @@ function locatedFile(file) {
  * every address as it wrote it, so a link, a text, a comparison or the URL
  * API reads the page's own address.
  * @param {[string, string][]} entries each carried address with its data: URI
+ * @param {Array<[string, number] | [string, number, number]>} [reads] each
+ *   carried address the first paint shows, with the number of its mark, and
+ *   for one that a `srcset` lists, its candidate's place there: its data is
+ *   read from `from`, the values the first paint carries, so the file holds
+ *   it once
+ * @param {string} [from] the script's name for those values
  * @returns {string} a statement that runs before the page's script
  */
-export function imageSinks(entries) {
-  return scriptSafe(`${SINKS}(new Map(${JSON.stringify(entries)}));`);
+export function imageSinks(entries, reads = [], from = '') {
+  const carried =
+    reads.length === 0
+      ? `new Map(${JSON.stringify(entries)})`
+      : `new Map([...${JSON.stringify(entries)}, ...${JSON.stringify(reads)}.map(([u, i, k]) => [u, k === undefined ? ${from}[i] : parse(${from}[i] ?? '')[k]?.url]).filter(e => e[1])])`;
+  return scriptSafe(`${SINKS}(parse => ${carried});`);
 }
 
 /**
@@ -455,15 +470,19 @@ export function imageSinks(entries) {
  * since the file carries every byte.
  * @param {Function} fn
  */
-const compact = fn =>
+export const compactSource = fn =>
   String(fn)
     .replace(/\/\*\*[^]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '')
     .replace(/\n\s*/g, '\n')
     .replace(/\n+/g, '\n');
 
-/** The installer, with the srcset reader and the image rule it uses, as one expression. */
-const SINKS = `(carried => (${compact(installImageSinks)})(carried, ${compact(parseSrcset)}, ${compact(formatSrcset)}, ${compact(showsImage)}))`;
+/**
+ * The installer, with the srcset reader and the image rule it uses, as one
+ * expression. It takes a function that builds the carried map with that
+ * reader.
+ */
+const SINKS = `(build => ((parse, format, shows) => (${compactSource(installImageSinks)})(build(parse), parse, format, shows))(${compactSource(parseSrcset)}, ${compactSource(formatSrcset)}, ${compactSource(showsImage)}))`;
 
 /**
  * Put the carried data where the browser takes an image's address; see
@@ -674,6 +693,8 @@ export function scriptSafe(code) {
  *   builtin: (name: string) => boolean,
  *   describe: (file: string) => string,
  *   oneCopy?: string[],
+ *   stylexFiles?: string[],
+ *   packageSource?: (file: string) => {contents: string, loader: 'tsx' | 'ts' | 'jsx'} | null,
  * }} options
  *   `source` compiles one of the page's own files as the server compiled it
  *   (null for any other file, which esbuild loads); `isPageFile` tells the
@@ -685,8 +706,13 @@ export function scriptSafe(code) {
  *   the copy the server loaded (React outside a project), else null;
  *   `builtin` tells a Node built-in; `describe` names a file for a message;
  *   `oneCopy` names the packages every module, a package's too, takes from
- *   the one copy `packageDir` names (React outside a project).
- * @returns {Promise<{code: string, modules: number}>}
+ *   the one copy `packageDir` names (React outside a project);
+ *   `stylexFiles` names the package files that hold StyleX source, which
+ *   alone go to `packageSource`.
+ * @returns {Promise<{code: string, modules: number, astryx: boolean, module: boolean, files: string[]}>}
+ *   `astryx`: the build's module graph holds a module an Astryx package owns;
+ *   `module`: the script runs the same as a module script ({@link runsAsModule});
+ *   `files`: the files on disk the script holds code of
  */
 export async function bundleForBrowser({
   esbuild,
@@ -698,6 +724,8 @@ export async function bundleForBrowser({
   builtin,
   describe,
   oneCopy = [],
+  stylexFiles = [],
+  packageSource = () => null,
 }) {
   // A page whose script throws, in render or in an effect (a cookie write in
   // a frame that blocks cookies, say), keeps its first paint: React would
@@ -713,7 +741,8 @@ export async function bundleForBrowser({
   // Only the page's own files and the mount go through this plugin: esbuild
   // resolves and loads every package file itself, which keeps the build fast.
   // A package file comes back here only for an import every module must take
-  // from one copy (`oneCopy`) or for a Node module, which is refused.
+  // from one copy (`oneCopy`), for a Node module, which is refused, or to be
+  // loaded compiled when it holds StyleX source (`stylexFiles`).
   /** @param {any} args */
   const resolveImport = async args => {
     if (args.pluginData?.astryx) return undefined;
@@ -803,6 +832,15 @@ export async function bundleForBrowser({
           return {errors: [{text: describe(args.path), detail: {compile: e}}]};
         }
       });
+      // Only the package files that hold StyleX source call back here, so
+      // every other package file stays with esbuild.
+      if (stylexFiles.length > 0) {
+        const holdsStylex = new RegExp(`^(?:${stylexFiles.map(escapeRegExp).join('|')})$`);
+        build.onLoad({filter: holdsStylex, namespace: 'file'}, (/** @type {any} */ args) => {
+          const compiled = packageSource(args.path);
+          return compiled ? {...compiled, resolveDir: path.dirname(args.path)} : undefined;
+        });
+      }
       // A package's own stylesheet import adds nothing to the script.
       build.onLoad({filter: /\.(css|scss|sass|less)$/i}, () => ({
         contents: '',
@@ -812,6 +850,8 @@ export async function bundleForBrowser({
   };
   /** @type {any} */
   let result;
+  /** @type {boolean} */
+  let module;
   try {
     result = await esbuild.build({
       entryPoints: ['astryx:mount'],
@@ -832,6 +872,7 @@ export async function bundleForBrowser({
       logLevel: 'silent',
       plugins: [plugin],
     });
+    module = await runsAsModule(esbuild, scriptSafe(result.outputFiles[0].text), result.metafile);
   } catch (e) {
     const first = /** @type {any} */ (e)?.errors?.[0];
     if (!first) throw e;
@@ -889,8 +930,97 @@ export async function bundleForBrowser({
   }
   // The modules the script holds: those esbuild kept any of.
   const output = Object.values(result.metafile?.outputs ?? {})[0];
-  const modules = Object.values(output?.inputs ?? {}).filter(
-    (/** @type {any} */ input) => input.bytesInOutput > 0,
-  ).length;
-  return {code, modules};
+  const kept = Object.entries(output?.inputs ?? {}).filter(
+    ([, /** @type {any} */ input]) => input.bytesInOutput > 0,
+  );
+  const astryx = graphHoldsAstryx(
+    Object.keys(result.metafile?.inputs ?? {}),
+    entry,
+  );
+  const files = kept.flatMap(([name]) => {
+    const file = inputFile(name);
+    return file === null ? [] : [file];
+  });
+  return {code, modules: kept.length, astryx, module, files};
+}
+
+/** A script's own strict-mode directive, after any comments. */
+const STRICT_DIRECTIVE = /^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*(['"])use strict\1/;
+
+/** The code files that can be other than an ES module. */
+const SCRIPT_FILE = /\.(?:js|cjs|jsx|ts|cts|tsx)$/i;
+
+/**
+ * Whether the bundled script runs the same as a module script, which a
+ * browser parses as a module and runs in strict mode. esbuild's module parse
+ * must accept it (it refuses a `with` statement), and every file in it that
+ * is not an ES module (a CommonJS file, a package's or the page's own) must
+ * ask for strict mode itself:
+ * one that does not can write an undeclared name or set a property on a
+ * primitive, which throws in strict mode. The script must not read
+ * `document.currentScript`, which a module script does not set. Else the file
+ * keeps a classic script.
+ * @param {any} esbuild
+ * @param {string} code
+ * @param {any} metafile
+ * @returns {Promise<boolean>}
+ */
+async function runsAsModule(esbuild, code, metafile) {
+  // A module script has no `document.currentScript` (it is null), so code
+  // that reads it while it loads keeps a classic script.
+  if (/\bcurrentScript\b/.test(code)) return false;
+  // The files esbuild kept any of, with each one's module format.
+  const kept = Object.entries(/** @type {any} */ (Object.values(metafile?.outputs ?? {})[0])?.inputs ?? {});
+  for (const [name, inOutput] of kept) {
+    if (!(inOutput.bytesInOutput > 0) || !SCRIPT_FILE.test(name) || metafile.inputs[name]?.format === 'esm') continue;
+    let head;
+    try {
+      const file = locatedFile(name);
+      if (file === null) continue;
+      head = fs.readFileSync(file, 'utf8').slice(0, 4096);
+    } catch {
+      return false;
+    }
+    if (!STRICT_DIRECTIVE.test(head)) return false;
+  }
+  try {
+    await esbuild.transform(code, {format: 'esm', loader: 'js', logLevel: 'silent'});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a build's module graph holds a module an Astryx package owns,
+ * other than the page itself. The owner is the package whose package.json
+ * holds the file, by its name: a workspace copy of Core counts as an
+ * installed one does, and a page inside an Astryx package's own folder
+ * counts the modules of that package it imports.
+ * @param {string[]} inputs the metafile's input keys
+ * @param {string} entry the page
+ * @returns {boolean}
+ */
+export function graphHoldsAstryx(inputs, entry) {
+  const page = path.resolve(entry);
+  return inputs.some(key => {
+    const file = inputFile(key);
+    if (!file || path.resolve(file) === page) return false;
+    return packageOf(file).startsWith('@astryxdesign/');
+  });
+}
+
+/**
+ * The file a metafile input names: a file-namespace path is relative to the
+ * build's working folder, a page file's is absolute after its namespace;
+ * the build's own virtual modules, and a file a package's `browser` field
+ * maps to false (`(disabled):…`), name no file.
+ * @param {string} key
+ * @returns {string | null}
+ */
+function inputFile(key) {
+  if (/^[a-z]:[\\/]/i.test(key)) return path.resolve(key);
+  const named = /^([^\\/:]+):(.+)$/.exec(key);
+  if (!named) return path.resolve(key);
+  return named[1] === PAGE ? named[2] : null;
 }

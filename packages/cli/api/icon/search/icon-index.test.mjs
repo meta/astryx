@@ -80,6 +80,8 @@ function queries() {
     'bin',
     'trash can',
     'home page',
+    'trash icon dialog list',
+    'search icon in a table link',
     'zebra',
     'x',
     '  search  ',
@@ -199,6 +201,34 @@ describe('rankIconIndex answers as icon() does where the index was made', () => 
         await icon(query, {cwd: alone}),
       );
     }
+  });
+
+  it('ranks place words with the component names the index stores, as icon() does', async () => {
+    const cwd = writeIconSetProject(tmp, {
+      packages: [
+        {
+          data: {
+            ...glyphsData(),
+            icons: [
+              {id: 'search', export: 'SearchIcon', words: ['search']},
+              {id: 'link', export: 'LinkIcon', words: ['link']},
+            ],
+            map: {},
+          },
+        },
+      ],
+    });
+    const index = JSON.parse(JSON.stringify(await exportIconIndex({cwd})));
+    /** @param {any} found */
+    const ids = found =>
+      found.data.matches.map((/** @type {{id: string}} */ m) => m.id);
+    const query = 'search icon link';
+    expect(ids(await icon(query, {cwd}))).toEqual(['search', 'link']);
+    expect(ids(await rankIconIndex(query, index))).toEqual(['search', 'link']);
+    // Without the stored names, `link` counts in full and leads.
+    expect(ids(await rankIconIndex(query, {...index, components: []}))).toEqual(
+      ['link', 'search'],
+    );
   });
 
   it('ranks several indexes as one list; equal scores keep the order given', async () => {

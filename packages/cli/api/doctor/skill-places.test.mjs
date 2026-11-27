@@ -180,6 +180,8 @@ describe('the skill-places check', () => {
           ],
           renderError: null,
           linkedOut: [],
+          skillProblems: [],
+          leftovers: [],
           blockFiles: [],
           skillFiles: [SHARED],
           skillsFolderFiles: [SHARED],

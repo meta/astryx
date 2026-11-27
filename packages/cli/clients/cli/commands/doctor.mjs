@@ -422,7 +422,7 @@ function templateMeaningBlocks(sets) {
 function unmappedBlocks(listed) {
   if (listed.length === 0) return [];
   return [
-    section('Unmapped icon definitions (optional)'),
+    section('Unmapped icon meanings (optional)'),
     records(
       listed.map(each => ({
         set: each.set,
@@ -445,7 +445,7 @@ function unmappedBlocks(listed) {
       );
     }),
     text(
-      'Mapping these is optional and never fails a check. Map one with `astryx experimental icon map <definition> <icon id>`; list your icons with `astryx experimental icon --set <set> --all-icons`; see how many definitions each set maps with `astryx experimental icon --list`.',
+      'Mapping these is optional and never fails a check. Map one with `astryx experimental icon map <definition> <icon id>`; list your icons with `astryx experimental icon --set <set> --all-icons`; see how many meanings each set maps with `astryx experimental icon --list`.',
     ),
   ];
 }

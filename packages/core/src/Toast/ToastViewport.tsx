@@ -268,8 +268,6 @@ interface ToastRowProps {
   onExited: (id: string) => void;
   onDismiss: (id: string, reason: ToastDismissReason) => void;
   announce: AnnounceFn;
-  /** Whether the card carries its own live region (see ToastViewport). */
-  isLiveRegion: boolean;
 }
 
 const noCallerTheme = () => () => {};
@@ -322,7 +320,6 @@ function ToastRow({
   onExited,
   onDismiss,
   announce,
-  isLiveRegion,
 }: ToastRowProps) {
   const o = entry.options;
   const type = o.type ?? 'info';
@@ -404,10 +401,9 @@ function ToastRow({
             onDismiss={reason => onDismiss(entry.id, reason)}
             renderContent={o.renderContent}
             timerKey={entry.id}
-            isLiveRegion={isLiveRegion}
             announce={announce}
             isRenderedBodyAnnouncement={
-              o.renderContent == null && getNodeText(o.body) === ''
+              o.renderContent == null && !isPlainTextBody(o.body)
             }
             hasEntryStarted={hasEntryStarted}
           />
@@ -417,6 +413,19 @@ function ToastRow({
   );
 }
 ToastRow.displayName = 'ToastRow';
+
+/**
+ * Whether the viewport can take a body's words when it dispatches the toast:
+ * a string, a number, or a list of them. Any element, a fragment included,
+ * can render other words than its children, so the toast reads it after
+ * commit.
+ */
+function isPlainTextBody(body: ReactNode): boolean {
+  if (typeof body === 'string' || typeof body === 'number') {
+    return true;
+  }
+  return Array.isArray(body) && body.every(isPlainTextBody);
+}
 
 /**
  * ToastViewport renders ToastRefSync, which writes through useCommittedRefInto,
@@ -538,10 +547,10 @@ export function ToastViewport({
 
   // Announce toasts through the persistent singleton live regions. They are
   // mounted empty and only mutated afterwards, which screen readers announce
-  // (see useAnnounce.ts). Plain React text is announced in addToast — the
-  // event-driven dispatch path. ToastSurface reads a component body or a
-  // custom layout after commit. getNodeText cannot see what a component
-  // renders. Both paths use this modal-aware writer.
+  // (see useAnnounce.ts). A plain-text body is announced in addToast — the
+  // event-driven dispatch path. ToastSurface reads any other body, and a
+  // custom layout, after commit, because an element can render words that
+  // getNodeText cannot see. Both paths use this modal-aware writer.
   // The viewport is each toast's only announcement owner; the card carries no
   // live role. A top-layer viewport's host moves into the latest open native
   // modal, where the page's shared channel is not exposed, so it writes
@@ -581,8 +590,10 @@ export function ToastViewport({
         return;
       }
       // Only text is announced; interactive endContent is reachable via F6.
-      const text = getNodeText(entry.options.body);
-      if (text && entry.options.renderContent == null) {
+      const {body, renderContent} = entry.options;
+      const text =
+        renderContent == null && isPlainTextBody(body) ? getNodeText(body) : '';
+      if (text) {
         // Error toasts map to the assertive region (role="alert"); everything
         // else to the polite region (role="status") — mirrors Toast.tsx.
         announce(text, entry.options.type === 'error' ? 'assertive' : 'polite');
@@ -860,16 +871,21 @@ export function ToastViewport({
   const insetStyle: React.CSSProperties = {
     ...layerInsetProperties(layerInset),
   };
-  if (inset?.top) {
-    insetStyle.top = inset.top;
+  // A zero on the stack's own block edge replaces the provider's value. On
+  // the opposite edge a zero writes nothing, so it cannot move the stack.
+  const isTopStack = position === 'topEnd' || position === 'topStart';
+  const insetTop = inset?.top;
+  if (insetTop != null && (isTopStack || insetTop !== 0)) {
+    insetStyle.top = insetTop;
   }
-  if (inset?.bottom) {
-    insetStyle.bottom = inset.bottom;
+  const insetBottom = inset?.bottom;
+  if (insetBottom != null && (!isTopStack || insetBottom !== 0)) {
+    insetStyle.bottom = insetBottom;
   }
-  if (inset?.start) {
+  if (inset?.start != null) {
     insetStyle.insetInlineStart = inset.start;
   }
-  if (inset?.end) {
+  if (inset?.end != null) {
     insetStyle.insetInlineEnd = inset.end;
   }
 
@@ -968,7 +984,9 @@ export function ToastViewport({
   // F6 jumps focus into the toast viewport — the standard "go to
   // notifications" affordance. Focus the first control in the newest toast,
   // or the viewport container if none. Toasts are non-modal, so this only
-  // moves focus in; Shift+Tab / Escape let focus leave naturally.
+  // moves focus in. Tab and Shift+Tab move focus out. A toast does not handle
+  // Escape. The layer stack sends it to the topmost present layer, such as a
+  // Dialog that holds the viewport.
   const hasToasts = toasts.length > 0;
   useEffect(() => {
     if (!hasToasts) {
@@ -1064,7 +1082,6 @@ export function ToastViewport({
             onExited={handleExited}
             onDismiss={removeToast}
             announce={announce}
-            isLiveRegion={false}
           />
         ))}
       </LayerContentBoundary>

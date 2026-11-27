@@ -6,14 +6,22 @@
  * @output `travellingStyles` for a List row that slides across other rows,
  *   and markTravelling, which marks the row for the length of its slide
  * @position Owner module of the private travelling attribute: the only file
- *   that writes its name. List/listLayoutUpdates.ts marks a row, and ListItem
- *   composes the styles. No package entry exports it.
+ *   that writes its name. List/listLayoutUpdates.ts marks a row, and so does
+ *   List/listReorderEngine.tsx for a dropped row's glide. ListItem composes
+ *   the styles, and so does the reorder session's row style for other rows.
+ *   No package entry exports it.
  */
 
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 
 const TRAVELLING = 'data-astryx-travelling';
+/**
+ * The backdrop a travelling row rides on, where it is not the surface: a
+ * dropped row keeps the backdrop its preview had.
+ */
+const BACKDROP = '--_travelling-backdrop';
+const SURFACE = `var(${BACKDROP}, ${colorVars['--color-background-surface']})`;
 
 /**
  * Each row's latest mark, so the end of an earlier slide leaves a later
@@ -38,6 +46,22 @@ export function markTravelling(row: Element): () => void {
   };
 }
 
+/**
+ * Sets the backdrop a travelling `row` rides on in place of the surface, or
+ * clears it with `null`. Only the reorder engine imports it, so a List
+ * without `reorderable` does not load it.
+ */
+export function setTravellingBackdrop(
+  row: HTMLElement,
+  backdrop: string | null,
+): void {
+  if (backdrop == null) {
+    row.style.removeProperty(BACKDROP);
+  } else {
+    row.style.setProperty(BACKDROP, backdrop);
+  }
+}
+
 export const travellingStyles = stylex.create({
   // A row that slides across rows moving the other way rides above them, with
   // the surface behind it, for the length of its slide. A UIKit cell passes
@@ -57,7 +81,7 @@ export const travellingStyles = stylex.create({
     },
     boxShadow: {
       default: null,
-      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected])': `inset 0 0 0 100vmax ${colorVars['--color-background-surface']}`,
+      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected])': `inset 0 0 0 100vmax ${SURFACE}`,
     },
     // A row of a List with dividers takes its shadow from the press layer's
     // `overDividers`, composed later, which wins over the one above. So the
@@ -66,7 +90,7 @@ export const travellingStyles = stylex.create({
     // does not inherit it.
     '--_travelling-surface': {
       default: null,
-      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected])': `inset 0 0 0 100vmax ${colorVars['--color-background-surface']}`,
+      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected])': `inset 0 0 0 100vmax ${SURFACE}`,
       ':not([data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"],[data-selected]))':
         'initial',
     },

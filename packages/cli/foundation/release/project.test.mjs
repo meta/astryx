@@ -268,6 +268,27 @@ describe('readReleaseFacts', () => {
     });
   });
 
+  it('reads the lockfile only for a package it does not find installed', () => {
+    const root = project(tempDir(), {
+      '@astryxdesign/core': '^0.7.0',
+      '@astryxdesign/cli': '^0.7.0',
+    });
+    installCore(root, '0.7.1');
+    writeJson(path.join(root, 'package-lock.json'), {
+      lockfileVersion: 3,
+      packages: {
+        'node_modules/@astryxdesign/core': {version: '0.7.0'},
+        'node_modules/@astryxdesign/cli': {version: '0.6.8'},
+      },
+    });
+    expect(readReleaseFacts(root)).toMatchObject({
+      core: {version: '0.7.1'},
+      cli: null,
+      lockedCoreVersion: null,
+      lockedCliVersion: '0.6.8',
+    });
+  });
+
   it('reports the installed Core and CLI', () => {
     const root = project(tempDir(), {'@astryxdesign/core': '0.7.1'});
     installCore(root, '0.7.1');

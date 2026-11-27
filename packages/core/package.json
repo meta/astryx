@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.17",
+  "version": "0.7.18",
   "displayName": "Astryx Core",
   "description": "The Astryx component library: accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -849,6 +849,11 @@
       "types": "./dist/internal/reorder.d.ts",
       "default": "./dist/internal/reorder.js"
     },
+    "./internal/reorderHandle.stylex": {
+      "source": "./src/internal/reorderHandle.stylex.ts",
+      "types": "./dist/internal/reorderHandle.stylex.d.ts",
+      "default": "./dist/internal/reorderHandle.stylex.js"
+    },
     "./internal/touchHitArea.stylex": {
       "source": "./src/internal/touchHitArea.stylex.ts",
       "types": "./dist/internal/touchHitArea.stylex.d.ts",
@@ -899,6 +904,11 @@
       "types": "./dist/internal/virtualization.d.ts",
       "default": "./dist/internal/virtualization.js"
     },
+    "./internal/module-loader": {
+      "source": "./src/internal/module-loader.ts",
+      "types": "./dist/internal/module-loader.d.ts",
+      "default": "./dist/internal/module-loader.js"
+    },
     "./internal/committed-ref": {
       "source": "./src/internal/committed-ref.ts",
       "types": "./dist/internal/committed-ref.d.ts",
@@ -913,6 +923,11 @@
       "source": "./src/internal/shared-context.ts",
       "types": "./dist/internal/shared-context.d.ts",
       "default": "./dist/internal/shared-context.js"
+    },
+    "./internal/tour": {
+      "source": "./src/internal/tour.ts",
+      "types": "./dist/internal/tour.d.ts",
+      "default": "./dist/internal/tour.js"
     }
   },
   "files": [

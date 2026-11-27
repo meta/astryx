@@ -325,6 +325,60 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  it('stops at the field frame while keeping the input beside its clear button', () => {
+    document.body.innerHTML =
+      '<div id="field"><div id="frame" class="astryx-text-input">' +
+      '<input id="input"><button id="clear">Clear</button></div></div>' +
+      '<button id="button">Add</button>';
+    place(byId('field'), rect(0, 0, 104, 60));
+    place(byId('frame'), rect(0, 0, 100, 32));
+    place(byId('input'), rect(8, 6, 64, 20));
+    place(byId('clear'), rect(76, 8, 16, 16));
+    place(byId('button'), rect(104, 0, 32, 32));
+    const buttonInsets: HitInsets[] = [];
+    const clearInsets: HitInsets[] = [];
+    const stopButton = watchHitArea(byId('button'), insets =>
+      buttonInsets.push(insets),
+    );
+    const stopClear = watchHitArea(byId('clear'), insets =>
+      clearInsets.push(insets),
+    );
+    show(byId('button'), byId('clear'));
+    flush();
+    expect(buttonInsets.at(-1)?.left).toBe(2);
+    expect(clearInsets.at(-1)?.left).toBe(2);
+    stopClear();
+    stopButton();
+  });
+
+  it('resolves a cached input’s frame after it moves in and out of the field', () => {
+    document.body.innerHTML =
+      '<div id="frame" class="astryx-number-input"></div>' +
+      '<input id="input"><button id="button">Add</button>';
+    const frame = byId('frame');
+    const input = byId('input');
+    const button = byId('button');
+    place(frame, rect(0, 0, 100, 32));
+    place(input, rect(8, 6, 84, 20));
+    place(button, rect(104, 0, 32, 32));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(button, insets => heard.push(insets));
+    show(button);
+    flush();
+    expect(heard.at(-1)?.left).toBe(6);
+
+    frame.append(input);
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)?.left).toBe(2);
+
+    document.body.append(input);
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)?.left).toBe(6);
+    stop();
+  });
+
   it('measures a control in an opening layer by its layout box, so its insets hold once the layer settles', () => {
     // The layer opens from half size about the page origin, so every rect on
     // screen is half its layout box during the first pass.
@@ -1016,6 +1070,107 @@ describe('watchHitArea', () => {
     expect(log).toContain('read link');
     expect(click.defaultPrevented).toBe(true);
     stop();
+  });
+
+  describe('a neighbour that no tap can reach', () => {
+    /**
+     * Measures the switch with the link 8 px to its right, then sends a touch
+     * 6 px past the switch and 2 px from the link, and its click. Whether the
+     * click was swallowed.
+     */
+    function tapBesideLink(): boolean {
+      const control = byId('switch');
+      place(control, rect(100, 100, 24, 24));
+      place(byId('link'), rect(132, 100, 60, 24));
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      const press = new Event('pointerdown', {bubbles: true});
+      Object.assign(press, {pointerType: 'touch', clientX: 130, clientY: 112});
+      control.dispatchEvent(press);
+      const click = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      control.dispatchEvent(click);
+      stop();
+      return click.defaultPrevented;
+    }
+
+    /** Moves the link into a new `<div>` that has `attributes`. */
+    function wrapLink(attributes: Record<string, string>): void {
+      const link = byId('link');
+      const wrapper = document.createElement('div');
+      for (const [name, value] of Object.entries(attributes)) {
+        wrapper.setAttribute(name, value);
+      }
+      link.replaceWith(wrapper);
+      wrapper.append(link);
+    }
+
+    it('still swallows a touch nearer a neighbour that takes taps', () => {
+      expect(tapBesideLink()).toBe(true);
+    });
+
+    it('lets a touch through beside a neighbour in an inert subtree', () => {
+      wrapLink({inert: ''});
+      expect(tapBesideLink()).toBe(false);
+    });
+
+    it('lets a touch through beside a disabled neighbour', () => {
+      byId('link').outerHTML = '<button id="link" disabled>Details</button>';
+      expect(tapBesideLink()).toBe(false);
+    });
+
+    it('lets a touch through beside a neighbour that takes no pointer events', () => {
+      wrapLink({style: 'pointer-events: none'});
+      expect(tapBesideLink()).toBe(false);
+    });
+
+    it('lets a touch through beside a neighbour that checkVisibility calls hidden', () => {
+      const checkVisibility = vi.fn(() => false);
+      Object.defineProperty(byId('link'), 'checkVisibility', {
+        configurable: true,
+        value: checkVisibility,
+      });
+      expect(tapBesideLink()).toBe(false);
+      expect(checkVisibility).toHaveBeenCalledWith({checkVisibilityCSS: true});
+    });
+
+    describe('where checkVisibility is missing, as in jsdom', () => {
+      it('lets a touch through beside a neighbour in a hidden subtree', () => {
+        expect(typeof byId('link').checkVisibility).toBe('undefined');
+        wrapLink({style: 'visibility: hidden'});
+        expect(tapBesideLink()).toBe(false);
+      });
+
+      it('lets a touch through beside a neighbour whose ancestor skips its contents', () => {
+        wrapLink({style: 'content-visibility: hidden'});
+        expect(tapBesideLink()).toBe(false);
+      });
+    });
+
+    it('still swallows a touch nearer a neighbour drawn at opacity 0, which still takes taps', () => {
+      wrapLink({style: 'opacity: 0'});
+      expect(tapBesideLink()).toBe(true);
+    });
+
+    it('still stops the hit area halfway to a neighbour that no tap can reach, reading no style in the pass', () => {
+      wrapLink({inert: ''});
+      const control = byId('switch');
+      layOut(control, 24, 24);
+      place(control, rect(100, 100, 24, 24));
+      place(byId('link'), rect(132, 100, 60, 24));
+      const getComputedStyle = vi.spyOn(window, 'getComputedStyle');
+      const heard: HitInsets[] = [];
+      const stop = watchHitArea(control, insets => heard.push(insets));
+      show(control);
+      flush();
+      expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+      expect(getComputedStyle).not.toHaveBeenCalled();
+      stop();
+    });
   });
 
   describe('when an animation moves boxes between the touch and its click', () => {

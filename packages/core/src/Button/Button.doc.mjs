@@ -193,7 +193,8 @@ export const docs = {
     {
       name: 'tooltip',
       type: 'string',
-      description: 'Tooltip text shown on hover.',
+      description:
+        'Tooltip text shown on hover. The text shows above the button; for another side, rich content, or control over when it shows, wrap the button in `Tooltip` instead (`placement`, `content`, `isOpen`).',
     },
     {
       name: 'onClick',
@@ -218,6 +219,12 @@ export const docs = {
       type: 'ComponentType',
       description:
         'Custom link component to use when href is provided (e.g. Next.js Link).',
+    },
+    {
+      name: 'ref',
+      type: 'Ref<HTMLButtonElement>',
+      description:
+        'In link mode (with `href` and not disabled) the ref receives the link element, the anchor or the link component\'s element, although the type names `HTMLButtonElement`; otherwise it receives the button.',
     },
     {
       name: 'target',
@@ -363,7 +370,12 @@ export const docsZh = {
       description:
         '标签后方渲染的尾部图标或徽章。仅接受 <Icon> 或 <Badge>。纯图标按钮时忽略。颜色继承自按钮变体。',
     },
-    {name: 'tooltip', type: 'string', description: '悬停时显示的提示文本。'},
+    {
+      name: 'tooltip',
+      type: 'string',
+      description:
+        '悬停时显示的提示文本，显示在按钮上方。要改变位置、使用富内容或控制显示时机，请改用 `Tooltip` 包裹按钮（`placement`、`content`、`isOpen`）。',
+    },
     {name: 'onClick', type: '(e: MouseEvent) => void', description: '标准点击处理函数（从 ButtonHTMLAttributes 透传）。'},
     {
       name: 'clickAction',
@@ -427,7 +439,8 @@ export const docsDense = {
     width: "Width of button. Numbers=pixels, strings=as-is (e.g. '100%' for full-width). Default: content width, capped at the container; label truncates w/ ellipsis in a narrow row (full label in a tooltip); icon-only stays square.",
     children: 'optional visible override; label is still required for a11y. Prefer <Button label="Save" /> over using children',
     endContent: 'trailing icon/badge after label; ignored when isIconOnly; color inherited',
-    tooltip: 'tooltip on hover',
+    tooltip:
+      'tooltip text on hover, shown above; other side, rich content or open control: wrap in Tooltip instead, without this prop (placement, content, isOpen)',
     onClick: 'standard click handler; fires before clickAction',
     clickAction: 'async click handler; shows loading while promise pending',
     isDisabled: 'disables button; uses aria-disabled instead of native disabled',

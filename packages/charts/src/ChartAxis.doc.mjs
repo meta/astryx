@@ -22,7 +22,12 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use tickFormat for product-specific units or locale formatting, and maxTicks or truncate when dense category labels need a bounded presentation.',
+          'Use tickFormat for product-specific units or locale formatting, and truncate for long category labels. Leave maxTicks unset: the axis thins its labels to fit its width.',
+      },
+      {
+        guidance: false,
+        description:
+          'Set maxTicks on a date or number axis to suit a desktop width. A set maxTicks wins over the fit to the axis width, so on a phone its labels overlap.',
       },
       {
         guidance: false,
@@ -95,13 +100,13 @@ export const docs = {
       name: 'maxTicks',
       type: 'number',
       description:
-        'Maximum displayed label count. Labels are thinned to at most this many; the first and last labels stay.',
+        'Leave unset to thin labels to fit the axis width. A set value wins over that fit, so its labels can overlap on a narrow chart. Labels are thinned to at most this many; the first and last labels stay.',
     },
     {
       name: 'tickFormat',
-      type: '(value: unknown) => string',
+      type: '(value: unknown) => string | null | undefined',
       description:
-        'Formats each retained tick. When omitted, continuous scales use d3 formatting and band scales use their category strings.',
+        'Formats each retained tick. When omitted, or when it returns null or undefined, continuous scales use d3 formatting and band scales use their category strings.',
     },
     {
       name: 'truncate',
@@ -153,7 +158,6 @@ export const docs = {
       label: 'Dense category labels',
       code: `<ChartAxis
   position="bottom"
-  maxTicks={8}
   truncate={12}
   showTicks
 />;`,

@@ -72,10 +72,6 @@ const RUNNERS = {
     runs: "the current specifications' grammar patches for css-tree, resolved when the module loads and loaded on the first CSS name or value check, so other commands do not load them",
     sites: ['require(<computed>)'],
   },
-  'api/theme-edit/_preview.mjs': {
-    runs: 'the picture process for a Playwright the project has installed, or a Chrome found on the machine, only with --png',
-    sites: ['child_process.spawn'],
-  },
   'api/theme-edit/_project.mjs': {
     runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
     sites: ['import(<computed>) ×2', 'require'],
@@ -85,12 +81,12 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it; a family build drops the modules it loaded from require.cache when it ends",
+    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it; a base theme package a theme imports whole, to name the themes it exports by name; a family build drops the modules it loaded from require.cache when it ends",
     sites: [
       '.evalModule() ×2',
       '.import() ×2',
       'createJiti ×7',
-      'import(<computed>) ×2',
+      'import(<computed>) ×3',
       'require(<computed>)',
       'require.cache',
       'withEmptyStylesheets ×6',
@@ -385,6 +381,10 @@ const RUNNERS = {
     runs: 'astryx.config, through the config parser',
     sites: ['loadModuleWithParser(..., parseConfig)'],
   },
+  'foundation/discovery/integration-skills.mjs': {
+    runs: "each configured integration's doc modules, to read the skills they declare",
+    sites: ['docsRootFiles', 'loadTopicModule'],
+  },
   'foundation/agent-docs/skill-place-files.mjs': {
     runs: 'astryx.config, through the config parser, to read the skill places it saves (only the config, not its integrations)',
     sites: ['loadModuleWithParser(..., parseConfig)'],
@@ -400,6 +400,10 @@ const RUNNERS = {
   'foundation/fs/file-protection.mjs': {
     runs: 'the ignore matcher (CommonJS), loaded when a resolver first reads an ignore file',
     sites: ['require(ignore)'],
+  },
+  'foundation/discovery/official-list.mjs': {
+    runs: "the CLI's own official-list generator, in a checkout with no packed list, to derive the list from the repository",
+    sites: ['child_process.execFileSync'],
   },
   'foundation/discovery/copied-passages.mjs': {
     runs: "the CLI's own guides and the package's topics, to compare their prose for passages two topics repeat",
@@ -460,6 +464,10 @@ const RUNNERS = {
     runs: 'authored doc files, each one handed to the compiler, with the loader its reader has always used',
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
+  'foundation/pictures/pictures.mjs': {
+    runs: "the picture process for a Playwright the project has installed, or a Chrome found on the machine, for the theme editor's pictures (--png) and an export's (--pictures), and a require at the project's folder to find that Playwright",
+    sites: ['child_process.spawn', 'createRequire'],
+  },
   'foundation/render/page-worker.mjs': {
     runs: "the page `astryx experimental export` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process (React DOM's client first, with a small document in place, so it reads the features a browser has), then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from; an in-thread resolve hook that resolves imports between the files of an installed package by path; and the esbuild the CLI depends on, to bundle the page's script; and the Babel parser, to read which imports the page's own TypeScript modules use as values, and the modules the page's named imports come from, to check that each name the page uses exists",
     sites: [
@@ -491,8 +499,8 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/render/render-page.mjs': {
-    runs: "the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, a one-line Intl.Segmenter check after a crash, and the naming module of the page's own Core, to keep the theme rules for the class names Core builds while the page runs",
-    sites: ['child_process.fork', 'child_process.spawnSync', 'importUrl'],
+    runs: "the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, a one-line Intl.Segmenter check after a crash, the naming module of the page's own Core, to keep the theme rules for the class names Core builds while the page runs, and a parse check of the page's script once it reads its images from the first paint",
+    sites: ['child_process.fork', 'child_process.spawnSync', 'importUrl', 'vm.Script'],
   },
   'foundation/render/page-host.mjs': {
     runs: 'the render worker, in a thread of the host process, so the host can exit with the CLI or at its own time limit while a page loops',
@@ -592,6 +600,10 @@ const RUNNERS = {
     runs: '`astryx manifest` and the error-code and response-type docs, to write the README tables (build time, not shipped)',
     sites: ['child_process.spawnSync', 'import(<computed>)'],
   },
+  'scripts/migrate-template-icons.mjs': {
+    runs: 'Prettier, to format a template file the migration rewrites when the file was formatted before (build tooling, not shipped)',
+    sites: ['require(prettier)'],
+  },
   'scripts/generate-manifest.mjs': {
     runs: "`astryx manifest --json`, from a folder beside each package manager's lockfile, to store the manifest at `prepack` (build time)",
     sites: ['child_process.spawnSync'],
@@ -650,6 +662,7 @@ const LOADER_MODULES = {
     'mergeTopic',
     'mergeTopicReport',
     'problemsInTopic',
+    'sectionContributor',
     'withoutPosition',
     'withSourceTitle',
   ],

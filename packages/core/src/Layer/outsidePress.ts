@@ -42,6 +42,12 @@ export interface OutsidePressOptions {
    */
   readonly onPan?: () => void;
   /**
+   * A touch or pen press outside that pans past the shared pan distance is a
+   * gesture, not a press: its lift calls no `onOutside`. Ignored with
+   * `closesOnPan` or `onPan`.
+   */
+  readonly ignoresPans?: boolean;
+  /**
    * Called as each press the watch follows begins, with whether it is
    * inside. The watch then judges no lift: a press that starts and ends
    * outside calls no `onOutside` and counts no dismissal. Each shadow root
@@ -54,6 +60,14 @@ export interface OutsidePressOptions {
    * document judges presses too, and an inner root's judgment stands.
    */
   readonly root?: Node | null;
+  /**
+   * Whether `onOutside` closes a layer, so the press counts as an outside
+   * dismissal that a modal host's backdrop press reads. False for an owner
+   * whose outside press closes no layer, such as an open still waiting for
+   * its layer to load: the backdrop press then still closes the host.
+   * Defaults to true.
+   */
+  readonly isDismissal?: boolean;
 }
 
 // A modal host's backdrop press reads this. A press that closed a layer above
@@ -94,12 +108,15 @@ export function watchOutsidePress(
     closesOnPan = false,
     onPan,
     onPress,
+    ignoresPans = false,
     root = null,
+    isDismissal = true,
   }: OutsidePressOptions = {},
 ): () => void {
   const doc = owner.ownerDocument;
   const reportPan = closesOnPan ? undefined : onPan;
-  const followsPans = closesOnPan || reportPan != null;
+  const skipsPans = ignoresPans && !closesOnPan && reportPan == null;
+  const followsPans = closesOnPan || reportPan != null || skipsPans;
   const shadows = root == null ? [] : shadowRootsOutward(root);
   let startedOutside = false;
   let panStart: {id: number; x: number; y: number} | null = null;
@@ -108,7 +125,9 @@ export function watchOutsidePress(
   const close = () => {
     startedOutside = false;
     panStart = null;
-    noteOutsideDismissal(doc);
+    if (isDismissal) {
+      noteOutsideDismissal(doc);
+    }
     onOutside();
   };
 
@@ -130,9 +149,10 @@ export function watchOutsidePress(
     startedOutside = !isInside(event.composedPath());
     onPress?.(!startedOutside);
     if (followsPans) {
-      panStart = startedOutside
-        ? {id: event.pointerId, x: event.clientX, y: event.clientY}
-        : null;
+      panStart =
+        startedOutside && !(skipsPans && event.pointerType === 'mouse')
+          ? {id: event.pointerId, x: event.clientX, y: event.clientY}
+          : null;
     }
   };
   const handleMove = (event: PointerEvent) => {
@@ -157,6 +177,11 @@ export function watchOutsidePress(
         }
         return;
       }
+      if (skipsPans) {
+        startedOutside = false;
+        panStart = null;
+        return;
+      }
       close();
     }
   };
@@ -173,7 +198,9 @@ export function watchOutsidePress(
     startedOutside = false;
     panStart = null;
     if (wasOutside && !isInside(event.composedPath())) {
-      noteOutsideDismissal(doc);
+      if (isDismissal) {
+        noteOutsideDismissal(doc);
+      }
       onOutside();
     }
   };
