@@ -342,8 +342,8 @@
       "reason": "Set and read inside markTravelling, which only the row's own List calls."
     },
     "packages/core/src/reorderable/createReorderable.ts:reorderableBrand": {
-      "status": "allowed",
-      "reason": "No swizzle copy carries this module; copies import createReorderable from the package's public path. shared-identity.pins.test.mjs pins it."
+      "status": "open",
+      "group": "F10 List reorder"
     },
     "packages/core/src/theme/Theme.tsx:injectedThemes": {
       "status": "open",
