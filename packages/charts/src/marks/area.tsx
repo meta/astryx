@@ -21,6 +21,7 @@ import {line as d3Line} from 'd3-shape';
 import {useId} from 'react';
 import type {SeriesDef, ResolvedPoint} from '../types';
 import {seriesFill} from '../markColor';
+import {resolveStrokeWidth} from './strokeWidth';
 import {xPixel} from '../utils';
 
 /** An area's fill, through a gradient whose id is unique on the page. */
@@ -72,6 +73,8 @@ export interface AreaOptions {
   stack?: string;
   gradient?: boolean;
   stroke?: boolean;
+  /** Width of the top-edge stroke path. Defaults to 2. */
+  strokeWidth?: number;
   label?: string;
 }
 
@@ -91,6 +94,7 @@ export function area(dataKey: string, options: AreaOptions = {}): SeriesDef {
   const curve = options.curve ?? 'linear';
   const gradient = options.gradient ?? false;
   const stroke = options.stroke ?? true;
+  const strokeWidth = resolveStrokeWidth(options.strokeWidth);
 
   const seriesDef: SeriesDef = {
     type: 'area',
@@ -157,7 +161,12 @@ export function area(dataKey: string, options: AreaOptions = {}): SeriesDef {
             />
           )}
           {stroke && (
-            <path d={strokeD} fill="none" stroke={fillColor} strokeWidth={2} />
+            <path
+              d={strokeD}
+              fill="none"
+              stroke={fillColor}
+              strokeWidth={strokeWidth}
+            />
           )}
         </g>
       );
