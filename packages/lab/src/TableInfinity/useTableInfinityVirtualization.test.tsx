@@ -27,15 +27,18 @@ function Fixture({
   direction,
   viewportHeight = geometry.viewportHeight,
   rowCount = geometry.rowCount,
+  columnCount = geometry.columnCount,
 }: {
   direction?: 'rtl' | 'ltr';
   viewportHeight?: number;
   rowCount?: number;
+  columnCount?: number;
 }) {
   const infinity = useTableInfinityVirtualization({
     ...geometry,
     viewportHeight,
     rowCount,
+    columnCount,
     direction,
     viewportLabel: 'Table viewport',
     rowScrollbarLabel: 'Scroll rows',
@@ -171,6 +174,61 @@ describe('Table Infinity window', () => {
       directionStyle.mockRestore();
     }
   });
+
+  it.each([
+    {
+      label: 'Scroll rows',
+      trackPoint: {clientY: 260},
+      start: {clientY: 270},
+      end: {clientY: -50},
+      translation: '0px -128px',
+    },
+    {
+      label: 'Scroll columns',
+      trackPoint: {clientX: 224},
+      start: {clientX: 200},
+      end: {clientX: 648},
+      translation: '448px 0px',
+    },
+  ])(
+    'moves $label by track press and thumb drag in RTL',
+    ({label, trackPoint, start, end, translation}) => {
+      vi.useFakeTimers();
+      try {
+        render(<Fixture direction="rtl" rowCount={18} columnCount={12} />);
+        const thumb = screen.getByRole('scrollbar', {name: label});
+        const track = thumb.parentElement;
+        if (!track) {
+          throw new Error('The scrollbar has no track.');
+        }
+        const table = screen.getByRole('table', {name: 'Archive'});
+        const vertical = label === 'Scroll rows';
+        const layer = vertical ? table.querySelector('tbody') : table;
+        vi.spyOn(track, 'getBoundingClientRect').mockReturnValue(
+          new DOMRect(0, 100, 448, 320),
+        );
+        const capture = vi.fn();
+        // jsdom dispatches pointer events but does not implement pointer capture.
+        Object.defineProperty(thumb, 'setPointerCapture', {value: capture});
+
+        fireEvent.pointerDown(track, {button: 0, pointerId: 1, ...trackPoint});
+        frame();
+        expect(thumb).toHaveAttribute('aria-valuenow', '4');
+        expect(layer?.style.translate).toBe(translation);
+
+        fireEvent.pointerDown(thumb, {button: 0, pointerId: 2, ...start});
+        expect(capture).toHaveBeenCalledWith(2);
+        fireEvent.pointerMove(thumb, {pointerId: 2, ...end});
+        fireEvent.lostPointerCapture(thumb, {pointerId: 2});
+        frame();
+        expect(thumb).toHaveAttribute('aria-valuenow', '0');
+        expect(layer?.style.translate).toBe('0px 0px');
+        expect(thumb).toHaveFocus();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('announces the full range of a partially overflowing row', () => {
     vi.useFakeTimers();
