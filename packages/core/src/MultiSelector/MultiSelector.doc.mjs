@@ -242,7 +242,6 @@ export const docs = {
           name: 'hasSelectAll',
           type: 'boolean',
           description: 'Whether to show a select-all checkbox.',
-          default: 'false',
         },
         {
           name: 'selectAllLabel',
@@ -255,7 +254,6 @@ export const docs = {
           type: 'boolean',
           description:
             'Whether to show a search input for filtering options. As the user types, the match count (or "No results found") is announced to screen readers via a polite live region. The search field has built-in affordances: a leading magnifier icon and, once a query is typed, a trailing clear (✕) button that resets the query and returns focus to the input.',
-          default: 'false',
         },
         {
           name: 'searchPlaceholder',
@@ -288,7 +286,6 @@ export const docs = {
           name: 'isDisabled',
           type: 'boolean',
           description: 'Disables the selector.',
-          default: 'false',
         },
         {
           name: 'isReadOnly',
@@ -313,7 +310,6 @@ export const docs = {
           name: 'isLabelHidden',
           type: 'boolean',
           description: 'Visually hides the label while keeping it accessible.',
-          default: 'false',
         },
         {
           name: 'description',
@@ -330,19 +326,16 @@ export const docs = {
           name: 'isOptional',
           type: 'boolean',
           description: 'Marks the field as optional.',
-          default: 'false',
         },
         {
           name: 'isRequired',
           type: 'boolean',
           description: 'Marks the field as required.',
-          default: 'false',
         },
         {
           name: 'isLoading',
           type: 'boolean',
           description: 'Shows a loading spinner in the trigger.',
-          default: 'false',
         },
         {
           name: 'status',
