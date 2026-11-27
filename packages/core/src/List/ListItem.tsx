@@ -478,9 +478,7 @@ export function ListItem({
   );
   // The row's element, which a row without a handle names for the reorder.
   const rowRef = useRef<HTMLLIElement | null>(null);
-  // A List isolates its rows, so what a row raises stays below a page-level
-  // sticky header. Outside a List nothing bounds a raise, so a row raises
-  // nothing there.
+  // In a List, a row's touch band takes the List's room between rows.
   const isInList = ctx != null;
   // In a reorderable List: a trailing handle, or a row that stays put.
   const reorder = ctx?.reorder;

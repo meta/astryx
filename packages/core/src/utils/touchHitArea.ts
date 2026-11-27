@@ -218,10 +218,10 @@ function checkTaps(host: Element, ownsDescendantTouches: boolean): () => void {
     // The band, and so the check, exists while the primary pointer is coarse,
     // for a finger, a pen and a mouse alike.
     if (
-      !isCoarsePointer(view) ||
       !isElement(target) ||
       !host.contains(target) ||
-      (ownsDescendantTouches && target !== host)
+      (ownsDescendantTouches && target !== host) ||
+      !isCoarsePointer(view)
     ) {
       return;
     }

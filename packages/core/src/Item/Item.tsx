@@ -362,9 +362,7 @@ const SWIPE_ROLES = new Set(['listitem']);
  * role at all. A root that is itself a link is not served, nor is a role that
  * forbids interactive descendants. A disabled row, a row with no entry on
  * either side, and the enlarged target of a nested control are not served
- * either. `swipe` wins over the deprecated `swipeActions`. Internal: under a
- * finger, List/ListItem.tsx raises such a row, so its touch band stays above
- * the rows after it.
+ * either. `swipe` wins over the deprecated `swipeActions`.
  */
 export function servesSwipeActions({
   swipe,
