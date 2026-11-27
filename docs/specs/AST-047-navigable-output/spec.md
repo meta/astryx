@@ -51,11 +51,14 @@ This record owns the moves a read offers and how they appear in text and JSON.
 - **FR3 — Down.** A read that has children MUST list them, each with its
   summary, and give the command that opens one: a namespace its children, a
   topic's index its sections, and the topic list its topics and namespaces. In text,
-  a topic with more than one section is read one level at a time: a bare read
-  lists its sections, and `--full` prints the whole doc; the dense variant is
-  written to be read whole, so `--dense` prints it whole. The JSON contract is
-  unchanged: `docs(topic)` and `--json` return the whole doc, and `--index` its
-  sections.
+  a bare read of a topic prints the whole doc, because a reader acts on the first
+  read it gets; only a topic whose whole text is over 16 KB lists its sections
+  instead, because up to that size the whole read costs no more than a reader
+  who wants the answer reads through the section list.
+  `--index` lists the sections of any topic, `--full` prints any topic whole, and
+  the dense variant is written to be read whole, so `--dense` prints it whole.
+  The JSON contract is unchanged: `docs(topic)` and `--json` return the whole doc,
+  and `--index` its sections.
 - **FR4 — Across.** A read with a place in an ordered level MUST offer the
   commands that open the item before it and the item after it, when they exist:
   a section's neighbors in its topic, and a docs-tree node's neighbors in its
@@ -107,10 +110,9 @@ This record owns the moves a read offers and how they appear in text and JSON.
   every link when it reads a doc, and Doctor MUST warn on a link that is
   unresolved or ambiguous. A link names a doc identity, not a provider instance,
   so it survives version changes.
-- **FR10 — Phase 1 covers docs and search.** `astryx docs` and `astryx search`
+- **FR10 — Docs and search are in scope.** `astryx docs` and `astryx search`
   MUST meet FR1–FR9, FR11, and FR12. A command a doc shows as an example, in a code
-  block or in prose, is not a link: FR11 keeps it true. Other commands adopt
-  this record in later phases, each as its own change.
+  block or in prose, is not a link: FR11 keeps it true.
 - **FR11 — Nothing a read shows can go stale.** A move or a cross-link MUST be
   derived when the read is made, never stored in a doc. Every other `astryx`
   command that a doc, a hint line, or the repository's agent prompt shows MUST
@@ -137,7 +139,7 @@ that name.
 Before this record, only docs-tree namespaces and typed docs offered a way up,
 and only in text; a section, a topic, and a topic's index were dead ends.
 
-Phase 1 changes:
+This record changes:
 
 - in text, a bare topic read lists the topic's sections when it has more than
   one; `--full` and `--dense` print it whole; `docs(topic)` and `--json` still

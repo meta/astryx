@@ -4,7 +4,7 @@
 
 /**
  * @file index.ts
- * @input Tour, TourStep, useTour
+ * @input The Tour component
  * @output Re-exports the Tour lab experiment's public API
  * @position Lab entry point for the Tour directory
  *
@@ -12,12 +12,9 @@
  */
 
 export {Tour} from './Tour';
-export type {TourProps} from './Tour';
-
-export {TourStep} from './TourStep';
-export type {TourStepProps} from './TourStep';
-
-export {useTour} from './useTour';
-export type {UseTourReturn} from './useTour';
-
-export type {TourDismissSource} from './TourContext';
+export type {
+  TourEndReason,
+  TourMissingAnchorBehavior,
+  TourProps,
+  TourStep,
+} from './Tour';

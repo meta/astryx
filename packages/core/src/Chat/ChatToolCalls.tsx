@@ -21,6 +21,7 @@
 import React, {useState, useCallback, useId, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
+import {cutText} from '../utils/textDirection';
 import {
   colorVars,
   spacingVars,
@@ -44,6 +45,12 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Chat/ChatToolCalls.generated';
+import {devPropError} from '../utils/devWarning';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -107,6 +114,10 @@ const styles = stylex.create({
   root: {
     display: 'flex',
     flexDirection: 'column',
+    // A message column aligns its children to the start, so the root sizes
+    // to its content and a long target never shrinks. The cap lets each row
+    // shrink to the column, so its target truncates.
+    maxWidth: '100%',
     marginBlockStart: spacingVars['--spacing-2'],
   },
   groupHeader: {
@@ -150,7 +161,7 @@ const styles = stylex.create({
   // animates, so one element carries both the transform and the theme target.
   chevronTransition: {
     transition: {
-      default: `transform ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}`,
+      default: `transform calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor}) ${easeVars['--ease-standard']}`,
       '@media (prefers-reduced-motion: reduce)': 'none',
     },
   },
@@ -467,14 +478,11 @@ function CallRow({
         )}
         <VisuallyHidden>{statusAnnouncement}</VisuallyHidden>
       </span>
-      <span {...stylex.props(styles.callName)}>{call.name}</span>
+      {cutText(call.name, styles.callName)}
       {call.node != null && (
         <Badge label={call.node} variant="neutral" xstyle={styles.nodePill} />
       )}
-      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `target` is a string field: an empty string still marks a target */}
-      {call.target != null && (
-        <span {...stylex.props(styles.callLabel)}>{call.target}</span>
-      )}
+      {call.target != null && cutText(call.target, styles.callLabel)}
       {(call.additions != null ||
         call.deletions != null ||
         call.stats != null) && (
@@ -567,6 +575,13 @@ export function ChatToolCalls(props: ChatToolCallsProps) {
     ref,
     ...rest
   } = props;
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(calls)) {
+    throw devPropError(
+      'ChatToolCalls',
+      'calls',
+      "must be an array of tool calls, for example calls={[{name: 'search', status: 'complete'}]}.",
+    );
+  }
 
   const autoDefault = defaultIsExpanded ?? false;
   const [internalExpanded, setInternalExpanded] = useState(autoDefault);
@@ -666,13 +681,9 @@ export function ChatToolCalls(props: ChatToolCallsProps) {
               )}
               <VisuallyHidden>{latestStatusAnnouncement}</VisuallyHidden>
             </span>
-            <span {...stylex.props(styles.callName)}>{latestCall.name}</span>
-            {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `target` is a string field: an empty string still marks a target */}
-            {latestCall.target != null && (
-              <span {...stylex.props(styles.callLabel)}>
-                {latestCall.target}
-              </span>
-            )}
+            {cutText(latestCall.name, styles.callName)}
+            {latestCall.target != null &&
+              cutText(latestCall.target, styles.callLabel)}
           </>
         )}
         <span {...stylex.props(styles.callCount)}>

@@ -183,6 +183,28 @@ export const docs = {
     },
   ],
   playground: {
+    // The phone layout (the menu button in the top bar, the open drawer with
+    // the top bar's links):
+    // the theme editor's census renders it, so a theme reaches the parts
+    // only that layout draws.
+    mobile: {
+      mobileNav: {defaultIsMobile: true, isOpen: true},
+      // The top bar's links, which the phone menu draws as its own rows.
+      topNav: {
+        __element: 'TopNav',
+        props: {
+          label: 'Navigation',
+          heading: {__element: 'TopNavHeading', props: {heading: 'My App'}},
+          startContent: [
+            {
+              __element: 'TopNavItem',
+              props: {label: 'Inbox', href: '#', isSelected: true},
+            },
+            {__element: 'TopNavItem', props: {label: 'Reports', href: '#'}},
+          ],
+        },
+      },
+    },
     defaults: {
       variant: 'surface',
       contentPadding: 4,

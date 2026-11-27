@@ -47,7 +47,9 @@ import {
 } from './switchTouch';
 import {
   readFillOf,
+  readInState,
   sameTrackState,
+  stateOf,
   trackStateOf,
   type TrackState,
 } from './switchFill';
@@ -77,6 +79,11 @@ export interface SwitchTouchOptions {
   readonly isDisabled: boolean;
   /** The track's box, px (width × height): the thumb geometry's scale. */
   readonly trackSize: readonly [number, number];
+  /**
+   * The thumb circle's default diameter in each state, px. A value change
+   * before any measurement animates the size from it.
+   */
+  readonly thumbSize?: {readonly off: number; readonly on: number};
   /**
    * The props the track renders with in its other state (its theme target
    * and fill), for the fade layer's colour.
@@ -208,12 +215,25 @@ interface Drag {
 export class SwitchTouchController {
   private elements: Elements | null = null;
   private geometry: SwitchTouchGeometry;
+  /** Whether `geometry` holds the rendered boxes since the last attach. */
+  private isGeometryMeasured = false;
+  /** The thumb's default diameter in each state, for the first change. */
+  private defaultThumb: {readonly off: number; readonly on: number} | null =
+    null;
+  /**
+   * The track's and the thumb's states when the switch attached. The first
+   * value change reads the theme's thumb size in them (attachedThumbSize).
+   */
+  private attachedStates: {
+    readonly track: TrackState;
+    readonly thumb: TrackState;
+  } | null = null;
   private isOn: boolean;
   private isInteractive = true;
   /** The side the visuals show or head to. */
   private isVisuallyOn: boolean;
-  /** +1 left-to-right, −1 right-to-left. */
-  private direction = 1;
+  /** +1 left-to-right, −1 right-to-left; null until read after an attach. */
+  private writingDirection: 1 | -1 | null = null;
   private thumb: Animator | null = null;
   /** The fade layer: its opacity is how far the visuals are from the value. */
   private fade: Animator | null = null;
@@ -274,8 +294,11 @@ export class SwitchTouchController {
     this.detach();
     this.elements = elements;
     this.presentation = presentation;
-    this.measureGeometry();
-    this.direction = isRtlElement(elements.surface) ? -1 : 1;
+    // The boxes and the writing direction are read at their first use, not
+    // here. A read at mount forces a layout or a style recalculation for every
+    // switch on the page.
+    this.isGeometryMeasured = false;
+    this.writingDirection = null;
     this.isVisuallyOn = this.isOn;
     const host = getGestureHost(elements.surface.ownerDocument);
     if (presentation === 'pointer') {
@@ -285,6 +308,13 @@ export class SwitchTouchController {
       return;
     }
     registerSwitchTable();
+    // The states it attaches in, for the theme's thumb size in them. A value
+    // change before any press reads it and grows the thumb from it. These are
+    // DOM reads: no style is read here.
+    this.attachedStates = {
+      track: stateOf(elements.track),
+      thumb: stateOf(elements.thumb),
+    };
     this.thumb = createMotionEngine(elements.thumb);
     // The layer rests clear (its class's opacity 0) while the visuals show
     // the value; from here its opacity is the animator's. The stylesheet
@@ -303,7 +333,8 @@ export class SwitchTouchController {
       base: {opacity: 0},
     });
     this.shadow.set({opacity: 0}, {promote: false});
-    this.paintFade();
+    // The fade layer is clear at rest. Its colour is painted before each of
+    // its motions (showWell, swapFade), so none is read here.
     this.detachers = this.attachPassive(host, elements);
   }
 
@@ -384,9 +415,44 @@ export class SwitchTouchController {
     }
   }
 
+  setDefaultThumb(
+    thumb: {readonly off: number; readonly on: number} | null,
+  ): void {
+    this.defaultThumb = thumb;
+  }
+
+  /** +1 left-to-right, −1 right-to-left, read at its first use. */
+  private get direction(): 1 | -1 {
+    this.writingDirection ??= isRtlElement(this.elements?.surface ?? null)
+      ? -1
+      : 1;
+    return this.writingDirection;
+  }
+
+  /**
+   * The thumb's diameter a theme sets for the state the switch attached in
+   * (`--_switch-thumb-width`), or null where the theme sets none. The track
+   * and the thumb are read in those states and put back in the same task, so
+   * nothing paints between.
+   */
+  private attachedThumbSize(): number | null {
+    const elements = this.elements;
+    const states = this.attachedStates;
+    if (elements == null || states == null) {
+      return null;
+    }
+    const value = readInState(elements.track, states.track, () =>
+      readInState(elements.thumb, states.thumb, thumb =>
+        getComputedStyle(thumb).getPropertyValue('--_switch-thumb-width'),
+      ),
+    );
+    const themed = /^\s*(\d*\.?\d+)px\s*$/.exec(value);
+    return themed ? Number(themed[1]) : null;
+  }
+
   setGeometry(geometry: SwitchTouchGeometry): void {
     this.geometry = geometry;
-    this.measureGeometry();
+    this.isGeometryMeasured = false;
     this.thumb?.set({x: 0, scaleX: 1, scaleY: 1}, {promote: false});
   }
 
@@ -410,6 +476,7 @@ export class SwitchTouchController {
     if (trackWidth <= 0 || trackHeight <= 0) {
       return;
     }
+    this.isGeometryMeasured = true;
     const style = thumb == null ? null : getComputedStyle(thumb);
     const thumbWidth = style == null ? NaN : parseFloat(style.width);
     const thumbHeight = style == null ? NaN : parseFloat(style.height);
@@ -444,6 +511,22 @@ export class SwitchTouchController {
     // and is sent to the new rest below. A spring already heading for the new
     // rest moves whole instead, keeping its start time and velocity. A
     // reduced-motion dip shifts whole, its end included, and keeps going.
+    // A value change before any measurement reads the boxes once here. The
+    // track is the rendered one, but the circle is already the new value's.
+    // The previous circle is the state it attached in: the theme's size for
+    // it, read then, else the state's default size.
+    let measured: SwitchTouchGeometry | null = null;
+    if (!this.isGeometryMeasured && this.defaultThumb != null) {
+      this.measureGeometry();
+      measured = this.geometry;
+      const size =
+        this.attachedThumbSize() ?? this.defaultThumb[previous ? 'on' : 'off'];
+      this.geometry = switchTouchGeometry(
+        measured.trackWidth,
+        measured.trackHeight,
+        {width: size, height: size},
+      );
+    }
     const springs = thumb.reducedMotion() === 'off';
     thumb.rebase(
       {x: this.direction * (this.rest(previous) - this.rest(isOn))},
@@ -453,7 +536,11 @@ export class SwitchTouchController {
     // CSS now renders is the new value's. Its scale takes the old size over
     // and grows or shrinks it from there.
     const before = this.geometry;
-    this.measureGeometry();
+    if (measured == null) {
+      this.measureGeometry();
+    } else {
+      this.geometry = measured;
+    }
     if (springs) {
       this.rescaleThumb(before, this.geometry, time);
     }
@@ -496,6 +583,8 @@ export class SwitchTouchController {
   // --- Touches ---------------------------------------------------------------
 
   private touchDown(time: number): void {
+    // Each press reads the rendered boxes once, before the drag needs them.
+    this.measureGeometry();
     this.landBase(time);
     this.released = false;
     this.pendingTravel = false;
@@ -1011,6 +1100,7 @@ export function useSwitchTouch(
     isInteractive,
     isDisabled,
     trackSize,
+    thumbSize,
     otherTrackProps,
   }: SwitchTouchOptions,
 ): void {
@@ -1036,6 +1126,15 @@ export function useSwitchTouch(
   useIsomorphicLayoutEffect(() => {
     controller.setGeometry(geometry);
   }, [controller, geometry]);
+
+  // Syncs the controller's default thumb sizes with the switch's size.
+  const thumbOff = thumbSize?.off;
+  const thumbOn = thumbSize?.on;
+  useIsomorphicLayoutEffect(() => {
+    controller.setDefaultThumb(
+      thumbOff == null || thumbOn == null ? null : {off: thumbOff, on: thumbOn},
+    );
+  }, [controller, thumbOff, thumbOn]);
 
   // Syncs whether the controller's gestures take a press.
   useIsomorphicLayoutEffect(() => {

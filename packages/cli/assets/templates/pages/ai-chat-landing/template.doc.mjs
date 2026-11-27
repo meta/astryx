@@ -20,15 +20,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'AI Chat - Landing',
-  icons: {
-    AtSymbolIcon: 'mention',
-    ClockIcon: 'clock',
-    CodeBracketIcon: 'code',
-    Cog6ToothIcon: 'settings',
-    LightBulbIcon: 'lightbulb',
-    LockClosedIcon: 'lock',
-    MagnifyingGlassIcon: 'search',
-    PencilSquareIcon: 'compose',
-    SparklesIcon: 'sparkles',
-  },
 };

@@ -85,7 +85,8 @@ export interface TypographyConfig {
 export type StyleXStyles = any;
 
 /**
- * Theme mode - system follows OS preference
+ * Theme mode. `system` takes the page's light or dark scheme: the reader's
+ * preference, unless the page or its host sets the root's scheme.
  */
 export type ThemeMode = 'system' | 'light' | 'dark';
 

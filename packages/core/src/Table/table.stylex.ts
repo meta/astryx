@@ -4,12 +4,14 @@
  * @file table.stylex.ts
  * @input StyleX, theme tokens
  * @output Shared table styles used by TableCell, TableHeaderCell, TableRow
+ *   and BaseTable
  * @position Utility styles; consumed by cell and row components
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Table/TableCell.tsx
  * - /packages/core/src/Table/TableHeaderCell.tsx
  * - /packages/core/src/Table/TableRow.tsx
+ * - /packages/core/src/Table/BaseTable.tsx
  */
 
 import * as stylex from '@stylexjs/stylex';
@@ -51,9 +53,46 @@ export const overflowStyles = stylex.create({
 export const wrapStyles = stylex.create({
   cell: {
     overflow: 'hidden',
+    // Break a word only when it cannot fit its column. A zero max-width or a
+    // break at any letter lets automatic layout shrink a column below its
+    // longest word. The table sets the word-break for its layout.
     overflowWrap: 'break-word',
-    wordBreak: 'break-word',
-    maxWidth: '0',
+    wordBreak: 'var(--_table-cell-word-break, normal)',
+  },
+});
+
+/**
+ * Header cells when the table's cells wrap.
+ *
+ * The table sets the white-space for its layout. In fixed layout the columns
+ * come from the column definitions, so a heading wraps like the body cells.
+ * In automatic layout a heading stays on one line and its column grows to fit
+ * it. There is no zero max-width: in automatic layout it would hold every
+ * column at zero width. Under `textOverflow="truncate"`, header cells use
+ * `overflowStyles` like the body cells.
+ */
+export const headerOverflowStyles = stylex.create({
+  cell: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'var(--_table-header-white-space, normal)',
+    overflowWrap: 'break-word',
+    wordBreak: 'var(--_table-cell-word-break, normal)',
+  },
+});
+
+/**
+ * A truncating plain-text heading cut by its own box, so the box can take the
+ * text's direction without moving the cell's padding, dividers or overlay.
+ * TableHeaderCell uses it for a plain heading and BaseTable for a heading
+ * beside a resize boundary, whose cell lets the boundary reach past its edge.
+ */
+export const cutHeadingStyles = stylex.create({
+  label: {
+    display: 'block',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
 });
 
@@ -69,6 +108,11 @@ export const wrapStyles = stylex.create({
  * Each density variant uses its own paddingInline as the fallback,
  * so standalone tables (where --container-padding-inline-start/end are unset)
  * keep their normal density-based cell padding unchanged.
+ *
+ * The last column's end inset is also exposed as `--_table-edge-inline-end`,
+ * so a header cell can give its content the same room it pads with. Every
+ * other cell resets it, so a Table nested in a last-column cell does not
+ * inherit the outer cell's inset.
  */
 export const containerEdgeStyles = stylex.create({
   compact: {
@@ -76,9 +120,13 @@ export const containerEdgeStyles = stylex.create({
       default: null,
       ':first-child': `max(var(--container-padding-inline-start, ${spacingVars['--spacing-2']}), ${spacingVars['--spacing-2']})`,
     },
+    '--_table-edge-inline-end': {
+      default: 'initial',
+      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-2']}), ${spacingVars['--spacing-2']})`,
+    },
     paddingInlineEnd: {
       default: null,
-      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-2']}), ${spacingVars['--spacing-2']})`,
+      ':last-child': 'var(--_table-edge-inline-end)',
     },
   },
   balanced: {
@@ -86,9 +134,13 @@ export const containerEdgeStyles = stylex.create({
       default: null,
       ':first-child': `max(var(--container-padding-inline-start, ${spacingVars['--spacing-3']}), ${spacingVars['--spacing-2']})`,
     },
+    '--_table-edge-inline-end': {
+      default: 'initial',
+      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-3']}), ${spacingVars['--spacing-2']})`,
+    },
     paddingInlineEnd: {
       default: null,
-      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-3']}), ${spacingVars['--spacing-2']})`,
+      ':last-child': 'var(--_table-edge-inline-end)',
     },
   },
   spacious: {
@@ -96,9 +148,13 @@ export const containerEdgeStyles = stylex.create({
       default: null,
       ':first-child': `max(var(--container-padding-inline-start, ${spacingVars['--spacing-4']}), ${spacingVars['--spacing-2']})`,
     },
+    '--_table-edge-inline-end': {
+      default: 'initial',
+      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-4']}), ${spacingVars['--spacing-2']})`,
+    },
     paddingInlineEnd: {
       default: null,
-      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-4']}), ${spacingVars['--spacing-2']})`,
+      ':last-child': 'var(--_table-edge-inline-end)',
     },
   },
 });

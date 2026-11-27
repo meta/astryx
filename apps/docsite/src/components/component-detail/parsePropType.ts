@@ -145,8 +145,16 @@ export function parsePropType(
 
   // If slotElements is declared, use it directly for the element control
   if (slotElements && slotElements.length > 0) {
+    // A plain HTML or SVG tag name (lower-case, like `svg`) means nothing to
+    // the reader. A single-option switch shows the prop's name instead. With
+    // more options, or in a slot list, the labels must stay distinct.
+    const isSingleSwitch =
+      slotElements.length === 1 && propName != null && propName !== 'children';
     const options = slotElements.map(el => ({
-      label: el.__element.replace(/^XDS/, ''),
+      label:
+        isSingleSwitch && /^[a-z]/.test(el.__element)
+          ? propName
+          : el.__element.replace(/^XDS/, ''),
       componentName: el.__element,
     }));
     // children with slotElements → repeatable slot list (add/remove items)
@@ -183,7 +191,7 @@ export function parsePropType(
   if (t === 'DefinedTheme') {
     return {kind: 'theme'};
   }
-  if (t === 'SyntaxTheme') {
+  if (t === 'SyntaxThemeDefinition') {
     return {kind: 'syntax-theme'};
   }
   if (t === 'IconType' || t === 'IconName') {

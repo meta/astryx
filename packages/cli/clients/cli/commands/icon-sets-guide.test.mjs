@@ -74,7 +74,7 @@ describe('icon-set guide', () => {
       '--new-definition',
       formatCliCommand('docs cli/experimental/icon-definitions'),
       'icon_builtin_definition_missing',
-      'Unmapped icon definitions (optional)',
+      'Unmapped icon meanings (optional)',
       'unmappedDefinitions',
       'icon_module_not_public',
       'icon_not_component',
@@ -90,6 +90,22 @@ describe('icon-set guide', () => {
       '`experimental.iconSet`',
       '`experimental.iconSets`',
       '`icon.newSet`',
+    ]) {
+      expect(stdout).toContain(phrase);
+    }
+  });
+
+  it('shows how to make a set inside an app, with no other package', async () => {
+    const {status, stdout} = await runCli(['docs', GUIDE, 'in-your-app']);
+    expect(status).toBe(0);
+    for (const phrase of [
+      'Make a set inside your app',
+      formatCliCommand(
+        'experimental icon new-set heroicons --from @heroicons/react/24/outline',
+      ),
+      formatCliCommand('experimental icon use heroicons'),
+      '"private": true',
+      "import {themeIcons} from 'app';",
     ]) {
       expect(stdout).toContain(phrase);
     }
@@ -144,9 +160,10 @@ describe('icon-set guide', () => {
     ).toEqual(types);
   });
 
-  // A set's own definitions join the namespace only in a project that opts
-  // in, as FR4 says; Astryx's are always there.
-  it("lists a set's own icon definitions only with experimental.iconSet", async () => {
+  // A set's own definitions join the namespace once its package is
+  // installed, with or without `experimental.iconSet`, as FR4 says;
+  // Astryx's are always there.
+  it("lists a set's own icon definitions once its package is installed, with or without experimental.iconSet", async () => {
     const definition = `/** @type {import('@astryxdesign/cli/authoring').IconDefinitionDoc} */
 export default {type: 'icon-definition', name: 'rocketLaunch', description: 'Launch something.', words: ['launch', 'liftoff']};
 `;
@@ -179,8 +196,7 @@ export default {type: 'icon-definition', name: 'rocketLaunch', description: 'Lau
     const withOptIn = await routes(optedIn);
     const without = await routes(notOptedIn);
     expect(withOptIn).toContain('rocket-launch');
-    expect(without).not.toContain('rocket-launch');
-    expect(without).toContain('close');
-    expect(withOptIn.filter(name => name !== 'rocket-launch')).toEqual(without);
+    expect(withOptIn).toContain('close');
+    expect(without).toEqual(withOptIn);
   });
 });

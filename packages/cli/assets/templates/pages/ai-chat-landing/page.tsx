@@ -28,16 +28,16 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {DropdownMenu, DropdownMenuItem} from '@astryxdesign/core/DropdownMenu';
 import {useToast} from '@astryxdesign/core/Toast';
 import {
-  Cog6ToothIcon,
-  AtSymbolIcon,
+  SettingsIcon,
+  MentionIcon,
   SparklesIcon,
-  PencilSquareIcon,
-  CodeBracketIcon,
-  MagnifyingGlassIcon,
-  LockClosedIcon,
+  ComposeIcon,
+  CodeIcon,
+  SearchIcon,
+  LockIcon,
   ClockIcon,
-  LightBulbIcon,
-} from '@heroicons/react/24/outline';
+  LightbulbIcon,
+} from '@astryxdesign/template-icons';
 
 // Fill the content area so the greeting and composer stay vertically centered.
 const pageStyle: CSSProperties = {minHeight: '100%'};
@@ -141,17 +141,17 @@ const CATEGORY_SUGGESTIONS: Record<
 
 // Category filters, shared by the toggle group and the composer mode menu.
 const CATEGORIES = [
-  {key: 'writing', label: 'Writing', icon: PencilSquareIcon},
-  {key: 'coding', label: 'Coding', icon: CodeBracketIcon},
-  {key: 'research', label: 'Research', icon: MagnifyingGlassIcon},
-  {key: 'creative', label: 'Creative', icon: LightBulbIcon},
+  {key: 'writing', label: 'Writing', icon: ComposeIcon},
+  {key: 'coding', label: 'Coding', icon: CodeIcon},
+  {key: 'research', label: 'Research', icon: SearchIcon},
+  {key: 'creative', label: 'Creative', icon: LightbulbIcon},
 ] as const;
 
 // Composer mode menu: categories plus special modes.
 const MODE_OPTIONS = [
   {key: 'auto', label: 'Auto', icon: SparklesIcon},
   ...CATEGORIES,
-  {key: 'sensitive', label: 'Sensitive', icon: LockClosedIcon},
+  {key: 'sensitive', label: 'Sensitive', icon: LockIcon},
   {key: 'deep', label: 'Deep Mode', icon: ClockIcon},
 ] as const;
 
@@ -202,6 +202,10 @@ const COMMAND_ITEMS: SearchableItem<{description: string}>[] = [
 const mentionTrigger: ChatComposerTrigger = {
   character: '@',
   searchSource: createStaticSource(MENTION_ITEMS),
+  deserialize: value => {
+    const user = MENTION_ITEMS.find(user => `@${user.id}` === value);
+    return user ? {value, label: user.label, variant: 'blue'} : null;
+  },
   renderItem: item => (
     <TypeaheadItem
       item={item}
@@ -301,7 +305,7 @@ export default function AIChatTemplate() {
       contentWidth={720}
       padding={6}
       content={
-        <LayoutContent>
+        <LayoutContent role="main">
           <VStack gap={8} vAlign="center" style={pageStyle}>
             {/* Greeting */}
             <VStack gap={1}>
@@ -353,7 +357,7 @@ export default function AIChatTemplate() {
                     label: 'Reference',
                     variant: 'ghost',
                     size: 'sm',
-                    icon: <Icon icon={AtSymbolIcon} size="sm" />,
+                    icon: <Icon icon={MentionIcon} size="sm" />,
                     isIconOnly: true,
                   }}
                   hasChevron={false}
@@ -412,7 +416,7 @@ export default function AIChatTemplate() {
                       label: 'Settings',
                       variant: 'ghost',
                       size: 'md',
-                      icon: <Icon icon={Cog6ToothIcon} size="sm" />,
+                      icon: <Icon icon={SettingsIcon} size="sm" />,
                       children: 'Settings',
                     }}
                     menuWidth={200}

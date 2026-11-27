@@ -12,6 +12,8 @@
  *   2. Every changeset body must carry a recognized [category] tag.
  *   3. Every changeset body must credit at least one @contributor.
  *   4. Frontmatter packages must be real, publishable, non-ignored packages.
+ *   5. A package's CHANGELOG.md starts with `# <its package.json name>`, so a
+ *      published changelog never shows a package name other than its own.
  *
  * It also enforces the declared-tier admission gate on main (spec:AST-017
  * FR46/FR48): while 0.x, a pending [breaking] Changeset is admissible only
@@ -46,7 +48,7 @@ function discoverPackages(root) {
     if (!fs.existsSync(pj)) continue;
     const p = JSON.parse(fs.readFileSync(pj, 'utf8'));
     if (p.name)
-      pkgs.push({name: p.name, private: !!p.private, version: p.version});
+      pkgs.push({name: p.name, private: !!p.private, version: p.version, dir});
   }
   return pkgs;
 }
@@ -165,8 +167,26 @@ function validateChangeset(file, contents, ctx) {
 }
 
 /**
+ * Check that a package's CHANGELOG starts with its own name as the title.
+ * Pure, so it can be unit-tested without the filesystem.
+ *
+ * @param {string} file       display name (for messages)
+ * @param {string} name       the package.json `name`
+ * @param {string} contents   raw CHANGELOG markdown
+ * @returns {string[]}        list of human-readable problems (empty = valid)
+ */
+function validateChangelogTitle(file, name, contents) {
+  const title = contents.split('\n', 1)[0].trim();
+  const expected = `# ${name}`;
+  return title === expected
+    ? []
+    : [`${file}: the first line must be "${expected}"; found "${title}".`];
+}
+
+/**
  * Validate every pending Changeset at `root`. Reads the fixed group's declaration
- * so a patch plan cannot admit [breaking] work.
+ * so a patch plan cannot admit [breaking] work. Also checks that each package's
+ * CHANGELOG.md starts with the title for its own package name.
  *
  * @param {string} root
  * @returns {{files: string[], problems: string[], pre1: boolean, declaredVersion: string|null, declaredTier: string|null}}
@@ -206,6 +226,17 @@ function checkRepository(root) {
     const contents = fs.readFileSync(path.join(dir, f), 'utf8');
     problems.push(...validateChangeset(f, contents, ctx));
   }
+  for (const pkg of pkgs) {
+    const changelog = path.join(pkg.dir, 'CHANGELOG.md');
+    if (!fs.existsSync(changelog)) continue;
+    problems.push(
+      ...validateChangelogTitle(
+        path.relative(root, changelog),
+        pkg.name,
+        fs.readFileSync(changelog, 'utf8'),
+      ),
+    );
+  }
   return {
     files,
     problems,
@@ -240,4 +271,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main();
 }
 
-export {checkRepository, validateChangeset, parseFrontmatter};
+export {
+  checkRepository,
+  validateChangeset,
+  validateChangelogTitle,
+  parseFrontmatter,
+};

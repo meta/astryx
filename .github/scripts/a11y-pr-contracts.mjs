@@ -70,7 +70,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {costOf, splitByDuration} from '../../scripts/lib/duration-split.mjs';
+import {costOf, fitLegsToBudget} from '../../scripts/lib/duration-split.mjs';
 
 export const EVIDENCE_DIR = 'pr-a11y-evidence';
 
@@ -838,33 +838,39 @@ export function planOverLimit(legs, isPullRequest) {
   const limit = isPullRequest ? LEG_LIMIT_MS : RELEASE_LEG_LIMIT_MS;
   if (legs.longestMs <= limit) return '';
   const minutes = (legs.longestMs / 60000).toFixed(1);
-  const job = isPullRequest ? "a leg's 15-minute job" : "the release check's 360-minute job";
+  const job = isPullRequest
+    ? "a leg's 15-minute job"
+    : "the release check's 360-minute job";
   return `::error title=Accessibility specs over their leg's time::${legs.count} legs still leave ${minutes} min of recorded time in one leg, more than the ${limit / 60000} minutes ${job} leaves for its specs. Split the change, or its longest spec files.`;
 }
 
 /**
  * The legs an opt-in run needs: enough that each leg's recorded time fits
- * LEG_BUDGET_MS, at most `maxLegs`, split slowest first onto the leg with the
- * least time (`splitByDuration`, as the other leg planners). The recorded
- * times come from release legs that run four files at once on four cores; one
- * file alone on a pull-request runner runs faster, so a leg sums them without
- * the default check's margin.
+ * LEG_BUDGET_MS, at most `maxLegs` (`fitLegsToBudget`, as the dependent-audit
+ * planner). It starts at the total over the budget and adds a leg while one
+ * is still over it. A file longer than the budget runs in a leg of its own,
+ * unless, at `maxLegs`, an even split is shorter (`fitLegsToBudget`).
+ * An empty selection plans one leg with no files. The recorded times come from
+ * release legs that run four files at once on four cores; one file alone on a
+ * pull-request runner runs faster, so a leg sums them without the default
+ * check's margin.
  * @param {string[]} files
  * @param {Record<string, number>} seconds
  * @param {number} maxLegs
  */
 export function planLegs(files, seconds, maxLegs) {
+  if (files.length === 0) return {count: 1, shares: [[]], longestMs: 0};
   const cost = costOf(files, seconds);
-  const sum = list => list.reduce((total, file) => total + cost(file), 0);
-  const count = Math.min(
-    Math.max(1, maxLegs),
-    Math.max(1, Math.ceil((sum(files) * 1000) / LEG_BUDGET_MS)),
-  );
-  const shares = splitByDuration(files, count, cost);
+  const totalMs = files.reduce((sum, file) => sum + cost(file), 0) * 1000;
+  const plan = fitLegsToBudget(files, cost, {
+    budget: LEG_BUDGET_MS / 1000,
+    maxLegs: Math.max(1, maxLegs),
+    start: Math.ceil(totalMs / LEG_BUDGET_MS),
+  });
   return {
-    count,
-    shares,
-    longestMs: Math.max(...shares.map(share => sum(share) * 1000)),
+    count: plan.count,
+    shares: plan.shares,
+    longestMs: plan.longest * 1000,
   };
 }
 

@@ -2,7 +2,7 @@
 
 'use client';
 
-import {useCallback, useState, useMemo, type CSSProperties} from 'react';
+import {useState, useMemo, type CSSProperties} from 'react';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {IconButton} from '@astryxdesign/core/IconButton';
@@ -13,7 +13,6 @@ import {Token} from '@astryxdesign/core/Token';
 import {Banner} from '@astryxdesign/core/Banner';
 import {CodeBlock} from '@astryxdesign/core/CodeBlock';
 import {TabList, Tab} from '@astryxdesign/core/TabList';
-import {Selector} from '@astryxdesign/core/Selector';
 import {HStack, VStack, StackItem} from '@astryxdesign/core/Stack';
 import {Layout, LayoutContent, LayoutPanel} from '@astryxdesign/core/Layout';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
@@ -25,11 +24,12 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Section} from '@astryxdesign/core/Section';
 import {Center} from '@astryxdesign/core/Center';
 import {Outline, type OutlineItem} from '@astryxdesign/core/Outline';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
-  ArrowTopRightOnSquareIcon,
-  ArrowsPointingOutIcon,
-  PlusIcon,
-} from '@heroicons/react/24/outline';
+  ExternalLinkIcon,
+  ExpandIcon,
+  AddIcon,
+} from '@astryxdesign/template-icons';
 
 const tabListFlush: CSSProperties = {marginInlineStart: '-12px'};
 const outlinePanel: CSSProperties = {
@@ -44,11 +44,6 @@ const COMPONENT_OUTLINE_ITEMS: OutlineItem[] = [
   {id: 'best-practices', label: 'Best practices', level: 3},
   {id: 'examples', label: 'Examples', level: 2},
 ];
-
-const COMPONENT_OUTLINE_OPTIONS = COMPONENT_OUTLINE_ITEMS.map(item => ({
-  value: item.id,
-  label: item.label,
-}));
 
 // ---------------------------------------------------------------------------
 // DialogPreview — stateful dialog preview for component previews
@@ -505,24 +500,21 @@ function getComponentDocs(key: string) {
 // ---------------------------------------------------------------------------
 
 function ComponentDetailView({activeNav}: {activeNav: string}) {
+  const showToast = useToast();
   const [exampleTabs, setExampleTabs] = useState<Record<string, string>>({});
-  const [activeId, setActiveId] = useState<string | undefined>(
-    COMPONENT_OUTLINE_ITEMS[0]?.id,
-  );
-  const isMobile = useMediaQuery('(max-width: 768px)');
-
-  const scrollToId = useCallback((id: string) => {
-    setActiveId(id);
-    const target = document.getElementById(id);
-    if (target != null) {
-      target.scrollIntoView({behavior: 'smooth', block: 'start'});
-      window.history.pushState(null, '', `#${id}`);
-    }
-  }, []);
+  // Mobile first: the server render and a shared static copy, which run no
+  // script, get one column with the section links on top. That reads well at
+  // every width; once script runs, wide screens move the links to the rail.
+  const isMobile = useMediaQuery('(max-width: 768px)', true);
 
   const EXAMPLE_PREVIEWS: Record<string, React.ReactNode[]> = {
     button: [
-      <HStack key="semantics" gap={3} vAlign="center">
+      <HStack
+        key="semantics"
+        gap={3}
+        vAlign="center"
+        hAlign="center"
+        wrap="wrap">
         <Button label="Flat" variant="ghost" />
         <Button label="Default" variant="secondary" />
         <Button label="Primary" variant="primary" />
@@ -537,7 +529,7 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
       <Button
         label="Button"
         variant="secondary"
-        icon={<Icon icon={PlusIcon} />}
+        icon={<Icon icon={AddIcon} />}
         endContent={<Badge label="New" variant="info" />}
       />
     ),
@@ -583,31 +575,21 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
             label="On this page"
             role="complementary"
             style={outlinePanel}>
-            <Outline
-              items={COMPONENT_OUTLINE_ITEMS}
-              onActiveIdChange={setActiveId}
-            />
+            <Outline items={COMPONENT_OUTLINE_ITEMS} />
           </LayoutPanel>
         )
       }
       content={
-        <LayoutContent isScrollable={false} padding={8}>
+        <LayoutContent role="main" isScrollable={false} padding={8}>
           <VStack gap={8}>
             <VStack gap={2}>
-              <Text type="display-1">{getComponentName(activeNav)}</Text>
+              <Text as="h1" type="display-1">
+                {getComponentName(activeNav)}
+              </Text>
               <Text type="supporting" color="secondary">
                 March 30, 2026 · Updated 5:40 p.m. PST
               </Text>
-              {isMobile && (
-                <Selector
-                  label="On this page"
-                  isLabelHidden
-                  options={COMPONENT_OUTLINE_OPTIONS}
-                  value={activeId}
-                  onChange={scrollToId}
-                  width="100%"
-                />
-              )}
+              {isMobile && <Outline items={COMPONENT_OUTLINE_ITEMS} />}
             </VStack>
 
             <Card variant="muted" padding={0}>
@@ -677,29 +659,46 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
                 return (
                   <Card key={i} padding={0}>
                     <Section padding={3} variant="transparent">
-                      <HStack gap={3} vAlign="center">
+                      {/* On a narrow screen the actions move under the title
+                          instead of running past the card. */}
+                      <HStack gap={3} vAlign="center" wrap="wrap">
                         <StackItem size="fill">
                           <Text type="body" weight="medium">
                             {example.title}
                           </Text>
                         </StackItem>
-                        <HStack gap={1} vAlign="center">
+                        <HStack gap={1} vAlign="center" wrap="wrap">
                           <Button
                             label="Open in Craft"
                             variant="ghost"
                             size="sm"
-                            icon={<Icon icon={ArrowTopRightOnSquareIcon} />}
+                            icon={<Icon icon={ExternalLinkIcon} />}
+                            onClick={() =>
+                              showToast({
+                                body: 'Demo: this example would open in Craft here',
+                              })
+                            }
                           />
                           <Button
                             label="Send to CLI"
                             variant="ghost"
                             size="sm"
+                            onClick={() =>
+                              showToast({
+                                body: 'Demo: this example would be sent to the CLI here',
+                              })
+                            }
                           />
                           <IconButton
                             label="Fullscreen"
                             variant="ghost"
                             size="sm"
-                            icon={<Icon icon={ArrowsPointingOutIcon} />}
+                            icon={<Icon icon={ExpandIcon} />}
+                            onClick={() =>
+                              showToast({
+                                body: 'Demo: this example would open full screen here',
+                              })
+                            }
                           />
                         </HStack>
                       </HStack>
@@ -714,6 +713,7 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
                     <Section variant="muted" padding={3} dividers={['top']}>
                       <VStack gap={3}>
                         <TabList
+                          aria-label={`${example.title} details`}
                           value={activeTab}
                           onChange={value =>
                             setExampleTabs(prev => ({

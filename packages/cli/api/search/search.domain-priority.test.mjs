@@ -247,6 +247,56 @@ describe('search domain priority — the rule', () => {
       }),
     ).toBe(0);
   });
+
+  it('reads the word scores ranking kept, only those scored the same way', () => {
+    const q = 'font size';
+    const tokens = tokenizeQuery(q);
+    const text = {domain: 'component', name: 'Text', keywords: ['font']};
+    /** @type {Map<string, {fuzzy: boolean, hit: {score: number, reason: string} | null}>} */
+    const tokenHits = new Map();
+    const hit = scoreQuery(q, tokens, text, undefined, {tokenHits}) ?? {
+      score: 0,
+      matched: 0,
+      total: 1,
+    };
+    expect([...tokenHits.keys()]).toEqual(tokens);
+    // The kept scores give the answer that scoring the words again gives.
+    expect(
+      domainPriority(
+        q,
+        tokens,
+        /** @type {any} */ (text),
+        hit,
+        undefined,
+        tokenHits,
+      ),
+    ).toBe(domainPriority(q, tokens, /** @type {any} */ (text), hit));
+    // A strong kept score counts only when it was scored with the same
+    // `fuzzy` as the priority asks for.
+    const card = /** @type {any} */ ({domain: 'component', name: 'Card'});
+    const none = {score: 0, matched: 0, total: tokens.length};
+    const strong = {score: 100, reason: 'kept'};
+    expect(
+      domainPriority(
+        q,
+        tokens,
+        card,
+        none,
+        undefined,
+        new Map([['size', {fuzzy: false, hit: strong}]]),
+      ),
+    ).toBe(1);
+    expect(
+      domainPriority(
+        q,
+        tokens,
+        card,
+        none,
+        undefined,
+        new Map([['size', {fuzzy: true, hit: strong}]]),
+      ),
+    ).toBe(0);
+  });
 });
 
 describe('search domain priority — real docs and components', () => {

@@ -13,14 +13,15 @@
  *   that names no doc is a problem, never a guess.
  *   Doc tokens render here too (renderTokens), so text and JSON carry the
  *   same commands.
- * @position Pure, apart from reading which package manager the working
- *   directory's project uses, for `{@pm}` tokens. The docs adapter owns the
+ * @position Pure, apart from reading the package manager and the Core release
+ *   of the project the docs render for, for `{@pm}` tokens. The docs adapter owns the
  *   resolver (the project's docs tree and topic catalog) and applies this to
  *   every read and every doctor check.
  */
 
 import {renderCommandTokens} from './doc-syntax.mjs';
-import {docPackageManager} from '../env/package-manager.mjs';
+import {docPackageManager, docProjectDir} from '../env/package-manager.mjs';
+import {coreMatchedAdd, releaseSpec} from '../release/notices.mjs';
 
 /** The kinds a link can name: every authored doc kind. */
 export const LINK_KINDS = new Set([
@@ -144,17 +145,37 @@ export function unlinkText(text) {
  * Text with its doc tokens rendered (doc-syntax.mjs): `{@command …}` as the
  * bare `astryx …` command, which text output then starts with the reader's
  * runner the way it starts every command, and `{@pm …}` in the package
- * manager of the project the CLI runs in. JSON readers get runnable commands,
- * the way they did before docs wrote tokens.
+ * manager of the project the CLI runs in. In a read for one project (a docs,
+ * component or template read), an install names Core, the CLI and each
+ * package Astryx releases with Core at the Core release that project names,
+ * as `theme add` and `doctor` do: each package released with Core names
+ * Core's exact release as its peer, so the newest one does not install
+ * beside an older Core. Search and build rank over the text as written, so
+ * they render no release. JSON readers get runnable commands, the way they
+ * did before docs wrote tokens.
  * @param {unknown} text
  * @param {string | null} [lang] the code block's language for a block's body
  * @returns {any}
  */
 export function renderTokens(text, lang = null) {
   if (typeof text !== 'string' || !text.includes('{@')) return text;
+  const dir = docProjectDir();
   return renderCommandTokens(
     text,
-    {stem: 'astryx', pm: docPackageManager(process.cwd())},
+    {
+      stem: 'astryx',
+      pm: docPackageManager(process.cwd()),
+      ...(dir == null
+        ? {}
+        : {
+            pin: (/** @type {string} */ name) => {
+              const add = coreMatchedAdd(dir, name, {projectOnly: true});
+              return (
+                add && {spec: releaseSpec(name, add.release), exact: add.exact}
+              );
+            },
+          }),
+    },
     lang,
   );
 }

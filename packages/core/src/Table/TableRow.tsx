@@ -25,6 +25,7 @@ import {glidingDividerStyles} from './glidingDivider';
 import {TableContext} from './TableContext';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {TableRowPlacementContext} from './TableRowPlacementContext';
 
 /** Props for TableRow — thin `<tr>` wrapper */
 export interface TableRowProps extends BaseProps<HTMLTableRowElement> {
@@ -91,6 +92,13 @@ const stripedRowStyles = stylex.create({
       default: null,
       [NOT_PANEL_ROW]: colorVars['--color-background-muted'],
     },
+  },
+});
+
+const openRowDividerStyles = stylex.create({
+  row: {
+    // Private plumbing for plugins/rowExpansion, read by TableCell's divider.
+    '--_table-open-row-divider-width': 'initial',
   },
 });
 
@@ -172,6 +180,7 @@ export function TableRow({
   ...props
 }: TableRowProps) {
   const ctx = use(TableContext);
+  const placement = use(TableRowPlacementContext);
 
   if (!ctx) {
     return (
@@ -189,7 +198,9 @@ export function TableRow({
     );
   }
 
-  const rowStyles: StyleXStyles[] = [];
+  // A row expansion's open panel sets this row's private divider width; a
+  // table nested in the row's cells starts again from none.
+  const rowStyles: StyleXStyles[] = [openRowDividerStyles.row];
 
   // Striped + hover styling is for body rows only — the header row must not
   // pick up the hover highlight (or striping) even when hasHover/isStriped.
@@ -228,12 +239,17 @@ export function TableRow({
     rowStyles.push(...xstyle);
   }
 
+  // Every row Core may stripe carries `striped`, footer rows included. Only
+  // a body row whose place Core knows carries `parity`.
   return (
     <tr
       ref={ref}
       {...props}
       {...mergeProps(
-        themeProps('table-row'),
+        themeProps('table-row', {
+          parity: placement.isBodyRow && !isHeaderRow ? placement.parity : null,
+          striped: ctx.isStriped && !isHeaderRow ? 'striped' : null,
+        }),
         stylex.props(tableRowMarker, ...rowStyles),
         incomingClassName,
         incomingStyle,

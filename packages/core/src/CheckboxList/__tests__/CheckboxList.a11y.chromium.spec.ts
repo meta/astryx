@@ -1036,10 +1036,11 @@ async function readPage(page: Page, auditCase: AuditCase) {
             descriptionText: text(
               byIds(input?.getAttribute('aria-describedby') ?? null)[0] ?? null,
             ),
+            // The description is the open tooltip or the content inside it.
             reasonDescribed:
               tooltip != null &&
-              byIds(input?.getAttribute('aria-describedby') ?? null).includes(
-                tooltip as HTMLElement,
+              byIds(input?.getAttribute('aria-describedby') ?? null).some(
+                node => tooltip.contains(node) === true,
               ),
             hovered: row.matches(':hover'),
             active: row.matches(':active'),
@@ -1181,7 +1182,9 @@ async function readPage(page: Page, auditCase: AuditCase) {
             : {
                 text: text(tooltip),
                 open: tooltip.matches(':popover-open'),
-                describesGroup: describedNodes.includes(tooltip as HTMLElement),
+                describesGroup: describedNodes.some(node =>
+                  tooltip.contains(node),
+                ),
                 color: parse(getComputedStyle(tooltip).color),
                 backdrop: backdrop(tooltip),
                 box: box(tooltip),

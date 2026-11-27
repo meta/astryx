@@ -235,6 +235,62 @@ test.describe('with a mouse', () => {
     await page.mouse.up();
   });
 
+  test('a press on a Button that an open popover names as its separate anchor neither scales it nor moves the popover, and the scale returns when the popover closes', async ({
+    page,
+  }) => {
+    await openStory(
+      page,
+      storybook(),
+      'core-popover-anchor-ref--button-anchor',
+    );
+    const opener = page.getByRole('button', {name: 'Show tip'});
+    const anchor = page.getByRole('button', {name: 'Target'});
+    await opener.click();
+    await settle(page);
+    const open = await layerBox(page);
+
+    const at = await centerOf(anchor);
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await expectPressedUnscaled(page, anchor);
+    expectSameBox(await layerBox(page), open, 'during the press');
+    await page.mouse.up();
+
+    await opener.click();
+    await expect(page.locator(OPEN_LAYER)).toHaveCount(0);
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await expectPressed(anchor);
+    await page.mouse.up();
+  });
+
+  for (const [story, box] of [
+    ['selector', '.astryx-selector'],
+    ['multi-selector', '.astryx-multi-selector'],
+    ['complex-selector', '.astryx-complex-selector'],
+  ] as const) {
+    test(`a press on a ${story} trigger that an open popover names as its separate anchor neither scales its box nor moves the popover`, async ({
+      page,
+    }) => {
+      await openStory(
+        page,
+        storybook(),
+        `core-popover-anchor-ref--${story}-anchor`,
+      );
+      await page.getByRole('button', {name: 'Show tip'}).click();
+      await settle(page);
+      const open = await layerBox(page);
+
+      const anchor = page.getByRole('combobox').first();
+      const at = await centerOf(anchor);
+      await page.mouse.move(at.x, at.y);
+      await page.mouse.down();
+      await expectPressedUnscaled(page, anchor, page.locator(box).first());
+      expectSameBox(await layerBox(page), open, 'during the press');
+      await page.mouse.up();
+    });
+  }
+
   test('the press that opens a DropdownMenu places the menu from the unpressed trigger', async ({
     page,
   }) => {
@@ -364,6 +420,28 @@ test.describe('with a finger', () => {
 
     const finger = await touch.press(at);
     await expectPressedUnscaled(page, trigger);
+    expectSameBox(await layerBox(page), open, 'while the finger is down');
+    await finger.lift();
+  });
+
+  test('a finger held on a Button that an open popover names as its separate anchor neither scales it nor moves the popover', async ({
+    page,
+  }) => {
+    await openStory(
+      page,
+      storybook(),
+      'core-popover-anchor-ref--button-anchor',
+    );
+    const touch = await touchDriver(page);
+    await touch.tap(
+      await centerOf(page.getByRole('button', {name: 'Show tip'})),
+    );
+    await settle(page);
+    const open = await layerBox(page);
+
+    const anchor = page.getByRole('button', {name: 'Target'});
+    const finger = await touch.press(await centerOf(anchor));
+    await expectPressedUnscaled(page, anchor);
     expectSameBox(await layerBox(page), open, 'while the finger is down');
     await finger.lift();
   });

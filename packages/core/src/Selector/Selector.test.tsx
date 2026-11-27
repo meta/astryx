@@ -21,6 +21,7 @@ import {
 import {readFileSync} from 'node:fs';
 import {
   act,
+  cleanup,
   render,
   screen,
   fireEvent,
@@ -48,6 +49,18 @@ import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {selectorPresentationStyles} from './selectorPresentation.stylex';
 import {groupStyles} from '../InputGroup/groupStyles';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {getTooltip} from '../__tests__/tooltipDescription';
+
+/** The popup the combobox names in `aria-controls`. */
+function popupOf(combobox: HTMLElement): HTMLElement {
+  const popup = document.getElementById(
+    combobox.getAttribute('aria-controls') ?? '',
+  );
+  if (popup == null) {
+    throw new Error('aria-controls names no element in the document');
+  }
+  return popup;
+}
 
 /**
  * Enters a search query as one change. Typing it key by key can land several
@@ -76,6 +89,8 @@ function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
 // resolves from the module cache and every sheet test waits only on the open.
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
+  await import('./SelectorBottomSheet');
+  await import('./SelectorBottomSheetFrame');
 });
 
 beforeEach(() => {
@@ -302,6 +317,8 @@ function expectSilentBusySpinner() {
 // here, and each test's open waits only for the open.
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
+  await import('./SelectorBottomSheet');
+  await import('./SelectorBottomSheetFrame');
 });
 
 describe('Selector', () => {
@@ -328,6 +345,30 @@ describe('Selector', () => {
     await user.click(screen.getByRole('option', {name: /Banana/}));
     expect(onChange).toHaveBeenCalledWith('Banana');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('with no options, focuses a group named by the label in the sheet', async () => {
+    const user = userEvent.setup();
+    render(
+      <Selector
+        label="Fruit"
+        options={[]}
+        onChange={() => {}}
+        presentation="bottom-sheet"
+      />,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await screen.findByRole('dialog', {name: 'Fruit'});
+    // The field is a group named "Fruit" too; the popup is the one the trigger
+    // controls.
+    const group = popupOf(trigger);
+    expect(group).toHaveAttribute('role', 'group');
+    expect(group).toHaveAccessibleName('Fruit');
+    await waitFor(() => {
+      expect(group).toHaveFocus();
+    });
+    expect(group).toHaveTextContent('No options');
   });
 
   it('restores touch focus without painting a trigger focus ring', async () => {
@@ -395,7 +436,7 @@ describe('Selector', () => {
 
   it('uses content-hugging height without extra bottom content padding', () => {
     const source = readFileSync(
-      'packages/core/src/Selector/SelectorBottomSheet.tsx',
+      'packages/core/src/Selector/SelectorBottomSheetFrame.tsx',
       'utf8',
     );
 
@@ -580,14 +621,13 @@ describe('Selector', () => {
     const popover = screen
       .getByRole('listbox', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-start span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideAbove');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('emits the direction-independent logical mapping under an RTL ancestor (#3389)', async () => {
-    // The self-* position-area keywords resolve against the popover's own
-    // inherited direction in the browser, so RTL emits the same string as
+    // The logical anchor insets resolve against the popover's own
+    // inherited direction in the browser, so RTL emits the same styles as
     // LTR and the mirroring is pure CSS — jsdom can only assert the string.
     const user = userEvent.setup();
     render(
@@ -606,9 +646,8 @@ describe('Selector', () => {
     const popover = screen
       .getByRole('listbox', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('clamps the default selected-item overlay to the viewport', async () => {
@@ -645,13 +684,15 @@ describe('Selector', () => {
   });
 
   it.each([
-    ['below its anchor', 'marginBlockEnd'],
-    ['already flipped above its anchor', 'marginBlockStart'],
+    ['below its anchor', 'marginBlockEnd', null],
+    ['already flipped above its anchor', 'marginBlockStart', 'self-end'],
   ])(
     "keeps the overlay out of the layer's viewport gutter, the layer %s",
-    async (_, gutterMargin) => {
+    async (_, gutterMargin, flippedAlignSelf) => {
       const restoreRects = mockSelectorRects();
-      // The layer keeps a 16 px gutter from the viewport's block end.
+      // The layer keeps a 16 px gutter from the viewport's block end. A flip
+      // moves it to the block-start margin and mirrors the layer's block
+      // self alignment to the block end.
       const realGetComputedStyle = window.getComputedStyle.bind(window);
       const styleSpy = vi
         .spyOn(window, 'getComputedStyle')
@@ -662,6 +703,11 @@ describe('Selector', () => {
             element.hasAttribute('popover')
           ) {
             Object.defineProperty(style, gutterMargin, {value: '16px'});
+            if (flippedAlignSelf != null) {
+              Object.defineProperty(style, 'alignSelf', {
+                value: flippedAlignSelf,
+              });
+            }
           }
           return style;
         });
@@ -693,6 +739,68 @@ describe('Selector', () => {
       }
     },
   );
+
+  it('measures the overlay again when a scroll stop re-picks the list onto the other side', async () => {
+    const restoreRects = mockSelectorRects();
+    // The browser picks the layer's side. A block flip mirrors the layer's
+    // block self alignment to the block end and moves the gutter to the
+    // block-start margin.
+    let isFlipped = false;
+    const realGetComputedStyle = window.getComputedStyle.bind(window);
+    const styleSpy = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((element, pseudo) => {
+        const style = realGetComputedStyle(element, pseudo);
+        if (
+          isFlipped &&
+          element instanceof HTMLElement &&
+          element.hasAttribute('popover')
+        ) {
+          Object.defineProperty(style, 'alignSelf', {value: 'self-end'});
+          Object.defineProperty(style, 'marginBlockStart', {value: '16px'});
+        }
+        return style;
+      });
+    // Scroll stops arrive as `scrollend`.
+    const view = window as {onscrollend?: unknown};
+    view.onscrollend = null;
+    const user = userEvent.setup();
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+        />,
+      );
+      await user.click(screen.getByRole('combobox'));
+      const popover = screen
+        .getByRole('listbox', {hidden: true})
+        .closest('[popover]');
+      // Opened below its anchor: the margin below the anchor.
+      await waitFor(() => {
+        expect(popover?.getAttribute('style')).toContain(
+          '--_selector-overlay-margin: min(-110px,',
+        );
+      });
+      // A scroll stops, and the re-pick puts the list above its anchor.
+      isFlipped = true;
+      act(() => {
+        document.dispatchEvent(new Event('scrollend'));
+      });
+      // The margin for a list above its anchor ends at the keyboard's term.
+      await waitFor(() => {
+        expect(popover?.getAttribute('style')).toContain(
+          'var(--_layer-keyboard-inset-block-end, 0px))))',
+        );
+      });
+    } finally {
+      delete view.onscrollend;
+      styleSpy.mockRestore();
+      restoreRects();
+    }
+  });
 
   it('aligns the selected item using untransformed layout geometry', async () => {
     const restoreRects = mockSelectorRects({
@@ -861,6 +969,29 @@ describe('Selector', () => {
           spacingVars['--spacing-1'],
         );
       });
+    });
+
+    it('opens the selected-item overlay without a flush inside its commit', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const user = userEvent.setup();
+        render(
+          <Selector
+            label="Fruit"
+            options={OPTIONS}
+            value="Banana"
+            onChange={() => {}}
+          />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        await screen.findByRole('listbox', {hidden: true});
+        // The list's resize report at registration runs inside the open's
+        // commit, where React cannot flush and warns.
+        expect(error.mock.calls.flat().join(' ')).not.toContain('flushSync');
+      } finally {
+        error.mockRestore();
+      }
     });
 
     it('stays flush in the default selected-item overlay', async () => {
@@ -1321,14 +1452,14 @@ describe('Selector', () => {
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
       await user.type(screen.getByRole('combobox', h), 'xyz');
       expect(screen.queryAllByRole('option', h)).toHaveLength(0);
-      // Scope to the listbox: the polite live region also announces "No results
+      // Scope to the popup: the polite live region also announces "No results
       // found", so an unscoped query matches both the visible empty state and
       // the a11y announcement.
-      const listbox = screen.getByRole('listbox', h);
-      expect(within(listbox).getByText('No results found')).toBeInTheDocument();
+      const popup = popupOf(screen.getByRole('combobox', h));
+      expect(within(popup).getByText('No results found')).toBeInTheDocument();
     });
 
-    it('empty-state message is not exposed as a listbox child', async () => {
+    it('with no matching options, the popup is a named group, not a listbox, and the input still controls it', async () => {
       const user = userEvent.setup();
       render(
         <Selector
@@ -1342,12 +1473,18 @@ describe('Selector', () => {
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
       await user.type(screen.getByRole('combobox', h), 'xyz');
 
-      // role="listbox" only permits option/group children — the visual
-      // empty-state message must be presentational (it is announced through
-      // the result-count live region instead).
-      const listbox = screen.getByRole('listbox', h);
-      const empty = within(listbox).getByText('No results found');
-      expect(empty).toHaveAttribute('role', 'presentation');
+      // An empty listbox is invalid (AST-020 1.3.1, 4.1.2): with no options the
+      // popup is a group named by the label, and the message is its content.
+      const combobox = screen.getByRole('combobox', h);
+      expect(screen.queryByRole('listbox', h)).toBeNull();
+      expect(combobox).toHaveAttribute('aria-expanded', 'true');
+      const popup = popupOf(combobox);
+      expect(popup).toBe(screen.getByRole('group', {name: 'Fruit', ...h}));
+      expect(within(popup).getByText('No results found')).toBeInTheDocument();
+
+      // Matching options bring the listbox back.
+      await user.clear(combobox);
+      expect(screen.getByRole('listbox', h)).toBe(popupOf(combobox));
     });
 
     it('renders emptySearchText in place of the default message', async () => {
@@ -1365,12 +1502,12 @@ describe('Selector', () => {
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
       await user.type(screen.getByRole('combobox', h), 'xyz');
 
-      const listbox = screen.getByRole('listbox', h);
+      const popup = popupOf(screen.getByRole('combobox', h));
       expect(
-        within(listbox).getByText('Nothing like that here'),
+        within(popup).getByText('Nothing like that here'),
       ).toBeInTheDocument();
       expect(
-        within(listbox).queryByText('No results found'),
+        within(popup).queryByText('No results found'),
       ).not.toBeInTheDocument();
     });
 
@@ -1387,10 +1524,10 @@ describe('Selector', () => {
       );
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
 
-      const listbox = screen.getByRole('listbox', h);
-      expect(within(listbox).getByText('No options')).toBeInTheDocument();
+      const popup = popupOf(screen.getByRole('combobox', h));
+      expect(within(popup).getByText('No options')).toBeInTheDocument();
       expect(
-        within(listbox).queryByText('Nothing like that here'),
+        within(popup).queryByText('Nothing like that here'),
       ).not.toBeInTheDocument();
     });
 
@@ -1409,8 +1546,8 @@ describe('Selector', () => {
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
       await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
 
-      // The panel message is role="presentation", so the live region is the
-      // only thing a screen reader gets — it has to say the same words.
+      // The live region announces the panel message, so it has to say the
+      // same words.
       await waitFor(() =>
         expect(politeRegion()?.textContent).toBe('Nothing like that here'),
       );
@@ -1691,7 +1828,7 @@ describe('Selector', () => {
       // Without hasSearch the trigger itself is the combobox.
       await user.click(screen.getByRole('combobox', {name: 'Fruit'}));
 
-      const listbox = screen.getByRole('listbox', h);
+      const listbox = popupOf(screen.getByRole('combobox', {name: 'Fruit'}));
       expect(
         within(listbox).getByText('Add a fruit first'),
       ).toBeInTheDocument();
@@ -2014,7 +2151,7 @@ describe('Selector', () => {
         expect(
           screen.queryByRole('group', {name: 'Citrus', ...h}),
         ).not.toBeInTheDocument();
-        const listbox = screen.getByRole('listbox', h);
+        const listbox = popupOf(screen.getByRole('combobox', h));
         expect(
           within(listbox).getByText('No results found'),
         ).toBeInTheDocument();
@@ -2220,6 +2357,29 @@ describe('Selector', () => {
       expect(onChange).toHaveBeenLastCalledWith('Đào');
     });
 
+    it('selects an option from a letter typed with AltGr (INV17)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="City"
+          options={['Kraków', 'Lublin', 'Łódź']}
+          value="Kraków"
+          onChange={onChange}
+        />,
+      );
+
+      await user.tab();
+      fireEvent.keyDown(document.activeElement as Element, {
+        key: 'ł',
+        ctrlKey: true,
+        altKey: true,
+        modifierAltGraph: true,
+      });
+
+      expect(onChange).toHaveBeenLastCalledWith('Łódź');
+    });
+
     it('puts the exact option first for a typed mark (INV17)', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
@@ -2345,6 +2505,27 @@ describe('Selector', () => {
       const search = screen.getByPlaceholderText('Search…');
       expect(search).toHaveValue('c');
       await waitFor(() => expect(search).toHaveFocus());
+    });
+
+    it('seeds a letter typed with AltGr on a closed hasSearch trigger (INV17)', async () => {
+      const user = userEvent.setup();
+      render(
+        <Selector
+          label="City"
+          options={['Kraków', 'Lublin', 'Łódź']}
+          hasSearch
+        />,
+      );
+
+      await user.tab();
+      fireEvent.keyDown(document.activeElement as Element, {
+        key: 'ł',
+        ctrlKey: true,
+        altKey: true,
+        modifierAltGraph: true,
+      });
+
+      expect(await screen.findByPlaceholderText('Search…')).toHaveValue('ł');
     });
 
     it('accumulates a multi-character prefix and resets it after the timeout', async () => {
@@ -2862,7 +3043,7 @@ describe('Selector', () => {
       const trigger = screen.getByRole('combobox', {
         name: 'Destination Channel',
       });
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
 
       expect(trigger).not.toBeDisabled();
       expect(trigger).toHaveAttribute('aria-disabled', 'true');
@@ -2887,17 +3068,20 @@ describe('Selector', () => {
       const container = screen
         .getByTestId('fruit-selector')
         .closest('.astryx-selector') as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        );
       });
     });
 
@@ -2912,11 +3096,10 @@ describe('Selector', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
     });
 
@@ -2961,7 +3144,7 @@ describe('Selector', () => {
         />,
       );
       const trigger = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -3589,12 +3772,35 @@ describe('Selector statusVariant forwarding', () => {
     const statusButton = screen.getByRole('button', {
       name: /warning details/i,
     });
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent('Visible to all users');
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
     expect(
       screen.getByRole('combobox').getAttribute('aria-describedby'),
     ).toContain(tooltip.id);
+  });
+
+  it('keeps the written order of the status tooltip message under right-to-left', async () => {
+    render(
+      <div dir="rtl">
+        <Selector
+          label="Fruit"
+          options={['Apple', 'Banana']}
+          variant="ghost"
+          status={{type: 'warning', message: '-42 items'}}
+          statusVariant="tooltip"
+        />
+      </div>,
+    );
+    // The tooltip mounts on the first hover; its text keeps the written order.
+    await userEvent.hover(
+      screen.getByRole('button', {name: /warning details/i}),
+    );
+    const tooltip = await screen.findByRole('tooltip', h);
+    expect(within(tooltip).getByText('-42 items')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
   });
 });
 
@@ -4592,6 +4798,249 @@ describe('Selector light dismiss focus (spec:Popover AR4)', () => {
     });
     closeByLightDismiss();
 
+    expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a pick that moved focus to a focusable container around the list', async () => {
+    const user = userEvent.setup();
+    let focusAtPick: Element | null = null;
+    render(
+      <div tabIndex={-1} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {
+            focusAtPick = document.activeElement;
+          }}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole('option', {name: 'Cherry', hidden: true}),
+    );
+
+    // The press on the option moved focus to the container before the pick.
+    expect(focusAtPick).toBe(screen.getByTestId('container'));
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a press on a focusable container around the list', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    act(() => {
+      screen.getByTestId('container').focus();
+    });
+    closeByLightDismiss();
+
+    expect(trigger).toHaveFocus();
+  });
+
+  it('leaves focus on a field a press moved it to inside the same focusable container', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1}>
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+        <input aria-label="Notes" />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const notes = screen.getByRole('textbox', {name: 'Notes'});
+    act(() => {
+      notes.focus();
+    });
+    closeByLightDismiss();
+
+    expect(notes).toHaveFocus();
+  });
+
+  it('leaves focus on a Tab-stop container that a press outside the list moved it to', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={0} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const container = screen.getByTestId('container');
+    await user.click(container);
+    closeByLightDismiss();
+
+    expect(container).toHaveFocus();
+  });
+
+  it('leaves focus on a control outside the list that is no Tab stop, as an unselected tab is', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1}>
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+        <button type="button" tabIndex={-1}>
+          Next tab
+        </button>
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const nextTab = screen.getByRole('button', {
+      name: 'Next tab',
+      hidden: true,
+    });
+    await user.click(nextTab);
+    closeByLightDismiss();
+
+    expect(nextTab).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a pick inside a Tab-stop container', async () => {
+    const user = userEvent.setup();
+    let focusAtPick: Element | null = null;
+    render(
+      <div tabIndex={0} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {
+            focusAtPick = document.activeElement;
+          }}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole('option', {name: 'Cherry', hidden: true}),
+    );
+
+    expect(focusAtPick).toBe(screen.getByTestId('container'));
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a pick from a list inside a shadow root', async () => {
+    const user = userEvent.setup();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadow = host.attachShadow({mode: 'open'});
+    const container = document.createElement('div');
+    container.tabIndex = -1;
+    shadow.append(container);
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />,
+        {container},
+      );
+      const view = within(container);
+      const trigger = view.getByRole('combobox');
+      await user.click(trigger);
+      await user.click(
+        view.getByRole('option', {name: 'Cherry', hidden: true}),
+      );
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(shadow.activeElement).toBe(trigger);
+    } finally {
+      cleanup();
+      host.remove();
+    }
+  });
+
+  it('returns focus to the trigger after a pick from a list inside a closed shadow root', async () => {
+    const user = userEvent.setup();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadow = host.attachShadow({mode: 'closed'});
+    const container = document.createElement('div');
+    container.tabIndex = -1;
+    shadow.append(container);
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />,
+        {container},
+      );
+      const view = within(container);
+      const trigger = view.getByRole('combobox');
+      await user.click(trigger);
+      await user.click(
+        view.getByRole('option', {name: 'Cherry', hidden: true}),
+      );
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(shadow.activeElement).toBe(trigger);
+    } finally {
+      cleanup();
+      host.remove();
+    }
+  });
+
+  it('returns focus to the trigger after a keyboard pick from the search field inside the list', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <Selector
+        label="Fruit"
+        options={OPTIONS}
+        onChange={onChange}
+        hasSearch
+      />,
+    );
+    await user.tab();
+    const trigger = document.activeElement as HTMLElement;
+    await user.keyboard('c');
+    const search = screen.getByPlaceholderText('Search…');
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(onChange).toHaveBeenCalledWith('Cherry');
     expect(trigger).toHaveFocus();
   });
 });
