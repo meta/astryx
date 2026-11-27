@@ -23,7 +23,7 @@
  * - disabled-cursor: Flags a cursor that promises an interaction without giving way to not-allowed on a disabled element
  * - no-unstable-merged-refs: Flags render-time mergeRefs callbacks and unstable callback inputs to useMergedRefs
  * - no-light-dark-outside-theme: Flags CSS light-dark() in component source (a light/dark decision belongs to the theme layer, where a token pair reaches both schemes in every theme)
- * - no-core-internal-import: Keeps Core's internal subpaths (@astryxdesign/core/internal/*) inside Core and Lab
+ * - no-core-internal-import: Keeps Core's internal subpaths (@astryxdesign/core/internal/*) inside Core and Lab, except the exact subpaths an `allow` option names (Charts: calendar-system)
  * - no-internal-barrel-import: Flags a package-internal relative import that resolves to a folder's index (a barrel) instead of the defining module
  * - no-prevent-default-in-passive-react-handler: Flags preventDefault() on the event in a React onWheel/onTouchStart/onTouchMove handler (React attaches those listeners as passive, so the call is ignored)
  * - no-raw-private-attribute: Flags a private data-astryx-* attribute written by hand outside its owner module in packages/<package>/src/privateAttributes (INV23 lists the public ones)

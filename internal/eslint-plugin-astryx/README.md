@@ -88,6 +88,7 @@ Approved implementations:
 Named test oracles:
 
 - `packages/charts/src/formatters.test.ts`
+- `packages/charts/src/ChartAxis.test.tsx`
 - `packages/core/src/Calendar/Calendar.test.tsx`
 - `packages/core/src/NumberInput/NumberInput.test.tsx`
 - `packages/core/src/NumberInput/numberParser.test.ts`
@@ -355,13 +356,20 @@ Reports imports of Core's internal subpaths (`@astryxdesign/core/internal` and
 and sit outside the compatibility promise (`spec:AST-017` FR21), and of Core's
 internal, gesture, motion and touch-support source (`@astryxdesign/core/gestures`,
 `@astryxdesign/core/motion` and their subpaths, or any path into
-`core/src/{internal,gestures,motion,touch-support}`), which a package outside Core and Lab reaches only through public entries
+`core/src/{internal,gestures,motion,touch-support}`), which a package outside Core and Lab reaches only through Core's package entries
 (`architecture:react-component-runtime` INV13). It checks `import`,
 `export … from`, `import()`, `require()` and `typeof import()`, a dynamic
 import or require named by a string or a template literal with no expressions. The repo config
 turns it on for every linted file outside `packages/core` and `packages/lab`
 (the global ignores still leave some scripts unlinted), so only Core and Lab
-may import them.
+may import them, apart from the subpaths an `allow` option names.
+
+The `allow` option (`{allow: ['@astryxdesign/core/internal/<name>']}`) names
+exact internal subpaths that the linted files may import. It never opens a
+subpath below an allowed one, Core's source, or the gesture and motion
+entries. The repo config gives `packages/charts` one entry,
+`@astryxdesign/core/internal/calendar-system`, so Charts reads the calendar
+that Core resolves; it may import no other internal subpath.
 
 An internal subpath is one file, `packages/core/src/internal/<name>.ts`, whose
 header says it is reserved for Astryx's own packages, undocumented, and outside

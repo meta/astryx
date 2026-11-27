@@ -2,7 +2,8 @@
 
 /**
  * @file ChartAxis.tsx (v2)
- * @input Chart context scales, axis presentation props, and grapheme-safe text utilities
+ * @input Chart context scales, axis presentation props, the provider locale
+ *   and resolved calendar, and grapheme-safe text utilities
  * @output Renders an axis (top, right, bottom, left) using the chart's scales
  * @position Child of Chart v2; reads scales from chart context
  *
@@ -11,18 +12,21 @@
  * `<ChartGrid>`). To stay consistent with most charts, the bottom axis
  * draws its edge line by default and other positions don't.
  *
- * Labels use d3's native tick formatter for continuous scales by default (clean
- * numbers/dates) unless a `tickFormat` is supplied, and are auto-thinned to the
- * available width (horizontal) or height (vertical) to avoid overlap.
+ * Continuous-scale labels use d3's tick format by default. It also applies
+ * when `formatTick` returns `null` or `undefined`. Labels are auto-thinned to
+ * the available width (horizontal) or height (vertical) to avoid overlap.
  *
  * Ticks use CSS transitions for smooth sliding during streaming updates.
  */
 
 import {useCallback, useMemo} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {useLocale} from '@astryxdesign/core';
+import {useCalendarSystem} from '@astryxdesign/core/internal/calendar-system';
 import {characterCount, truncateCharacters} from '@astryxdesign/core/utils';
 import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {useChart} from './ChartContext';
+import type {ChartValueFormat} from './types';
 import {isBandScale} from './utils';
 import type {ScaleLinear, ScaleTime} from 'd3-scale';
 
@@ -39,10 +43,11 @@ export interface ChartAxisProps {
    */
   maxTicks?: number;
   /**
-   * Custom tick formatter. A `null` or `undefined` result shows the default
-   * tick text.
+   * Tick text format. It receives the tick value, the provider locale, and
+   * the calendar the provider resolves. A `null` or `undefined` result shows
+   * the default tick text. `truncate` applies to the returned text.
    */
-  tickFormat?: (value: unknown) => string | null | undefined;
+  formatTick?: ChartValueFormat;
   /** Truncate labels to this many user-perceived characters (appends "\u2026"). */
   truncate?: number;
   /** Enable smooth transitions for streaming (default: true) */
@@ -106,7 +111,7 @@ export function ChartAxis({
   position,
   tickCount = 5,
   maxTicks,
-  tickFormat,
+  formatTick,
   truncate,
   animated = true,
   showAxisLine = position === 'bottom',
@@ -116,6 +121,8 @@ export function ChartAxis({
   // are enabled so the two visuals stay coherent.
   const renderAxisLine = showAxisLine || showTicks;
   const {width, height, xScale, yScale, yBandScale} = useChart();
+  const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'Chart');
 
   const isHorizontal = position === 'top' || position === 'bottom';
   // A categorical y-axis (e.g. heatmap rows) is exposed as `yBandScale`; prefer
@@ -150,14 +157,15 @@ export function ChartAxis({
 
   const format = useCallback(
     (value: unknown): string => {
-      const str = tickFormat?.(value) ?? (autoFormat ?? String)(value);
+      const str =
+        formatTick?.(value, locale, calendar) ?? (autoFormat ?? String)(value);
       if (!truncate) {
         return str;
       }
       const shortened = truncateCharacters(str, truncate, '');
       return shortened === str ? str : shortened + '\u2026';
     },
-    [tickFormat, autoFormat, truncate],
+    [formatTick, locale, calendar, autoFormat, truncate],
   );
 
   const ticks = useMemo(() => {

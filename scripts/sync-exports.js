@@ -235,7 +235,8 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   'CodeBlock/languages/toml',
   'Markdown/remark',
   // Internal entries for Astryx's own packages: undocumented, outside the
-  // public API, and allowed by lint only in Core and Lab
+  // public API, and allowed by lint only in Core and Lab, plus
+  // `internal/calendar-system` in Charts
   // (architecture:react-component-runtime INV13).
   'internal/indicatorPress.stylex',
   'internal/reorder',

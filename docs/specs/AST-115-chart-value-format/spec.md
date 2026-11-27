@@ -213,9 +213,6 @@ calendar: CalendarSystem) => string | null | undefined`. A format returns the
 - FR13 gap: `ChartAxis` formats continuous ticks with the d3 default tick
   format, which groups digits (`2,019`) and uses a typographic minus
   (`−20,000`).
-- FR15 gap: `ChartAxis` names its tick format `tickFormat`, typed
-  `(value: unknown) => string | null | undefined`, and passes it no locale or
-  calendar.
 - The `Chart`, `ChartTooltip`, and `ChartAxis` consumer docs and the formatter
   docs show the declaration once, with a mixed-unit example and an
   empty-value example.

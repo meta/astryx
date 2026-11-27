@@ -25,7 +25,7 @@ const meta = {
     position: 'bottom',
   },
   argTypes: {
-    tickFormat: {control: false},
+    formatTick: {control: false},
   },
   render: args => (
     <Chart

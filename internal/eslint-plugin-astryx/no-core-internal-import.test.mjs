@@ -19,7 +19,12 @@ const ruleTester = new RuleTester({
 });
 
 const message = source =>
-  `'${source}' is one of Core's internal subpaths, reserved for Astryx's own packages (Core and Lab) and outside the compatibility promise. Use Core's public API instead.`;
+  `'${source}' is one of Core's internal subpaths, reserved for Astryx's own packages (Core, Lab and Charts) and outside the compatibility promise. Use Core's public API instead.`;
+const notAllowed = (source, allowed) =>
+  `'${source}' is one of Core's internal subpaths that this package may not import. It may import only ${allowed}. Use Core's public API instead.`;
+
+const CALENDAR = '@astryxdesign/core/internal/calendar-system';
+const allowCalendar = [{allow: [CALENDAR]}];
 const deep = source =>
   `'${source}' reaches into Core's internal, gesture, motion or touch-support source, which is for Core and Lab only (architecture:react-component-runtime INV13). Use Core's public API instead.`;
 
@@ -44,6 +49,25 @@ ruleTester.run('no-core-internal-import', rule, {
     // A code sample in a string is not an import.
     {
       code: "const sample = `import {duration} from '@astryxdesign/core/motion';`;",
+    },
+    // An allowed subpath, in every import form.
+    {
+      code: `import {useCalendarSystem} from '${CALENDAR}';`,
+      options: allowCalendar,
+    },
+    {
+      code: `import type {CalendarSystem} from '${CALENDAR}';`,
+      options: allowCalendar,
+    },
+    {
+      code: `export {useCalendarSystem} from '${CALENDAR}';`,
+      options: allowCalendar,
+    },
+    {code: `const m = import('${CALENDAR}');`, options: allowCalendar},
+    {code: `const m = require('${CALENDAR}');`, options: allowCalendar},
+    {
+      code: `type M = typeof import('${CALENDAR}');`,
+      options: allowCalendar,
     },
   ],
   invalid: [
@@ -130,6 +154,48 @@ ruleTester.run('no-core-internal-import', rule, {
     {
       code: `type M = typeof import('../../core/src/motion/spring');`,
       errors: [{message: deep('../../core/src/motion/spring')}],
+    },
+    // An allow list admits only its exact subpaths.
+    {
+      code: `import {useReorderSession} from '@astryxdesign/core/internal/reorder';`,
+      options: allowCalendar,
+      errors: [
+        {
+          message: notAllowed(
+            '@astryxdesign/core/internal/reorder',
+            `'${CALENDAR}'`,
+          ),
+        },
+      ],
+    },
+    {
+      code: `import '@astryxdesign/core/internal';`,
+      options: allowCalendar,
+      errors: [
+        {message: notAllowed('@astryxdesign/core/internal', `'${CALENDAR}'`)},
+      ],
+    },
+    {
+      code: `import {x} from '${CALENDAR}/extra';`,
+      options: allowCalendar,
+      errors: [{message: notAllowed(`${CALENDAR}/extra`, `'${CALENDAR}'`)}],
+    },
+    // The allow list never opens Core's source or its gesture and motion
+    // entries.
+    {
+      code: `import {useCalendarSystem} from '../../core/src/internal/calendar-system';`,
+      options: allowCalendar,
+      errors: [{message: deep('../../core/src/internal/calendar-system')}],
+    },
+    {
+      code: `import {createAnimator} from '@astryxdesign/core/motion/animator';`,
+      options: allowCalendar,
+      errors: [{message: deep('@astryxdesign/core/motion/animator')}],
+    },
+    {
+      code: `import {GestureArena} from '@astryxdesign/core/gestures';`,
+      options: allowCalendar,
+      errors: [{message: deep('@astryxdesign/core/gestures')}],
     },
   ],
 });
