@@ -2,7 +2,7 @@
 
 /**
  * @file The Lint job's heap tripwire. Preloaded into each Node process of the
- *   type-aware lint steps (NODE_OPTIONS `--import`), it records the process's
+ *   lint steps that run ESLint (NODE_OPTIONS `--import`), it records the process's
  *   live heap (the most a full garbage collection left in use), its heap
  *   limit, the most heap V8 held, and its peak RSS. `report <file>` then names
  *   the process nearest its limit in the job summary and warns at WARN_SHARE.

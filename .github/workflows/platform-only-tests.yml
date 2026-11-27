@@ -1,0 +1,100 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Node tests that only one operating system can run, daily on main. Pull
+# request CI runs the Node tests on Linux, where these cases skip:
+# - windows: packages/cli/foundation/fs/path-safety.test.mjs, whose drive-path
+#   case reads real Windows paths on a real Windows file system;
+# - macos: packages/native/src/icons/defaults.test.ts, whose SF Symbols case
+#   reads the installed system's symbol catalog.
+# Each leg checks out main, installs the workspace, runs only its file with
+# .github/scripts/vitest.platform-only.config.mjs (no global setup: neither
+# file reads Core's build, the theme cache or the packed CLI), and then fails
+# when its platform case did not pass (a case that skipped would otherwise
+# pass in silence). A red run blocks no pull request. On a scheduled run, the
+# report job keeps one issue: a failure opens it or comments on it, naming the
+# failed case and the run, and the next passing scheduled run closes it
+# (.github/scripts/platform-only-report.mjs).
+name: Platform-only tests
+
+on:
+  schedule:
+    - cron: '43 6 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  platform-only:
+    name: platform-only (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            file: packages/cli/foundation/fs/path-safety.test.mjs
+            case: reads Windows drive paths
+          - os: macos-latest
+            file: packages/native/src/icons/defaults.test.ts
+            case: names only SF Symbols the system has
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - name: Run the file
+        shell: bash
+        env:
+          FILE: ${{ matrix.file }}
+        run: pnpm exec vitest run --config .github/scripts/vitest.platform-only.config.mjs "$FILE" --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/platform-only.json"
+
+      - name: Fail when the platform case did not run
+        if: always()
+        shell: bash
+        env:
+          CASE: ${{ matrix.case }}
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const want = process.env.CASE;
+            const report = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/platform-only.json", "utf8"));
+            const results = report.testResults.flatMap(file => file.assertionResults);
+            const found = results.find(result => result.title === want);
+            const status = found ? found.status : "missing";
+            console.log(want + ": " + status);
+            process.exit(status === "passed" ? 0 : 1);
+          '
+
+  # A scheduled run reports every outcome but a cancel; a dispatched run leaves
+  # the issue alone. Only this job writes issues; the legs only read.
+  report:
+    needs: platform-only
+    if: always() && !cancelled() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/scripts/platform-only-report.mjs
+            .github/scripts/platform-only-cases.mjs
+            .github/scripts/lib/daily-run-issue.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Open, update or close the platform-only issue
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const {reportPlatformOnly} = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/platform-only-report.mjs`);
+            const done = await reportPlatformOnly({github, context});
+            core.info(`platform-only issue: ${done}`);

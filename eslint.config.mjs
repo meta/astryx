@@ -21,14 +21,19 @@ import {scope as commentProvenanceScope} from './internal/eslint-plugin-astryx/n
 /**
  * Astryx ESLint Configuration
  *
- * Two-tier linting philosophy:
- * - CI/Agents: Strict mode (errors) - Set ASTRYX_STRICT_LINT=1 or CI=true
- * - Humans: Recommended mode (warnings) - Default for local development
+ * Two tiers:
+ * - CI and agents: strict mode, set by ASTRYX_STRICT_LINT=1 or CI=true. The
+ *   plugin's strict config applies, and each rule below that reads
+ *   `isStrictMode` reports an error. A rule the repository has not yet cleared
+ *   stays a warning in both tiers; it reads `isStrictMode` once its last
+ *   warning is fixed (scripts/lint-strict-promotions.test.mjs lists those).
+ * - People: recommended mode, the default for local development, where the
+ *   same rules warn.
  *
  * Usage:
- *   pnpm lint                    # Human mode (warnings)
- *   ASTRYX_STRICT_LINT=1 pnpm lint  # Strict mode (errors)
- *   CI=true pnpm lint            # Also triggers strict mode
+ *   pnpm lint                       # Recommended mode
+ *   ASTRYX_STRICT_LINT=1 pnpm lint  # Strict mode
+ *   CI=true pnpm lint               # Also strict mode
  */
 
 const isStrictMode =
@@ -246,6 +251,8 @@ export default defineConfig(
       '!packages/cli/utils/**/*.mjs',
       '!packages/cli/foundation/**/*.mjs',
       '!packages/cli/clients/cli/bin/**/*.mjs',
+      // The root config is .mjs too: lint it with the rest.
+      '!eslint.config.mjs',
       '**/*.test-violations.tsx',
       'apps/example-nextjs/*.js',
       // Generated declaration files (e.g. the CLI's `./api` type surface emitted
@@ -282,7 +289,7 @@ export default defineConfig(
         },
       ],
       'no-console': ['warn', {allow: ['warn', 'error']}],
-      curly: 'warn',
+      curly: isStrictMode ? 'error' : 'warn',
       '@typescript-eslint/no-non-null-assertion': 'warn',
       '@typescript-eslint/consistent-type-assertions': [
         'warn',
@@ -1092,9 +1099,7 @@ export default defineConfig(
       // React 19 ref-in-props migration for the editor's public props.
       '@astryx/require-ref-prop': 'warn',
       '@eslint-react/no-forward-ref': 'warn',
-      '@eslint-react/naming-convention-ref-name': 'warn',
       // Public API shape, settled with the package's stable-API decision.
-      '@astryx/require-base-props': 'warn',
       '@astryx/boolean-prop-naming': 'warn',
       '@eslint-react/no-unstable-default-props': 'warn',
     },

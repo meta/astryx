@@ -242,8 +242,8 @@ These requirements describe shipped behavior on current `main`.
   focused DropdownMenu row does (`component:DropdownMenuItem` AR4).
 - **AR6 — An empty popup is a named group.** With no options (not loading,
   nothing matches), the popup is a `group` named by the same label, not a
-  listbox, and the empty message is its content, beside the search input; the
-  listbox role returns when options match.
+  listbox, and the empty message is its content; the listbox role returns when
+  options match.
 
 ## Design relationships
 

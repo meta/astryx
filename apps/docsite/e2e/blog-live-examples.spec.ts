@@ -15,6 +15,7 @@
  */
 
 import {expect, test, type Frame, type Page} from '@playwright/test';
+import {safeFetchError} from '../../../.github/scripts/lib/fetch-error.js';
 
 const POST = '/blog/live-example-sample';
 
@@ -136,7 +137,9 @@ test('opens the post and runs its examples while GitHub never answers', async ({
 test('shows each live block as its source in the plain-text route', async ({
   request,
 }) => {
-  const response = await request.get(`${POST}.txt`);
+  const response = await request.get(`${POST}.txt`).catch(error => {
+    throw safeFetchError(error);
+  });
   expect(response.ok()).toBe(true);
   const text = await response.text();
   expect(text).not.toMatch(/^\s*(`{3,}|~{3,})\s*tsx\s+live/m);
@@ -149,7 +152,10 @@ test('never lists the fixture in the blog index, the feed, or the sitemap', asyn
   request,
 }) => {
   for (const path of ['/rss.xml', '/sitemap.xml']) {
-    const body = await (await request.get(path)).text();
+    const response = await request.get(path).catch(error => {
+      throw safeFetchError(error);
+    });
+    const body = await response.text();
     expect(body, path).not.toContain('live-example-sample');
   }
   await page.goto('/blog');
