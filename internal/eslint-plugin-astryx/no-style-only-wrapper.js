@@ -50,6 +50,8 @@ import {resolveImportedStyleProperties} from './stylex-style-source.js';
 import ts from 'typescript';
 import {inputFieldFamilyMembers} from './input-field-family-members.js';
 
+const UNREADABLE_TYPE_FLAGS = ts.TypeFlags.Any | ts.TypeFlags.Unknown;
+
 /**
  * Style properties whose effect depends on the wrapper existing as its own
  * box: they set up the formatting context *inside* the element (so moving them
@@ -251,20 +253,30 @@ const rule = {
 
     /**
      * Whether the child can take the wrapper's style itself. With types,
-     * whether its props have an `xstyle`. A props type that names no
-     * properties it can read (`any`, `unknown`, an index signature, or a
+     * whether its props have an `xstyle`; a component declared with no props
+     * cannot take one. A type the rule cannot read (an `any` or `unknown`
+     * component, or props that are `any`, `unknown`, an index signature, or a
      * union with any such member or an `xstyle` member) counts as yes, so the
      * rule still reports. Without types, every component except a
-     * family:input-fields member.
+     * family:input-fields member, matched by its imported name.
      */
     function childTakesXstyle(child) {
       if (checker != null) {
         const tsNode = services.esTreeNodeToTSNodeMap.get(child.openingElement);
-        const signature =
-          tsNode == null ? undefined : checker.getResolvedSignature(tsNode);
-        const propsSymbol = signature?.getParameters()[0];
-        if (propsSymbol == null || tsNode == null) {
+        if (tsNode == null) {
           return true;
+        }
+        const componentType = checker.getTypeAtLocation(tsNode.tagName);
+        if ((componentType.flags & UNREADABLE_TYPE_FLAGS) !== 0) {
+          return true;
+        }
+        const signature = checker.getResolvedSignature(tsNode);
+        if (signature == null) {
+          return true;
+        }
+        const propsSymbol = signature.getParameters()[0];
+        if (propsSymbol == null) {
+          return false;
         }
         const propsType = checker.getTypeOfSymbolAtLocation(
           propsSymbol,
@@ -273,12 +285,30 @@ const rule = {
         return propsTakeXstyle(propsType);
       }
       return !inputFieldFamilyMembers().has(
-        jsxNameRoot(child.openingElement.name),
+        importedComponentName(child.openingElement.name),
       );
     }
 
+    /**
+     * The name a JSX tag's component has where it is exported: the imported
+     * name for `import {Selector as S}`, and the last segment for
+     * `<Core.Selector>`.
+     */
+    function importedComponentName(nameNode) {
+      if (nameNode.type === 'JSXMemberExpression') {
+        return nameNode.property.name;
+      }
+      if (nameNode.type !== 'JSXIdentifier') {
+        return null;
+      }
+      const binding = importedBindings.get(nameNode.name);
+      return binding == null || binding.name === 'default'
+        ? nameNode.name
+        : binding.name;
+    }
+
     function propsTakeXstyle(type) {
-      if ((type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) !== 0) {
+      if ((type.flags & UNREADABLE_TYPE_FLAGS) !== 0) {
         return true;
       }
       if (type.isUnion()) {
