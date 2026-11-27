@@ -109,14 +109,13 @@ export function VisuallyHidden({
   children,
   as: element = 'span',
   ref,
-  // `xstyle` is declared and ignored by intent. It is not a valid attribute,
-  // so spreading it writes xstyle="[object Object]" into the DOM.
+  // VisuallyHidden ignores `xstyle`. Spread onto the element, it writes
+  // xstyle="[object Object]" into the DOM.
   xstyle: _xstyle,
   ...rest
 }: VisuallyHiddenProps) {
-  // `className` and `style` are off the interface. Take them back off at
-  // runtime so a cast cannot reach the element either: a cast `style` keeps
-  // the last word on `position` and un-hides the node.
+  // `className` and `style` are off the interface, but a cast can still pass
+  // them. A cast `style` overrides `position` and shows the node.
   const {
     className: _className,
     style: _style,
