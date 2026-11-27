@@ -21,6 +21,7 @@ const workflow = yaml.parse(
   ),
 );
 const job = workflow.jobs['platform-only'];
+const report = workflow.jobs.report;
 
 describe('platform-only workflow', () => {
   it('runs daily and by hand, never on a pull request or a push', () => {
@@ -30,9 +31,41 @@ describe('platform-only workflow', () => {
     ]);
   });
 
-  it('reads the repository and nothing more', () => {
+  it('lets only the report job write, and only issues', () => {
     expect(workflow.permissions).toEqual({});
     expect(job.permissions).toEqual({contents: 'read'});
+    expect(report.permissions).toEqual({
+      actions: 'read',
+      contents: 'read',
+      issues: 'write',
+    });
+  });
+
+  it('reports every scheduled outcome but a cancel, after both legs', () => {
+    expect(report.needs).toBe('platform-only');
+    expect(report.if).toBe(
+      "always() && !cancelled() && github.event_name == 'schedule'",
+    );
+  });
+
+  it("checks out every module the report job's script loads", () => {
+    const listed = report.steps[0].with['sparse-checkout'];
+    const imports = [];
+    const visit = file => {
+      const text = fs.readFileSync(path.join(root, file), 'utf8');
+      for (const [, spec] of text.matchAll(/from '(\.\.?\/[^']+)'/g)) {
+        const next = path.posix.normalize(
+          path.posix.join(path.posix.dirname(file), spec),
+        );
+        if (!imports.includes(next)) {
+          imports.push(next);
+          visit(next);
+        }
+      }
+    };
+    visit('.github/scripts/platform-only-report.mjs');
+    for (const file of ['.github/scripts/platform-only-report.mjs', ...imports])
+      expect(listed, file).toContain(file);
   });
 
   it("gives each leg the config's file and case, on its system", () => {
