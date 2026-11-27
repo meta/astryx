@@ -68,6 +68,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/CodeBlock/CodeBlock.generated';
 import {devPropError} from '../utils/devWarning';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -262,7 +263,10 @@ const styles = stylex.create({
   // rotates and the element a theme targets, so one selector reaches both.
   collapseChevronIcon: {
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   collapseChevronExpanded: {

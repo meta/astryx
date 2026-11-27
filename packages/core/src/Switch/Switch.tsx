@@ -62,7 +62,10 @@ import {
 import english from '../i18n/generated-english/Switch/Switch.generated';
 
 registerEnglishFallback(english);
-import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {
+  reducedMotionFadeConsts,
+  reducedMotionTransform,
+} from '../motion/reducedMotion.stylex';
 import {
   interactionOverlayStyles,
   pressVars,
@@ -586,7 +589,7 @@ const styles = stylex.create({
     // Under reduced motion nothing slides: under a finger the thumb
     // cross-fades through the animator, and with a mouse it moves at once.
     transitionDuration: {
-      default: durationVars['--duration-fast'],
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
       '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
         '0s',

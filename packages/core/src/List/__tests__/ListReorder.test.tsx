@@ -1815,6 +1815,8 @@ describe('List reorderable', () => {
       const row = again.closest('li')!;
       const top = 300 + 2 * 44 + 22;
       mouseDrag(again, top, top);
+      // Dragged, it does not travel: its preview rides above the rows.
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
       act(() => {
         fireEvent.pointerUp(again, {...MOUSE, clientY: top});
       });
@@ -1832,6 +1834,165 @@ describe('List reorderable', () => {
       now.mockRestore();
     }
   });
+
+  it('keeps a dropped row above the rows it passes until its glide rests', async () => {
+    // The motion clock stands still from the drop to the first check, so the
+    // glide is still running there however slowly the test runs.
+    const start = performance.now();
+    let clock = start;
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    try {
+      stubPrimaryPointer(false);
+      render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+      const list = screen.getByRole('list');
+      layOut(list);
+      const handle = handleOf('A');
+      const row = handle.closest('li')!;
+      mouseDrag(handle, 322, 322 + 70);
+      act(() => {
+        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+      });
+      expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+      // The travelling mark raises it, on the surface, as a ListItem that
+      // slides across rows is raised.
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(true);
+      // It rides on its preview's backdrop, not always the surface.
+      expect(row.style.getPropertyValue('--_travelling-backdrop')).not.toBe('');
+      // The glide's rest timer was set on the real clock at the drop. This
+      // wait is set after it, so it ends after the row rests.
+      clock = start + 5000;
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      });
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+      expect(row.style.getPropertyValue('--_travelling-backdrop')).toBe('');
+      expect(row.style.zIndex).toBe('');
+      expect(row.style.backgroundColor).toBe('');
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it.each([
+    ['a fine', false],
+    ['a coarse', true],
+  ])(
+    'does not mark a dropped row as travelling under Reduce Motion with %s primary pointer',
+    (_, coarse) => {
+      document.body.setAttribute('data-astryx-reduced-motion', '');
+      try {
+        stubPrimaryPointer(coarse);
+        render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+        const list = screen.getByRole('list');
+        layOut(list);
+        const handle = handleOf('A');
+        const row = handle.closest('li')!;
+        mouseDrag(handle, 322, 322 + 70);
+        act(() => {
+          fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+        });
+        expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+        expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+      } finally {
+        document.body.removeAttribute('data-astryx-reduced-motion');
+      }
+    },
+  );
+
+  it.each([
+    ['a fine', false],
+    ['a coarse', true],
+  ])(
+    'under Reduce Motion with %s primary pointer, times the drop from the release, so it ends within its 200 ms of the release',
+    (_, coarse) => {
+      stubPrimaryPointer(coarse);
+      document.body.setAttribute('data-astryx-reduced-motion', '');
+      // The pointer stamped its release at 1000 ms, and the page handles it,
+      // and commits the move, 40 ms later.
+      let clock = 1000;
+      const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      const glide = vi.spyOn(touchMotion, 'glide');
+      const follow = vi.spyOn(touchMotion, 'follow');
+      try {
+        render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+        const list = screen.getByRole('list');
+        layOut(list);
+        const handle = handleOf('A');
+        mouseDrag(handle, 322, 322 + 70);
+        const up = new PointerEvent('pointerup', {
+          ...MOUSE,
+          clientY: 322 + 70,
+          bubbles: true,
+        });
+        const releasedAt = 1000;
+        Object.defineProperty(up, 'timeStamp', {value: releasedAt});
+        clock = releasedAt + 40;
+        act(() => {
+          handle.dispatchEvent(up);
+        });
+        expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+        const starts = [...glide.mock.calls, ...follow.mock.calls].map(
+          call => call[3],
+        );
+        expect(starts.length).toBeGreaterThan(0);
+        for (const start of starts) {
+          expect(start).toBe(releasedAt);
+        }
+      } finally {
+        glide.mockRestore();
+        follow.mockRestore();
+        now.mockRestore();
+        document.body.removeAttribute('data-astryx-reduced-motion');
+      }
+    },
+  );
+
+  it.each([
+    ['a fine', false],
+    ['a coarse', true],
+  ])(
+    'under Reduce Motion with %s primary pointer, a commit later than half the fade lands the rows at once',
+    (_, coarse) => {
+      stubPrimaryPointer(coarse);
+      document.body.setAttribute('data-astryx-reduced-motion', '');
+      // The pointer stamped its release at 1000 ms, and the page commits the
+      // move 150 ms later, past the fade's first half.
+      let clock = 1000;
+      const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      const glide = vi.spyOn(touchMotion, 'glide');
+      const follow = vi.spyOn(touchMotion, 'follow');
+      try {
+        render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+        const list = screen.getByRole('list');
+        layOut(list);
+        const handle = handleOf('A');
+        const row = handle.closest('li')!;
+        mouseDrag(handle, 322, 322 + 70);
+        const up = new PointerEvent('pointerup', {
+          ...MOUSE,
+          clientY: 322 + 70,
+          bubbles: true,
+        });
+        Object.defineProperty(up, 'timeStamp', {value: 1000});
+        clock = 1150;
+        act(() => {
+          handle.dispatchEvent(up);
+        });
+        expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+        expect(glide).not.toHaveBeenCalled();
+        expect(follow).not.toHaveBeenCalled();
+        expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+        for (const element of Array.from(list.children) as HTMLElement[]) {
+          expect(element.getAnimations?.() ?? []).toEqual([]);
+        }
+      } finally {
+        glide.mockRestore();
+        follow.mockRestore();
+        now.mockRestore();
+        document.body.removeAttribute('data-astryx-reduced-motion');
+      }
+    },
+  );
 
   it("reads a key move's glide spring once, however many rows slide", async () => {
     stubPrimaryPointer(true);

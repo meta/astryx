@@ -254,6 +254,7 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   'internal/committed-ref',
   'internal/clipboard-copy',
   'internal/shared-context',
+  'internal/tour',
 ];
 
 /**

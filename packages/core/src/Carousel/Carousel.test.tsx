@@ -349,6 +349,69 @@ describe('Carousel', () => {
     expect(right.closest('[inert]')).not.toBeNull();
   });
 
+  it('shows a scroll button from the first measurement without its fade, and fades the later changes', async () => {
+    render(
+      <Carousel aria-label="Photos">
+        <div>Item 1</div>
+        <div>Item 2</div>
+      </Carousel>,
+    );
+    const scroller = screen.getByRole('group', {name: 'Photos'});
+    // A 200 px scroll area over 500 px of slides.
+    let scrollLeft = 0;
+    Object.defineProperty(scroller, 'scrollWidth', {
+      value: 500,
+      configurable: true,
+    });
+    Object.defineProperty(scroller, 'clientWidth', {
+      value: 200,
+      configurable: true,
+    });
+    Object.defineProperty(scroller, 'scrollLeft', {
+      get: () => scrollLeft,
+      configurable: true,
+    });
+    const pillOf = (label: string) => {
+      const pill = screen.getByLabelText(label).closest('[inert]');
+      if (!(pill instanceof HTMLElement)) {
+        throw new Error(`no hidden pill around "${label}"`);
+      }
+      return pill;
+    };
+    const start = pillOf('Scroll left');
+    const end = pillOf('Scroll right');
+    // The mount renders both pills hidden, and the first frame styles that.
+    expect(getComputedStyle(end).opacity).toBe('0');
+
+    // The browser's first notification after layout. Its result commits in
+    // a microtask, before the frame paints.
+    const observer = MockResizeObserver.last;
+    await act(async () => {
+      observer?.callback(
+        [{target: scroller} as unknown as ResizeObserverEntry],
+        observer,
+      );
+    });
+    expect(getComputedStyle(end).opacity).toBe('1');
+    expect(getComputedStyle(end).transitionProperty).toBe('none');
+    // Its button leaves the disabled state at once too, and keeps the rest.
+    const endButton = screen.getByLabelText('Scroll right');
+    expect(getComputedStyle(endButton).transitionProperty).not.toContain(
+      'opacity',
+    );
+    expect(getComputedStyle(endButton).transitionProperty).toContain(
+      'transform',
+    );
+
+    // A scroll changes the edges that a frame has shown: the pills fade.
+    scrollLeft = 150;
+    fireEvent.scroll(scroller);
+    expect(getComputedStyle(start).opacity).toBe('1');
+    expect(getComputedStyle(start).transitionProperty).toBe('opacity');
+    expect(getComputedStyle(end).transitionProperty).toBe('opacity');
+    expect(getComputedStyle(endButton).transitionProperty).toContain('opacity');
+  });
+
   describe('Shift + wheel horizontal scroll', () => {
     // jsdom doesn't lay out elements, so we fake an overflowing scroll
     // container and capture scrollBy calls.

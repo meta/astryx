@@ -1,7 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useState} from 'react';
 import {fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi, beforeEach} from 'vitest';
+import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
+import {Switch} from '../Switch/Switch';
 import {Text} from '../Text/Text';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
 import type {DropdownMenuOption} from './DropdownMenu';
@@ -11,6 +14,11 @@ afterEach(() => {
   __resetMenuPressForTest();
   Reflect.deleteProperty(document, 'elementFromPoint');
 });
+
+function PinSwitch() {
+  const [isOn, setIsOn] = useState(false);
+  return <Switch label="Pin" isLabelHidden value={isOn} onChange={setIsOn} />;
+}
 
 const touch = (pointerId = 1) => ({pointerType: 'touch', pointerId});
 const mouse = (pointerId = 1) => ({
@@ -233,10 +241,42 @@ describe('MenuBottomSheetActionList', () => {
           ),
         },
       ]);
-      press(screen.getByRole('button', {name: 'Pin'}), 'touch');
+      const pin = screen.getByRole('button', {name: 'Pin'});
+      press(pin, 'touch');
+      // The browser's own click on the control follows the release.
+      fireEvent.click(pin, {detail: 1});
       expect(onEndClick).toHaveBeenCalledTimes(1);
       expect(onSelect).not.toHaveBeenCalled();
     });
+
+    it.each([
+      ['touch', 'switch'],
+      ['touch', 'checkbox'],
+      ['mouse', 'switch'],
+      ['mouse', 'checkbox'],
+    ] as const)(
+      'a %s press on a %s in a row’s end content toggles it and runs no row',
+      (pointerType, role) => {
+        const {onSelect} = renderRows([
+          {
+            label: 'Notes',
+            onClick: () => {},
+            endContent:
+              role === 'switch' ? (
+                <PinSwitch />
+              ) : (
+                <input type="checkbox" aria-label="Pin" />
+              ),
+          },
+        ]);
+        const control = screen.getByRole(role, {name: 'Pin'});
+        press(control, pointerType);
+        // The browser's own click on the control follows the release.
+        fireEvent.click(control, {detail: 1});
+        expect(control).toBeChecked();
+        expect(onSelect).not.toHaveBeenCalled();
+      },
+    );
 
     it.each([
       [
@@ -261,6 +301,34 @@ describe('MenuBottomSheetActionList', () => {
         ]);
         press(screen.getByLabelText('Pin'), 'touch');
         press(screen.getByLabelText('Pin'), 'mouse');
+        expect(onSelect).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      [
+        'Switch',
+        <Switch key="s" label="Pin" isLabelHidden value={false} isDisabled />,
+      ],
+      [
+        'CheckboxInput',
+        <CheckboxInput
+          key="c"
+          label="Pin"
+          isLabelHidden
+          value={false}
+          isDisabled
+        />,
+      ],
+    ] as const)(
+      'a press on a disabled %s in a row’s end content neither focuses it nor runs a row',
+      (_kind, control) => {
+        const {onSelect} = renderRows([
+          {label: 'Notes', onClick: () => {}, endContent: control},
+        ]);
+        press(screen.getByLabelText('Pin'), 'touch');
+        press(screen.getByLabelText('Pin'), 'mouse');
+        expect(screen.getByLabelText('Pin')).not.toHaveFocus();
         expect(onSelect).not.toHaveBeenCalled();
       },
     );

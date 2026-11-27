@@ -1123,6 +1123,30 @@
     "defaultMessage": "Priority {rank, number} of {total, number}",
     "description": "Screen-reader description of a sortable Table column header button while several columns are sorted: this column's place in the sort order. The button's name is the column header text and its direction is announced from aria-sort."
   },
+  "@astryx.tour.back": {
+    "defaultMessage": "Back",
+    "description": "Label of the button in a product tour's callout that moves to the previous step. Counterpart to `tour.next`; keep the two parallel."
+  },
+  "@astryx.tour.next": {
+    "defaultMessage": "Next",
+    "description": "Label of the button in a product tour's callout that moves to the next step. Shown on every step but the last."
+  },
+  "@astryx.tour.done": {
+    "defaultMessage": "Done",
+    "description": "Label of the button on the last step of a product tour. Pressing it finishes the tour."
+  },
+  "@astryx.tour.skip": {
+    "defaultMessage": "Skip",
+    "description": "Label of the optional button in a product tour's callout that ends the tour before its last step. Verb, as in `skip the tour`."
+  },
+  "@astryx.tour.close": {
+    "defaultMessage": "Close tour",
+    "description": "\"Close\" = shut/dismiss, not \"nearby\". Screen-reader-only label on the close (X) button of a product tour's callout. Pressing it ends the tour."
+  },
+  "@astryx.tour.stepCount": {
+    "defaultMessage": "{current, number} of {total, number}",
+    "description": "Progress text in a product tour's callout, for example `2 of 5`: the number of the step that shows, then the number of steps in the tour."
+  },
   "@astryx.toast.dismiss": {
     "defaultMessage": "Dismiss notification",
     "description": "Screen-reader-only label on the X button of a Toast (transient notification popup). Distinct from `banner.dismiss` (persistent banner)."

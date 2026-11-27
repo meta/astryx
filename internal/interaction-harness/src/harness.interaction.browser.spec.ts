@@ -117,6 +117,7 @@ import {
   thawTimers,
   timeline,
   toTouchEvents,
+  TOUCH_STILLNESS_MS,
   touchDriver,
   trackBrightness,
   TouchPacingError,
@@ -191,13 +192,28 @@ const DOUBLE_TAP = [
   {t: 220, fingers: []},
 ];
 
+/** A double tap whose second touch-down comes 250 ms after the lift. */
+const LATE_DOUBLE_TAP = [
+  {t: 0, fingers: [{id: 0, x: 160, y: 150}]},
+  {t: 50, fingers: []},
+  {t: 300, fingers: [{id: 0, x: 160, y: 150}]},
+  {t: 350, fingers: []},
+];
+
 /**
- * Holds the page's main thread for `holdMs`, from 50 ms after the first lift,
- * as a page's own long task does. Records each touch's stamp and when it
- * reached the page, each frame, and when the task ran, on the page's clock.
+ * Holds the page's main thread from the first task after the first lift until
+ * `endsFromCloseMs` from the tap interval's close, as a page's own long task
+ * does. Before the close, the end counts from the lift's earlier time: its
+ * stamp, or when it reached the page. Past the close, it counts from the
+ * later one. So a late lift or a late timer moves neither end toward the
+ * close. Records each touch's stamp and when it reached the page, each
+ * frame, and when the task ran, on the page's clock.
  */
-async function holdAfterFirstLift(page: Page, holdMs: number): Promise<void> {
-  await page.evaluate(ms => {
+async function holdAfterFirstLift(
+  page: Page,
+  hold: {readonly tapIntervalMs: number; readonly endsFromCloseMs: number},
+): Promise<void> {
+  await page.evaluate(({tapIntervalMs, endsFromCloseMs}) => {
     const record = {
       seen: [] as {type: string; at: number; stamp: number}[],
       frames: [] as number[],
@@ -223,19 +239,24 @@ async function holdAfterFirstLift(page: Page, holdMs: number): Promise<void> {
     }
     addEventListener(
       'touchend',
-      () => {
+      event => {
+        const receivedAt = performance.now();
+        const from =
+          endsFromCloseMs < 0
+            ? Math.min(event.timeStamp, receivedAt)
+            : Math.max(event.timeStamp, receivedAt);
+        const end = from + tapIntervalMs + endsFromCloseMs;
         setTimeout(() => {
           record.hold.start = performance.now();
-          const end = record.hold.start + ms;
           while (performance.now() < end) {
             // The page's own task holds the main thread.
           }
           record.hold.end = performance.now();
-        }, 50);
+        }, 0);
       },
       {capture: true, once: true},
     );
-  }, holdMs);
+  }, hold);
 }
 
 /** The page's record of a held double tap, from `holdAfterFirstLift`. */
@@ -690,14 +711,16 @@ test.describe('touch input', () => {
       browserName !== 'webkit',
       'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
     );
-    // Each pointer move queues a 60 ms task, as a component's timer can. The
-    // listeners themselves return at once, and the next move waits for the
-    // task before they begin. The driver comes first, so its mark does too.
+    // Each pointer move queues a task that holds the main thread for four
+    // stillness intervals, as a component's timer can. The listeners
+    // themselves return at once, and the next move waits for the task before
+    // they begin. A runner that sends it late still leaves it a wait past the
+    // stillness interval. The driver comes first, so its mark does too.
     const driver = await touchDriver(page);
     await page.route('http://task-stalling-page.test/', route =>
       route.fulfill({
         contentType: 'text/html',
-        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{setTimeout(()=>{const end=performance.now()+60;while(performance.now()<end){}},0)});</script>',
+        body: `<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{setTimeout(()=>{const end=performance.now()+${4 * TOUCH_STILLNESS_MS};while(performance.now()<end){}},0)});</script>`,
       }),
     );
     await page.goto('http://task-stalling-page.test/');
@@ -757,18 +780,23 @@ test.describe('touch input', () => {
     // The driver comes first, so its mark does too.
     const driver = await touchDriver(page);
     await fixture(page);
-    // The page holds its main thread from 50 ms after the lift for 400 ms,
-    // past the close at 350 ms. The runner keeps its schedule.
-    await holdAfterFirstLift(page, 400);
+    // The page holds its main thread from the first task after the lift until
+    // 150 ms past the close at 350 ms. The second touch-down comes 250 ms
+    // after the lift, so the task holds it even when the lift is late.
+    await holdAfterFirstLift(page, {tapIntervalMs: 350, endsFromCloseMs: 150});
     const outcome = await driver
-      .play(DOUBLE_TAP, {boundaries: {tapIntervalMs: 350}})
+      .play(LATE_DOUBLE_TAP, {boundaries: {tapIntervalMs: 350}})
       .then(
         () => 'resolved',
         (error: unknown) => error,
       );
+    const record = await heldTapRecord(page);
+    expect(
+      record.downReceivedAt,
+      "the touch-down reached the page after the page's task began",
+    ).toBeGreaterThan(record.holdStart);
     // The page read separate taps, but its own task held the touch-down.
     expect(await secondTouchGapMs(page)).toBeGreaterThan(350);
-    const record = await heldTapRecord(page);
     const closesAt = record.liftStamp + 350;
     expect(record.holdStart).toBeLessThan(closesAt);
     expect(record.holdEnd).toBeGreaterThan(closesAt);
@@ -808,8 +836,9 @@ test.describe('touch input', () => {
     // The driver comes first, so its mark does too.
     const driver = await touchDriver(page);
     await fixture(page);
-    // The same task, cut to 250 ms, ends before the close.
-    await holdAfterFirstLift(page, 250);
+    // The same task, ending 150 ms before the close, holds the touch-down and
+    // lets it go on time.
+    await holdAfterFirstLift(page, {tapIntervalMs: 350, endsFromCloseMs: -150});
     const outcome = await driver
       .play(DOUBLE_TAP, {boundaries: {tapIntervalMs: 350}})
       .then(
@@ -8285,7 +8314,10 @@ test.describe('page freeze', () => {
     // The page's own handlers: the touch-down starts a 400 ms travel, and the
     // lift records how far it had run.
     await page.evaluate(() => {
-      const box = document.getElementById('box')!;
+      const box = document.getElementById('box');
+      if (box == null) {
+        throw new Error('no box');
+      }
       addEventListener(
         'pointerdown',
         () => {

@@ -1174,7 +1174,7 @@ test('a mouse: a click expands and collapses in one frame, as before', async ({
   }
 });
 
-test('a mouse under reduced motion: the group comes and goes at once, and the chevron turns on its own transition', async ({
+test('a mouse under reduced motion: the group comes and goes at once, and the chevron lands at once', async ({
   browser,
 }) => {
   const context = await browser.newContext({
@@ -1194,23 +1194,19 @@ test('a mouse under reduced motion: the group comes and goes at once, and the ch
     ).toEqual([false, true]);
     const {group, child, toggle, chevron} = parts(page);
     await expect(parts(page).below).toBeVisible();
-    // The page holds the chevron's turn as soon as it runs.
-    const turn = await armHold(page, chevron, {
-      judges: {target: chevron, property: 'transform'},
-    });
     await toggle.click();
     await expect(child).toBeVisible();
-    const held = await turn.held();
-    expect(
-      held.map(animation => animation.kind),
-      JSON.stringify(held),
-    ).toContain('CSSTransition');
-    // Nothing in the group moves or fades.
+    // A rotation is movement, so with a fine pointer the chevron lands at
+    // once, and nothing in the group moves or fades.
+    await page.evaluate(
+      async () =>
+        new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+    );
+    expect(await chevron.evaluate(el => el.getAnimations().length)).toBe(0);
+    expect(await rotation(chevron)).toBeCloseTo(90, 1);
     expect(
       await group.evaluate(el => el.getAnimations({subtree: true}).length),
     ).toBe(0);
-    await releaseAnimations(page, {finish: true});
-    await expect.poll(async () => rotation(chevron)).toBeCloseTo(90, 1);
     await toggle.click();
     await page.evaluate(
       async () =>

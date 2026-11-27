@@ -28,7 +28,10 @@ import {
   measureLogicalScrollAxis,
 } from '../hooks/scrollGeometry';
 import {observeMutations} from '../utils/sharedMutationObserver';
-import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
+import {
+  observeResizeAfterLayout,
+  splitFirstResizeDelivery,
+} from '../utils/sharedResizeObserver';
 
 /**
  * Main's content: layout attributes, text and children, all the way down.
@@ -95,14 +98,10 @@ export function observeMainOverflow(
 
   // The first notification measures at once: the browser has just laid out,
   // so the read forces no pass.
-  const onResize = () => {
-    if (isLaidOut) {
-      scheduleMeasure();
-      return;
-    }
+  const onResize = splitFirstResizeDelivery(() => {
     isLaidOut = true;
     measure();
-  };
+  }, scheduleMeasure);
 
   // Main keeps its size while its content grows; its children do not. Each
   // direct child's size is watched, following the children as they change.

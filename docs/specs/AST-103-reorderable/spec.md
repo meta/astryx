@@ -471,7 +471,7 @@ Rejected: making shift the default.
 ### DEC-8 — The grip is the shared `drag` icon, through a component icon slot
 
 **Reference:** `spec:AST-103/DEC-8`
-**Decider:** `cixzhang`, `2026-11-13`
+**Decider:** `cixzhang`, `2026-11-13 18:40 PT`. Owner decision: `cixzhang`, 2026-11-13 18:40 PT (option A: as built, the `drag` icon and a new component icon slot)
 
 The handle is its grip alone. The grip is a shared semantic icon, `drag`, so
 a theme draws it once, in its own style, for every surface that drags. A

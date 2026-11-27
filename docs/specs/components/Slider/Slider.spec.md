@@ -17,7 +17,7 @@ verified_by:
     scripts/check-knowledge.mjs,
   ]
 modules: []
-families: []
+families: [family:input-fields]
 design_specs: [design:reduced-motion, design:user-states]
 architecture:
   [architecture:component-theming-surface, architecture:public-component-api]

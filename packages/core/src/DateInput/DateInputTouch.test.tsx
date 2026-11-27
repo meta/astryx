@@ -523,6 +523,25 @@ describe('DateInput — surface selection', () => {
 // ---------------------------------------------------------------------------
 
 describe('DateInput — field parity', () => {
+  it.each([
+    ['en-US', 'ltr'],
+    ['he', 'rtl'],
+  ])('reads a %s date in dir %s on a right-to-left page', (locale, dir) => {
+    render(
+      <div dir="rtl">
+        <InternationalizationProvider locale={locale}>
+          <DateInput
+            nativePicker="never"
+            label="Ship date"
+            value="2026-03-21"
+            onChange={() => {}}
+          />
+        </InternationalizationProvider>
+      </div>,
+    );
+    expect(field()).toHaveAttribute('dir', dir);
+  });
+
   it('shows a placeholder until a date is chosen, then the formatted value', () => {
     const {rerender} = render(
       <DateInput nativePicker="never" label="Ship date" onChange={() => {}} />,
@@ -3282,8 +3301,13 @@ describe('DateInput — scroll CSS (definition-level)', () => {
       source.indexOf('const styles = stylex.create('),
     );
     // The arrows, Reset, the weekday row, the layer beneath, the layer
-    // above, and the chevron.
-    expect(styles.match(/transitionDuration: SWAP_DURATION/g)).toHaveLength(6);
+    // above, and the chevron (whose turn also reads the reduced-motion
+    // factor).
+    expect(
+      styles.match(
+        /transitionDuration: (?:SWAP_DURATION|`calc\(\$\{SWAP_DURATION\})/g,
+      ),
+    ).toHaveLength(6);
     // And no leftover hand-rolled timing beside them.
     expect(styles).not.toContain('PANEL_FADE_MS');
     expect(source).toContain(

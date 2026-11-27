@@ -6,12 +6,11 @@
  * @output Browser fixtures for the empty-state live-region announcement
  * @position Stable fixtures for EmptyStateAnnouncement.a11y.chromium.spec.ts
  *
- * The panel's empty message is `role="presentation"` — `role="listbox"`
- * permits only `option` and `group` children — so it reaches assistive
- * technology only through the shared polite live region. This story covers
- * what a DOM emulator cannot settle: whether the region actually carries the
- * rendered words in a shipping engine, and whether the message element has
- * stayed out of the listbox's own accessibility tree.
+ * With no options, the popup is a group named by the label, and the empty
+ * message is its content; the shared polite live region announces it. This
+ * story covers what a DOM emulator cannot settle: whether the region carries
+ * the rendered words in a shipping engine, and what the empty popup exposes
+ * in its accessibility tree.
  */
 
 import type {Meta, StoryObj} from '@storybook/react';

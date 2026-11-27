@@ -65,6 +65,24 @@ function MoveMenu({onMove}: {onMove?: (folder: string) => void} = {}) {
   );
 }
 
+/**
+ * jsdom does not compute `direction` from `dir`. This emulates a browser's
+ * answer: the nearest `dir` decides. Returns the function that stops it.
+ */
+function emulateDirectionFromDir(): () => void {
+  const originalGetComputedStyle = window.getComputedStyle.bind(window);
+  const spy = vi
+    .spyOn(window, 'getComputedStyle')
+    .mockImplementation((element, pseudo) => {
+      const computed = originalGetComputedStyle(element, pseudo);
+      const direction =
+        element.closest('[dir]')?.getAttribute('dir') === 'rtl' ? 'rtl' : 'ltr';
+      Object.defineProperty(computed, 'direction', {value: direction});
+      return computed;
+    });
+  return () => spy.mockRestore();
+}
+
 describe('DropdownMenuSubMenu', () => {
   it('renders the trigger with aria-haspopup and collapsed aria-expanded', async () => {
     const user = userEvent.setup();
@@ -266,6 +284,34 @@ describe('DropdownMenuSubMenu', () => {
     expect(getComputedStyle(indicator as HTMLElement).transform).not.toBe(
       'scaleX(-1)',
     );
+  });
+
+  it('flips its indicator for a right-to-left menu portalled out of a paragraph into a left-to-right region', async () => {
+    const restore = emulateDirectionFromDir();
+    try {
+      const user = userEvent.setup();
+      render(
+        <div dir="rtl">
+          <div dir="ltr">
+            <p dir="rtl">
+              <MoveMenu />
+            </p>
+          </div>
+        </div>,
+      );
+
+      await user.click(screen.getByRole('button', {name: /Actions/}));
+      const row = screen.getByRole('menuitem', {name: /Move to/, hidden: true});
+      // The menu left the paragraph: a paragraph cannot hold it.
+      expect(row.closest('p')).toBeNull();
+      const indicator = row.querySelector('.astryx-icon');
+      expect(indicator).not.toBeNull();
+      expect(getComputedStyle(indicator as HTMLElement).transform).toBe(
+        'scaleX(-1)',
+      );
+    } finally {
+      restore();
+    }
   });
 
   it('names the flyout from its trigger via aria-labelledby', async () => {
@@ -1873,6 +1919,39 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
       }
     },
   );
+
+  it('flips the Back icon for a right-to-left menu portalled out of a paragraph into a left-to-right region', async () => {
+    stubCompactTouch(true);
+    const restore = emulateDirectionFromDir();
+    try {
+      const user = userEvent.setup();
+      render(
+        <div dir="rtl">
+          <div dir="ltr">
+            <p dir="rtl">
+              <PhoneMenu />
+            </p>
+          </div>
+        </div>,
+      );
+      const trigger = screen.getByRole('button', {name: /Actions/});
+      await user.click(trigger);
+      await waitFor(() =>
+        expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+      );
+      fireEvent.click(shownRow('Move to'), {detail: 1});
+
+      const backRow = await waitFor(() => shownRow('Back to Actions'));
+      expect(backRow.closest('p')).toBeNull();
+      const backIcon = backRow.querySelector('.astryx-icon');
+      expect(backIcon).not.toBeNull();
+      expect(getComputedStyle(backIcon as HTMLElement).transform).toBe(
+        'scaleX(-1)',
+      );
+    } finally {
+      restore();
+    }
+  });
 
   it('typeahead and arrows scope to the drilled rows', async () => {
     stubCompactTouch(true);

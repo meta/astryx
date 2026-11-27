@@ -49,6 +49,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TreeList/TreeListItem.generated';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 
@@ -274,7 +275,10 @@ const styles = stylex.create({
     height: spacingVars['--spacing-4'],
     fontSize: spacingVars['--spacing-4'],
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   // The RTL mirror is folded into each state's transform rather than living on

@@ -3480,3 +3480,32 @@ describe('DateInput entryErrorBehavior', () => {
     });
   });
 });
+
+describe('DateInput reads a formatted date in its locale direction', () => {
+  it.each([
+    ['en-US', 'ltr'],
+    ['he', 'rtl'],
+    ['ar', 'rtl'],
+  ])('a %s date takes dir %s on a right-to-left page', (locale, dir) => {
+    render(
+      <div dir="rtl">
+        <InternationalizationProvider locale={locale}>
+          <DateInput label="Date" value="2026-01-25" onChange={() => {}} />
+        </InternationalizationProvider>
+      </div>,
+    );
+    expect(screen.getByRole('combobox')).toHaveAttribute('dir', dir);
+  });
+
+  it("lets the caller's dir win", () => {
+    render(
+      <DateInput
+        label="Date"
+        value="2026-01-25"
+        dir="rtl"
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole('combobox')).toHaveAttribute('dir', 'rtl');
+  });
+});

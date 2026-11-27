@@ -125,7 +125,8 @@ mode, width, tooltip) is Button's, with Button's defaults.
   substitutes for it (`family:buttons` FR1).
 - **AR2 — Visible hint.** IconButton shows no visible text. A visible hint
   exists only when the caller sets `tooltip`, which also describes the button
-  unless it repeats the `label` (`component:Button` FR12).
+  unless `component:Button` FR12 leaves it out: it repeats the `label`, or a
+  Core part's name contains it.
 - **AR3 — Target size.** With the default square aspect, the smallest
   IconButton with no `width` is 28 by 28 CSS pixels, above the WCAG 2.5.8 24 by
   24 minimum. A caller `width` or theme icon-only aspect that narrows it below

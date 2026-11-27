@@ -136,6 +136,116 @@ describe('ClickableCard', () => {
     expect(link).toHaveAttribute('target', '_blank');
   });
 
+  describe('aria-current and aria-describedby', () => {
+    it('apply to the hidden button, not to the root', () => {
+      const {container} = render(
+        <>
+          <ClickableCard
+            label="Settings"
+            onClick={() => {}}
+            aria-current="page"
+            aria-describedby="settings-hint">
+            Content
+          </ClickableCard>
+          <p id="settings-hint">Manage your preferences</p>
+        </>,
+      );
+      const button = screen.getByRole('button', {name: 'Settings'});
+      expect(button).toHaveAttribute('aria-current', 'page');
+      expect(button).toHaveAccessibleDescription('Manage your preferences');
+      const root = container.firstElementChild!;
+      expect(root).not.toHaveAttribute('aria-current');
+      expect(root).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('apply to the hidden link, which keeps its destination and target', () => {
+      const {container} = render(
+        <>
+          <ClickableCard
+            label="Settings"
+            href="/settings"
+            target="_blank"
+            aria-current="page"
+            aria-describedby="settings-hint">
+            Content
+          </ClickableCard>
+          <p id="settings-hint">Manage your preferences</p>
+        </>,
+      );
+      const link = screen.getByRole('link', {name: 'Settings'});
+      expect(link).toHaveAttribute('aria-current', 'page');
+      expect(link).toHaveAccessibleDescription('Manage your preferences');
+      expect(link).toHaveAttribute('href', '/settings');
+      expect(link).toHaveAttribute('target', '_blank');
+      const root = container.firstElementChild!;
+      expect(root).not.toHaveAttribute('aria-current');
+      expect(root).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('apply to the hidden control of a disabled card, which stays disabled and focusable', () => {
+      render(
+        <>
+          <ClickableCard
+            label="Disabled action"
+            onClick={() => {}}
+            isDisabled
+            aria-current="step"
+            aria-describedby="plan-hint">
+            Content
+          </ClickableCard>
+          <ClickableCard
+            label="Disabled link"
+            href="/settings"
+            isDisabled
+            aria-current="page"
+            aria-describedby="plan-hint">
+            Content
+          </ClickableCard>
+          <p id="plan-hint">Not available on this plan</p>
+        </>,
+      );
+      const button = screen.getByRole('button', {name: 'Disabled action'});
+      expect(button).toHaveAttribute('aria-current', 'step');
+      expect(button).toHaveAccessibleDescription('Not available on this plan');
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      const link = screen.getByRole('link', {name: 'Disabled link'});
+      expect(link).toHaveAttribute('aria-current', 'page');
+      expect(link).toHaveAccessibleDescription('Not available on this plan');
+      expect(link).toHaveAttribute('aria-disabled', 'true');
+      expect(link).toHaveAttribute('tabindex', '0');
+      expect(link).not.toHaveAttribute('href');
+    });
+
+    it('leave data attributes and other props on the root, and nothing else reaches the control', () => {
+      const {container} = render(
+        <ClickableCard
+          label="Settings"
+          href="/settings"
+          isDisabled
+          id="settings-card"
+          data-testid="settings-card"
+          aria-labelledby="settings-title"
+          aria-disabled={false}
+          tabIndex={-1}
+          aria-current="page">
+          <span id="settings-title">Settings</span>
+        </ClickableCard>,
+      );
+      const root = container.firstElementChild!;
+      expect(root).toHaveAttribute('id', 'settings-card');
+      expect(root).toHaveAttribute('data-testid', 'settings-card');
+      expect(root).toHaveAttribute('aria-labelledby', 'settings-title');
+      const link = screen.getByRole('link', {name: 'Settings'});
+      expect(link).not.toHaveAttribute('id');
+      expect(link).not.toHaveAttribute('data-testid');
+      expect(link).not.toHaveAttribute('aria-labelledby');
+      expect(link).toHaveAttribute('aria-label', 'Settings');
+      expect(link).toHaveAttribute('aria-disabled', 'true');
+      expect(link).toHaveAttribute('tabindex', '0');
+      expect(link).toHaveAttribute('aria-current', 'page');
+    });
+  });
+
   it('disabled button stays focusable and the surface runs nothing', () => {
     const handleClick = vi.fn();
     render(

@@ -21,6 +21,8 @@ export interface CoreStatusMessageBindingDefinition {
   readonly summary: string;
   readonly facts: StatusMessageStateFacts;
   readonly focusSelector?: string;
+  /** The accessible label of the mark that `focusSelector` focuses. */
+  readonly focusLabel?: string;
   readonly storyId: string;
 }
 
@@ -237,6 +239,7 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
       maxValue: 100,
     },
     focusSelector: '[tabindex="0"]',
+    focusLabel: 'Target',
     storyId: 'a11y-status-message-pattern--progress-mark-focused-update',
   },
 ] as const satisfies ReadonlyArray<CoreStatusMessageBindingDefinition>;

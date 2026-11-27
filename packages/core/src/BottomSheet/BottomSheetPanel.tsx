@@ -82,6 +82,7 @@ import {
   type SheetDragExit,
 } from './useSheetGestures';
 import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 const HEIGHT_BUDGETS = {
   hug: '92dvh',
@@ -384,7 +385,10 @@ const styles = stylex.create({
     },
     transitionProperty: 'transform, opacity',
     transitionDuration: {
-      default: durationVars['--duration-medium'],
+      // Under a theme that reduces motion for everyone, the sheet lands on the
+      // next frame. waitForTransition ends at once on a zero duration, so the
+      // sheet needs no settle time.
+      default: `calc(${durationVars['--duration-medium']} * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce)': {
         default: '0.01s',
         '@media (pointer: coarse)': `0.01s, ${CROSS_FADE_MS}ms`,

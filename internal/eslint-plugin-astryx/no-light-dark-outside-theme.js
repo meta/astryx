@@ -32,7 +32,7 @@
  * literals, so a comment mentioning `light-dark()` is invisible to it, as is a
  * `.css` file (ESLint never parses one) and a `.doc.mjs` prose file (unlinted
  * outside the CLI). Path exemptions are kept here rather than only in
- * eslint.config.js so they are testable, and so a future config edit cannot
+ * eslint.config.mjs so they are testable, and so a future config edit cannot
  * quietly turn the theme layer into a violation.
  *
  * A bare `'light-dark('` with no closing parenthesis is a PREFIX, not a value:

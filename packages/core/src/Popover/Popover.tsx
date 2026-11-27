@@ -55,7 +55,7 @@ import type {
 import {
   compactDefinition,
   DEFAULT_COMPACT_DEFINITION,
-} from '../theme/themeAdaptations';
+} from '../theme/breakpoints';
 import {useThemeDefinition} from '../theme/useTheme';
 import * as stylex from '@stylexjs/stylex';
 import {devWarn} from '../utils/devWarning';

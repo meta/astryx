@@ -390,7 +390,7 @@ export function HeroReelProvider({children}: {children: ReactNode}) {
   // <link>, but a family's woff2 is only fetched when a glyph using it first
   // paints — and the remote card photos aren't fetched until their slide
   // renders; both happen mid-swap on a cold cache. Kicking the fetches off here
-  // (off the critical path, scoped to just the reel's ~9 fonts and photos) gets
+  // (off the critical path, scoped to just the reel's fonts and photos) gets
   // them into cache before the first 4.5s advance without touching initial LCP.
   // A screen narrower than 1024 px does not advance the reel, and most of its
   // visitors never see another slide. There, warmNeighborsOf loads slides
