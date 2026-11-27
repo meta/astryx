@@ -1102,9 +1102,7 @@ export default defineConfig(
       // React 19 ref-in-props migration for the editor's public props.
       '@astryx/require-ref-prop': 'warn',
       '@eslint-react/no-forward-ref': 'warn',
-      '@eslint-react/naming-convention-ref-name': 'warn',
       // Public API shape, settled with the package's stable-API decision.
-      '@astryx/require-base-props': 'warn',
       '@astryx/boolean-prop-naming': 'warn',
       '@eslint-react/no-unstable-default-props': 'warn',
     },

@@ -36,6 +36,7 @@ jobs:
           # The script and every module it imports.
           sparse-checkout: |
             .github/scripts/cli-minimum-node.mjs
+            .github/scripts/lib/daily-run-issue.mjs
             .github/scripts/node-time-drift.mjs
             .github/scripts/lib/a11y-spec-files.mjs
             scripts/lib/duration-split.mjs
@@ -222,6 +223,7 @@ jobs:
           # The CLI's test files too, so the refreshed record drops a deleted one.
           sparse-checkout: |
             .github/scripts/cli-minimum-node.mjs
+            .github/scripts/lib/daily-run-issue.mjs
             .github/scripts/node-time-drift.mjs
             scripts/lib/duration-split.mjs
             scripts/vitest-node-durations.min-node.json
