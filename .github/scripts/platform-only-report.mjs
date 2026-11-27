@@ -16,9 +16,11 @@ import {PLATFORM_ONLY} from './platform-only-cases.mjs';
 export const ISSUE_TITLE = 'Platform-only tests fail on main';
 
 /**
- * Each leg's verdict from its job's conclusion: "pass" for success, "fail"
- * for a failure or a time-out, and "none" for anything else (cancelled,
- * skipped, or a leg with no job).
+ * Each leg's verdict from its job's conclusion: "pass" for success; "fail"
+ * for a failure, a time-out, or a cancel (the report job runs only when the
+ * run itself was not cancelled, so a cancelled leg is one its time limit
+ * stopped, such as a hung leg); and "none" for anything else (skipped, or a
+ * leg with no job).
  * @param {Array<{name: string, conclusion: string | null}>} jobs
  * @returns {Array<{case: string, os: string, verdict: 'pass' | 'fail' | 'none'}>}
  */
@@ -29,7 +31,7 @@ export function legVerdicts(jobs) {
     const verdict =
       conclusion === 'success'
         ? 'pass'
-        : conclusion === 'failure' || conclusion === 'timed_out'
+        : ['failure', 'timed_out', 'cancelled'].includes(conclusion ?? '')
           ? 'fail'
           : 'none';
     return {case: entry.case, os: entry.os, verdict};

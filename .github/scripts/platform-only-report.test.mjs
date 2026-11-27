@@ -71,10 +71,17 @@ describe('legVerdicts', () => {
     );
   });
 
-  it('gives no verdict to a cancelled, skipped or missing leg', () => {
+  it('fails a leg its time limit cancelled, such as a hung one', () => {
+    // The report job runs only when the run itself was not cancelled.
+    expect(legVerdicts([job('windows-latest', 'cancelled')])[0].verdict).toBe(
+      'fail',
+    );
+  });
+
+  it('gives no verdict to a skipped or missing leg', () => {
     expect(
       legVerdicts([
-        job('windows-latest', 'cancelled'),
+        job('windows-latest', 'skipped'),
         job('macos-latest', 'skipped'),
       ]).map(leg => leg.verdict),
     ).toEqual(['none', 'none']);
@@ -144,7 +151,7 @@ describe('the one issue', () => {
 
   it('a run with no verdict only notes it on the open issue', async () => {
     const github = fakeGithub(
-      [job('windows-latest', 'cancelled'), job('macos-latest', 'success')],
+      [job('windows-latest', 'skipped'), job('macos-latest', 'success')],
       [ours],
     );
     expect(await reportPlatformOnly({github, context})).toBe(
