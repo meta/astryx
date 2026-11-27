@@ -95,6 +95,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The touch band under a coarse pointer (`spec:AST-094` FR42), carried by the
   content wrapper's `::after`; the root's `::before` and `::after` stay as FR15
   and callers use them.
+- At the start of a press on a Button that a caller made static, the press
+  controller places one hidden probe in it within the press-start call, to
+  measure the press layer's containing block. Button's DOM at rest and during
+  the press does not change.
 - Busy-only and disabled operability guards.
 - Link mode's rendering choice and its disabled fallback.
 - Standalone resting elevation and the `button` theme target.

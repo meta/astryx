@@ -1130,8 +1130,10 @@ function placePress(
  * engine answers: a hidden, absolutely placed probe in the control has that
  * containing block as its offset parent, and the probe's box is its padding
  * box. The control's own offset parent can stop short, at a table cell or a
- * table that holds no layers. The probe is out of flow and hidden, so it
- * moves no other box and takes no hit, and it is gone before anything paints.
+ * table that holds no layers. The probe is out of flow and hidden, also from
+ * assistive technology, so it moves no other box and takes no hit. It exists
+ * only inside this call, at a press's start, so the control's DOM at rest and
+ * during the press does not change.
  * For that one layout, the probe can change what `:empty` or `:last-child`
  * matches in the control, and a mutation observer records it twice.
  * Every read happens while the probe is in place, so they share one layout.
@@ -1140,6 +1142,7 @@ function layerBlock(
   element: HTMLElement,
 ): {box: DOMRect; rect: DOMRect; width: number; height: number} | null {
   const probe = element.ownerDocument.createElement('span');
+  probe.setAttribute('aria-hidden', 'true');
   probe.style.cssText =
     'position:absolute;inset:0;visibility:hidden;pointer-events:none';
   element.append(probe);

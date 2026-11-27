@@ -14,7 +14,8 @@
  *   fine one (both engines). A tap on the line under the Button activates it
  *   once, through the engine's own tap path (both engines). A held press
  *   there does too (Chromium, which also clicks from a raw touch sequence),
- *   and so does a mouse click (both engines)
+ *   and so does a mouse click (both engines). A press leaves the Button's
+ *   children as they were at rest
  * @position Interaction evidence for privateAttributes/press.stylex.ts
  *   (`control`, `rowTint`) and the press controller (utils/pressFeedback.ts)
  *   as Button uses them
@@ -60,6 +61,20 @@ interface HitState {
   rowTintBox: number[];
   rowOpacity: string;
   ownTint: string;
+}
+
+/** The Button's children through a press, and each child the press added. */
+interface ProbeSeen {
+  children: string[];
+  added: Array<{
+    hidden: string | null;
+    text: string;
+    pointerEvents: string;
+    visibility: string;
+    tabIndex: number;
+    connected: boolean;
+  }>;
+  removed: number;
 }
 
 async function openRow(page: Page) {
@@ -395,6 +410,66 @@ test("a finger on a row-target Button in a table row's second cell tints only th
       log,
     ).toEqual(frame.buttonBox);
   }
+});
+
+test("a press leaves the Button's children as they were at rest, and its probe is hidden and gone at once", async ({
+  page,
+}) => {
+  const {driver, button} = await openRow(page);
+  const at = await buttonCenter(button);
+  await button.evaluate(el => {
+    const seen: ProbeSeen = {children: [el.innerHTML], added: [], removed: 0};
+    // Each child the press adds, as the observer sees it after the press's
+    // start has run.
+    new MutationObserver(records => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          const probe = node as HTMLElement;
+          seen.added.push({
+            hidden: probe.getAttribute('aria-hidden'),
+            text: probe.textContent ?? '',
+            pointerEvents: probe.style.pointerEvents,
+            visibility: probe.style.visibility,
+            tabIndex: probe.tabIndex,
+            connected: probe.isConnected,
+          });
+        }
+        seen.removed += record.removedNodes.length;
+      }
+    }).observe(el, {childList: true});
+    // The children in each press state, read as it paints.
+    new MutationObserver(() => {
+      requestAnimationFrame(() => seen.children.push(el.innerHTML));
+    }).observe(el, {attributes: true, attributeFilter: ['data-astryx-press']});
+    (window as unknown as {__probe: ProbeSeen}).__probe = seen;
+  });
+  await fingerHold(driver, at)();
+  await expect
+    .poll(async () => button.getAttribute('data-astryx-press'))
+    .toBeNull();
+  await page.evaluate(async () => {
+    await new Promise(resolve => requestAnimationFrame(resolve));
+  });
+  const seen = await page.evaluate(
+    () => (window as unknown as {__probe: ProbeSeen}).__probe,
+  );
+  const log = JSON.stringify(seen);
+  // At rest, then on, fading and released: the same children each time.
+  expect(seen.children.length, log).toBeGreaterThanOrEqual(4);
+  expect(new Set(seen.children).size, log).toBe(1);
+  // One probe at the press's start: hidden, with no text, no hit and no
+  // focus, and already removed when the observer runs.
+  expect(seen.added, log).toEqual([
+    {
+      hidden: 'true',
+      text: '',
+      pointerEvents: 'none',
+      visibility: 'hidden',
+      tabIndex: -1,
+      connected: false,
+    },
+  ]);
+  expect(seen.removed, log).toBe(1);
 });
 
 test('a tap on the line under the Button activates the Button once', async ({
