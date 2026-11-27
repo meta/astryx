@@ -66,9 +66,6 @@ function classTokens(value: string | null): Set<string> {
   return new Set(value?.split(/\s+/).filter(Boolean));
 }
 
-/**
- * Whether a class write only added or removed classes in `own`.
- */
 function isOwnClassWrite(
   before: string | null,
   after: string | null,
@@ -92,9 +89,8 @@ function isOwnClassWrite(
 /**
  * Observes what changes `el`'s overflow besides its scroll: its own size,
  * each child's size, the children added or removed, and its class or style.
- * Returns the teardown, which ends every observation. A class write that
- * only adds or removes the caller's own classes, given by `getOwnClassNames`,
- * is not measured.
+ * Returns the teardown, which ends every observation. The observer skips a
+ * class write that only adds or removes the caller's own classes.
  *
  * The container attaches in React's commit, where a read forces a style and
  * layout pass before the browser's own. So the first measurement waits for
