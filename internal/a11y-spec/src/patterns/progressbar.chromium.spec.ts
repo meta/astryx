@@ -13,6 +13,8 @@ import {describeExpectation, requiredLayers} from '../contract';
 import {
   checkAccessibilitySpec,
   engineMatches,
+  unmatchedKnownFailures,
+  type BindingResult,
   type ExpectationResult,
 } from '../check';
 import {
@@ -43,7 +45,16 @@ async function results(
   target: ProgressbarFixture,
   only?: readonly string[],
 ): Promise<readonly ExpectationResult[]> {
-  const run = await checkAccessibilitySpec({
+  return (await bindingResult(page, cdp, target, only)).results;
+}
+
+async function bindingResult(
+  page: Page,
+  cdp: CDPSession,
+  target: ProgressbarFixture,
+  only?: readonly string[],
+): Promise<BindingResult> {
+  return checkAccessibilitySpec({
     spec: PROGRESSBAR_PATTERN,
     binding: 'fixture',
     state: target.id,
@@ -61,7 +72,6 @@ async function results(
       });
     },
   });
-  return run.results;
 }
 
 test.describe('progressbar contract — conforming fixtures', () => {
@@ -97,24 +107,43 @@ test.describe('progressbar contract — deliberately violating fixtures', () => 
         page,
       }) => {
         // From VALUE_TEXT_UNEXPOSED_ENGINE on, the accessibility tree shows no
-        // value text, so a claimed text cannot be seen there. The case is
-        // expected to pass there, and fails the run once the engine is fixed.
-        test.fail(
+        // value text, so a claimed text cannot be seen there and the case
+        // passes. It fails this assertion once the engine is fixed.
+        const unseen =
           fixtureId === 'violating-indeterminate-claims-text' &&
-            engineMatches(
-              VALUE_TEXT_UNEXPOSED_ENGINE,
-              'chromium',
-              page.context().browser()?.version(),
-            ),
-          'this Chromium build exposes no value text in its accessibility tree',
-        );
+          engineMatches(
+            VALUE_TEXT_UNEXPOSED_ENGINE,
+            'chromium',
+            page.context().browser()?.version(),
+          );
         const cdp = await page.context().newCDPSession(page);
         const [result] = await results(page, cdp, fixture(fixtureId), [
           expectation.id,
         ]);
-        expect(result?.status, result?.detail ?? 'no result').toBe('fail');
-        expect(result?.detail ?? '').not.toBe('');
+        expect(result?.status, result?.detail ?? 'no result').toBe(
+          unseen ? 'pass' : 'fail',
+        );
+        if (!unseen) {
+          expect(result?.detail ?? '').not.toBe('');
+        }
       });
     }
   }
+});
+
+test('every fixture known failure matches exactly one result', async ({
+  page,
+}) => {
+  const cdp = await page.context().newCDPSession(page);
+  const observed: BindingResult[] = [];
+  for (const failure of PROGRESSBAR_FIXTURE_KNOWN_FAILURES) {
+    observed.push(
+      await bindingResult(page, cdp, fixture(failure.state), [
+        failure.expectation,
+      ]),
+    );
+  }
+  expect(
+    unmatchedKnownFailures(PROGRESSBAR_FIXTURE_KNOWN_FAILURES, observed),
+  ).toEqual([]);
 });
