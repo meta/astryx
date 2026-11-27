@@ -86,6 +86,23 @@ const nestedStyles = stylex.create({
   },
 });
 
+// With `minHeight`, `height: 100%` resolves to the content height, so the
+// wrapper becomes a column flex container and the painted container grows
+// to the height the wrapper reaches. Only then: as a flex item, the painted
+// container contains its children's margins and floats.
+const minHeightFillStyles = stylex.create({
+  outer: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  inner: {
+    flexGrow: 1,
+    // Content taller than a set `height` overflows the painted container,
+    // as it does without flex, instead of stretching it.
+    minHeight: 0,
+  },
+});
+
 // Divider styles for each side
 const dividerStyles = stylex.create({
   top: {
@@ -273,8 +290,10 @@ export function Section({
   const useThemeDefault = padding == null;
   const effectivePadding = padding ?? 4;
   const paddingToken = spacingStepToToken[effectivePadding] as SpacingToken;
+  const fillsMinHeight = minHeight != null;
   const outerStylex = stylex.props(
     nestedStyles.outer,
+    fillsMinHeight && minHeightFillStyles.outer,
     dynamicStyles.sizing(
       width ?? null,
       height ?? null,
@@ -302,6 +321,7 @@ export function Section({
           themeProps('section', {variant}),
           stylex.props(
             nestedStyles.inner,
+            fillsMinHeight && minHeightFillStyles.inner,
             ...container(
               useThemeDefault
                 ? {useThemeDefault: 'section'}
