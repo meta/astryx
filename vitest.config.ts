@@ -113,11 +113,12 @@ export default defineConfig({
     // Node 25 and later define their own `localStorage` global, which hides
     // jsdom's; a Node that knows the flag turns its own off in the workers.
     execArgv: ['--max-old-space-size=4096', ...webStorageOff],
-    // One less than the cores, as Vitest's default, but at most 8 and one per
-    // 2 GiB of memory: a Node test can start CLI processes of its own, so on a
-    // many-core machine the default loads it far past its cores. A 4-core CI
-    // runner still runs 3. Set here, not in a project: every project uses it,
-    // and `--maxWorkers` or VITEST_MAX_WORKERS still overrides it.
+    // On a CI runner (CI set), Vitest's default: one less than the cores. On a
+    // shared machine, at most 8 and one per 2 GiB of memory as well: a Node
+    // test can start CLI processes of its own, so on a many-core machine the
+    // default loads it far past its cores. Set here, not in a project: every
+    // project uses it, and `--maxWorkers` or VITEST_MAX_WORKERS still
+    // overrides it.
     maxWorkers: testWorkers(),
     // A `--shard` leg of the `node` project runs files chosen by their
     // recorded time, not by count, so the slowest files never share a leg
