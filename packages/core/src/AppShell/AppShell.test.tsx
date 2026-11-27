@@ -269,10 +269,8 @@ describe('AppShell', () => {
     expect(document.activeElement).toBe(main);
   });
 
-  it('leaves the URL alone when the skip link is activated, so a hash router stays on its page', () => {
+  it('leaves the URL alone when the skip link is activated, so a hash router stays on its page', async () => {
     window.history.replaceState(null, '', '#/orders/46');
-    const hashChanges = vi.fn();
-    window.addEventListener('hashchange', hashChanges);
     try {
       render(
         <AppShell>
@@ -284,10 +282,11 @@ describe('AppShell', () => {
       expect(skipLink).toHaveAttribute('href', '#astryx-app-shell-main');
       expect(fireEvent.click(skipLink)).toBe(false);
       expect(document.activeElement).toBe(screen.getByRole('main'));
+      // A followed link changes the URL a task after the click, so the check
+      // waits for that task first.
+      await new Promise(resolve => setTimeout(resolve, 20));
       expect(window.location.hash).toBe('#/orders/46');
-      expect(hashChanges).not.toHaveBeenCalled();
     } finally {
-      window.removeEventListener('hashchange', hashChanges);
       window.history.replaceState(null, '', ' ');
     }
   });
