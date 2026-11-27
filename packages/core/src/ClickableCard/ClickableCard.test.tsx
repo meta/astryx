@@ -246,6 +246,65 @@ describe('ClickableCard', () => {
     });
   });
 
+  describe('aria-expanded and aria-pressed', () => {
+    it('apply to the hidden button of a disclosure or toggle card, not to the root', () => {
+      const {container} = render(
+        <>
+          <ClickableCard label="Details" onClick={() => {}} aria-expanded>
+            Content
+          </ClickableCard>
+          <ClickableCard
+            label="Favorite"
+            onClick={() => {}}
+            aria-pressed={false}>
+            Content
+          </ClickableCard>
+        </>,
+      );
+      expect(
+        screen.getByRole('button', {name: 'Details', expanded: true}),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', {name: 'Favorite', pressed: false}),
+      ).toBeInTheDocument();
+      for (const root of Array.from(container.children)) {
+        expect(root).not.toHaveAttribute('aria-expanded');
+        expect(root).not.toHaveAttribute('aria-pressed');
+      }
+    });
+
+    it('apply aria-expanded to the hidden link, which keeps its destination', () => {
+      const {container} = render(
+        <ClickableCard label="Section" href="/section" aria-expanded={false}>
+          Content
+        </ClickableCard>,
+      );
+      const link = screen.getByRole('link', {name: 'Section'});
+      expect(link).toHaveAttribute('aria-expanded', 'false');
+      expect(link).toHaveAttribute('href', '/section');
+      expect(container.firstElementChild).not.toHaveAttribute(
+        'aria-expanded',
+      );
+    });
+
+    it('apply to the hidden control of a disabled card, which stays disabled', () => {
+      render(
+        <ClickableCard
+          label="Disabled toggle"
+          onClick={() => {}}
+          isDisabled
+          aria-pressed>
+          Content
+        </ClickableCard>,
+      );
+      const button = screen.getByRole('button', {
+        name: 'Disabled toggle',
+        pressed: true,
+      });
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+    });
+  });
+
   it('disabled button stays focusable and the surface runs nothing', () => {
     const handleClick = vi.fn();
     render(
