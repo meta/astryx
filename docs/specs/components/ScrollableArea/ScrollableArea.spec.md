@@ -15,6 +15,7 @@ verified_by:
     packages/core/src/ScrollableArea/ScrollableArea.test.tsx,
     packages/core/src/hooks/useScrollableArea.test.tsx,
     packages/core/src/hooks/useScrollableArea.firstFrame.test.tsx,
+    packages/core/src/ScrollableArea/__tests__/ScrollableAreaFirstFrameTabStop.a11y.browser.spec.ts,
     apps/storybook/stories/ScrollableArea.stories.tsx,
   ]
 modules: [module:ScrollableArea/useScrollableArea]
