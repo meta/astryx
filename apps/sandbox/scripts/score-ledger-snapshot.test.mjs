@@ -9,7 +9,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {readSectionBlocks} from './score-ledger-snapshot.mjs';
+import {readRows, readSectionBlocks} from './score-ledger-snapshot.mjs';
 
 const OPEN = [
   {id: 'B1', summary: 'The first finding', issue: null},
@@ -67,5 +67,42 @@ describe('readSectionBlocks', () => {
         {where: WHERE, item: '{"id":"B1"}', reason: 'not a list of BLOCKs'},
       ],
     });
+  });
+});
+
+describe('readRows', () => {
+  it('keeps every row that is an object, and skips nothing', () => {
+    const skipped = [];
+    const rows = [{component: 'Button'}, {component: 'Badge'}];
+    expect(readRows(rows, item => skipped.push(item))).toEqual(rows);
+    expect(skipped).toEqual([]);
+  });
+
+  it('skips and records a row that is not an object, such as null', () => {
+    const skipped = [];
+    const rows = readRows([{component: 'Button'}, null, 'Badge'], item =>
+      skipped.push(item),
+    );
+    expect(rows).toEqual([{component: 'Button'}]);
+    expect(skipped).toEqual([
+      {where: 'components[1]', item: 'null', reason: 'not a ledger row'},
+      {where: 'components[2]', item: '"Badge"', reason: 'not a ledger row'},
+    ]);
+  });
+
+  it('skips and records components that are not a list, and keeps no rows', () => {
+    const skipped = [];
+    expect(readRows({component: 'Button'}, item => skipped.push(item))).toEqual(
+      [],
+    );
+    expect(readRows(undefined, item => skipped.push(item))).toEqual([]);
+    expect(skipped).toEqual([
+      {
+        where: 'components',
+        item: '{"component":"Button"}',
+        reason: 'not a list of rows',
+      },
+      {where: 'components', item: 'undefined', reason: 'not a list of rows'},
+    ]);
   });
 });

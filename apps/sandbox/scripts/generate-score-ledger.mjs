@@ -44,7 +44,7 @@ import {
   isEvidenceItem,
   listComponents,
 } from '../../../scripts/score-ledger.mjs';
-import {readSectionBlocks} from './score-ledger-snapshot.mjs';
+import {readRows, readSectionBlocks} from './score-ledger-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -177,7 +177,8 @@ function pruneEntry(entry) {
 
 let snapshot = null;
 let snapshotFetchedAt = null;
-let parsed = null;
+let fetched = false;
+let parsed;
 try {
   // Bounded on purpose. A 404 or a refused connection lands in the catch
   // immediately, but a STALLED connection would not: a bare fetch inherits
@@ -191,9 +192,8 @@ try {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   parsed = JSON.parse(await res.text());
-  if (!Array.isArray(parsed.components)) throw new Error('missing a components array');
+  fetched = true;
 } catch (e) {
-  parsed = null;
   // Never fail the build over this — and never hang it either. The page
   // fetches the same URL at runtime and says which copy it is showing.
   const why = e.name === 'TimeoutError' ? 'no response within 5000ms' : e.message;
@@ -202,14 +202,18 @@ try {
   );
 }
 
-// Outside the catch: a bad row is skipped and recorded, so an error here is a
-// fault in this script, and it stops the build.
-if (parsed != null) {
-  snapshot = {...parsed, components: parsed.components.map(pruneEntry)};
-  snapshotFetchedAt = new Date().toISOString();
-  console.log(
-    `componentScores: snapshot of ${parsed.components.length} audited component(s) from the wiki`,
-  );
+// Outside the catch: bad wiki data is skipped and recorded, so an error here
+// is a fault in this script, and it stops the build.
+if (fetched) {
+  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    skip({where: 'ledger', item: String(JSON.stringify(parsed)), reason: 'not a ledger object'});
+  } else {
+    snapshot = {...parsed, components: readRows(parsed.components, skip).map(pruneEntry)};
+    snapshotFetchedAt = new Date().toISOString();
+    console.log(
+      `componentScores: snapshot of ${snapshot.components.length} audited component(s) from the wiki`,
+    );
+  }
 }
 
 if (skipped.length > 0) {

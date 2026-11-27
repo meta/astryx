@@ -66,3 +66,31 @@ export function readSectionBlocks(blocks, openBlocks, where, skip) {
   });
   return read;
 }
+
+/**
+ * Keeps the ledger's rows that are objects. A row that is not one, such as
+ * `null`, is skipped, and `skip` records it. So is a `components` that is not
+ * a list, which leaves no rows.
+ * @param {unknown} components the ledger's `components`
+ * @param {(skipped: SkippedItem) => void} skip records a skipped item
+ * @returns {object[]} the rows that the snapshot can read
+ */
+export function readRows(components, skip) {
+  if (!Array.isArray(components)) {
+    skip({
+      where: 'components',
+      item: String(JSON.stringify(components)),
+      reason: 'not a list of rows',
+    });
+    return [];
+  }
+  return components.filter((row, index) => {
+    if (isObject(row)) return true;
+    skip({
+      where: `components[${index}]`,
+      item: JSON.stringify(row),
+      reason: 'not a ledger row',
+    });
+    return false;
+  });
+}
