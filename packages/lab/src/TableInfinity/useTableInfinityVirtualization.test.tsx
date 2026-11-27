@@ -123,6 +123,55 @@ describe('Table Infinity window', () => {
     expect(viewport.closest('[dir]')).toHaveAttribute('dir', 'ltr');
   });
 
+  it('uses the new direction after the host changes without remounting', async () => {
+    const computedStyle = window.getComputedStyle.bind(window);
+    // The DOM test environment does not compute inherited direction.
+    const directionStyle = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((node, pseudo) => {
+        const style = computedStyle(node, pseudo);
+        if (style.direction !== '') {
+          return style;
+        }
+        Object.defineProperty(style, 'direction', {
+          value: node.matches(':dir(rtl)') ? 'rtl' : 'ltr',
+        });
+        return style;
+      });
+    vi.useFakeTimers();
+    try {
+      const {rerender} = render(
+        <div dir="ltr" style={{direction: 'ltr'}}>
+          <Fixture />
+        </div>,
+      );
+      const scrollbar = screen.getByRole('scrollbar', {name: 'Scroll columns'});
+      rerender(
+        <div dir="rtl" style={{direction: 'rtl'}}>
+          <Fixture />
+        </div>,
+      );
+      await act(async () => {});
+      expect(screen.getByRole('scrollbar', {name: 'Scroll columns'})).toBe(
+        scrollbar,
+      );
+      fireEvent.keyDown(scrollbar, {key: 'ArrowLeft'});
+      frame();
+      expect(scrollbar).toHaveAttribute('aria-valuenow', '1');
+      fireEvent.wheel(screen.getByRole('group', {name: 'Table viewport'}), {
+        deltaX: -112,
+      });
+      frame();
+      expect(scrollbar).toHaveAttribute('aria-valuenow', '2');
+      expect(screen.getByRole('table', {name: 'Archive'}).style.translate).toBe(
+        '224px 0px',
+      );
+    } finally {
+      vi.useRealTimers();
+      directionStyle.mockRestore();
+    }
+  });
+
   it('announces the full range of a partially overflowing row', () => {
     vi.useFakeTimers();
     try {
