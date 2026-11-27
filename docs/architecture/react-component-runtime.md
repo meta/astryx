@@ -328,8 +328,8 @@ those contracts, and one user-facing rule that no component owns: how a
   FR6), and the Reduce Motion substitution for a move, an entrance or an exit
   (`design:reduced-motion` DR1–DR3); the touch hit area's press-time check; and List's
   reorder session, for a collection that adapts the reorderable object to its
-  own values or whose rows are not `ListItem`s (`createReorderable`'s
-  plain-element `attach`, `spec:AST-103` FR4b, is not built). One chosen
+  own values or whose rows are not `ListItem`s (`createReorderable` has
+  no plain-element `attach`; `spec:AST-103` FR4b owns that form). One chosen
   start, `start: 'next-frame'`, exists for motion an interaction starts in an
   input event's own task. On a busy page such motion then starts on the first
   frame after that task, so it does not skip ahead. It is internal:
