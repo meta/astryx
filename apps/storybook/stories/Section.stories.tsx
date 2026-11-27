@@ -346,3 +346,59 @@ export const AsymmetricPadding: Story = {
     </div>
   ),
 };
+
+export const Dividers: Story = {
+  render: () => (
+    <div {...stylex.props(styles.storyWrapper)}>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>dividers top + bottom</h4>
+        <Section
+          data-evidence="dividers-block"
+          variant="muted"
+          width={220}
+          dividers={['top', 'bottom']}>
+          <p {...stylex.props(styles.text)}>A border above and below.</p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>dividers start</h4>
+        <Section
+          data-evidence="dividers-start"
+          variant="section"
+          width={220}
+          dividers={['start']}>
+          <p {...stylex.props(styles.text)}>
+            A border on the leading edge: left in LTR, right in RTL.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>dividers end</h4>
+        <Section
+          data-evidence="dividers-end"
+          variant="transparent"
+          width={220}
+          dividers={['end']}>
+          <p {...stylex.props(styles.text)}>
+            A border on the trailing edge: right in LTR, left in RTL.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          minHeight=160 + bottom divider
+        </h4>
+        <Section
+          data-evidence="min-height"
+          variant="muted"
+          width={220}
+          minHeight={160}
+          dividers={['bottom']}>
+          <p {...stylex.props(styles.text)}>
+            The fill and the bottom divider reach the minimum height.
+          </p>
+        </Section>
+      </div>
+    </div>
+  ),
+};
