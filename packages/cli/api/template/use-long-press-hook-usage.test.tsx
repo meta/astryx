@@ -48,6 +48,24 @@ vi.mock('@astryxdesign/core/Card', () => ({
     ),
 }));
 
+// The node project loads Core's built bundle, which the StyleX stub does not
+// reach either. A plain stand-in for VStack shows the surface's style list on
+// `data-style`, so a case reads whether the surface scrolls.
+vi.mock('@astryxdesign/core/Layout', async importOriginal => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  VStack: ({
+    xstyle,
+    children,
+    gap: _gap,
+    ...rest
+  }: {
+    xstyle?: unknown;
+    children?: ReactNode;
+    gap?: number;
+    [prop: string]: unknown;
+  }) => createElement('div', {...rest, ...style.attribute(xstyle)}, children),
+}));
+
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean}).IS_REACT_ACT_ENVIRONMENT =
   true;
 
