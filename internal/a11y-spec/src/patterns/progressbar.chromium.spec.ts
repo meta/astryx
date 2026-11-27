@@ -10,7 +10,11 @@
 
 import {expect, test, type CDPSession, type Page} from '../playwright';
 import {describeExpectation, requiredLayers} from '../contract';
-import {checkAccessibilitySpec, type ExpectationResult} from '../check';
+import {
+  checkAccessibilitySpec,
+  engineMatches,
+  type ExpectationResult,
+} from '../check';
 import {
   CHROMIUM_OBSERVES,
   createChromiumHarness,
@@ -24,6 +28,10 @@ import {
   fixture,
   type ProgressbarFixture,
 } from './progressbar.fixtures';
+import {
+  PROGRESSBAR_FIXTURE_KNOWN_FAILURES,
+  VALUE_TEXT_UNEXPOSED_ENGINE,
+} from './progressbar.known-failures';
 
 function fixturePage(html: string): string {
   return `<!doctype html><html lang="en"><body>${html}</body></html>`;
@@ -41,6 +49,7 @@ async function results(
     state: target.id,
     facts: target.facts,
     only,
+    knownFailures: PROGRESSBAR_FIXTURE_KNOWN_FAILURES,
     mount: async () => {
       await page.setContent(fixturePage(target.html));
       await holdMotionStill(page);
@@ -64,7 +73,9 @@ test.describe('progressbar contract — conforming fixtures', () => {
         observed
           .filter(
             result =>
-              result.status !== 'pass' && result.status !== 'not-applicable',
+              result.status !== 'pass' &&
+              result.status !== 'not-applicable' &&
+              result.status !== 'known-failure',
           )
           .map(result => `${result.expectation}: ${result.detail ?? ''}`),
       ).toEqual([]);
@@ -85,6 +96,18 @@ test.describe('progressbar contract — deliberately violating fixtures', () => 
       test(`${describeExpectation(expectation)} — fails against ${fixtureId}`, async ({
         page,
       }) => {
+        // From VALUE_TEXT_UNEXPOSED_ENGINE on, the accessibility tree shows no
+        // value text, so a claimed text cannot be seen there. The case is
+        // expected to pass there, and fails the run once the engine is fixed.
+        test.fail(
+          fixtureId === 'violating-indeterminate-claims-text' &&
+            engineMatches(
+              VALUE_TEXT_UNEXPOSED_ENGINE,
+              'chromium',
+              page.context().browser()?.version(),
+            ),
+          'this Chromium build exposes no value text in its accessibility tree',
+        );
         const cdp = await page.context().newCDPSession(page);
         const [result] = await results(page, cdp, fixture(fixtureId), [
           expectation.id,

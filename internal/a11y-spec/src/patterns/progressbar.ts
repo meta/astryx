@@ -244,6 +244,40 @@ export const PROGRESSBAR_PATTERN: PatternContract<ProgressbarStateFacts> =
         },
       },
       {
+        id: 'progressbar.value.text-attribute',
+        outcome:
+          'The progress bar carries its formatted value as its value text, so a browser that exposes value text speaks what a sighted user reads.',
+        sources: [WCAG_4_1_2, ARIA_VALUE_TEXT],
+        covers: ['4.1.2-name-role-value'],
+        appliesWhen: {
+          condition:
+            'the binding knows its progress and speaks it as formatted text',
+          test: facts => facts.value != null && facts.valueText != null,
+        },
+        // The component's own markup, on every engine. It checks the source
+        // the browser reads, not what the browser exposes:
+        // `progressbar.value.text-exposed` checks that, and this result never
+        // changes that one.
+        evidenceLayer: 'dom',
+        enforcement: 'required',
+        run: async ({subject, facts}) => {
+          const role = await subject.attribute('role');
+          if (role !== 'progressbar') {
+            throw new Error(
+              `the element is ${role == null ? 'not given a role' : `role ${JSON.stringify(role)}`}, not role "progressbar"`,
+            );
+          }
+          const text = await subject.attribute('aria-valuetext');
+          if ((text ?? '').trim() !== (facts.valueText ?? '').trim()) {
+            throw new Error(
+              text == null
+                ? `aria-valuetext is absent, not the binding’s formatted ${JSON.stringify(facts.valueText)}`
+                : `aria-valuetext is ${JSON.stringify(text)}, not the binding’s formatted ${JSON.stringify(facts.valueText)}`,
+            );
+          }
+        },
+      },
+      {
         id: 'progressbar.subtree.no-focusable-descendants',
         outcome:
           'Nothing a keyboard can land on sits inside the progress bar, whose descendants the platform hides, so every focusable control keeps a role and a name.',
