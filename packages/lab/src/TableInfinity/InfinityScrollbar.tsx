@@ -15,6 +15,7 @@ import {
   radiusVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {isRtlElement} from '@astryxdesign/core/internal/touch';
 import {focusOutlineStyles} from '@astryxdesign/core/utils';
 import {
   endPosition,
@@ -47,7 +48,7 @@ const styles = stylex.create({
     },
     forcedColorAdjust: {'@media (forced-colors: active)': 'none'},
     backgroundColor: {
-      default: colorVars['--color-neutral'],
+      default: colorVars['--color-text-secondary'],
       '@media (forced-colors: active)': 'CanvasText',
     },
   },
@@ -83,7 +84,7 @@ export function InfinityScrollbar({
   thumbHeight,
   thumbRef,
   orientation = 'vertical',
-  direction = 'ltr',
+  direction,
   navigate,
   move,
   readFraction,
@@ -92,10 +93,14 @@ export function InfinityScrollbar({
     pointer: number;
     start: number;
     fraction: number;
+    sign: number;
   } | null>(null);
   const {viewportHeight: extent, itemHeight: pitch} = geometry;
   const vertical = orientation === 'vertical';
-  const sign = !vertical && direction === 'rtl' ? -1 : 1;
+  const inlineSign = (node: HTMLDivElement) =>
+    !vertical && (direction == null ? isRtlElement(node) : direction === 'rtl')
+      ? -1
+      : 1;
   const travel = extent - thumbHeight;
   return (
     <div
@@ -110,7 +115,7 @@ export function InfinityScrollbar({
         const rect = event.currentTarget.getBoundingClientRect();
         const local = vertical
           ? event.clientY - rect.top
-          : sign === 1
+          : inlineSign(event.currentTarget) === 1
             ? event.clientX - rect.left
             : rect.right - event.clientX;
         navigate(positionAtFraction(geometry, local / extent));
@@ -155,10 +160,10 @@ export function InfinityScrollbar({
               move(-extent);
               break;
             case vertical ? 'ArrowDown' : 'ArrowRight':
-              move(pitch * sign);
+              move(pitch * inlineSign(event.currentTarget));
               break;
             case vertical ? 'ArrowUp' : 'ArrowLeft':
-              move(-pitch * sign);
+              move(-pitch * inlineSign(event.currentTarget));
               break;
             default:
               return;
@@ -176,6 +181,7 @@ export function InfinityScrollbar({
             pointer: event.pointerId,
             start: vertical ? event.clientY : event.clientX,
             fraction: readFraction(),
+            sign: inlineSign(event.currentTarget),
           };
         }}
         onPointerMove={event => {
@@ -187,7 +193,8 @@ export function InfinityScrollbar({
           navigate(
             positionAtFraction(
               geometry,
-              active.fraction + (sign * (coordinate - active.start)) / travel,
+              active.fraction +
+                (active.sign * (coordinate - active.start)) / travel,
             ),
           );
         }}
