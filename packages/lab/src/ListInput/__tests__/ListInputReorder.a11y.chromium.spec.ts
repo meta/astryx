@@ -414,6 +414,15 @@ test.describe('a finger on the reorder handle', () => {
         }
         fieldRoot.style.setProperty('padding', '0');
         fieldRoot.style.setProperty('overflow', 'clip');
+        // Under horizontal labels the field root is `display: contents`.
+        // Clipping a root without a box clips nothing, so the case must stop
+        // here instead of passing without a clip.
+        const clip = getComputedStyle(fieldRoot);
+        if (clip.display === 'contents' || clip.overflowX !== 'clip') {
+          throw new Error(
+            `the ListInput field root does not clip (display ${clip.display}, overflow-x ${clip.overflowX})`,
+          );
+        }
       });
     }
     // The hit area's observers settle its reach after layout.
