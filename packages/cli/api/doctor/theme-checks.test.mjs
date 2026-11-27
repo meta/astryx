@@ -1857,6 +1857,7 @@ describe('app-theme doctor checks', () => {
     expect(googleCheck.fix).toContain('This app loads fonts with next/font');
     expect(googleCheck.fix).toContain('docs font-setup');
     expect(googleCheck.fix).not.toContain('fonts.googleapis.com');
+    expect(googleCheck.fix).not.toContain('.fonts.css');
 
     const local = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
     write(

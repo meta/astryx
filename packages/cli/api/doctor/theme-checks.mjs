@@ -64,6 +64,10 @@ import {
 } from '../../foundation/env/package-manager.mjs';
 import {logger} from '../logger.mjs';
 import {stylesheetLinkHrefs} from './built-checks.mjs';
+import {
+  nextFontFix,
+  rootLayoutImportsNextFont,
+} from '../../foundation/fonts/next-font.mjs';
 
 /** @typedef {import('./doctor.mjs').DoctorCheck} DoctorCheck */
 /** @typedef {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} DiscoveredTheme */
@@ -2194,6 +2198,11 @@ export async function checkAppThemes(cwd) {
   // A font service stylesheet the app links in its page head (the setup a
   // theme's README gives) loads its families for every added theme.
   const pageFonts = pageFontLinks(state.projectDir);
+  // A next/font app needs the family pointed at the font's CSS variable, so
+  // its fixes name that recipe instead of a font service <link>.
+  const nextFontRecipe = rootLayoutImportsNextFont(state.projectDir)
+    ? nextFontFix(`${run} docs font-setup`)
+    : null;
   for (const family of pageFonts.families) moduleLoaded.add(family);
   for (const theme of resolved) {
     const availableTheme = available.find(
@@ -2267,14 +2276,16 @@ export async function checkAppThemes(cwd) {
     const packageWarnings = missingFontWarnings.filter(
       problem => problem.theme.source !== 'local',
     );
-    if (localWarnings.length > 0) {
+    if (nextFontRecipe) {
+      fontWarningFixes.push(`${nextFontRecipe}.`);
+    } else if (localWarnings.length > 0) {
       fontWarningFixes.push(
         `Add <slug>.fonts.css beside each built local theme output, then ${localWarnings
           .map(problem => `${run} theme add ${problem.theme.slug}`)
           .join('; ')}.`,
       );
     }
-    if (packageWarnings.length > 0) {
+    if (!nextFontRecipe && packageWarnings.length > 0) {
       fontWarningFixes.push(
         `Add the theme's font <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=…"> to the <head> of ${pageFonts.head ?? "the app's HTML page (index.html, or the root layout)"}, as the theme's README gives it, or install a package version that exports <slug>.fonts.css (or fonts.css for a single-theme package).`,
       );
@@ -2332,7 +2343,7 @@ export async function checkAppThemes(cwd) {
             message: `Named font families have no proven loader (${fontFailures
               .map(problem => `${problem.theme.slug}: ${problem.message}`)
               .join('; ')}).`,
-            fix: `${
+            fix: `${nextFontRecipe ? `${nextFontRecipe}. Otherwise: ` : ''}${
               fontInstall.line &&
               fontInstall.coversAll &&
               fontFailures.every(f => f.missing)

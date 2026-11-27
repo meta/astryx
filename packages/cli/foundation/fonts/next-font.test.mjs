@@ -64,7 +64,7 @@ describe('rootLayoutImportsNextFont', () => {
 describe('nextFontFix', () => {
   it('names the CSS variable fix and the recipe', () => {
     expect(nextFontFix('astryx docs font-setup')).toBe(
-      "This app loads fonts with next/font, which gives each family a generated name: set the theme's font family to the font's CSS variable, for example family: 'var(--font-geist-sans)' (recipe: astryx docs font-setup)",
+      "This app loads fonts with next/font, which loads each family under a name of its own: set the theme's font family to the font's CSS variable, for example family: 'var(--font-geist-sans)' (recipe: astryx docs font-setup)",
     );
   });
 });
