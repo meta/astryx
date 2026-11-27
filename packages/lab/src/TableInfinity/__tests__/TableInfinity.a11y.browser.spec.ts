@@ -75,10 +75,10 @@ test('replaces both windows while keeping the header aligned with the visible bo
   ).toBeInViewport({ratio: 0.99});
 });
 
-test('uses the logical start and physical arrow direction in RTL', async ({
-  page,
-}) => {
+test('inherits RTL for keyboard, wheel, and scrollbar drag', async ({page}) => {
   await openStory(page, storybook(), 'lab-infinitytable--rtl');
+  const viewport = page.getByRole('group', {name: 'Table viewport'});
+  await expect(viewport).toHaveCSS('direction', 'rtl');
   const horizontal = page.getByRole('scrollbar', {name: 'Scroll columns'});
   await horizontal.press('ArrowLeft');
   await expect(horizontal).toHaveAttribute('aria-valuenow', '1');
@@ -94,4 +94,19 @@ test('uses the logical start and physical arrow direction in RTL', async ({
   await expect(
     page.getByRole('columnheader', {name: 'Column 1', exact: true}),
   ).toBeInViewport({ratio: 0.99});
+  await viewport.hover();
+  await page.mouse.wheel(-184, 0);
+  await expect(horizontal).toHaveAttribute('aria-valuenow', '1');
+  const thumb = await horizontal.boundingBox();
+  if (!thumb) {
+    throw new Error('The horizontal scrollbar thumb is not visible.');
+  }
+  await page.mouse.move(thumb.x + thumb.width / 2, thumb.y + thumb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(thumb.x - 552, thumb.y + thumb.height / 2);
+  await page.mouse.up();
+  await expect(
+    page.getByRole('columnheader', {name: 'Column 1000000'}),
+  ).toBeInViewport({ratio: 0.99});
+  await expect(horizontal).toBeFocused();
 });
