@@ -47,7 +47,7 @@ import {
   DEFAULT_COMPACT_DEFINITION,
   compactDefinition,
   type CompactDefinition,
-} from '../theme/themeAdaptations';
+} from '../theme/breakpoints';
 import {useThemeDefinition} from '../theme/useTheme';
 import {IOS_SUPPORTS_QUERY, TOUCH_QUERY} from './touchQueries';
 

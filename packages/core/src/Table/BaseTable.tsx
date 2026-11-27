@@ -29,10 +29,11 @@ import {
   isTableScrollWrapperOwned,
 } from './tableRuntime';
 import {resolveTableIdentity, resolveTableAdmission} from './tableIdentity';
-import {useTableWindow} from './plugins/virtualization/useTableWindow';
-import {getTableVirtualizationConfig} from './plugins/virtualization/useTableRowsVirtualization';
 import {
+  getTableRowsWindowing,
+  getTableVirtualizationConfig,
   resolveTableVirtualization,
+  useUnwindowedTable,
   type TableColumnFocusProps,
   type TableColumnLayout,
 } from './tableColumnWindowing';
@@ -781,7 +782,13 @@ function BaseTableInner<T extends Record<string, unknown>>({
       ),
     [resolvedColumns],
   );
-  const windowPlan = useTableWindow({
+  // The capability carries the row window, so a Table without one loads no
+  // windowing code. Its presence is fixed for this mount: BaseTable remounts
+  // the table when it comes or goes, so the hook stays the same.
+  /* eslint-disable react-compiler/react-compiler -- the capability's hook is fixed per mount (see BaseTableMount) */
+  const useWindow =
+    getTableRowsWindowing(rowsCapability)?.useWindow ?? useUnwindowedTable;
+  const windowPlan = useWindow({
     capability: rowsCapability,
     data: data ?? [],
     keys,
@@ -792,6 +799,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
     table: runtime.table,
     geometry: runtime.geometry,
   });
+  /* eslint-enable react-compiler/react-compiler */
   const renderContext = useMemo<TableRenderContext>(
     () =>
       Object.freeze({
@@ -1374,7 +1382,24 @@ function BaseTableInner<T extends Record<string, unknown>>({
  * />
  * ```
  */
-export const BaseTable = BaseTableInner as <T extends Record<string, unknown>>(
+function BaseTableMount<T extends Record<string, unknown>>(
+  props: BaseTableProps<T> & {ref?: Ref<HTMLTableElement>},
+): ReactElement {
+  // Adding or removing row windowing is a remount boundary: the window's
+  // hooks come with its capability.
+  const hasRowsWindowing =
+    getTableRowsWindowing(
+      resolveTableVirtualization(props.virtualization).rows,
+    ) != null;
+  return (
+    <BaseTableInner
+      key={hasRowsWindowing ? 'rows-windowed' : 'rows-unwindowed'}
+      {...props}
+    />
+  );
+}
+
+export const BaseTable = BaseTableMount as <T extends Record<string, unknown>>(
   props: BaseTableProps<T> & {ref?: Ref<HTMLTableElement>},
 ) => ReactElement;
 

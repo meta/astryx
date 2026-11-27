@@ -39,11 +39,13 @@ content = content.replaceAll(
   'resolve(__dirname, "babel.js")',
   'resolve(__dirname, "../src/babel.js")',
 );
-// The marker reader also lives in src/, beside babel.js.
-content = content.replaceAll(
-  'resolve(__dirname, "swizzle-marker.js")',
-  'resolve(__dirname, "../src/swizzle-marker.js")',
-);
+// The marker reader and the relation keying also live in src/, beside babel.js.
+for (const file of ['swizzle-marker.js', 'keyed-relations.js']) {
+  content = content.replaceAll(
+    `resolve(__dirname, "${file}")`,
+    `resolve(__dirname, "../src/${file}")`,
+  );
+}
 // So do the prebuilt stylesheet names and the empty stylesheet that
 // replaces Core's prebuilt one.
 content = content.replaceAll(

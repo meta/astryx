@@ -793,6 +793,7 @@ describe('SideNavHeading collapsed', () => {
       el =>
         el.textContent === 'My App' &&
         !el.closest('[role="tooltip"]') &&
+        !el.hasAttribute('hidden') &&
         !el.hasAttribute('data-tooltip'),
     );
     expect(inlineHeadingText).toBeUndefined();
@@ -2013,9 +2014,15 @@ describe('SideNavItem — collapsed submenu hover intent', () => {
     });
 
   /** The element the trigger's `aria-describedby` names. */
+  /**
+   * The label tooltip the trigger's description names. Until the layer first
+   * mounts, the description is a hidden copy of the label; after, it is the
+   * content inside the layer.
+   */
   function labelTooltipOf(trigger: HTMLElement) {
     const id = trigger.getAttribute('aria-describedby');
-    return id == null ? null : document.getElementById(id);
+    const described = id == null ? null : document.getElementById(id);
+    return described?.closest<HTMLElement>('[role="tooltip"]') ?? described;
   }
 
   /** jsdom does not model `:focus-visible`; stand in for a keyboard focus. */
@@ -2073,11 +2080,10 @@ describe('SideNavItem — collapsed submenu hover intent', () => {
     const showPopover = vi.spyOn(HTMLElement.prototype, 'showPopover');
     try {
       const trigger = renderFlyout();
-      const label = labelTooltipOf(trigger);
       fireEvent.mouseEnter(trigger);
       advance(1000);
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
-      expect(showPopover.mock.contexts).not.toContain(label);
+      expect(showPopover.mock.contexts).not.toContain(labelTooltipOf(trigger));
     } finally {
       showPopover.mockRestore();
     }
@@ -2717,6 +2723,7 @@ describe('SideNavItem — actions slot', () => {
 
 import {SideNavRenderContext} from './SideNavRenderContext';
 import {AppShellMobileContext} from '../AppShell/AppShellMobileContext';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 describe('SideNavItem — mobile drawer close-on-activate', () => {
   function renderInDrawer(ui: ReactNode, closeMobileNav = vi.fn()) {
@@ -4342,9 +4349,15 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
   // SideNav (the persisted-collapse case) must attach its tooltip on the first
   // render, and the tooltip must describe the control that takes focus — the
   // link or button — not the row around it.
+  /** The rail tooltip's layer: its id is the description id without `-description`. */
   function railTooltipFor(trigger: HTMLElement) {
     const id = trigger.getAttribute('aria-describedby');
-    return id == null ? null : document.getElementById(id);
+    // Before the first show the layer is not mounted; its description holds
+    // the same text.
+    return id == null
+      ? null
+      : (document.getElementById(id.replace(/-description$/, '')) ??
+          document.getElementById(id));
   }
 
   function renderRail(item: ReactNode) {
@@ -4371,10 +4384,10 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     );
     const link = screen.getByRole('link', {name: 'Dashboard'});
 
-    const layer = railTooltipFor(link);
-    expect(layer).not.toBeNull();
-    expect(layer).toHaveAttribute('role', 'tooltip');
-    expect(layer).toHaveTextContent('Dashboard');
+    const description = railTooltipFor(link);
+    expect(description).not.toBeNull();
+    expect(description).toHaveTextContent('Dashboard');
+    expect(link).toHaveAccessibleDescription('Dashboard');
   });
 
   it('shows a disabled item its label when the pointer rests on its row', async () => {
@@ -4397,14 +4410,15 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
       name: 'Analytics (Coming Soon)',
     });
     const row = button.parentElement as HTMLElement;
-    const layer = screen.getByRole('tooltip', {hidden: true});
-    expect(layer).toHaveTextContent('Analytics (Coming Soon)');
+    expect(railTooltipFor(button)).toHaveTextContent('Analytics (Coming Soon)');
 
     fireEvent.mouseEnter(row);
+    fireEvent.pointerMove(row);
     act(() => {
       vi.advanceTimersByTime(200);
     });
-    expect(spy.mock.contexts).toContain(layer);
+    // The layer mounts at this first show; the trigger then names it.
+    expect(spy.mock.contexts).toContain(railTooltipFor(button));
   });
 
   it('describes a disabled rail item on the control that takes focus', async () => {
@@ -4527,10 +4541,12 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     const layer = railTooltipFor(link);
     expect(layer).toHaveTextContent('Dashboard');
     fireEvent.mouseEnter(link);
+    fireEvent.pointerMove(link);
     act(() => {
       vi.advanceTimersByTime(200);
     });
-    expect(spy.mock.contexts).toContain(layer);
+    // The layer mounts at this first show; the trigger then names it.
+    expect(spy.mock.contexts).toContain(railTooltipFor(link));
   });
 
   it("keeps the tooltip beside a caller's changing aria-describedby", () => {
@@ -4552,7 +4568,7 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     );
 
     const link = screen.getByRole('link', {name: 'Dashboard'});
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    const tooltip = getTooltip();
     const ids = (link.getAttribute('aria-describedby') ?? '').split(' ');
     expect(ids).toContain('hint-b');
     expect(ids).toContain(tooltip.id);
@@ -4566,7 +4582,6 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
       <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />,
     );
     const link = screen.getByRole('link', {name: 'Dashboard'});
-    const layer = railTooltipFor(link);
     // jsdom does not model `:focus-visible`; stand in for a keyboard focus.
     const realMatches = link.matches.bind(link);
     vi.spyOn(link, 'matches').mockImplementation((selector: string) =>
@@ -4574,7 +4589,8 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     );
 
     fireEvent.focusIn(link);
-    expect(spy.mock.contexts).toContain(layer);
+    // The layer mounts at this first show; the trigger then names it.
+    expect(spy.mock.contexts).toContain(railTooltipFor(link));
   });
 
   it('keeps a tooltip that was open when the rail expanded shut on the next collapse', () => {
@@ -4589,6 +4605,7 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     const {rerender} = render(rail(true));
     const link = screen.getByRole('link', {name: 'Dashboard'});
     fireEvent.mouseEnter(link);
+    fireEvent.pointerMove(link);
     act(() => {
       vi.advanceTimersByTime(200);
     });

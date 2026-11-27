@@ -35,6 +35,7 @@ import {
   projectFiles,
   refusal,
 } from '../../test-utils/theme-edit-fixture.mjs';
+import {UNASSIGNABLE_PID} from '../../test-utils/unassignable-pid.mjs';
 
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
@@ -338,7 +339,11 @@ describe('exact tokens', () => {
     fs.mkdirSync(path.join(dir, `${key}-theme-h.lock`), {recursive: true});
     fs.writeFileSync(
       path.join(dir, `${key}-theme-h.lock`, 'owner.json'),
-      JSON.stringify({pid: 2 ** 22 + 7, host: os.hostname(), at: Date.now()}),
+      JSON.stringify({
+        pid: UNASSIGNABLE_PID,
+        host: os.hostname(),
+        at: Date.now(),
+      }),
     );
     const started = Date.now();
     await themeEditShow('h', {cwd});

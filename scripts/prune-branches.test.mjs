@@ -84,4 +84,92 @@ describe('prune-branches.sh', () => {
     expect(out).not.toMatch(/^\s+assets\/pr-3$/m);
     expect(out).toContain('0 branches (no PR');
   });
+
+  it('keeps stale branches with open PRs or gh errors, ignores fork PRs, keeps HEAD-named branches, and safely deletes option-like branch names', () => {
+    const {work, bin} = setup({});
+    const origin = path.join(path.dirname(work), 'origin.git');
+    const oldGitEnv = {
+      ...process.env,
+      GIT_AUTHOR_DATE: '2020-01-01T00:00:00Z',
+      GIT_COMMITTER_DATE: '2020-01-01T00:00:00Z',
+      GIT_AUTHOR_NAME: 'Test',
+      GIT_AUTHOR_EMAIL: 'test@example.com',
+      GIT_COMMITTER_NAME: 'Test',
+      GIT_COMMITTER_EMAIL: 'test@example.com',
+    };
+
+    for (const branch of ['old-open-pr', 'old-gh-error']) {
+      execFileSync('git', ['checkout', '-q', '-b', branch, 'main'], {cwd: work});
+      execFileSync('git', ['commit', '--allow-empty', '-q', '-m', branch], {
+        cwd: work,
+        env: oldGitEnv,
+      });
+      execFileSync('git', ['push', '-q', 'origin', branch], {cwd: work});
+    }
+    for (const branch of ['fork-closed-only', 'fix/HEAD-reset']) {
+      execFileSync('git', ['checkout', '-q', '-b', branch, 'main'], {cwd: work});
+      execFileSync('git', ['push', '-q', 'origin', branch], {cwd: work});
+    }
+    execFileSync('git', ['checkout', '-q', 'main'], {cwd: work});
+    execFileSync(
+      'git',
+      ['update-ref', 'refs/heads/--hyphen-branch', 'refs/heads/main'],
+      {cwd: origin},
+    );
+
+    fs.writeFileSync(
+      path.join(bin, 'gh'),
+      [
+        '#!/usr/bin/env bash',
+        'if [ "$1 $2" = "pr list" ]; then',
+        '  head=""',
+        '  json=""',
+        '  jq_expr=""',
+        '  while [ $# -gt 0 ]; do',
+        '    case "$1" in',
+        '      --head) head="$2"; shift 2 ;;',
+        '      --json) json="$2"; shift 2 ;;',
+        '      --jq) jq_expr="$2"; shift 2 ;;',
+        '      *) shift ;;',
+        '    esac',
+        '  done',
+        '  [[ "$head" != *:* ]] || exit 2',
+        '  [[ "$json" == *isCrossRepository* ]] || exit 2',
+        '  [ "$jq_expr" = \'[.[] | select(.isCrossRepository | not)][0].state // "none"\' ] || exit 2',
+        '  case "$head" in',
+        '    old-open-pr) payload=\'[{"state":"OPEN","isCrossRepository":false}]\' ;;',
+        '    old-gh-error) exit 1 ;;',
+        '    fork-closed-only) payload=\'[{"state":"CLOSED","isCrossRepository":true}]\' ;;',
+        '    --hyphen-branch) payload=\'[{"state":"MERGED","isCrossRepository":false}]\' ;;',
+        '    *) payload=\'[]\' ;;',
+        '  esac',
+        '  node -e \'const items = JSON.parse(process.argv[1]); const kept = items.filter(p => !p.isCrossRepository); process.stdout.write((kept[0]?.state ?? "none") + "\\n");\' "$payload"',
+        'else',
+        '  echo none',
+        'fi',
+      ].join('\n') + '\n',
+      {mode: 0o755},
+    );
+
+    const out = execFileSync('bash', [SCRIPT, '--delete'], {
+      cwd: work,
+      encoding: 'utf8',
+      env: {...process.env, PATH: `${bin}:${process.env.PATH}`},
+    }).replace(/\u001b\[[0-9;]*m/g, '');
+
+    expect(out).toContain('Found 8 remote branches');
+    expect(out).toContain('Deleted:   1');
+    const refs = execFileSync(
+      'git',
+      ['for-each-ref', '--format=%(refname:lstrip=2)', 'refs/heads'],
+      {cwd: origin, encoding: 'utf8'},
+    )
+      .trim()
+      .split(/\r?\n/);
+    expect(refs).not.toContain('--hyphen-branch');
+    expect(refs).toContain('old-open-pr');
+    expect(refs).toContain('old-gh-error');
+    expect(refs).toContain('fork-closed-only');
+    expect(refs).toContain('fix/HEAD-reset');
+  });
 });

@@ -18,7 +18,7 @@
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {drag} from './scripts';
 import {openStory, withStorybook} from './story';
-import {touchDriver, TouchPacingError} from './touch';
+import {TOUCH_STILLNESS_MS, touchDriver, TouchPacingError} from './touch';
 import {countBetween, traceRendering} from './trace';
 
 const storybook = withStorybook(test);
@@ -180,12 +180,14 @@ test("a WebKit touch driver created after openStory tells a page task's wait fro
     browserName !== 'webkit',
     'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
   );
-  // Each pointer move queues a 60 ms task, as a component's timer can. The
-  // listener itself returns at once, so the next move waits for the task
-  // before the page's listeners begin. The driver comes after the story
-  // loads, as in most proofs.
+  // Each pointer move queues a task that holds the main thread for four
+  // stillness intervals, as a component's timer can. The listener itself
+  // returns at once, so the next move waits for the task before the page's
+  // listeners begin. A runner that sends it late still leaves it a wait past
+  // the stillness interval. The driver comes after the story loads, as in
+  // most proofs.
   await page.addInitScript(
-    'addEventListener("pointermove",()=>{setTimeout(()=>{const end=performance.now()+60;while(performance.now()<end){}},0)});',
+    `addEventListener("pointermove",()=>{setTimeout(()=>{const end=performance.now()+${4 * TOUCH_STILLNESS_MS};while(performance.now()<end){}},0)});`,
   );
   await openStory(page, storybook(), 'core-button--primary');
   await page.addStyleTag({

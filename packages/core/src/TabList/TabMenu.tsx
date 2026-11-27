@@ -44,6 +44,7 @@ import {composeEventHandlers, mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 export interface TabMenuOption {
   value: string;
@@ -172,7 +173,10 @@ const styles = stylex.create({
   // element that rotates is the element a theme targets.
   chevronIcon: {
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   chevronOpen: {

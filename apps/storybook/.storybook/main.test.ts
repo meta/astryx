@@ -3,7 +3,8 @@
 /**
  * @file main.test.ts
  * @input Storybook config, workspace alias table, and app package dependencies.
- * @output Regression coverage for source aliases and cold-clone config loading.
+ * @output Regression coverage for source aliases, cold-clone config loading
+ *   and the preview head's icon link.
  * @position Node tests beside the Storybook configuration.
  * @description Guards two things that both keep `storybook dev` working from
  *   a cold clone, at two different resolution stages.
@@ -178,6 +179,23 @@ describe('storybook main.ts config-loader imports (#5128)', () => {
     );
     expect(viteConfig.resolve.alias['@astryxdesign/core']).toMatch(
       /packages[\\/]core[\\/]src$/,
+    );
+  });
+});
+
+describe('storybook main.ts preview head', () => {
+  it('links the built favicon.svg, so a story frame opened on its own asks for no /favicon.ico', async () => {
+    const previewHead = config.previewHead as (
+      head: string,
+      options: unknown,
+    ) => string | Promise<string>;
+    expect(typeof previewHead).toBe('function');
+
+    const head = await previewHead('<meta name="existing" />', {});
+
+    expect(head).toContain('<meta name="existing" />');
+    expect(head).toContain(
+      '<link rel="icon" type="image/svg+xml" href="./favicon.svg" />',
     );
   });
 });

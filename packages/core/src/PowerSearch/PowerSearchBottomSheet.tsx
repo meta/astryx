@@ -72,6 +72,7 @@ import {Text} from '../Text/Text';
 import {TextInput} from '../TextInput/TextInput';
 import type {SearchSource} from '../Typeahead/types';
 import {useAnnounce, type AnnounceFn} from '../hooks/useAnnounce';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
@@ -1337,6 +1338,10 @@ export function PowerSearchBottomSheet({
     [config, draft],
   );
 
+  // The server and the hydrating render write a range's days only when no
+  // clock reading is needed.
+  const isHydrating = useIsHydrating();
+
   // The two parts of a Filters row's text for `filter`: "{field} {operator}"
   // as one catalog message, and the value as the popover presentation's
   // token shows it — the same function, so the same words and the same zone
@@ -1371,10 +1376,11 @@ export function PowerSearchBottomSheet({
         calendar,
         t,
         timezoneID,
+        !isHydrating,
       );
       return {label, value};
     },
-    [calendar, config, locale, t, timezoneID],
+    [calendar, config, locale, t, timezoneID, isHydrating],
   );
   const describeFilter = useCallback(
     (filter: PowerSearchFilter): string => {

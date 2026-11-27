@@ -96,6 +96,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MobileNav/MobileNav.generated';
 import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -194,7 +195,7 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     overflow: 'hidden',
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-medium'],
+    transitionDuration: `calc(${durationVars['--duration-medium']} * ${reducedMotionTransform.factor} + ${reducedMotionTransform.settle})`,
     transitionTimingFunction: easeVars['--ease-standard'],
     outline: 'none',
     '@media (prefers-reduced-motion: reduce)': {

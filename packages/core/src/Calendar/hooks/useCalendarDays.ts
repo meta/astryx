@@ -22,7 +22,7 @@ import {
   plainDateDayOfWeek,
   plainDateAddDays,
 } from '../../utils/plainDate';
-import {useLocale} from '../../i18n';
+import {useLocale} from '../../i18n/useLocale';
 import {getWeekdayHeaderNames} from '../getWeekdayHeaderNames';
 import {
   type CalendarSystem,

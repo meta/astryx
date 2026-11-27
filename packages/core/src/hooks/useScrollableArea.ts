@@ -33,7 +33,10 @@ import {attachScrollKeyboardDelegation} from './scrollKeyboardDelegation';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {mergeProps} from '../utils/mergeProps';
 import {mergeRefs} from '../utils/mergeRefs';
-import {observeResize} from '../utils/sharedResizeObserver';
+import {
+  observeResizeAfterLayout,
+  splitFirstResizeDelivery,
+} from '../utils/sharedResizeObserver';
 import {
   getLogicalAxisMapping,
   measureLogicalOverflowGeometry,
@@ -343,6 +346,9 @@ export function useScrollableArea({
 
     let frame: number | null = null;
     let isActive = true;
+    // Before the first resize notification, a signal reads nothing: the
+    // layout that the notification follows includes the change.
+    let isLaidOut = false;
     // What the last full measurement read from computed style and geometry.
     // A scroll changes neither, so the scroll path reuses them.
     let measuredMapping = INITIAL_MAPPING;
@@ -411,6 +417,7 @@ export function useScrollableArea({
       measuredOverflow = nextOverflow;
       // Measured DOM geometry decides whether the viewport becomes a CSS
       // scroll container.
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- a viewport that scrolls from its first frame measures in the layout effect, so its tab stop renders before that frame paints
       setOverflow(current =>
         overflowEqual(current, nextOverflow) ? current : nextOverflow,
       );
@@ -424,6 +431,7 @@ export function useScrollableArea({
       hasContentInvalidation = false;
       hasLayoutInvalidation = false;
       // A writing-mode change remaps the behavior-owned physical CSS.
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- as setOverflow above
       setMapping(current =>
         mappingsEqual(current, nextMapping) ? current : nextMapping,
       );
@@ -435,7 +443,7 @@ export function useScrollableArea({
     };
 
     const scheduleMeasure = () => {
-      if (!isActive || frame != null) {
+      if (!isActive || !isLaidOut || frame != null) {
         return;
       }
       frame = window.requestAnimationFrame(measure);
@@ -448,8 +456,8 @@ export function useScrollableArea({
     // appears or goes away, or the offset sign does not match the writing
     // direction), it schedules the full measurement.
     const onScroll = () => {
-      if (!isActive || frame != null) {
-        // A full measurement is already pending for this frame.
+      if (!isActive || !isLaidOut || frame != null) {
+        // The first measurement, or a full one for this frame, is pending.
         return;
       }
       const current = stateRef.current;
@@ -546,14 +554,39 @@ export function useScrollableArea({
         scheduleContentMeasure();
       }
     };
+    // The effect runs in React's commit, where a read forces a style and
+    // layout pass before the browser's own. So the first measurement waits
+    // for the first resize notification, which comes after the browser lays
+    // the viewport or the content out. A viewport that keeps its sticky
+    // containment measures in the commit instead (below).
+    const onResize = splitFirstResizeDelivery(() => {
+      isLaidOut = true;
+      measureNow();
+    }, scheduleLayoutMeasure);
     registerScrollOwner(viewport, stateRef.current);
     measureRef.current = measureNow;
-    measure();
-    const stopObservingViewport = observeResize(
-      viewport,
-      scheduleLayoutMeasure,
-    );
-    const stopObservingContent = observeResize(content, scheduleLayoutMeasure);
+    // A viewport that keeps its sticky containment scrolls from its first
+    // frame, and a scroller must be a tab stop while it overflows. So it
+    // measures here, once, before that frame paints. Every other viewport
+    // clips until it is measured, and reads nothing here.
+    if (stickyContainment === 'always') {
+      isLaidOut = true;
+      measureNow();
+    }
+    const stopObservingViewport = observeResizeAfterLayout(viewport, onResize);
+    // A content box that another observer already watches sends no first
+    // notification; the viewport's own registration covers that.
+    const stopObservingContent = observeResizeAfterLayout(content, entry => {
+      if (entry != null) {
+        onResize();
+      }
+    });
+    if (stopObservingViewport == null) {
+      // No ResizeObserver exists, so nothing reports a layout. The viewport
+      // is measured at once, and again in the next frame.
+      onResize();
+      scheduleLayoutMeasure();
+    }
 
     viewport.addEventListener('scroll', onScroll, {passive: true});
     window.addEventListener('resize', scheduleMeasure);
@@ -591,16 +624,18 @@ export function useScrollableArea({
       ancestor = ancestor.parentElement;
     }
 
+    // A font that loads after layout changes the content's size, and the
+    // event reports it. Chromium updates style and layout when a script reads
+    // `fonts.ready`, so the effect does not read it.
     const fonts = document.fonts;
     fonts?.addEventListener?.('loadingdone', scheduleLayoutMeasure);
-    void fonts?.ready.then(scheduleLayoutMeasure);
 
     return () => {
       isActive = false;
       measureRef.current = null;
       unregisterScrollOwner(viewport);
-      stopObservingViewport();
-      stopObservingContent();
+      stopObservingViewport?.();
+      stopObservingContent?.();
       mutationObserver?.disconnect();
       viewport.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', scheduleMeasure);
@@ -615,7 +650,7 @@ export function useScrollableArea({
         window.cancelAnimationFrame(frame);
       }
     };
-  }, [axis, content, viewport]);
+  }, [axis, content, stickyContainment, viewport]);
 
   // The first measure runs before an overflowing axis can scroll (it is
   // `clip` until then). So when an axis gains overflow, or the axis mapping
@@ -632,13 +667,23 @@ export function useScrollableArea({
     const hasGainedOverflow =
       (overflow.inline && !previous.inline) ||
       (overflow.block && !previous.block);
-    const hasRemapped = mapping !== previousMappingRef.current;
+    // Only a change of physical axis moves the scrollbar gutter. A reversed
+    // direction alone changes no geometry, and the pass that read it already
+    // used it.
+    const previousMapping = previousMappingRef.current;
+    const hasRemapped =
+      mapping.inline !== previousMapping.inline ||
+      mapping.block !== previousMapping.block;
     previousOverflowRef.current = overflow;
     previousMappingRef.current = mapping;
-    if (hasGainedOverflow || hasRemapped) {
+    // A viewport that keeps its sticky containment scrolls before it is
+    // measured, so gaining overflow changes none of its geometry.
+    const isGainRemeasured =
+      hasGainedOverflow && stickyContainment !== 'always';
+    if (isGainRemeasured || hasRemapped) {
       measureRef.current?.();
     }
-  }, [overflow, mapping]);
+  }, [overflow, mapping, stickyContainment]);
 
   const state = useMemo<ScrollableAreaState>(
     () => ({

@@ -24,6 +24,7 @@ import {MediaTheme} from '../theme/MediaTheme';
 import {mergeProps} from '../utils';
 import {overlayScope} from './overlay.markers.stylex';
 import {themeProps} from '../utils/themeProps';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 // =============================================================================
 // Types (re-exported from index.ts for consumers)
@@ -48,11 +49,13 @@ export interface OverlayScrimProps {
 // =============================================================================
 
 const FADE = durationVars['--duration-fast'];
+// The fade, or nothing under a theme that reduces motion for everyone.
+const FADE_UNLESS_REDUCED = `calc(${FADE} * ${reducedMotionTransform.factor})`;
 // On hide, the clip path applies when the fade ends. On a hover reveal, it
 // lifts one frame after the fade starts. The first paint and the first click
 // then happen on the same frame, at any fade length.
-const CLIP_DELAY_ON_HIDE = '0s, 0s, 0s, ' + FADE;
-const CLIP_DELAY_ON_HOVER = '0s, 0s, 0s, 1ms';
+const CLIP_DELAY_ON_HIDE = '0s, 0s, 0s, ' + FADE_UNLESS_REDUCED;
+const CLIP_DELAY_ON_HOVER = `0s, 0s, 0s, calc(1ms * ${reducedMotionTransform.factor})`;
 
 const styles = stylex.create({
   base: {
@@ -64,7 +67,7 @@ const styles = stylex.create({
     pointerEvents: 'none',
     transitionProperty: 'opacity, visibility, transform, clip-path',
     transitionDuration: {
-      default: FADE + ', ' + FADE + ', ' + FADE + ', 0s',
+      default: `${FADE_UNLESS_REDUCED}, ${FADE_UNLESS_REDUCED}, ${FADE_UNLESS_REDUCED}, 0s`,
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
     // The clip path is discrete. Its delay times it against the fade.

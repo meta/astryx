@@ -86,7 +86,8 @@ export const docs = {
         {
           name: 'delay',
           type: 'number',
-          description: 'Show delay in milliseconds.',
+          description:
+            'Show delay in milliseconds. It starts when a mouse or pen first moves over the trigger, so a trigger that appears under a still pointer does not open.',
           default: '200',
         },
         {

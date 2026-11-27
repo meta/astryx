@@ -299,51 +299,6 @@
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
     },
     {
-      "key": "TableTree::Default::aria-conditional-attr",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
-    },
-    {
-      "key": "TableTree::Expand And Collapse All::aria-conditional-attr",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
-    },
-    {
-      "key": "TableTree::Header Expand All Control::aria-conditional-attr",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
-    },
-    {
-      "key": "TableTree::Indent Sizes::aria-conditional-attr",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
-    },
-    {
-      "key": "TableTree::Lazy Loaded Children::aria-conditional-attr",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
-    },
-    {
-      "key": "TableTree::Row Click Expansion::aria-conditional-attr",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
-    },
-    {
-      "key": "TableTree::With Selection::aria-conditional-attr",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
-    },
-    {
-      "key": "TableTree::With Sibling Sorting::aria-conditional-attr",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
-    },
-    {
-      "key": "core/tabletree::core-tabletree--compact-density::aria-conditional-attr",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
-    },
-    {
       "key": "Text::Color Variants::color-contrast",
       "impact": "serious",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
