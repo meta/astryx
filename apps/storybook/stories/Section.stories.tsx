@@ -50,6 +50,11 @@ const styles = stylex.create({
   fixedColumn: {
     height: 400,
   },
+  spacedText: {
+    fontFamily: typographyVars['--font-family-body'],
+    color: colorVars['--color-text-primary'],
+    marginBlock: 16,
+  },
 });
 
 const meta: Meta<typeof Section> = {
@@ -432,6 +437,35 @@ export const MinHeight: Story = {
           dividers={['bottom']}>
           <p {...stylex.props(styles.text)}>
             The muted paint and the bottom divider reach 200px.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          padding=0, no minHeight: the margins collapse out
+        </h4>
+        <Section
+          data-evidence="margin-collapse"
+          variant="muted"
+          width={220}
+          padding={0}>
+          <p {...stylex.props(styles.spacedText)}>
+            A 16px block margin falls outside the paint.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          padding=0, minHeight=120: the margins stay inside
+        </h4>
+        <Section
+          data-evidence="margin-contained"
+          variant="muted"
+          width={220}
+          padding={0}
+          minHeight={120}>
+          <p {...stylex.props(styles.spacedText)}>
+            A 16px block margin stays inside the paint.
           </p>
         </Section>
       </div>

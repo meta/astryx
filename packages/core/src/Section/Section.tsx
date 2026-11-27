@@ -62,12 +62,6 @@ const variantStyles = stylex.create({
 const nestedStyles = stylex.create({
   // Outer wrapper escapes parent's container padding
   outer: {
-    // A column flex container, so the painted container grows to a
-    // `minHeight` the wrapper reaches. `height: 100%` resolves only against a
-    // set `height`. As a flex item, the painted container also contains its
-    // children's margins and floats.
-    display: 'flex',
-    flexDirection: 'column',
     // Escape horizontal padding using directional vars with shorthand fallback
     marginInlineStart: 'calc(-1 * var(--container-padding-inline-start, 0px))',
     marginInlineEnd: 'calc(-1 * var(--container-padding-inline-end, 0px))',
@@ -89,6 +83,19 @@ const nestedStyles = stylex.create({
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
     height: '100%',
+  },
+});
+
+// With `minHeight`, `height: 100%` resolves to the content height, so the
+// wrapper becomes a column flex container and the painted container grows
+// to the height the wrapper reaches. Only then: as a flex item, the painted
+// container contains its children's margins and floats.
+const minHeightFillStyles = stylex.create({
+  outer: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  inner: {
     flexGrow: 1,
     // Content taller than a set `height` overflows the painted container,
     // as it does without flex, instead of stretching it.
@@ -283,8 +290,10 @@ export function Section({
   const useThemeDefault = padding == null;
   const effectivePadding = padding ?? 4;
   const paddingToken = spacingStepToToken[effectivePadding] as SpacingToken;
+  const fillsMinHeight = minHeight != null;
   const outerStylex = stylex.props(
     nestedStyles.outer,
+    fillsMinHeight && minHeightFillStyles.outer,
     dynamicStyles.sizing(
       width ?? null,
       height ?? null,
@@ -312,6 +321,7 @@ export function Section({
           themeProps('section', {variant}),
           stylex.props(
             nestedStyles.inner,
+            fillsMinHeight && minHeightFillStyles.inner,
             ...container(
               useThemeDefault
                 ? {useThemeDefault: 'section'}

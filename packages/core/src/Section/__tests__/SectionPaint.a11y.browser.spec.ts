@@ -198,6 +198,34 @@ test('the painted container fills a fixed and a percentage minHeight', async ({
   }
 });
 
+test('a child margin collapses out of a zero-padding Section without minHeight and stays inside with one', async ({
+  page,
+}) => {
+  await open(page, 'min-height');
+  const gaps = async (evidence: string) =>
+    page.locator(`[data-evidence="${evidence}"]`).evaluate(wrapper => {
+      const painted = (
+        wrapper.firstElementChild as HTMLElement
+      ).getBoundingClientRect();
+      const child = (
+        wrapper.firstElementChild?.firstElementChild as HTMLElement
+      ).getBoundingClientRect();
+      return {
+        top: child.top - painted.top,
+        bottom: painted.bottom - child.bottom,
+      };
+    });
+  // Without minHeight the paint keeps its block layout, so the 16px margins
+  // collapse outside it.
+  const collapsed = await gaps('margin-collapse');
+  expect(collapsed.top).toBe(0);
+  expect(collapsed.bottom).toBe(0);
+  // With minHeight the painted container is a flex item and holds them.
+  const contained = await gaps('margin-contained');
+  expect(contained.top).toBe(16);
+  expect(contained.bottom).toBeGreaterThanOrEqual(16);
+});
+
 /** The painted padding per physical edge, and the padding a child that reads
  * the published container-padding variables would take. */
 async function readPadding(page: Page, evidence: string) {
