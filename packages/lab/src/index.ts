@@ -28,9 +28,7 @@ export {InfoTip, type InfoTipProps, type InfoTipSize} from './InfoTip';
 // selection: one choice is a radio group, several a group of checkboxes
 export {
   SelectableCardGroup,
-  SelectableCardGroupItem,
   type SelectableCardGroupProps,
-  type SelectableCardGroupItemProps,
 } from './SelectableCardGroup';
 
 // CircleCheckIndicator — the iOS multiple-selection circle, a checkbox-family

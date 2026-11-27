@@ -9,7 +9,8 @@
  */
 
 import {useState} from 'react';
-import {SelectableCardGroup, SelectableCardGroupItem} from '@astryxdesign/lab';
+import {SelectableCardGroup} from '@astryxdesign/lab';
+import {SelectableCard} from '@astryxdesign/core/SelectableCard';
 import {HStack, StackItem, VStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
 
@@ -44,7 +45,7 @@ export default function SelectableCardGroupShippingSpeed() {
       value={speed}
       onChange={setSpeed}>
       {SPEEDS.map(item => (
-        <SelectableCardGroupItem
+        <SelectableCard
           key={item.value}
           value={item.value}
           label={item.name}
@@ -62,7 +63,7 @@ export default function SelectableCardGroupShippingSpeed() {
             </StackItem>
             <Text type="body">{item.price}</Text>
           </HStack>
-        </SelectableCardGroupItem>
+        </SelectableCard>
       ))}
     </SelectableCardGroup>
   );

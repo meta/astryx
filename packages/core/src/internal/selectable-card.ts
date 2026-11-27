@@ -1,10 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 /**
  * @file selectable-card.ts
- * @input SelectableCard's internal input context, the Field input styling
+ * @input SelectableCard's internal group context, the Field input styling
  *   rule and the aria id joiner
  * @output `@astryxdesign/core/internal/selectable-card`:
- *   SelectableCardInputContext, useFieldInputStyling and joinAriaIDs,
+ *   SelectableCardGroupContext, useFieldInputStyling and joinAriaIDs,
  *   re-exported by name
  *   for Lab's SelectableCardGroup
  * @position An internal entry reserved for Astryx's own packages:
@@ -15,7 +15,7 @@
  *
  * SYNC: When modified, update scripts/sync-exports.js.
  */
-export {SelectableCardInputContext} from '../SelectableCard/selectableCardInput';
-export type {SelectableCardInput} from '../SelectableCard/selectableCardInput';
+export {SelectableCardGroupContext} from '../SelectableCard/selectableCardGroupContext';
+export type {SelectableCardGroupMembership} from '../SelectableCard/selectableCardGroupContext';
 export {useFieldInputStyling} from '../Field/fieldParts';
 export {joinAriaIDs} from '../utils/inputAria';

@@ -18,7 +18,7 @@ export const docs = {
     'selection',
   ],
   description:
-    'A set of selectable cards with the semantics of its selection. One choice (the default) is a radio group: the cards are native radios sharing one name, so the set is one tab stop, the arrow keys move and select, and screen readers speak the position ("2 of 3"). Several choices are a named group of checkboxes. Each SelectableCardGroupItem is a SelectableCard whose input, name and selection come from the group.',
+    'A set of selectable cards with the semantics of its selection. One choice (the default) is a radio group: the cards are native radios sharing one name, so the set is one tab stop, the arrow keys move and select, and screen readers speak the position ("2 of 3"). Several choices are a named group of checkboxes. Each card is a SelectableCard with a `value`; its input, name and selection come from the group.',
   props: [
     {
       name: 'label',
@@ -82,7 +82,7 @@ export const docs = {
       name: 'children',
       type: 'ReactNode',
       description:
-        'SelectableCardGroupItem cards. Each takes a `value` and the SelectableCard props other than isSelected and onChange.',
+        'SelectableCard cards, each with a `value` in place of isSelected and onChange.',
       required: true,
     },
     {
@@ -145,7 +145,7 @@ export const docsZh = {
   name: 'SelectableCardGroup',
   displayName: 'Selectable Card Group',
   description:
-    '一组可选卡片，语义与其选择方式一致。单选（默认）是一个单选按钮组：卡片是共享同一 name 的原生单选按钮，因此整组只占一个 Tab 停靠点，方向键移动并选中，读屏软件会读出位置（“第 2 项，共 3 项”）。多选是一个带名称的复选框组。每个 SelectableCardGroupItem 都是一个 SelectableCard，其输入类型、name 和选中状态由组提供。',
+    '一组可选卡片，语义与其选择方式一致。单选（默认）是一个单选按钮组：卡片是共享同一 name 的原生单选按钮，因此整组只占一个 Tab 停靠点，方向键移动并选中，读屏软件会读出位置（“第 2 项，共 3 项”）。多选是一个带名称的复选框组。每张卡片都是一个带 `value` 的 SelectableCard，其输入类型、name 和选中状态由组提供。',
   props: [
     {
       name: 'label',
@@ -206,7 +206,7 @@ export const docsZh = {
       name: 'children',
       type: 'ReactNode',
       description:
-        'SelectableCardGroupItem 卡片。每张卡片接受一个 `value`，以及除 isSelected 和 onChange 之外的 SelectableCard 属性。',
+        'SelectableCard 卡片，每张卡片用 `value` 代替 isSelected 和 onChange。',
       required: true,
     },
     {

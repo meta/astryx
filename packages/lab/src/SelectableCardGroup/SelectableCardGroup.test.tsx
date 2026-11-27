@@ -2,7 +2,7 @@
 
 /**
  * @file SelectableCardGroup.test.tsx
- * @input Uses SelectableCardGroup, SelectableCardGroupItem, Testing Library
+ * @input Uses SelectableCardGroup, core SelectableCard, Testing Library
  * @output Tests the group's semantics and selection
  * @position A single choice is a radio group of native radios sharing a name;
  * several choices are a named group of checkboxes.
@@ -11,10 +11,8 @@
 import {useState} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
-import {
-  SelectableCardGroup,
-  SelectableCardGroupItem,
-} from './SelectableCardGroup';
+import {SelectableCard} from '@astryxdesign/core/SelectableCard';
+import {SelectableCardGroup} from './SelectableCardGroup';
 
 const PLANS = ['Basic', 'Pro', 'Team'];
 
@@ -39,9 +37,9 @@ function Single({
         onChange?.(v);
       }}>
       {PLANS.map(plan => (
-        <SelectableCardGroupItem key={plan} value={plan} label={plan}>
+        <SelectableCard key={plan} value={plan} label={plan}>
           {plan}
-        </SelectableCardGroupItem>
+        </SelectableCard>
       ))}
     </SelectableCardGroup>
   );
@@ -59,9 +57,9 @@ function Multiple({onChange}: {onChange?: (value: string[]) => void}) {
         onChange?.(v);
       }}>
       {PLANS.map(plan => (
-        <SelectableCardGroupItem key={plan} value={plan} label={plan}>
+        <SelectableCard key={plan} value={plan} label={plan}>
           {plan}
-        </SelectableCardGroupItem>
+        </SelectableCard>
       ))}
     </SelectableCardGroup>
   );
@@ -141,12 +139,30 @@ describe('SelectableCardGroup', () => {
     expect(screen.getByRole('checkbox', {name: 'Basic'})).not.toBeChecked();
   });
 
-  it('an item outside a group throws', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(() =>
-      render(<SelectableCardGroupItem value="x" label="X" />),
-    ).toThrow(/inside a SelectableCardGroup/);
-    spy.mockRestore();
+  it("a card's own isDisabled holds in an enabled group", () => {
+    const onChange = vi.fn();
+    render(
+      <SelectableCardGroup label="Plan" value="Basic" onChange={onChange}>
+        {PLANS.map(plan => (
+          <SelectableCard
+            key={plan}
+            value={plan}
+            label={plan}
+            isDisabled={plan === 'Team'}>
+            {plan}
+          </SelectableCard>
+        ))}
+      </SelectableCardGroup>,
+    );
+    expect(screen.getByRole('radio', {name: 'Team'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.getByRole('radio', {name: 'Pro'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
+    fireEvent.click(screen.getByText('Team'));
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('a disabled group submits nothing with its form, and keeps its grouping', () => {
@@ -175,9 +191,9 @@ describe('SelectableCardGroup', () => {
           value="Pro"
           onChange={() => {}}>
           {PLANS.map(plan => (
-            <SelectableCardGroupItem key={plan} value={plan} label={plan}>
+            <SelectableCard key={plan} value={plan} label={plan}>
               {plan}
-            </SelectableCardGroupItem>
+            </SelectableCard>
           ))}
         </SelectableCardGroup>
       </form>,
@@ -198,13 +214,13 @@ describe('SelectableCardGroup', () => {
           value="Team"
           onChange={() => {}}>
           {PLANS.map(plan => (
-            <SelectableCardGroupItem
+            <SelectableCard
               key={plan}
               value={plan}
               label={plan}
               isDisabled={plan === 'Team'}>
               {plan}
-            </SelectableCardGroupItem>
+            </SelectableCard>
           ))}
         </SelectableCardGroup>
       </form>,
@@ -232,9 +248,9 @@ describe('SelectableCardGroup', () => {
           aria-describedby="extra-help"
           value={null}
           onChange={() => {}}>
-          <SelectableCardGroupItem value="Basic" label="Basic">
+          <SelectableCard value="Basic" label="Basic">
             Basic
-          </SelectableCardGroupItem>
+          </SelectableCard>
         </SelectableCardGroup>
       </>,
     );
@@ -251,9 +267,9 @@ describe('SelectableCardGroup', () => {
         value={null}
         onChange={() => {}}
         {...untyped}>
-        <SelectableCardGroupItem value="Basic" label="Basic">
+        <SelectableCard value="Basic" label="Basic">
           Basic
-        </SelectableCardGroupItem>
+        </SelectableCard>
       </SelectableCardGroup>,
     );
     expect(document.querySelector('.root-class')).toBeNull();
@@ -269,9 +285,9 @@ describe('SelectableCardGroup', () => {
         onChange={() => {}}
         containerClassName="field-box"
         containerStyle={{marginTop: 7}}>
-        <SelectableCardGroupItem value="Basic" label="Basic">
+        <SelectableCard value="Basic" label="Basic">
           Basic
-        </SelectableCardGroupItem>
+        </SelectableCard>
       </SelectableCardGroup>,
     );
     const group = screen.getByRole('radiogroup', {name: 'Plan'});

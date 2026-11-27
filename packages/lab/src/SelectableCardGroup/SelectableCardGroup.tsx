@@ -4,10 +4,10 @@
 
 /**
  * @file SelectableCardGroup.tsx
- * @input Uses core SelectableCard (its input set through Core's internal
- *   SelectableCardInputContext), Field (the group label and description),
+ * @input Uses Core's internal SelectableCardGroupContext (read by each core
+ *   SelectableCard with a `value`), Field (the group label and description),
  *   useFieldInputStyling, useId, StyleX and the spacing tokens
- * @output Exports SelectableCardGroup, SelectableCardGroupItem and their props
+ * @output Exports SelectableCardGroup and its props
  * @position Lab: a set of selectable cards with the semantics of its selection
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -16,26 +16,15 @@
  * - /apps/storybook/stories/SelectableCardGroup.stories.tsx (stories)
  */
 
-import {
-  createContext,
-  useContext,
-  useId,
-  useMemo,
-  type ReactNode,
-  type Ref,
-} from 'react';
+import {useId, useMemo, type ReactNode, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {Field, type FieldContainerStyleProps} from '@astryxdesign/core/Field';
 import {
-  SelectableCard,
-  type SelectableCardProps,
-} from '@astryxdesign/core/SelectableCard';
-import {
-  SelectableCardInputContext,
+  SelectableCardGroupContext,
   joinAriaIDs,
   useFieldInputStyling,
-  type SelectableCardInput,
+  type SelectableCardGroupMembership,
 } from '@astryxdesign/core/internal/selectable-card';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {mergeProps, themeProps} from '@astryxdesign/core/utils';
@@ -105,37 +94,15 @@ export type SelectableCardGroupProps = Omit<
      * `horizontal` (the default) wraps cards in rows; `vertical` stacks them.
      */
     orientation?: 'horizontal' | 'vertical';
-    /** The SelectableCardGroupItem cards. */
+    /**
+     * The cards: SelectableCards, each with a `value` in place of
+     * `isSelected` and `onChange`.
+     */
     children: ReactNode;
   };
 
-export interface SelectableCardGroupItemProps extends Omit<
-  SelectableCardProps,
-  'isSelected' | 'onChange'
-> {
-  /** The value this card stands for in the group's `value`. */
-  value: string;
-}
-
 // =============================================================================
-// Context
-// =============================================================================
-
-interface GroupContextValue {
-  inputType: 'checkbox' | 'radio';
-  groupName: string;
-  submitName: string;
-  isDisabled: boolean;
-  isSelected: (value: string) => boolean;
-  change: (value: string, isSelected: boolean) => void;
-}
-
-const SelectableCardGroupContext = createContext<GroupContextValue | null>(
-  null,
-);
-
-// =============================================================================
-// Components
+// Component
 // =============================================================================
 
 /**
@@ -146,8 +113,8 @@ const SelectableCardGroupContext = createContext<GroupContextValue | null>(
  * @example
  * ```
  * <SelectableCardGroup label="Plan" value={plan} onChange={setPlan}>
- *   <SelectableCardGroupItem value="basic" label="Basic">Basic</SelectableCardGroupItem>
- *   <SelectableCardGroupItem value="pro" label="Pro">Pro</SelectableCardGroupItem>
+ *   <SelectableCard value="basic" label="Basic">Basic</SelectableCard>
+ *   <SelectableCard value="pro" label="Pro">Pro</SelectableCard>
  * </SelectableCardGroup>
  * ```
  */
@@ -194,16 +161,16 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
   );
   const isMultiple = props.type === 'multiple';
 
-  const context = useMemo<GroupContextValue>(() => {
+  const membership = useMemo<SelectableCardGroupMembership>(() => {
     if (props.type === 'multiple') {
       const {value, onChange} = props;
       return {
         inputType: 'checkbox',
-        groupName: submitName,
+        inputName: submitName,
         submitName,
         isDisabled,
         isSelected: v => value.includes(v),
-        change: (v, isSelected) =>
+        onMemberChange: (v, isSelected) =>
           onChange(
             isSelected
               ? [...value.filter(x => x !== v), v]
@@ -216,11 +183,11 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
     // apart, even from another form's group with the same `htmlName`.
     return {
       inputType: 'radio',
-      groupName: generatedName,
+      inputName: generatedName,
       submitName,
       isDisabled,
       isSelected: v => value === v,
-      change: (v, isSelected) => {
+      onMemberChange: (v, isSelected) => {
         if (isSelected) {
           onChange(v);
         }
@@ -263,68 +230,12 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
             orientation === 'vertical' && styles.vertical,
           ),
         )}>
-        <SelectableCardGroupContext.Provider value={context}>
+        <SelectableCardGroupContext value={membership}>
           {children}
-        </SelectableCardGroupContext.Provider>
+        </SelectableCardGroupContext>
       </div>
     </Field>
   );
 }
 
 SelectableCardGroup.displayName = 'SelectableCardGroup';
-
-/**
- * One card of a SelectableCardGroup: a SelectableCard whose input, name and
- * selection come from the group.
- *
- * @example
- * ```
- * <SelectableCardGroup label="Plan" value={plan} onChange={setPlan}>
- *   <SelectableCardGroupItem value="pro" label="Pro">
- *     <Text type="body">Pro, $29 a month</Text>
- *   </SelectableCardGroupItem>
- * </SelectableCardGroup>
- * ```
- */
-export function SelectableCardGroupItem({
-  value,
-  isDisabled,
-  ...props
-}: SelectableCardGroupItemProps) {
-  const group = useContext(SelectableCardGroupContext);
-  const input = useMemo<SelectableCardInput | null>(
-    () =>
-      group == null
-        ? null
-        : {
-            type: group.inputType,
-            name: group.groupName,
-            value,
-          },
-    [group, value],
-  );
-  if (group == null) {
-    throw new Error(
-      'SelectableCardGroupItem must be rendered inside a SelectableCardGroup.',
-    );
-  }
-  const isSelected = group.isSelected(value);
-  const isCardDisabled = group.isDisabled || isDisabled === true;
-  return (
-    <SelectableCardInputContext value={input}>
-      <SelectableCard
-        {...props}
-        isSelected={isSelected}
-        isDisabled={isCardDisabled}
-        onChange={nextSelected => group.change(value, nextSelected)}
-      />
-      {/* The radio cards stay out of the form, so the chosen, enabled card
-          submits the group's value here. */}
-      {group.inputType === 'radio' && isSelected && !isCardDisabled ? (
-        <input type="hidden" name={group.submitName} value={value} />
-      ) : null}
-    </SelectableCardInputContext>
-  );
-}
-
-SelectableCardGroupItem.displayName = 'SelectableCardGroupItem';
