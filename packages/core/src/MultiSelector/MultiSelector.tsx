@@ -57,6 +57,7 @@ import {
   sizeVars,
   spacingVars,
   radiusVars,
+  borderVars,
   durationVars,
   easeVars,
   typographyVars,
@@ -204,6 +205,13 @@ const styles = stylex.create({
   triggerPlaceholder: {
     color: colorVars['--color-text-secondary'],
   },
+  // Inside an InputGroup the group's row is the height, so the trigger drops
+  // its own floor and padding and keeps one uncapped line box.
+  triggerInGroup: {
+    minHeight: 0,
+    paddingBlock: 0,
+    lineHeight: `max(${spacingVars['--spacing-5']}, 20px, 1rem)`,
+  },
   triggerContent: {
     display: 'flex',
     alignItems: 'center',
@@ -259,6 +267,7 @@ const styles = stylex.create({
   triggerGhost: {
     width: 'auto',
     borderWidth: 0,
+    lineHeight: `max(${spacingVars['--spacing-5']}, 20px, 1rem)`,
     backgroundColor: 'transparent',
     boxShadow: {
       default: 'none',
@@ -538,15 +547,29 @@ const styles = stylex.create({
   },
 });
 
+// The trigger is sized by padding and a floor, not by a fixed height, as
+// Selector's is: at the theme's text size it is exactly the size token, and a
+// larger set text size grows it instead of clipping the value. The line box is
+// `--spacing-5`, floored at 20px and 1rem, and capped at what the token holds
+// inside its borders, but never below 1.5em of the trigger's own font. The
+// padding is what is left of the token, so it reaches 0 before the floor lets
+// the trigger grow. Ghost and grouped triggers keep the uncapped line box.
+// Keep these calculations inline: StyleX must evaluate them as constants.
 const sizeStyles = stylex.create({
   sm: {
-    height: sizeVars['--size-element-sm'],
+    minHeight: sizeVars['--size-element-sm'],
+    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
+    paddingBlock: `calc((${sizeVars['--size-element-sm']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
   },
   md: {
-    height: sizeVars['--size-element-md'],
+    minHeight: sizeVars['--size-element-md'],
+    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
+    paddingBlock: `calc((${sizeVars['--size-element-md']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
   },
   lg: {
-    height: sizeVars['--size-element-lg'],
+    minHeight: sizeVars['--size-element-lg'],
+    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
+    paddingBlock: `calc((${sizeVars['--size-element-lg']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
   },
 });
 
@@ -2799,6 +2822,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             // Grouped secondary triggers keep their neutral fill but take the
             // group's row height, connected edge radii, and focus stacking.
             variant !== 'ghost' && inputGroup && groupStyles.inGroup,
+            inputGroup && styles.triggerInGroup,
             controlXstyle,
           ),
           controlClassName,
