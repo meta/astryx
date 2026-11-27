@@ -38,11 +38,13 @@ import {
 } from '@astryxdesign/a11y-spec/storybook';
 import {
   armHold,
+  drag,
   freezeTimers,
   installTimerGate,
   releaseAnimations,
   seekAnimations,
   thawTimers,
+  touchDriver,
   waitForRest,
   type HeldAnimation,
 } from '@astryxdesign/interaction-harness';
@@ -324,91 +326,22 @@ test('the lock keeps the page where it is on a page whose body sets its own over
 const DRAG_START = {x: 195, y: 120};
 
 /**
- * A finger drag down the backdrop, one move per frame. Chromium gets trusted
- * touch events through CDP: `Input.synthesizeScrollGesture` delivers the
- * touch's start but none of its moves to the page, so it cannot show a
- * cancelled move. WebKit under Playwright has no way to send a touch move, so
- * the page dispatches the same events itself. They do not drive WebKit's own
- * scrolling, but whether the lock cancels each move is the evidence here.
+ * A finger drag down the backdrop, 240 px over 200 ms, as real touch input
+ * in Chromium and WebKit (the interaction harness). Every move reaches the
+ * page as a trusted, cancelable touchmove, so the lock's cancel is what holds
+ * each one.
  */
-async function touchDragDown(page: Page, browserName: string) {
-  if (browserName !== 'chromium') {
-    await dispatchTouchDrag(page);
-    return;
-  }
-  const session = await page.context().newCDPSession(page);
-  await session.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [DRAG_START],
-  });
-  for (let step = 1; step <= 12; step += 1) {
-    await session.send('Input.dispatchTouchEvent', {
-      type: 'touchMove',
-      touchPoints: [{x: DRAG_START.x, y: DRAG_START.y + step * 20}],
-    });
-    await page.evaluate(async () => new Promise(requestAnimationFrame));
-  }
-  await session.send('Input.dispatchTouchEvent', {
-    type: 'touchEnd',
-    touchPoints: [],
-  });
-  await session.detach();
-  // Two frames, so the page has handled the lift before the test reads it.
-  await page.evaluate(
-    async () =>
-      new Promise(resolve =>
-        requestAnimationFrame(() => requestAnimationFrame(resolve)),
-      ),
+async function touchDragDown(page: Page) {
+  const driver = await touchDriver(page);
+  await driver.play(
+    drag(
+      DRAG_START,
+      {x: DRAG_START.x, y: DRAG_START.y + 240},
+      {durationMs: 200},
+    ),
+    {pacing: 'spacing'},
   );
-}
-
-/**
- * The same drag as page-dispatched touch events on the element under the
- * finger. WebKit builds a touch only through `document.createTouch`, and its
- * `TouchEvent` takes lists from `document.createTouchList`, not arrays.
- */
-async function dispatchTouchDrag(page: Page) {
-  const send = async (type: string, step: number | null) =>
-    page.evaluate(
-      ({type, step, start}) => {
-        const doc = document as Document & {
-          createTouch: (...args: unknown[]) => Touch;
-          createTouchList: (...touches: Touch[]) => TouchList;
-        };
-        const target = document.elementFromPoint(start.x, start.y);
-        if (target == null) {
-          throw new Error('nothing under the finger');
-        }
-        const y = start.y + (step ?? 0) * 20;
-        const touch = doc.createTouch(
-          window,
-          target,
-          1,
-          start.x,
-          y,
-          start.x,
-          y,
-        );
-        const held = type === 'touchend' ? [] : [touch];
-        target.dispatchEvent(
-          new TouchEvent(type, {
-            touches: doc.createTouchList(...held) as unknown as Touch[],
-            targetTouches: doc.createTouchList(...held) as unknown as Touch[],
-            changedTouches: doc.createTouchList(touch) as unknown as Touch[],
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-          }),
-        );
-      },
-      {type, step, start: DRAG_START},
-    );
-  await send('touchstart', 0);
-  for (let step = 1; step <= 12; step += 1) {
-    await send('touchmove', step);
-    await page.evaluate(async () => new Promise(requestAnimationFrame));
-  }
-  await send('touchend', 12);
+  // Two frames, so the page has handled the lift before the test reads it.
   await page.evaluate(
     async () =>
       new Promise(resolve =>
@@ -419,7 +352,6 @@ async function dispatchTouchDrag(page: Page) {
 
 test('the lock holds a backdrop drag when the flow renders inside a scrolling container', async ({
   page,
-  browserName,
 }) => {
   await mountScrollable(page);
   // The sheets render their dialogs in place, so moving the story root into a
@@ -479,7 +411,7 @@ test('the lock holds a backdrop drag when the flow renders inside a scrolling co
     };
   }, DRAG_START);
   expect(start).toEqual({openDialogs: 1, hitIsOpenDialog: true, painted: true});
-  await touchDragDown(page, browserName);
+  await touchDragDown(page);
 
   const moves = await page.evaluate(
     () => (window as {__moves?: {judged: number; cancelled: number}}).__moves,
