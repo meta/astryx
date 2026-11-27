@@ -126,6 +126,26 @@ export const docs = {
         'Additional Lexical plugins rendered inside the composer. Compose mentions, autolink, and other editor behavior on top of the base editor.',
     },
     {
+      name: 'extensions',
+      type: 'ReadonlyArray<AnyLexicalExtension>',
+      description:
+        'Additional Lexical extensions the editor is built from, appended to the ones it always carries. An extension configures the editor itself and is read while the editor is built, so it cannot arrive through plugins, which are React children of an editor that already exists. Use it for anything that must be in place before the first editor state: a collaborative binding that ships as an extension, a node structure contract. Read once, when the editor is built; later changes to the array are ignored, because applying them would rebuild the editor and discard its content.',
+    },
+    {
+      name: 'isCollaborative',
+      type: 'boolean',
+      description:
+        'The editor takes its content from a collaborative binding rather than from defaultValue. It then provides the collaboration context a Yjs binding reads, and keeps no undo history of its own, because the binding owns undo. This connects nothing on its own: render the binding through plugins (a React collaboration plugin) or through extensions (a binding that ships as an extension), and keep the transport, the provider and presence in the host app. Doing so also keeps Yjs out of the dependencies of every app that installs this package.',
+      default: 'false',
+    },
+    {
+      name: 'hasHistory',
+      type: 'boolean',
+      description:
+        'The editor keeps its own undo history. Turn it off when something else owns undo: a collaborative binding with its own history, or a history plugin passed through plugins. Two history stacks over one editor fight each other, so only one may be active.',
+      default: 'true, or false when isCollaborative is set',
+    },
+    {
       name: 'hasMarkdownShortcuts',
       type: 'boolean',
       description:
