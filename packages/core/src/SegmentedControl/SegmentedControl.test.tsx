@@ -1593,6 +1593,24 @@ describe('SegmentedControl focus handlers cannot cancel built-in focus behavior 
     expect(onChange).toHaveBeenCalledWith('list');
   });
 
+  it('keeps selection following focus when a segment onFocus calls preventDefault', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl value="grid" onChange={onChange} label="View mode">
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem
+          value="list"
+          label="List"
+          onFocus={e => e.preventDefault()}
+        />
+      </SegmentedControl>,
+    );
+    screen.getByRole('radio', {name: 'Grid'}).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onChange).toHaveBeenCalledWith('list');
+  });
+
   it('still shows the keyboard hint when a caller onFocus calls preventDefault', () => {
     treatFocusAsKeyboardFocus();
     render(
