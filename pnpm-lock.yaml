@@ -33,6 +33,9 @@ catalogs:
     '@testing-library/react':
       specifier: ^16.3.3
       version: 16.3.3
+    esbuild-wasm:
+      specifier: ^0.28.2
+      version: 0.28.2
     prettier:
       specifier: ^3.9.10
       version: 3.9.10
@@ -841,8 +844,8 @@ importers:
       css-tree:
         specifier: 3.2.1
         version: 3.2.1
-      esbuild:
-        specifier: '>=0.28.1'
+      esbuild-wasm:
+        specifier: 'catalog:'
         version: 0.28.2
       globals:
         specifier: 17.14.0
@@ -4813,6 +4816,11 @@ packages:
 
   es-toolkit@1.49.0:
     resolution: {integrity: sha512-G5iZ6Pc/FNRY/soKZHC+TxGDD83rHUDXxzaWhGCX44vAv/tMs56WMusnm/KMNK+luUPsgA9U28cGr4RDlSzL2g==}
+
+  esbuild-wasm@0.28.2:
+    resolution: {integrity: sha512-GccVwhv3mmOUVQHCQm2Ox/rby8n/EqUwvZxE6Pjfikrq/lWw9g9WX/u9EykWnpot3Ko6j426DgQdea2xWKIAQA==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   esbuild@0.28.2:
     resolution: {integrity: sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==}
@@ -10833,6 +10841,8 @@ snapshots:
       es-errors: 1.3.0
 
   es-toolkit@1.49.0: {}
+
+  esbuild-wasm@0.28.2: {}
 
   esbuild@0.28.2:
     optionalDependencies:

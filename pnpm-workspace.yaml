@@ -57,6 +57,10 @@ catalog:
   '@testing-library/jest-dom': ^6.6.0
   prettier: ^3.9.10
   esbuild: ^0.28.2
+  # The CLI's `experimental export` builds with a native esbuild in this
+  # range, the project's own or one beside the CLI, else with this one, which
+  # has no install script.
+  esbuild-wasm: ^0.28.2
 
 # Moved from package.json's "pnpm" field: pnpm 11 no longer reads
 # pnpm.overrides / pnpm.onlyBuiltDependencies from package.json.
