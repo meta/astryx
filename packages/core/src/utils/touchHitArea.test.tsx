@@ -12,6 +12,7 @@
  *   __tests__/touchHitArea.interaction.browser.spec.ts
  */
 
+import type {ReactElement} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
@@ -25,6 +26,7 @@ import {Button} from '../Button/Button';
 import {ButtonGroup} from '../ButtonGroup/ButtonGroup';
 import {InfoTip} from '../InfoTip/InfoTip';
 import {List} from '../List/List';
+import {Selector} from '../Selector/Selector';
 import {Typeahead} from '../Typeahead/Typeahead';
 import {ListItem} from '../List/ListItem';
 
@@ -582,6 +584,133 @@ describe('at a tap', () => {
     a.dispatchEvent(key);
     expect(key.defaultPrevented).toBe(false);
     expect(onA).toHaveBeenCalledTimes(4);
+  });
+  it('gives a tap on a Selector’s frame outside its trigger button, under a neighbour’s band, to the Selector’s frame', () => {
+    const onA = vi.fn();
+    render(
+      <div data-testid="container">
+        <Host id="a" onClick={onA} />
+        <Selector
+          label="Fruit"
+          options={['Apple', 'Banana']}
+          onChange={() => {}}
+          presentation="popover"
+        />
+      </div>,
+    );
+    const a = document.getElementById('a') as HTMLElement;
+    const frame = screen.getByRole('combobox').parentElement as HTMLElement;
+    a.getBoundingClientRect = () => rect(100, 100, 24, 24);
+    frame.getBoundingClientRect = () => rect(128, 100, 200, 36);
+    const onFrame = vi.fn();
+    frame.addEventListener('click', onFrame);
+    // 6 px past the control, 2 px inside the frame's padding.
+    elementsAtPoint = [
+      a,
+      frame,
+      screen.getByTestId('container'),
+      document.body,
+    ];
+    expect(tap(a, 130)).toBe(true);
+    expect(onA).not.toHaveBeenCalled();
+    expect(onFrame).toHaveBeenCalledTimes(1);
+  });
+
+  describe('beside a neighbour that no tap can reach', () => {
+    /**
+     * Renders the control and `neighbour` (id `b`) 4 px after it, then taps
+     * 6 px past the control, 2 px inside the neighbour's box. `prepare` runs
+     * on the neighbour before the tap.
+     */
+    function tapBeside(
+      neighbour: ReactElement,
+      prepare: (b: HTMLElement) => void = () => {},
+    ) {
+      const onA = vi.fn();
+      render(
+        <div data-testid="container">
+          <Host id="a" onClick={onA} />
+          {neighbour}
+        </div>,
+      );
+      const a = document.getElementById('a') as HTMLElement;
+      const b = document.getElementById('b') as HTMLElement;
+      a.getBoundingClientRect = () => rect(100, 100, 24, 24);
+      b.getBoundingClientRect = () => rect(128, 100, 60, 24);
+      prepare(b);
+      elementsAtPoint = [a, b, screen.getByTestId('container'), document.body];
+      const isGivenAway = tap(a, 130);
+      return {isGivenAway, onA};
+    }
+
+    const link = (
+      <a href="#b" id="b">
+        Details
+      </a>
+    );
+
+    it('still gives the tap to a neighbour that takes taps', () => {
+      const {isGivenAway, onA} = tapBeside(link);
+      expect(isGivenAway).toBe(true);
+      expect(onA).not.toHaveBeenCalled();
+    });
+
+    it('lets the control act beside a neighbour in an inert subtree', () => {
+      const {isGivenAway, onA} = tapBeside(<div inert>{link}</div>);
+      expect(isGivenAway).toBe(false);
+      expect(onA).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets the control act beside a disabled neighbour', () => {
+      const {isGivenAway, onA} = tapBeside(
+        <button id="b" type="button" disabled>
+          Details
+        </button>,
+      );
+      expect(isGivenAway).toBe(false);
+      expect(onA).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets the control act beside a neighbour that takes no pointer events', () => {
+      const {isGivenAway} = tapBeside(
+        <div style={{pointerEvents: 'none'}}>{link}</div>,
+      );
+      expect(isGivenAway).toBe(false);
+    });
+
+    it('lets the control act beside a neighbour that checkVisibility calls hidden', () => {
+      const checkVisibility = vi.fn(() => false);
+      const {isGivenAway} = tapBeside(link, b =>
+        Object.defineProperty(b, 'checkVisibility', {
+          configurable: true,
+          value: checkVisibility,
+        }),
+      );
+      expect(isGivenAway).toBe(false);
+      expect(checkVisibility).toHaveBeenCalledWith({checkVisibilityCSS: true});
+    });
+
+    describe('where checkVisibility is missing, as in jsdom', () => {
+      it('lets the control act beside a neighbour in a hidden subtree', () => {
+        const {isGivenAway} = tapBeside(
+          <div style={{visibility: 'hidden'}}>{link}</div>,
+          b => expect(typeof b.checkVisibility).toBe('undefined'),
+        );
+        expect(isGivenAway).toBe(false);
+      });
+
+      it('lets the control act beside a neighbour whose ancestor skips its contents', () => {
+        const {isGivenAway} = tapBeside(
+          <div style={{contentVisibility: 'hidden'}}>{link}</div>,
+        );
+        expect(isGivenAway).toBe(false);
+      });
+    });
+
+    it('still gives the tap to a neighbour drawn at opacity 0, which still takes taps', () => {
+      const {isGivenAway} = tapBeside(<div style={{opacity: 0}}>{link}</div>);
+      expect(isGivenAway).toBe(true);
+    });
   });
 });
 

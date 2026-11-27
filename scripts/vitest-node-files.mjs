@@ -28,6 +28,8 @@ export const NODE_TEST_INCLUDE = [
   // Sandbox page logic (palette generation, colour maths) — pure modules
   // with no DOM, so they run here rather than in `ui`.
   'apps/sandbox/src/**/*.test.{ts,tsx,mjs}',
+  // The docs site's MCP-folder install pins (a pure module, no DOM).
+  'apps/docsite/scripts/lockfile-overrides.test.mjs',
 ];
 
 // Beside Vitest's own default excludes.

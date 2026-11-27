@@ -201,7 +201,14 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
-    paddingBlock: spacingVars['--spacing-1'],
+    // The padding is what the row leaves after the prompt's line and the
+    // borders. A larger or wrapped prompt grows the row from there.
+    paddingBlock: {
+      default: `max(0px, calc((${sizeVars['--size-element-md']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(0px, calc((${sizeVars['--size-element-md']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      },
+    },
     paddingInline: spacingVars['--spacing-2'],
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
@@ -228,7 +235,7 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    height: sizeVars['--size-element-md'],
+    minHeight: sizeVars['--size-element-md'],
     outline: 'none',
   },
   compactDisabled: {
@@ -301,6 +308,9 @@ const styles = stylex.create({
     textAlign: 'start',
     flex: 1,
     minWidth: 0,
+    // A word wider than the field breaks inside itself, so the prompt wraps
+    // inside the border and loses no text at large sizes.
+    overflowWrap: 'break-word',
   },
 });
 

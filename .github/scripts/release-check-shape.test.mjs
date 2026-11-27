@@ -30,7 +30,7 @@ const coreParts = event =>
 describe('release-check legs', () => {
   it.each([
     ['pr-a11y-shard', 6],
-    ['a11y-contracts-shard', 6],
+    ['a11y-contracts-shard', 7],
     ['visual-scout', 8],
   ])('%s runs %i legs on a release-check', (job, legs) => {
     const shards = ci.jobs[job].strategy.matrix.shard;
@@ -98,7 +98,7 @@ describe('release-check legs', () => {
     );
   });
 
-  it("keeps a release-check's widest wave at 32 legs, the room main's lane plans for", () => {
+  it("keeps a release-check's widest wave at 33 legs, the room main's lane plans for", () => {
     const legs = job =>
       job === 'pr-rtl-shard'
         ? matrixFor(ci.jobs[job].strategy.matrix.include, 'workflow_dispatch')
@@ -110,7 +110,7 @@ describe('release-check legs', () => {
         .map(legs)
         .reduce((sum, count) => sum + count, 0) +
       ['pr-a11y-guards', 'pr-a11y-specs'].length;
-    expect(wave).toBe(32);
+    expect(wave).toBe(33);
   });
 });
 

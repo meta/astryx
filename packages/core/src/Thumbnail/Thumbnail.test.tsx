@@ -2,6 +2,7 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
+import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import userEvent from '@testing-library/user-event';
 import {Thumbnail} from './Thumbnail';
 import {
@@ -10,6 +11,25 @@ import {
   pressArmsShadowedByDefault,
   readsPressStrength,
 } from '../__tests__/pressState';
+
+/** The outline-style values `element`'s classes set with no focus condition. */
+function outlineStylesAtRest(element: Element): string[] {
+  const classes = Array.from(element.classList, name => `.${name}`);
+  const values: string[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      if (
+        rule instanceof CSSStyleRule &&
+        classes.some(cls => rule.selectorText.startsWith(cls)) &&
+        !rule.selectorText.includes('focus') &&
+        rule.style.getPropertyValue('outline-style') !== ''
+      ) {
+        values.push(rule.style.getPropertyValue('outline-style'));
+      }
+    }
+  }
+  return values;
+}
 
 describe('Thumbnail', () => {
   it('renders an image when src is provided', () => {
@@ -89,6 +109,19 @@ describe('Thumbnail', () => {
     ).toBeInTheDocument();
   });
 
+  it('joins the label and alt through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="ja"
+        overrides={{ja: {'@astryx.thumbnail.nameWithAlt': '{alt}（{label}）'}}}>
+        <Thumbnail src="/img.jpg" alt="表紙" label="file.png" />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByRole('group', {name: '表紙（file.png）'}),
+    ).toBeInTheDocument();
+  });
+
   it('marks the image as explicitly decorative when no alt is provided', () => {
     render(
       <Thumbnail src="/photo.jpg" label="photo.png" data-testid="thumb" />,
@@ -122,6 +155,19 @@ describe('Thumbnail', () => {
     render(<Thumbnail src="/b.jpg" alt="Photo b" />);
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+
+  it('describes a label-only thumbnail with nothing, since the label is its whole name', () => {
+    render(<Thumbnail src="/img.jpg" label="file.png" />);
+    const group = screen.getByRole('group', {name: 'file.png'});
+    expect(group).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('describes a thumbnail with a label and alt with its label', () => {
+    render(<Thumbnail src="/img.jpg" alt="Cover" label="file.png" />);
+    expect(
+      screen.getByRole('group', {name: 'file.png — Cover'}),
+    ).toHaveAccessibleDescription('file.png');
   });
 
   it('label is shown via tooltip, not as inline text', () => {
@@ -276,6 +322,22 @@ describe('Thumbnail', () => {
     const ref = vi.fn();
     render(<Thumbnail ref={ref} data-testid="thumb" />);
     expect(ref).toHaveBeenCalled();
+  });
+
+  it('draws no ring of its own on Open, inside the image container ring', () => {
+    render(
+      <Thumbnail
+        src="/photo.jpg"
+        alt="Photo"
+        onClick={() => {}}
+        onRemove={() => {}}
+        showRemoveOn="always"
+      />,
+    );
+    const open = screen.getByRole('button', {name: 'Open Photo'});
+    const atRest = outlineStylesAtRest(open);
+    expect(atRest.length).toBeGreaterThan(0);
+    expect(atRest.every(value => value === 'none')).toBe(true);
   });
 
   describe('showRemoveOn', () => {

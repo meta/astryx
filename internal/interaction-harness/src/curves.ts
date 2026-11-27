@@ -2004,12 +2004,35 @@ export async function waitForAnimation(
           {timeout: 1_000},
         )
         .catch(() => [] as string[]);
+      // Whether a dialog or popover is still open tells a dismissal that did
+      // not start (the press did not act) from one that ran unseen.
+      const openState =
+        missed.length > 0
+          ? null
+          : await locator
+              .evaluate(
+                element =>
+                  element instanceof HTMLDialogElement
+                    ? element.open
+                      ? 'an open dialog'
+                      : 'a closed dialog'
+                    : element instanceof HTMLElement &&
+                        element.hasAttribute('popover')
+                      ? element.matches(':popover-open')
+                        ? 'an open popover'
+                        : 'a closed popover'
+                      : null,
+                undefined,
+                {timeout: 1_000},
+              )
+              .catch(() => null);
       throw new Error(
         missed.length > 0
           ? `waitForAnimation: the element's ${missed.join(', ')} started and finished between two of the page's frames: its start event came after it had finished, with nothing left to read (WebKit sends it at the next frame; README: engine limits). Make the animation last longer than the page's frame gaps under load.`
           : 'waitForAnimation: no animation started on the element, none running ' +
-              'and none recorded since the last wait. If the action is the ' +
-              "page's first contact with the harness, take " +
+              'and none recorded since the last wait. ' +
+              (openState == null ? '' : `The element is ${openState}. `) +
+              "If the action is the page's first contact with the harness, take " +
               'watchAnimations(locator) before it.',
       );
     }
@@ -2096,6 +2119,15 @@ export async function watchAnimations(
  * it) is pending or still before the end of its curve, and its presented
  * `transform`, `translate`, `rotate`, `scale` and `opacity` (and `::backdrop`
  * opacity) have held still for `frames` consecutive frames.
+ *
+ * It also waits until no input hold of the element's own layer is in place. A
+ * Core layer holds a finger's input under a shield while its motion runs, and
+ * the hold ends when that motion settles. After a storyboard has sought or
+ * paused the motion, it settles at a later look, after the element rests. A
+ * press that goes down under the shield is held, so a tap right after the wait
+ * would not act. A layer inside the held one (a toast that an alert raises) is
+ * left out, and a viewport-wide hold of another layer is not read. A hold
+ * still in place at the deadline rejects by name.
  *
  * It judges curves and presented values, not `playState`: an animation that
  * holds its end value (a run of identical final keyframes kept so a later
@@ -2203,6 +2235,60 @@ export async function waitForRest(
               ).__harnessAnimations?.arm();
               resolve(null);
             };
+            // An input hold lays a shield over its layer until the motion that
+            // holds it settles, which can come after the motion rests: a
+            // sought or paused run settles at a later look. A press that goes
+            // down while the shield is up is held, even when the engine
+            // dispatches it after the shield goes. So rest also waits until
+            // no shield of the element's own layer is in place. A layer inside
+            // the held one (a toast that an alert raises) is left out, as a
+            // dismissal leaves it live. A viewport-wide shield of another layer
+            // is not read.
+            // SYNC: the shield's attributes are addShield's in
+            // packages/core/src/Layer/inputHold.ts, and the layer-root mark
+            // is packages/core/src/privateAttributes/layerRoot.stylex.ts's.
+            const isInNestedLayer = (layer: Element) => {
+              for (
+                let node: Element | null = element;
+                node != null && node !== layer;
+                node = node.parentElement
+              ) {
+                if (node.hasAttribute('data-astryx-layer-root')) {
+                  return true;
+                }
+              }
+              return false;
+            };
+            const isUnderInputHold = () =>
+              [
+                ...element.ownerDocument.querySelectorAll(
+                  '[aria-hidden="true"]',
+                ),
+              ].some(node => {
+                const layer = node.parentElement;
+                return (
+                  node instanceof HTMLElement &&
+                  node.style.touchAction === 'pinch-zoom' &&
+                  node.style.inset === '0px' &&
+                  layer != null &&
+                  ((layer.contains(element) && !isInNestedLayer(layer)) ||
+                    element.contains(layer))
+                );
+              });
+            const settleUnheld = () => {
+              if (!isUnderInputHold()) {
+                settle();
+              } else if (realNow() > deadline) {
+                end();
+                reject(
+                  new Error(
+                    'waitForRest: the element rests, but an input hold still covers it at the deadline',
+                  ),
+                );
+              } else {
+                timeout(settleUnheld, 4);
+              }
+            };
             let last = '';
             let still = 0;
             // When the per-frame check last looked, and when the last gap longer
@@ -2284,7 +2370,7 @@ export async function waitForRest(
               if (wait <= 0) {
                 idle += 1;
                 if (idle >= need) {
-                  settle();
+                  settleUnheld();
                   return;
                 }
                 wait = 16;
@@ -2371,7 +2457,7 @@ export async function waitForRest(
               still = resting ? still + 1 : 0;
               last = now;
               if (still >= need) {
-                settle();
+                settleUnheld();
               } else if (realNow() > deadline) {
                 const short = shortfall();
                 end();

@@ -37,7 +37,12 @@ export interface TooltipBindingState {
 const story = (id: string) => `a11y-tooltip--${id}`;
 
 /** Tooltip's and useTooltip's default hover delay. */
-const DEFAULT_DELAY: TooltipStateFacts = {showsOnHover: true, showDelayMs: 200};
+// Every Astryx tooltip describes its trigger with a hidden copy of its text.
+const DEFAULT_DELAY: TooltipStateFacts = {
+  showsOnHover: true,
+  showDelayMs: 200,
+  describesWithCopy: true,
+};
 
 export const TOOLTIP_BINDING_STATES = [
   {
@@ -84,6 +89,17 @@ export const TOOLTIP_BINDING_STATES = [
     triggerRole: 'button',
     content: 'Moves this page out of the list',
     facts: DEFAULT_DELAY,
+  },
+  {
+    id: 'before-first-show',
+    summary:
+      'a Tooltip wrapping a Button that has not shown yet, so no tooltip is in the page and the Button is described by a hidden copy of the tooltip text',
+    storyId: story('before-first-show'),
+    attachment: 'wrapped-element',
+    triggerText: 'Save',
+    triggerRole: 'button',
+    content: 'Saves your changes to this draft',
+    facts: {...DEFAULT_DELAY, isBeforeFirstShow: true},
   },
 ] as const satisfies ReadonlyArray<TooltipBindingState>;
 

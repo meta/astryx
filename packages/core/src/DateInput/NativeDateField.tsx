@@ -36,6 +36,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useCalendarConstraints} from '../Calendar';
 import type {DateInputProps} from './DateInput';
@@ -55,6 +56,8 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
 import {useLocale} from '../i18n';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {localeTextStyles} from '../utils/textDirection';
 import {useInputGroup} from '../InputGroup';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {joinAriaIDs} from '../utils/inputAria';
@@ -64,7 +67,6 @@ import {Spinner} from '../Spinner';
 import {
   colorVars,
   radiusVars,
-  sizeVars,
   spacingVars,
   typeScaleVars,
   typographyVars,
@@ -246,9 +248,9 @@ const styles = stylex.create({
 });
 
 const sizeStyles = stylex.create({
-  sm: {height: sizeVars['--size-element-sm'], minWidth: 180},
-  md: {height: sizeVars['--size-element-md'], minWidth: 180},
-  lg: {height: sizeVars['--size-element-lg'], minWidth: 180},
+  sm: {minWidth: 180},
+  md: {minWidth: 180},
+  lg: {minWidth: 180},
 });
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -312,6 +314,8 @@ export function NativeDateField({
   } = rest;
   const t = useComponentTranslator();
   const locale = useLocale();
+  // A date the locale formats reads in the locale's direction.
+  const textDirection = getLocaleDirection(locale);
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.dateInput.placeholder');
@@ -637,6 +641,7 @@ export function NativeDateField({
           inputWrapperStyles.base,
           inputWrapperStyles.textField,
           sizeStyles[size],
+          inputRowSizeStyles[size],
           styles.wrapper,
           // Disabled paint belongs to the disabled state only; a busy field
           // keeps its ordinary paint and shows the Spinner (spec:AST-085
@@ -702,8 +707,10 @@ export function NativeDateField({
             fieldStatus?.type === 'error' || !isInputValid ? 'true' : undefined
           }
           aria-busy={isBusy || undefined}
+          dir={controlProps.dir ?? textDirection}
           {...stylex.props(
             styles.input,
+            localeTextStyles.pageAlign,
             showsOverlay && styles.inputTextHidden,
             isEffectivelyDisabled && styles.inputDisabled,
             !isInputValid && styles.inputInvalid,
@@ -712,8 +719,10 @@ export function NativeDateField({
         {showsOverlay && (
           <span
             aria-hidden="true"
+            dir={textDirection}
             {...stylex.props(
               styles.overlay,
+              localeTextStyles.pageAlign,
               nativeValue ? styles.overlayValue : styles.overlayPlaceholder,
               isEffectivelyDisabled && styles.inputDisabled,
               !isInputValid && !!nativeValue && styles.inputInvalid,

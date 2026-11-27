@@ -44,17 +44,19 @@ import {
 import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
 import {rtlStyles} from '@astryxdesign/core/utils';
 import {useToast} from '@astryxdesign/core/Toast';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
-  PencilIcon,
-  DocumentDuplicateIcon,
+  EditIcon,
+  CopyIcon,
   ArrowRightIcon,
   TagIcon,
   UserIcon,
-  TrashIcon,
-  EllipsisHorizontalIcon,
-} from '@heroicons/react/24/outline';
-import {XMarkIcon} from '@heroicons/react/24/outline';
-import {ChartBarIcon} from '@heroicons/react/24/solid';
+  DeleteIcon,
+  MoreHorizontalIcon,
+} from '@astryxdesign/template-icons';
+import {CloseIcon} from '@astryxdesign/template-icons';
+import {ChartIcon} from '@astryxdesign/template-icons/24/solid';
 
 // Types
 type TaskStatus = 'in_progress' | 'todo' | 'backlog' | 'done';
@@ -588,14 +590,20 @@ function getGroupLabel(groupBy: GroupByField, key: string): string {
 function getColumns({
   onEdit,
   onDuplicate,
+  onDemo,
+  onDelete,
 }: {
   onEdit: (task: TaskRow) => void;
   onDuplicate: (task: TaskRow) => void;
+  /** Says what a menu action would do, for actions this demo does not perform. */
+  onDemo: (task: TaskRow, action: string) => void;
+  /** Asks before the destructive Delete issue action. */
+  onDelete: (task: TaskRow) => void;
 }): TableColumn<TaskRow>[] {
   return [
     {
       key: 'status',
-      header: '',
+      header: <VisuallyHidden>Status</VisuallyHidden>,
       width: pixel(44),
       renderCell: task => (
         <Center axis="horizontal">
@@ -613,7 +621,7 @@ function getColumns({
       renderCell: task => (
         <HStack gap={3} vAlign="center">
           <Icon
-            icon={ChartBarIcon}
+            icon={ChartIcon}
             size="sm"
             color={PRIORITY_COLOR[task.priority]}
           />
@@ -674,7 +682,7 @@ function getColumns({
     },
     {
       key: 'actions',
-      header: '',
+      header: <VisuallyHidden>Actions</VisuallyHidden>,
       width: pixel(56),
       renderCell: task => (
         <DropdownMenu
@@ -682,29 +690,29 @@ function getColumns({
             label: 'Actions',
             variant: 'ghost',
             size: 'sm',
-            icon: <Icon icon={EllipsisHorizontalIcon} size="sm" />,
+            icon: <Icon icon={MoreHorizontalIcon} size="sm" />,
             isIconOnly: true,
           }}
           hasChevron={false}
           items={[
             {
               label: 'Edit issue',
-              icon: PencilIcon,
+              icon: EditIcon,
               onClick: () => onEdit(task),
             },
             {
               label: 'Assign to...',
               icon: UserIcon,
-              onClick: () => {},
+              onClick: () => onDemo(task, 'assigning'),
             },
             {
               label: 'Add label',
               icon: TagIcon,
-              onClick: () => {},
+              onClick: () => onDemo(task, 'labeling'),
             },
             {
               label: 'Duplicate',
-              icon: DocumentDuplicateIcon,
+              icon: CopyIcon,
               onClick: () => onDuplicate(task),
             },
             {
@@ -717,13 +725,13 @@ function getColumns({
                   xstyle={rtlStyles.mirror}
                 />
               ),
-              onClick: () => {},
+              onClick: () => onDemo(task, 'moving'),
             },
             {type: 'divider' as const},
             {
               label: 'Delete issue',
-              icon: TrashIcon,
-              onClick: () => {},
+              icon: DeleteIcon,
+              onClick: () => onDelete(task),
             },
           ]}
         />
@@ -839,7 +847,7 @@ function TaskDetailPanel({
             label="Close panel"
             variant="ghost"
             size="sm"
-            icon={<Icon icon={XMarkIcon} size="sm" />}
+            icon={<Icon icon={CloseIcon} size="sm" />}
             isIconOnly
             onClick={onClose}
           />
@@ -867,7 +875,7 @@ function TaskDetailPanel({
           <MetadataListItem label="Priority">
             <HStack gap={2} vAlign="center">
               <Icon
-                icon={ChartBarIcon}
+                icon={ChartIcon}
                 size="sm"
                 color={PRIORITY_COLOR[task.priority]}
               />
@@ -911,6 +919,8 @@ export default function DataTableTemplate() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
+  const {show: showConfirm, hide: hideConfirm} = confirm;
   const columns = useMemo(
     () =>
       getColumns({
@@ -923,11 +933,31 @@ export default function DataTableTemplate() {
         onDuplicate: task =>
           // Demo only: replace this toast with the call that performs the action.
           showToast({
-            body: `${task.taskId} duplicated`,
+            body: `Demo: ${task.taskId} would be duplicated here`,
             uniqueID: `duplicate-${task.taskId}`,
           }),
+        onDemo: (task, action) =>
+          // Demo only: replace this toast with the call that performs the action.
+          showToast({
+            body: `Demo: ${action} ${task.taskId} would happen here`,
+            uniqueID: `${action}-${task.taskId}`,
+          }),
+        onDelete: task =>
+          showConfirm({
+            title: `Delete ${task.taskId}?`,
+            description: "This demo won't delete anything.",
+            actionLabel: 'Delete issue',
+            onAction: () => {
+              hideConfirm();
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: `Demo: ${task.taskId} would be deleted here`,
+                uniqueID: `delete-${task.taskId}`,
+              });
+            },
+          }),
       }),
-    [showToast],
+    [showToast, showConfirm, hideConfirm],
   );
   const [powerSearchFilters, setPowerSearchFilters] = useState<
     ReadonlyArray<PowerSearchFilter>
@@ -1015,7 +1045,8 @@ export default function DataTableTemplate() {
         header={
           <LayoutHeader hasDivider padding={4}>
             <VStack gap={4}>
-              <HStack gap={3} vAlign="center">
+              {/* On a narrow screen the action moves under the title instead of squeezing it. */}
+              <HStack gap={3} vAlign="center" wrap="wrap">
                 <StackItem size="fill">
                   <Heading level={1}>All Issues</Heading>
                 </StackItem>
@@ -1169,6 +1200,7 @@ export default function DataTableTemplate() {
           }
         />
       </Dialog>
+      {confirm.element}
     </>
   );
 }

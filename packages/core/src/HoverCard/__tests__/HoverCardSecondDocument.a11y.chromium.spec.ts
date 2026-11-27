@@ -75,7 +75,14 @@ test('Escape from inside the card returns focus to its trigger', async ({
 
 test('Escape pressed in a Picture-in-Picture window closes the card there, and focus returns to its trigger', async ({
   page,
+  browserName,
 }) => {
+  // Document Picture-in-Picture is a Chromium API: the story disables its Pop
+  // out button where `window.documentPictureInPicture` is missing.
+  test.skip(
+    browserName !== 'chromium',
+    'Document Picture-in-Picture is Chromium-only',
+  );
   await page.goto(
     `${storybook.origin}/iframe.html?id=a11y-hovercard-in-a-second-document--second-document&viewMode=story`,
   );

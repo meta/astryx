@@ -7,10 +7,11 @@
  * @input A group's root ref and whether the group tracks presses: under the
  *   touch presentation only
  * @output useGroupPressTracking: the press tracking that ButtonGroup and
- *   ToggleButtonGroup share; GROUP_PRESS_POINTERS, the pointers it follows
- * @position Internal hook, not exported from the hooks entry. It drives
- *   useActionGroupTracking for a group's members, whose own touch bands take
- *   a finger just past them. AlertDialog's tracking follows
+ *   ToggleButtonGroup share; GROUP_PRESS_POINTERS, the pointers it follows,
+ *   re-exported from pressGroupContext
+ * @position Internal hook. Core's internal/touch entry exposes it to Lab. It
+ *   drives useActionGroupTracking for a group's members, whose own touch
+ *   bands take a finger just past them. AlertDialog's tracking follows
  *   GROUP_PRESS_POINTERS too.
  *
  * SYNC: When modified, update ButtonGroupTracking.test.tsx and
@@ -20,6 +21,7 @@
 import type {RefObject} from 'react';
 import type {GestureTouch} from '../gestures/types';
 import {isPressGroupItem} from '../privateAttributes/pressGroupItem.stylex';
+import {GROUP_PRESS_POINTERS} from './pressGroupContext';
 import {targetUnderFinger} from '../utils/touchHitArea';
 import {
   DISABLED_SELECTOR,
@@ -105,8 +107,7 @@ function takesPress(group: HTMLElement | null, touch: GestureTouch): boolean {
   );
 }
 
-/** The pointers a group's press slides for: a finger and a pen. */
-export const GROUP_PRESS_POINTERS = ['touch', 'pen'] as const;
+export {GROUP_PRESS_POINTERS};
 
 /**
  * Track a held finger or pen across the marked members of the group behind

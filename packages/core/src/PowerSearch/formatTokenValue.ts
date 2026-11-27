@@ -3,8 +3,8 @@
 /**
  * @fileoverview The text a PowerSearch filter token shows for a value.
  *
- * @input `OperatorValue`, `FilterValue`, a width budget, the locale, and the
- * calendar.
+ * @input `OperatorValue`, `FilterValue`, a width budget, the locale, the
+ * calendar, and the provider's translator.
  * @output `formatTokenValueText` — one string, or null for an empty value;
  * `formatTokenLabel` and `formatTokenText` — the token's "field: operator"
  * label and its full text, each one catalog message; `tokenTextKeepsParts` —
@@ -19,13 +19,17 @@ import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {Locale, TranslatorFn} from '../i18n';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {truncateCharacters} from '../utils/characters';
-import {formatDateAbsolute, formatSharedNumber} from './formatFilterValue';
+import {
+  formatDateAbsolute,
+  formatDateRange,
+  formatSharedNumber,
+} from './formatFilterValue';
+import {createListFormatter} from '../i18n/listFormat';
+import {relativeDateLabel} from './relativeDateOptions';
 import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/PowerSearch/formatTokenValue.generated';
 
 registerEnglishFallback(english);
-
-type ListFormatFn = (items: ReadonlyArray<string>) => string;
 
 /**
  * A filter token's label: its field and operator, joined by one catalog
@@ -112,24 +116,15 @@ function formatNumberAsToken(value: number, locale: Locale): string {
       });
 }
 
-// The summaries, lists, and numbers the token writes as English literals, and
-// the locale-aware readings of the same: with a translator (the sheet
-// presentation's rows and announcements) the summaries resolve through the
-// catalog, lists through the provider locale's list format, and numbers
-// through its number format; without one they stay the token's own literals,
-// the released popover token's text. In English the two read identically.
-function itemsSummary(count: number, t: TranslatorFn | undefined): string {
-  return t
-    ? t('@astryx.powersearch.valueEditor.itemsCount', {count})
-    : // eslint-disable-next-line @astryx/no-hardcoded-i18n-string -- the popover token's released English text; translating it is a separate stable change
-      `${count} items`;
+function itemsSummary(count: number, t: TranslatorFn): string {
+  return t('@astryx.powersearch.valueEditor.itemsCount', {count});
 }
 
 function formatListText(
   labels: ReadonlyArray<string>,
   maxLength: number,
-  t: TranslatorFn | undefined,
-  formatList: ListFormatFn | undefined,
+  t: TranslatorFn,
+  locale: Locale,
 ): string | null {
   if (labels.length === 0) {
     return null;
@@ -141,7 +136,7 @@ function formatListText(
   if (totalLength > maxLength) {
     return itemsSummary(labels.length, t);
   }
-  return formatList ? formatList(labels) : labels.join(', ');
+  return createListFormatter(locale)(labels);
 }
 
 /**
@@ -151,12 +146,10 @@ function formatListText(
  * use the same words and the same zone handling. `maxLength` is the token's
  * width budget; pass `Number.MAX_SAFE_INTEGER` for the untruncated text.
  * A `date_absolute` value is written in `calendar`, the calendar that the
- * provider resolves.
- * With `t`, the list, date-range and nested summaries resolve through the
- * catalog (`@astryx.powersearch.valueEditor.*`); without it they are the
- * token's own literals. With `formatList` (the provider's list formatter),
- * several labels join as a list in the locale; without it they join with
- * the token's literal ", ".
+ * provider resolves, and a `date_range` as its two days in the same zone.
+ * Pass `canReadClock` false on the server and in the hydrating render.
+ * The list and nested summaries and a relative date resolve through the
+ * catalog; several labels join as a list in the locale.
  */
 export function formatTokenValueText(
   operatorValue: OperatorValue,
@@ -164,9 +157,9 @@ export function formatTokenValueText(
   maxLength: number,
   locale: Locale,
   calendar: CalendarSystem,
-  t?: TranslatorFn,
-  formatList?: ListFormatFn,
+  t: TranslatorFn,
   timezoneID?: string,
+  canReadClock = true,
 ): string | null {
   switch (filterValue.type) {
     case 'empty':
@@ -177,9 +170,7 @@ export function formatTokenValueText(
 
     case 'integer':
     case 'float':
-      return t
-        ? formatNumberAsToken(filterValue.value, locale)
-        : String(filterValue.value);
+      return formatNumberAsToken(filterValue.value, locale);
 
     case 'enum':
       if (operatorValue.type === 'enum') {
@@ -191,7 +182,7 @@ export function formatTokenValueText(
       return truncateString(filterValue.value, maxLength);
 
     case 'string_list':
-      return formatListText(filterValue.value, maxLength, t, formatList);
+      return formatListText(filterValue.value, maxLength, t, locale);
 
     case 'enum_list': {
       const items = filterValue.value;
@@ -203,7 +194,7 @@ export function formatTokenValueText(
           items.map(v => getEnumLabel(operatorValue.values, v)),
           maxLength,
           t,
-          formatList,
+          locale,
         );
       }
       if (items.length === 1) {
@@ -217,7 +208,7 @@ export function formatTokenValueText(
         filterValue.value.map(e => e.label),
         maxLength,
         t,
-        formatList,
+        locale,
       );
 
     case 'time':
@@ -238,14 +229,25 @@ export function formatTokenValueText(
       );
 
     case 'date_relative':
-      return truncateString(filterValue.value, maxLength);
+      return truncateString(
+        operatorValue.type === 'date_relative'
+          ? relativeDateLabel(operatorValue, filterValue.value, t)
+          : filterValue.value,
+        maxLength,
+      );
 
-    case 'date_range':
-      if (t) {
-        return t('@astryx.powersearch.valueEditor.dateRange');
-      }
-      // eslint-disable-next-line @astryx/no-hardcoded-i18n-string -- the popover token's released English text; translating it is a separate stable change
-      return 'date range';
+    case 'date_range': {
+      const days = formatDateRange(
+        filterValue.value,
+        locale,
+        timezoneID,
+        calendar,
+        canReadClock,
+      );
+      return days == null
+        ? t('@astryx.powersearch.valueEditor.dateRange')
+        : truncateString(days, maxLength);
+    }
 
     case 'custom':
       if (operatorValue.type === 'custom') {
@@ -258,11 +260,7 @@ export function formatTokenValueText(
 
     case 'nested': {
       const count = filterValue.value.length;
-      if (t) {
-        return t('@astryx.powersearch.valueEditor.filtersCount', {count});
-      }
-      // eslint-disable-next-line @astryx/no-hardcoded-i18n-string -- the popover token's released English text; translating it is a separate stable change
-      return count === 1 ? '1 filter' : `${count} filters`;
+      return t('@astryx.powersearch.valueEditor.filtersCount', {count});
     }
 
     default:

@@ -18,7 +18,7 @@ import {Stack} from '@astryxdesign/core/Stack';
  */
 export default function CollapsibleShowcase() {
   return (
-    <Card width={420}>
+    <Card width={420} maxWidth="100%">
       <CollapsibleGroup type="single" defaultValue="notifications">
         <Stack gap={4}>
           <Collapsible

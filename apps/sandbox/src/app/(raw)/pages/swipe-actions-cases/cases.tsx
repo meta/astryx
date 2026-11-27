@@ -9,7 +9,7 @@
  * @position The content of the swipe actions cases page.
  */
 
-import {useState} from 'react';
+import {useMemo, useState, type Dispatch, type SetStateAction} from 'react';
 import {
   ArchiveBoxIcon,
   EnvelopeIcon,
@@ -120,80 +120,86 @@ const MESSAGES: readonly Message[] = [
   },
 ];
 
-interface MailActions {
-  remove: (id: number) => void;
-  toggleRead: (id: number) => void;
+/** The key `onActivate` hands a handler: the row's `itemKey`. */
+type RowKey = {itemKey: string | number | undefined};
+
+/** Flips the read state of the message with `messageId`. */
+function toggledRead(
+  messages: readonly Message[],
+  messageId: string | number | undefined,
+): readonly Message[] {
+  return messages.map(item =>
+    item.id === messageId ? {...item, isUnread: !item.isUnread} : item,
+  );
 }
 
-/** The swipe a message's row takes in each case. */
-function swipeFor(
+/**
+ * The two swipes a case's rows take, built once: unread rows offer Read, and
+ * read rows offer Unread. Each handler reads its row from the key.
+ */
+function swipesFor(
   id: SwipeActionsCaseId,
-  message: Message,
-  {remove, toggleRead}: MailActions,
-): Swipe {
-  const readEntry = {
-    id: 'read',
-    label: message.isUnread ? 'Read' : 'Unread',
-    icon: (
-      <Icon
-        icon={message.isUnread ? EnvelopeOpenIcon : EnvelopeIcon}
-        size="sm"
-      />
-    ),
-    onActivate: () => toggleRead(message.id),
+  setMessages: Dispatch<SetStateAction<readonly Message[]>>,
+): {unread: Swipe; read: Swipe} {
+  const remove = ({itemKey}: RowKey) =>
+    setMessages(current => current.filter(item => item.id !== itemKey));
+  const toggleRead = ({itemKey}: RowKey) =>
+    setMessages(current => toggledRead(current, itemKey));
+  const swipeFor = (isUnread: boolean): Swipe => {
+    const readEntry = {
+      id: 'read',
+      label: isUnread ? 'Read' : 'Unread',
+      icon: (
+        <Icon icon={isUnread ? EnvelopeOpenIcon : EnvelopeIcon} size="sm" />
+      ),
+      onActivate: toggleRead,
+    };
+    const deleteEntry = {
+      id: 'delete',
+      label: 'Delete',
+      icon: <Icon icon={TrashIcon} size="sm" />,
+      onActivate: remove,
+      variant: 'destructive' as const,
+      hasRemoval: true,
+    };
+    switch (id) {
+      case 'mail':
+        return createSwipe({
+          leading: [readEntry],
+          trailing: [
+            {
+              id: 'archive',
+              label: 'Archive',
+              icon: <Icon icon={ArchiveBoxIcon} size="sm" />,
+              onActivate: remove,
+              variant: 'neutral',
+              hasRemoval: true,
+            },
+            deleteEntry,
+          ],
+        });
+      case 'one-entry':
+        return createSwipe({leading: [readEntry], trailing: [deleteEntry]});
+      case 'commit':
+        return createSwipe({
+          trailing: [{...deleteEntry, label: 'Dismiss'}],
+          swipeBehavior: 'commit',
+        });
+    }
   };
-  const deleteEntry = {
-    id: 'delete',
-    label: 'Delete',
-    icon: <Icon icon={TrashIcon} size="sm" />,
-    onActivate: () => remove(message.id),
-    variant: 'destructive' as const,
-    hasRemoval: true,
-  };
-  switch (id) {
-    case 'mail':
-      return createSwipe({
-        leading: [readEntry],
-        trailing: [
-          {
-            id: 'archive',
-            label: 'Archive',
-            icon: <Icon icon={ArchiveBoxIcon} size="sm" />,
-            onActivate: () => remove(message.id),
-            variant: 'neutral',
-            hasRemoval: true,
-          },
-          deleteEntry,
-        ],
-      });
-    case 'one-entry':
-      return createSwipe({leading: [readEntry], trailing: [deleteEntry]});
-    case 'commit':
-      return createSwipe({
-        trailing: [{...deleteEntry, label: 'Dismiss'}],
-        swipeBehavior: 'commit',
-      });
-  }
+  return {unread: swipeFor(true), read: swipeFor(false)};
 }
 
 export function SwipeActionsCase({id}: {id: SwipeActionsCaseId}) {
   const [messages, setMessages] = useState<readonly Message[]>(MESSAGES);
-  const actions: MailActions = {
-    remove: messageId =>
-      setMessages(current => current.filter(item => item.id !== messageId)),
-    toggleRead: messageId =>
-      setMessages(current =>
-        current.map(item =>
-          item.id === messageId ? {...item, isUnread: !item.isUnread} : item,
-        ),
-      ),
-  };
+  const swipes = useMemo(() => swipesFor(id, setMessages), [id]);
   return (
     <VStack gap={3}>
       <List hasDividers>
         {messages.map(message => (
           <ListItem
             key={message.id}
+            itemKey={message.id}
             label={message.sender}
             description={message.subject}
             startContent={<Avatar name={message.sender} />}
@@ -202,8 +208,10 @@ export function SwipeActionsCase({id}: {id: SwipeActionsCaseId}) {
                 {message.time}
               </Text>
             }
-            onClick={() => actions.toggleRead(message.id)}
-            swipe={swipeFor(id, message, actions)}
+            onClick={() =>
+              setMessages(current => toggledRead(current, message.id))
+            }
+            swipe={message.isUnread ? swipes.unread : swipes.read}
           />
         ))}
         {messages.length === 0 && <ListItem label="No messages left" />}

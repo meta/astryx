@@ -61,6 +61,7 @@ import {
 import {flushSync} from 'react-dom';
 import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
 import * as stylex from '@stylexjs/stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
@@ -81,6 +82,8 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
 import {useLocale} from '../i18n';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {localeTextStyles} from '../utils/textDirection';
 import {useInputGroup} from '../InputGroup';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {joinAriaIDs} from '../utils/inputAria';
@@ -141,6 +144,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/DateInput/TouchDateField.generated';
 import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 // The month math needs a date before today is known (server render,
 // hydration). The sheet's content, which shows the month, waits for today.
@@ -175,15 +179,12 @@ const SWAP_DURATION = durationVars['--duration-fast'];
 
 const sizeStyles = stylex.create({
   sm: {
-    height: sizeVars['--size-element-sm'],
     minWidth: 180,
   },
   md: {
-    height: sizeVars['--size-element-md'],
     minWidth: 180,
   },
   lg: {
-    height: sizeVars['--size-element-lg'],
     minWidth: 180,
   },
 });
@@ -375,6 +376,7 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     color: colorVars['--color-text-primary'],
     fontSize: typeScaleVars['--text-large-size'],
+    lineHeight: typeScaleVars['--text-large-leading'],
     fontWeight: fontWeightVars['--font-weight-semibold'],
     cursor: {
       default: 'pointer',
@@ -399,7 +401,7 @@ const styles = stylex.create({
     // fast-out-slow-in is what that curve is for. Same duration as the
     // surface it announces, so the two land together.
     transitionProperty: 'transform',
-    transitionDuration: SWAP_DURATION,
+    transitionDuration: `calc(${SWAP_DURATION} * ${reducedMotionTransform.factor} + ${reducedMotionTransform.settle})`,
     transitionTimingFunction: easeVars['--ease-standard'],
     '@media (prefers-reduced-motion: reduce)': {
       transitionDuration: '0.01s',
@@ -431,6 +433,7 @@ const styles = stylex.create({
   weekday: {
     textAlign: 'center',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     fontWeight: fontWeightVars['--font-weight-normal'],
     color: colorVars['--color-text-secondary'],
   },
@@ -621,6 +624,8 @@ export function TouchDateField({
   const pressable = usePressFeedback();
   const t = useComponentTranslator();
   const locale = useLocale();
+  // A date the locale formats reads in the locale's direction.
+  const textDirection = getLocaleDirection(locale);
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.dateInput.placeholder');
@@ -1346,6 +1351,7 @@ export function TouchDateField({
           inputWrapperStyles.base,
           inputWrapperStyles.textField,
           sizeStyles[size],
+          inputRowSizeStyles[size],
           styles.wrapper,
           // Disabled paint belongs to the disabled state only; a busy field
           // keeps its ordinary paint and shows the Spinner (spec:AST-085
@@ -1419,8 +1425,10 @@ export function TouchDateField({
         aria-haspopup="dialog"
         aria-autocomplete="none"
         autoComplete="off"
+        dir={controlProps.dir ?? textDirection}
         {...stylex.props(
           styles.input,
+          localeTextStyles.pageAlign,
           isEffectivelyDisabled && styles.inputDisabled,
         )}
       />

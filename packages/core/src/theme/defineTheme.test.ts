@@ -7,12 +7,8 @@ import type {
   DefineThemeInput,
   ResolvedDefinedTheme,
 } from './defineTheme';
-import {
-  defineTheme,
-  generateThemeCSS,
-  generateThemeRules,
-  isDefinedTheme,
-} from './defineTheme';
+import {defineTheme, isDefinedTheme} from './defineTheme';
+import {generateThemeCSS, generateThemeRules} from './generateThemeRules';
 import {resolveThemeToken} from './tokens';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
@@ -326,6 +322,33 @@ describe('defineTheme', () => {
     });
     expect(theme.tokens['--color-accent']).toBe('light-dark(#0077B6, #48CAE4)');
     expect(theme.tokens['--color-accent']).toBe('light-dark(#0077B6, #48CAE4)');
+  });
+
+  it('refuses a plain-object base, which defineTheme() has not built', () => {
+    const plainBase = {
+      name: 'plain-base',
+      tokens: {'--color-accent': ['#ffffff', '#000000']},
+    };
+    expect(() =>
+      defineTheme({
+        name: 'plain-base-child',
+        extends: plainBase as unknown as DefinedTheme,
+      }),
+    ).toThrow(
+      /`extends` must be a theme from defineTheme\(\), got a plain object named "plain-base", which is theme input, not a theme\. Pass it through defineTheme\(\) first/,
+    );
+    expect(() =>
+      defineTheme({
+        name: 'plain-base-child',
+        extends: {name: 'plain-base', tokens: {}},
+      }),
+    ).toThrow(/`extends` must be a theme from defineTheme\(\)/);
+    expect(
+      defineTheme({
+        name: 'defined-base-child',
+        extends: defineTheme(plainBase as DefineThemeInput),
+      }).tokens['--color-accent'],
+    ).toBe('light-dark(#ffffff, #000000)');
   });
 
   it('passes through string values as-is', () => {

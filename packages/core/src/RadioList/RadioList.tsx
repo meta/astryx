@@ -41,6 +41,7 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
+import {isElement} from '../utils/nodeType';
 
 /**
  * Size of the radio controls, matching CheckboxInput sizes.
@@ -53,10 +54,10 @@ export interface RadioListContextValue {
   onChange: (value: string) => void;
   isDisabled: boolean;
   /**
-   * True when the whole group is disabled *and* a `disabledMessage` is set. In
-   * that mode radios stay focusable via `aria-disabled` (instead of the native
-   * `disabled` attribute) so the disabled-reason tooltip is keyboard- and
-   * AT-discoverable; selection is still blocked in the item's onChange guard.
+   * True when the whole group is disabled *and* a `disabledMessage` is set, so
+   * the group shows its disabled-reason tooltip. The radios of a disabled
+   * group stay focusable via `aria-disabled` either way; selection is blocked
+   * in the item's onChange guard.
    */
   hasDisabledMessage: boolean;
   isRequired: boolean;
@@ -119,7 +120,9 @@ export interface RadioListProps extends Omit<
    */
   orientation?: 'vertical' | 'horizontal';
   /**
-   * Whether all radio items are disabled.
+   * Whether all radio items are disabled. The radios stay focusable (via
+   * `aria-disabled`), so keyboard users can still reach the group; selection
+   * stays blocked.
    * @default false
    */
   isDisabled?: boolean;
@@ -134,8 +137,7 @@ export interface RadioListProps extends Omit<
    * Explains why the radio group is disabled. Applies to the whole-group
    * disabled state (`isDisabled`), not individual items. When set together with
    * `isDisabled`, the group shows a tooltip with this text on hover and keyboard
-   * focus, and its radios stay focusable (via `aria-disabled`) so the reason is
-   * discoverable by keyboard and assistive technology. Selection stays blocked.
+   * focus, and each radio is described by it.
    *
    * Use this instead of wrapping a disabled group in `Tooltip` — disabled
    * controls don't emit the pointer events an external tooltip needs.
@@ -174,7 +176,7 @@ export interface RadioListProps extends Omit<
    */
   labelTooltip?: string;
   /**
-   * Test ID for the outer container.
+   * Test ID for the `role="radiogroup"` element.
    */
   'data-testid'?: string;
   /**
@@ -248,12 +250,8 @@ export function RadioList({
   // on browser validation for the group.
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
 
-  // Disabled-reason tooltip. Applies to the whole-group disabled state. Disabled
-  // controls swallow pointer events, so the tooltip listeners attach to the
-  // radiogroup container and the radios stay perceivable via aria-disabled
-  // instead of the disabled attribute. Selection is blocked in the item's
-  // onChange guard. The reason describes the radiogroup and each radio (see
-  // RadioListReasonContext).
+  // The reason tooltip listens on the radiogroup. Focus and hover from any
+  // radio reach it.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -368,6 +366,66 @@ export function RadioList({
     [value],
   );
 
+  // Puts back the tab indexes that the last Tab press took away. It runs
+  // after that press, and also before the next press and when focus leaves
+  // the group, so a second press never saves the temporary values.
+  const pendingTabRestoreRef = useRef<(() => void) | null>(null);
+  const restoreTabIndexes = useCallback(() => {
+    const restore = pendingTabRestoreRef.current;
+    pendingTabRestoreRef.current = null;
+    restore?.();
+  }, []);
+
+  // A radio group is one Tab stop. Chromium moves Tab from a radio that
+  // script focused to the group's checked radio when that radio comes next in
+  // order. For this one key press the other radios leave the Tab order, so Tab
+  // leaves the group. They return to the order after the press.
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== 'Tab' || e.ctrlKey || e.metaKey) {
+        return;
+      }
+      restoreTabIndexes();
+      const group = groupRef.current;
+      const from = e.target;
+      // A RadioList inside another one's option bubbles its key presses to the
+      // outer group. Each group acts only on its own radios. The check does not
+      // use `instanceof`: a group can render in another window, such as a
+      // same-origin iframe, where that window's element classes apply.
+      if (
+        group == null ||
+        !isElement(from) ||
+        !from.matches('input[type="radio"]') ||
+        (from as HTMLInputElement).name !== name
+      ) {
+        return;
+      }
+      const others = Array.from(
+        group.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
+      ).filter(radio => radio !== from && radio.name === name);
+      if (others.length === 0) {
+        return;
+      }
+      const savedTabIndexes = others.map(
+        radio => [radio, radio.getAttribute('tabindex')] as const,
+      );
+      for (const radio of others) {
+        radio.tabIndex = -1;
+      }
+      pendingTabRestoreRef.current = () => {
+        for (const [radio, tabIndex] of savedTabIndexes) {
+          if (tabIndex == null) {
+            radio.removeAttribute('tabindex');
+          } else {
+            radio.setAttribute('tabindex', tabIndex);
+          }
+        }
+      };
+      setTimeout(restoreTabIndexes, 0);
+    },
+    [name, restoreTabIndexes],
+  );
+
   return (
     <Field
       {...container}
@@ -415,6 +473,8 @@ export function RadioList({
         // A caller aria-labelledby names the group together with its label.
         aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}
         onFocus={composeEventHandlers(handleFocus, onFocus)}
+        onKeyDown={composeEventHandlers(handleKeyDown, rest.onKeyDown)}
+        onBlur={composeEventHandlers(restoreTabIndexes, rest.onBlur)}
         aria-describedby={
           [
             ariaDescribedByProp,

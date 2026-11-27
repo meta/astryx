@@ -141,15 +141,15 @@
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
-    "packages/core/src/Resizable/useResizable.ts:collapseControls": {
+    "packages/core/src/Resizable/resizableModel.ts:collapseControls": {
       "status": "open",
       "group": "F9 Resizable"
     },
-    "packages/core/src/Resizable/useResizable.ts:effectiveMaxima": {
+    "packages/core/src/Resizable/resizableModel.ts:effectiveMaxima": {
       "status": "open",
       "group": "F9 Resizable"
     },
-    "packages/core/src/Resizable/useResizable.ts:releaseEnds": {
+    "packages/core/src/Resizable/resizableModel.ts:releaseEnds": {
       "status": "open",
       "group": "F9 Resizable"
     },
@@ -357,10 +357,6 @@
       "status": "allowed",
       "reason": "Each copy writes the same reader text-size variables to the document root; the duplicate sync is idempotent."
     },
-    "packages/core/src/theme/generateThemeRules.ts:REACHABLE_MATCH_SET_CACHE": {
-      "status": "allowed",
-      "reason": "A memo cache; a second cache per copy changes no result."
-    },
     "packages/core/src/theme/generateThemeRules.ts:STATUS_ROLE_GENERATION_CACHE": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
@@ -368,6 +364,10 @@
     "packages/core/src/theme/generateThemeRules.ts:activeStatusRoleGeneration": {
       "status": "allowed",
       "reason": "Per-run state of one call (a parse, a transform or a render pass) that never outlives the call; a run never crosses copies."
+    },
+    "packages/core/src/theme/statusRoleDefaults.ts:REACHABLE_MATCH_SET_CACHE": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/core/src/theme/statusRoleDerivation.ts:coreCache": {
       "status": "allowed",
@@ -408,6 +408,10 @@
     "packages/core/src/utils/calendarSystem.ts:supportedCalendars": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/devWarning.ts:missingCallbacks": {
+      "status": "allowed",
+      "reason": "A memo cache that keeps one stand-in callback per component, prop and message; a component renders with one copy, so a second cache per copy changes no result."
     },
     "packages/core/src/utils/devWarning.ts:warnedKeys": {
       "status": "allowed",
@@ -494,6 +498,14 @@
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
     },
     "packages/core/src/utils/timeFormat.ts:symbolsByLocale": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/timeFormat.ts:unitFormats": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/timeFormat.ts:unitLists": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },

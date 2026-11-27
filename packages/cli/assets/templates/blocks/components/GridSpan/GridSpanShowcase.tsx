@@ -8,7 +8,7 @@ import {Text} from '@astryxdesign/core/Text';
 
 export default function GridSpanShowcase() {
   return (
-    <Grid columns={4} gap={3} width={400}>
+    <Grid columns={4} gap={3} width={400} maxWidth="100%">
       <GridSpan columns={3}>
         <Card height={80}>
           <Text type="body" color="secondary">

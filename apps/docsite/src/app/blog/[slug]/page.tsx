@@ -3,13 +3,15 @@
 /**
  * Page type: blog post detail
  * Renders an individual post with article typography. Static params and per-post
- * metadata are derived from the generated blog registry.
+ * metadata are derived from the generated blog registry. The body of the post
+ * comes from the generated post bodies, which only server modules read.
  */
 
 import type {Metadata} from 'next';
 import {notFound} from 'next/navigation';
 import {blogFixturePosts, blogPosts} from '../../../generated/blogRegistry';
 import {BlogArticle} from '../../../components/blog/BlogArticle';
+import {withBody} from '../../../lib/blog/postBodies';
 
 export function generateStaticParams() {
   return [...blogPosts, ...blogFixturePosts].map(p => ({slug: p.slug}));
@@ -78,5 +80,5 @@ export default async function BlogPostPage({
     notFound();
   }
 
-  return <BlogArticle post={found.post} />;
+  return <BlogArticle post={withBody(found.post)} />;
 }

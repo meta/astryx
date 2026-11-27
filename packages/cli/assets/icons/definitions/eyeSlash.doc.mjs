@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'eyeSlash',
+  group: 'visibility',
   description: 'Hide something, or show that it is hidden.',
   words: ['hide', 'hidden', 'invisible', 'eye off'],
   builtIn: true,

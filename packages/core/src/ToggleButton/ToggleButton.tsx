@@ -26,10 +26,12 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars, fontWeightVars} from '../theme/tokens.stylex';
 
 import {Button, type ButtonSize} from '../Button';
-import {PressGroupContext} from '../hooks/pressGroupContext';
-import {GROUP_PRESS_POINTERS} from '../hooks/useGroupPressTracking';
+import {
+  GROUP_PRESS_POINTERS,
+  PressGroupContext,
+} from '../hooks/pressGroupContext';
 import type {Elevation} from '../utils/types';
-import {useToggleButtonGroup} from './ToggleButtonGroup';
+import {useToggleButtonGroup} from './ToggleButtonGroupContext';
 import type {BaseProps} from '../BaseProps';
 import {themeDataAttributes, themeProps} from '../utils/themeProps';
 import {mergeProps} from '../utils/mergeProps';
@@ -73,11 +75,23 @@ const labelStyles = stylex.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
+    // Shrinks with the Button's label box, so a label too long for the row
+    // is cut on the visible line below with an ellipsis.
+    maxWidth: '100%',
+  },
+  visible: {
+    maxWidth: '100%',
+    overflow: 'clip',
+    // Glyph edges that paint outside the text box (the foot of an "A") stay
+    // visible, so a label that fits looks as it did.
+    overflowClipMargin: 2,
+    textOverflow: 'ellipsis',
   },
   pressed: {
     fontWeight: fontWeightVars['--font-weight-semibold'],
   },
   widthReservation: {
+    maxWidth: '100%',
     display: 'block',
     fontWeight: fontWeightVars['--font-weight-semibold'],
     height: 0,
@@ -324,7 +338,11 @@ export function ToggleButton({
     // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- switching to isRenderable would show `label` for children of '', false or true, a visible change that needs a decision
     children != null ? (
       <span {...stylex.props(labelStyles.wrapper)}>
-        <span {...stylex.props(isPressed && labelStyles.pressed)}>
+        <span
+          {...stylex.props(
+            labelStyles.visible,
+            isPressed && labelStyles.pressed,
+          )}>
           {children}
         </span>
         <span
@@ -335,7 +353,13 @@ export function ToggleButton({
       </span>
     ) : !isIconOnly ? (
       <span {...stylex.props(labelStyles.wrapper)}>
-        <span {...stylex.props(isPressed && labelStyles.pressed)}>{label}</span>
+        <span
+          {...stylex.props(
+            labelStyles.visible,
+            isPressed && labelStyles.pressed,
+          )}>
+          {label}
+        </span>
         <span
           {...stylex.props(labelStyles.widthReservation)}
           aria-hidden="true">
@@ -372,6 +396,7 @@ export function ToggleButton({
           themeProps('toggle-button', {
             isPressed: isPressed ? 'true' : 'false',
             elevation,
+            grouped: group != null ? 'grouped' : null,
           }),
           className,
         )}

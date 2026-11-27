@@ -75,6 +75,12 @@ async function mountScrollable(page: Page, story = 'hug-content') {
   await page.keyboard.press('Escape');
   await expect(page.locator('dialog[open]')).toHaveCount(0);
   await page.evaluate(() => {
+    // A lead as tall as the scroll below keeps the opener in view, where it
+    // was before the scroll. A close then has no hidden opener to scroll back
+    // to, so any movement of the page comes from the lock.
+    const lead = document.createElement('div');
+    lead.style.height = '300px';
+    document.body.prepend(lead);
     const spacer = document.createElement('div');
     spacer.id = 'spacer';
     spacer.style.height = '3000px';

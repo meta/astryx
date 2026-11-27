@@ -50,6 +50,7 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
+import {LayoutContainerContext} from '../Layout/LayoutContainerContext';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
@@ -80,6 +81,8 @@ import {
   useSheetGestures,
   type SheetDragExit,
 } from './useSheetGestures';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 const HEIGHT_BUDGETS = {
   hug: '92dvh',
@@ -324,8 +327,6 @@ const pastGrabBarStyles = stylex.create({
  */
 const REDUCED_MOTION_COARSE =
   '@media (prefers-reduced-motion: reduce) and (pointer: coarse)';
-export const REDUCED_MOTION_COARSE_QUERY =
-  '(prefers-reduced-motion: reduce) and (pointer: coarse)';
 const CROSS_FADE_MS = 200;
 
 const styles = stylex.create({
@@ -341,6 +342,10 @@ const styles = stylex.create({
     width: '100%',
     maxWidth: 640,
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface's text color. The browser gives a dialog and a popover
+    // CanvasText, which follows the color scheme and not the theme, so text
+    // that sets no color of its own (a selected nav row) needs this.
+    color: colorVars['--color-text-primary'],
     // A hairline on the three edges that face the scrim. In dark mode the
     // surface and the scrim are only a few RGB steps apart, and the shadow is
     // black on near-black, so the side edges disappear. The block-end edge
@@ -380,7 +385,10 @@ const styles = stylex.create({
     },
     transitionProperty: 'transform, opacity',
     transitionDuration: {
-      default: durationVars['--duration-medium'],
+      // Under a theme that reduces motion for everyone, the sheet lands on the
+      // next frame. waitForTransition ends at once on a zero duration, so the
+      // sheet needs no settle time.
+      default: `calc(${durationVars['--duration-medium']} * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce)': {
         default: '0.01s',
         '@media (pointer: coarse)': `0.01s, ${CROSS_FADE_MS}ms`,
@@ -839,7 +847,7 @@ export function BottomSheetPanel({
   const isFading = isRetained && state.motion === 'fading';
   // Under reduced motion a retained sheet does not align down to a shorter
   // entering sheet, because that is travel. It fades where it is.
-  const isReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const isReducedMotion = useReducesMotion();
   const alignmentOffset =
     isRetained && !isReducedMotion ? state.alignmentOffset : 0;
 
@@ -857,16 +865,16 @@ export function BottomSheetPanel({
   if (keyedSnapPoints.key !== snapPointsKey) {
     setKeyedSnapPoints({key: snapPointsKey, points: snapPoints});
   }
-  const {snapHeights, ignoredSnapPointsMessage} = useMemo(() => {
+  const {snapHeights, ignoredSnapPointsWarning} = useMemo(() => {
     const {key, points} = keyedSnapPoints;
     if (key === '') {
-      return {snapHeights: undefined, ignoredSnapPointsMessage: ''};
+      return {snapHeights: undefined, ignoredSnapPointsWarning: ''};
     }
     const ignored = (points ?? []).filter(point => !isValidSnapPoint(point));
     return {
       snapHeights: () =>
         resolveSnapPoints(points ?? [], layoutViewportHeight()),
-      ignoredSnapPointsMessage:
+      ignoredSnapPointsWarning:
         ignored.length === 0
           ? ''
           : `snapPoints ignored ${JSON.stringify(ignored)}. A snap point is a viewport fraction above 0 and up to 1 (0.5 is half the screen), a px length ('320px'), or a percentage ('50%').`,
@@ -874,8 +882,8 @@ export function BottomSheetPanel({
   }, [keyedSnapPoints]);
   useDevWarning(
     'BottomSheet',
-    ignoredSnapPointsMessage,
-    ignoredSnapPointsMessage !== '',
+    ignoredSnapPointsWarning,
+    ignoredSnapPointsWarning !== '',
   );
 
   // A caller's height owns the element's height: the drag never writes it.
@@ -993,7 +1001,9 @@ export function BottomSheetPanel({
   // The cross-fade applies on a coarse pointer, and to a transition that a
   // touch drag's release started: a finger's swipe dismissal fades in place on
   // every pointer. A mouse or pen drag is not a touch drag.
-  const isCoarseCrossFade = useMediaQuery(REDUCED_MOTION_COARSE_QUERY);
+  // A theme's reducedMotion: 'always' cross-fades on a coarse pointer too.
+  const isCoarsePointer = useMediaQuery('(pointer: coarse)');
+  const isCoarseCrossFade = isReducedMotion && isCoarsePointer;
   const isCrossFade =
     isCoarseCrossFade || (isReducedMotion && isDismissedByTouchDrag);
   // Without Web Animations the animator jumps the sheet to its end, so the
@@ -1294,7 +1304,10 @@ export function BottomSheetPanel({
       )}>
       <div
         ref={handleRef}
-        {...stylex.props(styles.handleBar)}
+        {...mergeProps(
+          themeProps('bottom-sheet-handle'),
+          stylex.props(styles.handleBar),
+        )}
         {...handleProps}
         aria-hidden="true"
       />
@@ -1353,7 +1366,11 @@ export function BottomSheetPanel({
               ),
             ),
           )}>
-          <LayerContentBoundary>{children}</LayerContentBoundary>
+          <LayerContentBoundary>
+            <LayoutContainerContext value="bottom-sheet">
+              {children}
+            </LayoutContainerContext>
+          </LayerContentBoundary>
         </div>
       </div>
     </div>

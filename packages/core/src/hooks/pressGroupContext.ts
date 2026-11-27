@@ -7,7 +7,8 @@
  * @input The layer-scoped context factory (Layer/layerScopedContext) and
  *   the press-group marker (privateAttributes/pressGroupItem.stylex)
  * @output PressGroupContext: the pointer types a group's own tracker follows
- *   on its actions, or null outside one. HitAreaGroupContext: whether the
+ *   on its actions, or null outside one. GROUP_PRESS_POINTERS: the pointers
+ *   the shared group tracking follows. HitAreaGroupContext: whether the
  *   action is a member of a group that sets its touch band's room.
  *   pressGroupItemProps: the marker Button writes
  * @position Internal; not exported from the hooks entry. Groups that track
@@ -20,6 +21,13 @@ import {createLayerScopedContext} from '../Layer/layerScopedContext';
 // Button reads the marker here, not from its private StyleX module: a
 // swizzled Button imports each StyleX module by its public path.
 export {pressGroupItemProps} from '../privateAttributes/pressGroupItem.stylex';
+
+/**
+ * The pointers a group's press slides for: a finger and a pen. It lives here,
+ * not with the tracking hook, so an action that only reads it does not load
+ * the tracking.
+ */
+export const GROUP_PRESS_POINTERS = ['touch', 'pen'] as const;
 
 /**
  * The pointer types a group's tracker follows on its actions, such as

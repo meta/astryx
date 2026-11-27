@@ -8,9 +8,14 @@
  * @position Testing for /packages/core/src/SegmentedControl/useSegmentedTouchTracking.ts
  */
 
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
+import {createActionGroupTracker} from '../hooks/actionGroupTracker';
+import {SEGMENT_SELECTOR} from './useSegmentedSelectionMotion';
 import {
+  createSegmentLiftTarget,
   liftTargetAt,
+  measureLiftArea,
+  measureSegments,
   segmentTargetAt,
   type SegmentSpan,
 } from './useSegmentedTouchTracking';
@@ -116,5 +121,118 @@ describe('liftTargetAt', () => {
     expect(lift(250, 11)).toBe('table');
     // Above Grid, past its band but within Table's reach: nothing.
     expect(lift(60, 11)).toBeNull();
+  });
+});
+
+describe('a lift through the tracker, when a caller wraps the segments', () => {
+  type Box = {left: number; top: number; right: number; bottom: number};
+  function withRect<T extends Element>(element: T, box: Box): T {
+    element.getBoundingClientRect = () => ({
+      ...box,
+      x: box.left,
+      y: box.top,
+      width: box.right - box.left,
+      height: box.bottom - box.top,
+      toJSON: () => box,
+    });
+    return element;
+  }
+  /** A track of rows of three 96 px segments, 36 px tall, 4 px apart. */
+  function wrappedTrack(rows: ReadonlyArray<ReadonlyArray<string>>) {
+    const track = document.createElement('div');
+    rows.forEach((row, r) => {
+      row.forEach((value, c) => {
+        const segment = document.createElement('button');
+        segment.setAttribute('role', 'radio');
+        segment.dataset.value = value;
+        const left = 12 + c * 100;
+        const top = 22 + r * 40;
+        track.append(
+          withRect(segment, {left, top, right: left + 96, bottom: top + 36}),
+        );
+      });
+    });
+    withRect(track, {
+      left: 10,
+      top: 20,
+      right: 310,
+      bottom: 22 + rows.length * 40,
+    });
+    document.body.append(track);
+    return track;
+  }
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  /**
+   * Makes the primary pointer coarse, so each 36 px tall segment has a touch
+   * band that grows it 4 px up and down, toward 44 px.
+   */
+  function withBands(track: HTMLElement): HTMLElement {
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      media =>
+        ({
+          media,
+          matches: media.includes('pointer: coarse'),
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
+    return track;
+  }
+  function liftAt(track: HTMLElement, x: number, y: number): string | null {
+    const segments = measureSegments(track);
+    const area = measureLiftArea(track, segments);
+    // One lift target for the press, as the hook keeps one for its tracker.
+    const liftTarget = createSegmentLiftTarget(
+      () => area,
+      () => segments,
+    );
+    const tracker = createActionGroupTracker(() => ({
+      roots: () => [track],
+      itemSelector: SEGMENT_SELECTOR,
+      highlightExpansion: 0,
+      tracksAlong: 'x',
+      paintsHighlight: () => false,
+      ...liftTarget,
+    }));
+    tracker.begin(x, y);
+    const lifted = tracker.end();
+    tracker.dispose();
+    track.remove();
+    return lifted?.dataset.value ?? null;
+  }
+
+  it('commits the second-row segment a tap lands on in two rows', () => {
+    const rows = [
+      ['a', 'b', 'c'],
+      ['d', 'e'],
+    ];
+    // E sits under B; the tracker's center line falls between the rows.
+    expect(liftAt(wrappedTrack(rows), 160, 80)).toBe('e');
+    expect(liftAt(wrappedTrack(rows), 60, 80)).toBe('d');
+    expect(liftAt(wrappedTrack(rows), 160, 40)).toBe('b');
+  });
+
+  it('commits the second-row segment a tap lands on its touch band', () => {
+    const rows = [
+      ['a', 'b', 'c'],
+      ['d', 'e'],
+    ];
+    // 2 px below E (its box ends at 98), inside E's 4 px band and the control.
+    expect(liftAt(withBands(wrappedTrack(rows)), 160, 100)).toBe('e');
+    // On the 4 px gap between B and E, both bands hold the lift, and B's box
+    // is nearer.
+    expect(liftAt(withBands(wrappedTrack(rows)), 160, 59)).toBe('b');
+    // 1 px above E, E's box is nearer.
+    expect(liftAt(withBands(wrappedTrack(rows)), 160, 61)).toBe('e');
+  });
+
+  it('commits the first-row segment a tap lands on in three rows', () => {
+    const rows = [['a', 'b', 'c'], ['d', 'e', 'f'], ['g']];
+    // The center line falls inside the second row.
+    expect(liftAt(wrappedTrack(rows), 160, 40)).toBe('b');
+    expect(liftAt(wrappedTrack(rows), 160, 80)).toBe('e');
+    expect(liftAt(wrappedTrack(rows), 60, 120)).toBe('g');
   });
 });

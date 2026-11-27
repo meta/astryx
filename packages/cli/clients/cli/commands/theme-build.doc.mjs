@@ -42,7 +42,7 @@ export const doc = {
     {
       flag: '--family',
       description:
-        'Build the selected extension family into one keyed CSS, JS, and declaration set, written beside the family root theme file, which must be inside the working directory to build (ERR_PATH_TRAVERSAL); --check only reads, so it compares outputs anywhere. Requires --family-key; refused with --out or --watch (ERR_THEME_INVALID)',
+        'Build the selected extension family into one keyed CSS, JS, and declaration set, written beside the family root theme file, which must be inside the working directory to build (ERR_PATH_TRAVERSAL); --check only reads, so it compares outputs anywhere. The selected themes form one extends tree with one root: the base of every other member is selected, and the root may extend a theme the family does not select (such as an installed theme package), which its outputs carry as its standalone build does; a member whose base is missing is refused naming that base (ERR_THEME_INVALID). Requires --family-key; refused with --out or --watch (ERR_THEME_INVALID)',
     },
     {
       flag: '--family-key <key>',
@@ -53,13 +53,13 @@ export const doc = {
       flag: '-o, --out <path>',
       param: 'options.out',
       description:
-        'Output CSS file path, relative or absolute; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A folder, or a path ending in /, writes <theme name>.css into it. The path should end in .css; another name still builds, with a warning. A build never replaces the theme source (ERR_THEME_INVALID). At a path --out names, it replaces its own earlier outputs, and the output of another theme source with a warning that names both sources; any other existing file fails with ERR_FILE_EXISTS and nothing is written. Into a folder the theme editor made (folder <slug>/ holds <slug>.settings.json), a source outside that folder builds there too, with a warning; to keep the editor folder to its own theme, build beside the source, or pass an --out outside it. A build writes only inside the working directory, the defaults beside the source too (ERR_PATH_TRAVERSAL); --check writes nothing, so it compares outputs anywhere and refuses only a relative path that escapes the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)',
+        'Output CSS file path, relative or absolute; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A folder, or a path ending in /, writes <theme name>.css into it. The path should end in .css: a TypeScript declaration file (.d.ts) or a stylesheet source map (.css.map) is refused with the .css path to give (ERR_INVALID_ARGUMENT), and nothing is written; any other name still builds, with a warning naming the .css path meant. A build never replaces the theme source (ERR_THEME_INVALID). Beside the source and at a path --out names, it replaces its own earlier outputs (beside the source, those of the CLI before it was named Astryx too), and the output of another theme source with a warning that names both sources; any other existing file, such as your own brand.css beside brand.ts, fails with ERR_FILE_EXISTS naming it, and nothing is written: build with --out, or move or rename the file. Into a folder the theme editor made (folder <slug>/ holds <slug>.settings.json), a source outside that folder builds there too, with a warning; to keep the editor folder to its own theme, build beside the source, or pass an --out outside it. A build writes only inside the working directory, the defaults beside the source too (ERR_PATH_TRAVERSAL); --check writes nothing, so it compares outputs anywhere and refuses only a relative path that escapes the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)',
     },
     {
       flag: '--icons-specifier <specifier>',
       param: 'options.iconsSpecifier',
       description:
-        "Override the icon-registry import in the generated JS module, for example ./icons.mjs (default: the specifier in the theme source's own import). With --family it applies to every member's icon import",
+        "Override the icon-registry import in the generated JS module, for example ./icons.mjs; the build then does not compile the registry (default: a TypeScript or JSX registry's compiled copy in <name>.modules/, or a plain JavaScript registry's own path). With --family it applies to every member's icon import",
     },
     {
       flag: '-w, --watch',
@@ -96,6 +96,7 @@ export const doc = {
     },
   ],
   outsideProject: 'same',
+  requires: ['themes.compile'],
   exitCodes: [
     {
       code: 0,

@@ -323,7 +323,9 @@ describe('preview picker refusals', () => {
       themeEditPreviewAdd('a weather widget', {cwd, theme: 's'}),
     );
     expect(r.code).toBe('ERR_NOT_FOUND');
-    expect(r.message).toContain('No page template relates');
+    expect(r.message).toContain(
+      'No page template is a clear fit for "a weather widget": build starts this idea from the app shell.',
+    );
     expect(r.run[0]).toMatch(/preview add --template \S+ --theme s$/);
     expect(
       fs.readFileSync(
@@ -371,12 +373,23 @@ describe('round 3', () => {
     expect(show.data.resolved['--radius-element']).toMatch(/px$/);
   }, 120_000);
 
-  it('says which colors keep the base theme at any vibrancy, with the commands', async () => {
+  it('says what the status colors gave up at any vibrancy, with the command', async () => {
     const r = await themeEditSet('s', 'vibrancy', '0', {cwd});
     const note = r.data.notes.join(' ');
-    expect(note).toContain('keep the base theme');
-    expect(note).toContain('colored cards');
-    expect(note).toMatch(/set s info '#[0-9a-fA-F]{6}'/);
+    // The status roles grow from the look at the new vibrancy; what a role
+    // gave up to stay written is said, with the command that sets it. A
+    // role keeps the base theme's colors only when no shade of it reads.
+    for (const kept of note.match(
+      /\b\w+ keeps the base theme's colors[^;]*/g,
+    ) ?? [])
+      expect(kept).toMatch(
+        /^(?:info|success|warning|danger) keeps the base theme's colors: no shade of its family reads$/,
+      );
+    if (/status colors follow your look/.test(note))
+      expect(note).toMatch(
+        /to choose one: \S.* set s (?:info|success|warning|danger) <color>/,
+      );
+    expect(note).not.toContain('colored cards');
     await themeEditUndo('s', {cwd, thing: 'vibrancy'});
     await themeEditUndo('s', {cwd, thing: 'accent'});
   }, 120_000);
@@ -528,7 +541,7 @@ describe('round 4', () => {
       await themeEditUndo('s', {cwd, thing});
     const n = await themeEditSet('s', 'neutral', '#64748b', {cwd});
     expect(n.data.notes.join(' ')).toMatch(
-      /the page background stays the base theme's \(#[0-9a-fA-F]{6} in light.*--color-background-body '#ffffff' --mode light/,
+      /the page background follows it too.*--color-background-body '#ffffff' --mode light/,
     );
     await themeEditUndo('s', {cwd, thing: 'neutral'});
   }, 240_000);
@@ -563,10 +576,10 @@ describe('round 4 follow-ups', () => {
       (await themeEditHow('thin gray border on inputs', {cwd, theme: 's'})).data
     );
     const lines = r.results.flatMap((/** @type {any} */ x) => x.commands);
-    // The width and the color the question names, with no comment or
-    // placeholder in the command.
+    // The width and the color the question names (gray: the theme's own
+    // grays), with no comment or placeholder in the command.
     expect(lines.join('\n')).toContain(
-      "set s border '1px solid #9ca3af' --on inputs",
+      "set s border '1px solid #9e9e9e' --on inputs",
     );
     expect(lines.join('\n')).not.toMatch(/#\s|<color>/);
   });
@@ -720,8 +733,18 @@ describe('review fixes', () => {
     () =>
       withRealRenders(async () => {
         await themeEditNew('cc', {cwd, like: 'neutral'});
+        // (The show draws one section of the sheet: two commands still run
+        // at once, each drawing its pages.)
         const [a, b] = await Promise.all([
-          cli(['experimental', 'theme', 'editor', 'show', 's']),
+          cli([
+            'experimental',
+            'theme',
+            'editor',
+            'show',
+            's',
+            '--section',
+            'actions',
+          ]),
           cli([
             'experimental',
             'theme',

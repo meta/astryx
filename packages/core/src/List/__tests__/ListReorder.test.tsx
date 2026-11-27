@@ -22,8 +22,9 @@
  *   object on two. A mouse drags past the slop, and a drag's click leaves the
  *   mode alone. A new object keeps the mode, and the next move calls the
  *   latest callback. One object serves two lists apart. The reorder adds one
- *   element to a row and no listener to a row or handle. A List without it
- *   loads no reorder module
+ *   element to a row and no listener to a row or handle. The object's
+ *   `handle` option places it at a row's end, by default, or its start, and
+ *   reveals it on hover. A List without it loads no reorder module
  * @position Tests for List/listReorderEngine.tsx, List/ListReorderHandle.tsx
  *   and reorderable/createReorderable.ts
  */
@@ -44,6 +45,11 @@ import {ContextMenu} from '../../ContextMenu';
 import {List} from '../List';
 import {ListItem} from '../ListItem';
 import {INSERTION_LINE_THICKNESS} from '../ListReorderHandle';
+import {Icon} from '../../Icon/Icon';
+import {registerIcons, resetIcons} from '../../Icon/globalIconRegistry';
+import type {ComponentIconMap} from '../../Icon/index';
+import {defineTheme} from '../../theme/defineTheme';
+import {Theme} from '../../theme/Theme';
 import {MOUSE_DRAG_SLOP} from '../listReorderEngine';
 import {
   createReorderable,
@@ -52,6 +58,7 @@ import {
 } from '../../reorderable/createReorderable';
 import {DRAG_SLOP} from '../../DateInput/usePointerDragScroll';
 import {useAnnounce} from '../../hooks/useAnnounce';
+import {useContainerReveal} from '../../hooks/useContainerReveal';
 import {LayerDepthProvider} from '../../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../../Layer/useLayerDismissal';
 import {animatorFor} from '../../motion/animator';
@@ -118,8 +125,8 @@ function stubPrimaryPointer(coarse: boolean) {
 }
 
 /**
- * jsdom lays nothing out: 44 px rows from 300 px down the viewport. Each read
- * of a row's layout top calls `onRead`.
+ * jsdom lays nothing out: 44 px rows from 300 px down the viewport, each
+ * handle at its row's top. Each read of a row's layout top calls `onRead`.
  */
 function layOut(list: HTMLElement, onRead?: () => void) {
   const place = (row: Element) => Array.from(list.children).indexOf(row);
@@ -143,6 +150,11 @@ function layOut(list: HTMLElement, onRead?: () => void) {
         width: 300,
         height: 44,
       });
+    for (const handle of Array.from(
+      row.querySelectorAll<HTMLElement>('[data-astryx-list-reorder]'),
+    )) {
+      handle.getBoundingClientRect = () => row.getBoundingClientRect();
+    }
   }
 }
 
@@ -163,6 +175,10 @@ const labels = () =>
 
 const handleOf = (label: string) =>
   screen.getByRole('button', {name: `Reorder ${label}`});
+
+/** The elements in `row`, not counting the ones inside its `handle`. */
+const outsideHandle = (row: HTMLElement, handle: HTMLElement) =>
+  row.querySelectorAll('*').length - handle.querySelectorAll('*').length;
 
 /**
  * A button of reorder mode's hint. jsdom never opens a popover, so the hint
@@ -384,14 +400,14 @@ describe('List reorderable', () => {
     const sent = screen.getByText('Sent').closest('li') as HTMLElement;
     const before = [inbox, sent].map(row => row.querySelectorAll('*').length);
     rerender(rows(createReorderable({onReorder: () => {}})));
-    expect(inbox.querySelectorAll('*').length).toBe(before[0] + 1);
-    expect(sent.querySelectorAll('*').length).toBe(before[1] + 1);
+    expect(outsideHandle(inbox, handleOf('Inbox'))).toBe(before[0] + 1);
+    expect(outsideHandle(sent, handleOf('Sent'))).toBe(before[1] + 1);
     // The handle is the row's own child, after the label.
     expect(handleOf('Inbox').parentElement).toBe(inbox);
     expect(handleOf('Sent').parentElement).toBe(sent);
   });
 
-  it('adds one element to a row, the handle, whose lines are a pseudo-element', () => {
+  it('adds one element to a row, the handle, whose grip is the drag icon', () => {
     const rows = (reorderable?: Reorderable) => (
       <List reorderable={reorderable}>
         <ListItem itemKey="inbox" label="Inbox" endContent={<span>3</span>} />
@@ -401,10 +417,103 @@ describe('List reorderable', () => {
     const row = screen.getByText('Inbox').closest('li') as HTMLElement;
     const before = row.querySelectorAll('*').length;
     rerender(rows(createReorderable({onReorder: () => {}})));
-    expect(row.querySelectorAll('*').length).toBe(before + 1);
     const handle = handleOf('Inbox');
-    expect(handle.children).toHaveLength(0);
+    expect(outsideHandle(row, handle)).toBe(before + 1);
+    // The grip is the handle's only content: an icon, hidden from assistive
+    // technology.
+    expect(handle.children).toHaveLength(1);
+    expect(handle.firstElementChild).toHaveAttribute('aria-hidden', 'true');
+    expect(handle.querySelector('svg')).not.toBeNull();
     expect(handle.textContent).toBe('');
+  });
+
+  it("draws the icon registry's drag icon as its grip", () => {
+    registerIcons({drag: <svg data-testid="brand-drag" />});
+    try {
+      render(
+        <List reorderable={createReorderable({onReorder: () => {}})}>
+          <ListItem itemKey="inbox" label="Inbox" />
+        </List>,
+      );
+      expect(handleOf('Inbox')).toContainElement(
+        screen.getByTestId('brand-drag'),
+      );
+    } finally {
+      resetIcons();
+    }
+  });
+
+  it("draws the theme's list-reorder-handle icon as its grip; null draws none and keeps the handle", () => {
+    let themes = 0;
+    const draw = (componentIcons: ComponentIconMap<never>) =>
+      render(
+        <Theme
+          theme={defineTheme({
+            name: `list-reorder-handle-slot-${themes++}`,
+            icons: {menu: <svg data-testid="slot-menu" />},
+            componentIcons,
+          })}>
+          <List reorderable={createReorderable({onReorder: () => {}})}>
+            <ListItem itemKey="inbox" label="Inbox" />
+          </List>
+        </Theme>,
+      );
+    const {unmount} = draw({'list-reorder-handle': 'menu'});
+    expect(handleOf('Inbox')).toContainElement(screen.getByTestId('slot-menu'));
+    unmount();
+    draw({'list-reorder-handle': null});
+    expect(handleOf('Inbox').querySelector('svg')).toBeNull();
+    expect(handleOf('Inbox')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('draws the drag icon at the sm size when the theme maps nothing to the slot', () => {
+    render(
+      <>
+        <List reorderable={createReorderable({onReorder: () => {}})}>
+          <ListItem itemKey="inbox" label="Inbox" />
+        </List>
+        <span data-testid="drag-sm">
+          <Icon icon="drag" size="sm" />
+        </span>
+      </>,
+    );
+    const grip = handleOf('Inbox').querySelector('svg');
+    expect(grip).not.toBeNull();
+    expect(grip?.outerHTML).toBe(
+      screen.getByTestId('drag-sm').querySelector('svg')?.outerHTML,
+    );
+  });
+
+  it("changes only the icon for a theme's slot size: the handle keeps its box and its classes", () => {
+    const handleWith = (componentIcons?: ComponentIconMap<never>) => {
+      const {unmount} = render(
+        <Theme
+          theme={defineTheme({
+            name: `list-reorder-grip-${componentIcons == null ? 'default' : 'lg'}`,
+            componentIcons,
+          })}>
+          <List reorderable={createReorderable({onReorder: () => {}})}>
+            <ListItem itemKey="inbox" label="Inbox" />
+          </List>
+        </Theme>,
+      );
+      const handle = handleOf('Inbox');
+      const result = {
+        className: handle.getAttribute('class'),
+        style: handle.getAttribute('style'),
+        iconSize: handle
+          .querySelector('[data-size]')
+          ?.getAttribute('data-size'),
+      };
+      unmount();
+      return result;
+    };
+    const standard = handleWith();
+    const large = handleWith({'list-reorder-handle': {size: 'lg'}});
+    expect(standard.iconSize).toBe('sm');
+    expect(large.iconSize).toBe('lg');
+    expect(large.className).toBe(standard.className);
+    expect(large.style).toBe(standard.style);
   });
 
   it('keeps a row the object rejects in place: no handle, and nothing added to it', () => {
@@ -428,6 +537,138 @@ describe('List reorderable', () => {
     expect(screen.queryByRole('button', {name: 'Reorder Trash'})).toBeNull();
     expect(handleOf('Inbox')).toBeInTheDocument();
     expect(trash.outerHTML).toBe(before);
+  });
+
+  it("starts each row with its handle with handle.placement 'start': the row's own child, before its slots", () => {
+    render(
+      <List
+        reorderable={createReorderable({
+          onReorder: () => {},
+          handle: {placement: 'start'},
+        })}>
+        <ListItem itemKey="inbox" label="Inbox" endContent={<span>3</span>} />
+        <ListItem itemKey="sent" label="Sent" startContent={<span>S</span>} />
+      </List>,
+    );
+    const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
+    const sent = screen.getByText('Sent').closest('li') as HTMLElement;
+    expect(inbox.firstElementChild).toBe(handleOf('Inbox'));
+    expect(sent.firstElementChild).toBe(handleOf('Sent'));
+    // The end slot keeps only the end content.
+    expect(inbox.lastElementChild).toHaveTextContent('3');
+    expect(inbox.lastElementChild?.contains(handleOf('Inbox'))).toBe(false);
+  });
+
+  it("keeps the handle at the end by default: in the end slot with end content, else the row's own last child", () => {
+    render(
+      <List reorderable={createReorderable({onReorder: () => {}})}>
+        <ListItem itemKey="inbox" label="Inbox" endContent={<span>3</span>} />
+        <ListItem itemKey="sent" label="Sent" />
+      </List>,
+    );
+    const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
+    const sent = screen.getByText('Sent').closest('li') as HTMLElement;
+    expect(handleOf('Inbox').parentElement).not.toBe(inbox);
+    expect(inbox.lastElementChild?.contains(handleOf('Inbox'))).toBe(true);
+    expect(handleOf('Inbox').previousElementSibling).toHaveTextContent('3');
+    expect(sent.lastElementChild).toBe(handleOf('Sent'));
+  });
+
+  it("puts the handle after the list marker with handle.placement 'start'", () => {
+    render(
+      <List
+        listStyle="disc"
+        reorderable={createReorderable({
+          onReorder: () => {},
+          handle: {placement: 'start'},
+        })}>
+        <ListItem itemKey="inbox" label="Inbox" />
+      </List>,
+    );
+    const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
+    const marker = inbox.firstElementChild as HTMLElement;
+    expect(marker.contains(handleOf('Inbox'))).toBe(false);
+    expect(
+      marker.compareDocumentPosition(handleOf('Inbox')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps its neighbours' handle room at the start in a row that stays put, and no room at the end", () => {
+    const classes = (row: HTMLElement) =>
+      row.getAttribute('class')?.split(/\s+/).sort() ?? [];
+    const withoutClasses = (html: string) =>
+      html.replace(/ class="[^"]*"/g, '');
+    const rows = (placement?: 'start' | 'end') => (
+      <List
+        reorderable={
+          placement == null
+            ? undefined
+            : createReorderable({
+                onReorder: () => {},
+                isReorderable: key => key !== 'trash',
+                handle: {placement},
+              })
+        }>
+        <ListItem itemKey="inbox" label="Inbox" />
+        <ListItem itemKey="trash" label="Trash" />
+      </List>
+    );
+    const {rerender} = render(rows());
+    const trash = screen.getByText('Trash').closest('li') as HTMLElement;
+    const plain = trash.outerHTML;
+    const plainClasses = classes(trash);
+    rerender(rows('end'));
+    expect(classes(trash)).toEqual(plainClasses);
+    rerender(rows('start'));
+    expect(classes(trash)).not.toEqual(plainClasses);
+    // Only its classes change.
+    expect(withoutClasses(trash.outerHTML)).toBe(withoutClasses(plain));
+  });
+
+  it("always shows the handle by default; with handle.revealBehavior 'adaptive' it fades with its row", () => {
+    // The reveal's fade, without its opacity: the tokens a shown and a
+    // fading reveal share.
+    const {result} = renderHook(() => useContainerReveal());
+    const tokens = (props: {className?: string}) =>
+      props.className?.split(/\s+/).filter(Boolean) ?? [];
+    const fading = tokens(
+      result.current.getContentRevealProps({isLayoutPreserved: true}),
+    );
+    const shown = tokens(
+      result.current.getContentRevealProps({
+        isLayoutPreserved: true,
+        forceVisibility: 'shown',
+      }),
+    );
+    const fade = fading.filter(token => shown.includes(token));
+    const container = tokens(result.current.getContainerProps());
+    expect(fade.length).toBeGreaterThan(0);
+    const rows = (revealBehavior?: 'always' | 'adaptive') => (
+      <List
+        reorderable={createReorderable({
+          onReorder: () => {},
+          handle: {revealBehavior},
+        })}>
+        <ListItem itemKey="inbox" label="Inbox" />
+      </List>
+    );
+    const classes = (element: Element | null) =>
+      element?.getAttribute('class')?.split(/\s+/) ?? [];
+    const {rerender} = render(rows());
+    const inbox = screen.getByText('Inbox').closest('li');
+    expect(classes(handleOf('Inbox'))).not.toEqual(
+      expect.arrayContaining(fade),
+    );
+    rerender(rows('always'));
+    expect(classes(handleOf('Inbox'))).not.toEqual(
+      expect.arrayContaining(fade),
+    );
+    rerender(rows('adaptive'));
+    expect(classes(handleOf('Inbox'))).toEqual(expect.arrayContaining(fade));
+    // The row is the reveal container. Hidden, the handle keeps its tab stop.
+    expect(classes(inbox)).toEqual(expect.arrayContaining(container));
+    expect(handleOf('Inbox')).not.toHaveAttribute('tabindex', '-1');
   });
 
   it('keeps a row without an item key in place, and warns in development when no row has one', () => {
@@ -458,6 +699,43 @@ describe('List reorderable', () => {
     rerender(unkeyed());
     expect(warnings()).toHaveLength(1);
     warn.mockRestore();
+  });
+
+  it('announces a row whose label holds inline markup by its words as they read', async () => {
+    const user = userEvent.setup();
+    function Rows() {
+      const [items, setItems] = useState(['water', 'salt', 'sugar']);
+      const reorderable = createReorderable({
+        onReorder: move =>
+          setItems(previous => moveKey(previous, move.key, move.to)),
+      });
+      const labels: Record<string, ReactNode> = {
+        water: (
+          <>
+            H<sub>2</sub>O
+          </>
+        ),
+        salt: 'Salt',
+        sugar: 'Sugar',
+      };
+      return (
+        <List reorderable={reorderable}>
+          {items.map(item => (
+            <ListItem key={item} itemKey={item} label={labels[item]} />
+          ))}
+        </List>
+      );
+    }
+    render(<Rows />);
+    const handle = handleOf('H2O');
+    handle.focus();
+    await user.keyboard('{Enter}');
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() =>
+      expect(document.body).toHaveTextContent(
+        'H2O, position 2 of 3, after Salt, before Sugar',
+      ),
+    );
   });
 
   it('keeps reorder mode through a move that renames its row, and announces the rows by their new names', async () => {
@@ -1423,6 +1701,233 @@ describe('List reorderable', () => {
       spring.mockRestore();
     }
   });
+
+  it("glides a mouse drop's rows on the finger's spring, the dropped row at the release's velocity", () => {
+    stubPrimaryPointer(false);
+    const glide = vi.spyOn(touchMotion, 'glide');
+    const follow = vi.spyOn(touchMotion, 'follow');
+    try {
+      render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+      const list = screen.getByRole('list');
+      layOut(list);
+      const handle = handleOf('A');
+      mouseDrag(handle, 322, 322 + 70);
+      act(() => {
+        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+      });
+      expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+      expect(glide).toHaveBeenCalledTimes(1);
+      expect(typeof glide.mock.calls[0]?.[4]).toBe('number');
+      expect(follow).toHaveBeenCalledTimes(2);
+    } finally {
+      glide.mockRestore();
+      follow.mockRestore();
+    }
+  });
+
+  it('leaves no stacking or background on a row grabbed again during its drop glide and released in place', async () => {
+    // The motion clock stands still from the drop to the second release, so
+    // the glide is at its start however slowly the test runs. The test's
+    // pointer events come a few ms apart, so the drop can carry thousands of
+    // px/s, and on a moving clock the spring takes the row a row's height
+    // past its place before the second grab.
+    const start = performance.now();
+    let clock = start;
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    try {
+      stubPrimaryPointer(false);
+      render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+      const list = screen.getByRole('list');
+      layOut(list);
+      const handle = handleOf('A');
+      mouseDrag(handle, 322, 322 + 70);
+      act(() => {
+        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+      });
+      expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+      // Grabbed again while the drop's glide still runs, and let go in place.
+      const again = handleOf('A');
+      const row = again.closest('li')!;
+      const top = 300 + 2 * 44 + 22;
+      mouseDrag(again, top, top);
+      // Dragged, it does not travel: its preview rides above the rows.
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+      act(() => {
+        fireEvent.pointerUp(again, {...MOUSE, clientY: top});
+      });
+      // The glide's rest timer was set on the real clock at the drop, and
+      // fires at most about 0.9 s later. This wait is set after it, so it
+      // ends after the row rests, however slowly the test runs.
+      clock = start + 5000;
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      });
+      expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+      expect(row.style.zIndex).toBe('');
+      expect(row.style.backgroundColor).toBe('');
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('keeps a dropped row above the rows it passes until its glide rests', async () => {
+    // The motion clock stands still from the drop to the first check, so the
+    // glide is still running there however slowly the test runs.
+    const start = performance.now();
+    let clock = start;
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    try {
+      stubPrimaryPointer(false);
+      render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+      const list = screen.getByRole('list');
+      layOut(list);
+      const handle = handleOf('A');
+      const row = handle.closest('li')!;
+      mouseDrag(handle, 322, 322 + 70);
+      act(() => {
+        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+      });
+      expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+      // The travelling mark raises it, on the surface, as a ListItem that
+      // slides across rows is raised.
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(true);
+      // It rides on its preview's backdrop, not always the surface.
+      expect(row.style.getPropertyValue('--_travelling-backdrop')).not.toBe('');
+      // The glide's rest timer was set on the real clock at the drop. This
+      // wait is set after it, so it ends after the row rests.
+      clock = start + 5000;
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      });
+      expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+      expect(row.style.getPropertyValue('--_travelling-backdrop')).toBe('');
+      expect(row.style.zIndex).toBe('');
+      expect(row.style.backgroundColor).toBe('');
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it.each([
+    ['a fine', false],
+    ['a coarse', true],
+  ])(
+    'does not mark a dropped row as travelling under Reduce Motion with %s primary pointer',
+    (_, coarse) => {
+      document.body.setAttribute('data-astryx-reduced-motion', '');
+      try {
+        stubPrimaryPointer(coarse);
+        render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+        const list = screen.getByRole('list');
+        layOut(list);
+        const handle = handleOf('A');
+        const row = handle.closest('li')!;
+        mouseDrag(handle, 322, 322 + 70);
+        act(() => {
+          fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+        });
+        expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+        expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+      } finally {
+        document.body.removeAttribute('data-astryx-reduced-motion');
+      }
+    },
+  );
+
+  it.each([
+    ['a fine', false],
+    ['a coarse', true],
+  ])(
+    'under Reduce Motion with %s primary pointer, times the drop from the release, so it ends within its 200 ms of the release',
+    (_, coarse) => {
+      stubPrimaryPointer(coarse);
+      document.body.setAttribute('data-astryx-reduced-motion', '');
+      // The pointer stamped its release at 1000 ms, and the page handles it,
+      // and commits the move, 40 ms later.
+      let clock = 1000;
+      const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      const glide = vi.spyOn(touchMotion, 'glide');
+      const follow = vi.spyOn(touchMotion, 'follow');
+      try {
+        render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+        const list = screen.getByRole('list');
+        layOut(list);
+        const handle = handleOf('A');
+        mouseDrag(handle, 322, 322 + 70);
+        const up = new PointerEvent('pointerup', {
+          ...MOUSE,
+          clientY: 322 + 70,
+          bubbles: true,
+        });
+        const releasedAt = 1000;
+        Object.defineProperty(up, 'timeStamp', {value: releasedAt});
+        clock = releasedAt + 40;
+        act(() => {
+          handle.dispatchEvent(up);
+        });
+        expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+        const starts = [...glide.mock.calls, ...follow.mock.calls].map(
+          call => call[3],
+        );
+        expect(starts.length).toBeGreaterThan(0);
+        for (const start of starts) {
+          expect(start).toBe(releasedAt);
+        }
+      } finally {
+        glide.mockRestore();
+        follow.mockRestore();
+        now.mockRestore();
+        document.body.removeAttribute('data-astryx-reduced-motion');
+      }
+    },
+  );
+
+  it.each([
+    ['a fine', false],
+    ['a coarse', true],
+  ])(
+    'under Reduce Motion with %s primary pointer, a commit later than half the fade lands the rows at once',
+    (_, coarse) => {
+      stubPrimaryPointer(coarse);
+      document.body.setAttribute('data-astryx-reduced-motion', '');
+      // The pointer stamped its release at 1000 ms, and the page commits the
+      // move 150 ms later, past the fade's first half.
+      let clock = 1000;
+      const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      const glide = vi.spyOn(touchMotion, 'glide');
+      const follow = vi.spyOn(touchMotion, 'follow');
+      try {
+        render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+        const list = screen.getByRole('list');
+        layOut(list);
+        const handle = handleOf('A');
+        const row = handle.closest('li')!;
+        mouseDrag(handle, 322, 322 + 70);
+        const up = new PointerEvent('pointerup', {
+          ...MOUSE,
+          clientY: 322 + 70,
+          bubbles: true,
+        });
+        Object.defineProperty(up, 'timeStamp', {value: 1000});
+        clock = 1150;
+        act(() => {
+          handle.dispatchEvent(up);
+        });
+        expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+        expect(glide).not.toHaveBeenCalled();
+        expect(follow).not.toHaveBeenCalled();
+        expect(row.hasAttribute('data-astryx-travelling')).toBe(false);
+        for (const element of Array.from(list.children) as HTMLElement[]) {
+          expect(element.getAnimations?.() ?? []).toEqual([]);
+        }
+      } finally {
+        glide.mockRestore();
+        follow.mockRestore();
+        now.mockRestore();
+        document.body.removeAttribute('data-astryx-reduced-motion');
+      }
+    },
+  );
 
   it("reads a key move's glide spring once, however many rows slide", async () => {
     stubPrimaryPointer(true);

@@ -85,8 +85,49 @@ function entryOf(frame: Element, x: number, y: number): Element {
 }
 
 /**
+ * Whether a tap can reach `element`. A tap on a target that no tap reaches,
+ * such as a disabled or inert neighbour, stays with the band's control, so the
+ * band never swallows it. Opacity does not count: a control drawn at opacity
+ * 0, such as a native input over its own drawn box, takes the tap.
+ */
+function takesTaps(element: Element): boolean {
+  if (element.matches(':disabled') || element.closest('[inert]') != null) {
+    return false;
+  }
+  const view = element.ownerDocument.defaultView;
+  if (view == null) {
+    return true;
+  }
+  const style = view.getComputedStyle(element);
+  if (style.pointerEvents === 'none') {
+    return false;
+  }
+  if (typeof element.checkVisibility === 'function') {
+    return element.checkVisibility({checkVisibilityCSS: true});
+  }
+  // Without `checkVisibility`, its two checks are read from the styles.
+  if (style.visibility === 'hidden' || style.visibility === 'collapse') {
+    return false;
+  }
+  for (
+    let node = element.parentElement;
+    node != null;
+    node = node.parentElement
+  ) {
+    if (
+      view.getComputedStyle(node).getPropertyValue('content-visibility') ===
+      'hidden'
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Where a tap on `host`'s band at (x, y) goes, or null for the host: a visible
- * box under the finger, else the nearest box in empty space. It reads boxes
+ * box under the finger, else the nearest box in empty space, of a target that
+ * takes taps. It reads boxes
  * only when the finger is outside the host's, up to the host's own container
  * (what paints below, such as the page under a layer, is not beside it), in
  * one layout flush. A group that takes its members' presses asks it first.
@@ -113,7 +154,12 @@ export function targetUnderFinger(
     const control = element.closest(INTERACTIVE_SELECTOR);
     const frame = control == null ? closestFieldFrame(element) : null;
     const target = control ?? (frame && entryOf(frame, x, y));
-    if (target == null || isOwn(host, target) || frame?.contains(host)) {
+    if (
+      target == null ||
+      isOwn(host, target) ||
+      frame?.contains(host) ||
+      !takesTaps(target)
+    ) {
       continue;
     }
     const shown = frame ?? shownBy(target);

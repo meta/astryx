@@ -7,7 +7,7 @@
  * @input ResizeObserver API
  * @output Exports observeResize / unobserveResize for shared observation,
  *   observeResizeAfterLayout for a first measurement after layout, and the
- *   internal isResizeObserved
+ *   internal isResizeObserved and splitFirstResizeDelivery
  * @position Utility; consumed by useTruncation, useOverflow, and any component
  *   that needs resize observation without creating per-instance observers
  *
@@ -148,6 +148,35 @@ export function observeResizeAfterLayout(
   return () => {
     isActive = false;
     unsubscribe();
+  };
+}
+
+/**
+ * Returns a resize handler that calls `onFirst` for the first notification
+ * and `onLater` for each notification after its delivery. The rest of the
+ * first delivery calls nothing: when several boxes of one element group first
+ * report together, the first measurement already reads them all. The shared
+ * observer reports one delivery in one callback, and a microtask follows that
+ * callback, so the microtask ends the first delivery. Internal.
+ */
+export function splitFirstResizeDelivery(
+  onFirst: () => void,
+  onLater: () => void,
+): () => void {
+  let phase: 'waiting' | 'first' | 'later' = 'waiting';
+  return () => {
+    if (phase === 'later') {
+      onLater();
+      return;
+    }
+    if (phase === 'first') {
+      return;
+    }
+    phase = 'first';
+    queueMicrotask(() => {
+      phase = 'later';
+    });
+    onFirst();
   };
 }
 

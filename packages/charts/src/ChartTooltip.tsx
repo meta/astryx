@@ -50,6 +50,7 @@ import {useChart} from './ChartContext';
 import {ChartSwatch, swatchVariantForType} from './ChartSwatch';
 import {
   deriveTooltipSeriesValues,
+  hasMultiplePrimarySeries,
   shouldRenderHoverDot,
   type TooltipSeriesValue,
 } from './tooltip';
@@ -121,16 +122,18 @@ const styles = stylex.create({
 const DefaultTooltipContent = memo(function DefaultTooltipContent({
   xValue,
   rows,
+  labelRows,
 }: {
   xValue: unknown;
   rows: TooltipSeriesValue[];
+  labelRows: boolean;
 }) {
   return (
     <VStack gap={1}>
       <Text type="body" weight="semibold">
         {String(xValue)}
       </Text>
-      {rows.length === 1 ? (
+      {rows.length === 1 && !labelRows ? (
         <Text type="supporting">{String(rows[0].value)}</Text>
       ) : (
         <VStack gap={1}>
@@ -305,6 +308,7 @@ export function ChartTooltip({
     () => deriveTooltipSeriesValues(series, datum, resolvedKeys),
     [series, datum, resolvedKeys],
   );
+  const labelRows = useMemo(() => hasMultiplePrimarySeries(series), [series]);
 
   // Hover dots — read from the resolved map at the hovered index.
   const dots = useMemo(() => {
@@ -418,7 +422,11 @@ export function ChartTooltip({
     datum == null ? null : render ? (
       render(xValue, seriesValues)
     ) : (
-      <DefaultTooltipContent xValue={xValue} rows={seriesValues} />
+      <DefaultTooltipContent
+        xValue={xValue}
+        rows={seriesValues}
+        labelRows={labelRows}
+      />
     );
   const isCardHidden =
     hoveredIndex == null ||

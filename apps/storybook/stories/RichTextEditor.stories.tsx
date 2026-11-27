@@ -337,6 +337,20 @@ export const WithInitialValue: Story = {
 };
 
 /**
+ * A seeded document with an English paragraph and a paragraph of digits only.
+ * Each block takes the direction of its own text from the first frame; the
+ * digits have none, so they follow the page.
+ */
+export const MixedDirectionSeed: Story = {
+  args: {
+    label: 'Notes',
+    defaultValue: markdownToEditorStateJSON(
+      'An English paragraph.\n\n123 — 456',
+    ),
+  },
+};
+
+/**
  * Serialize on change and render the same content read-only with RichTextView.
  */
 export const ControlledPersistence = {

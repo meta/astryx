@@ -22,7 +22,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {MATCH_TIER, otherCommand, withOtherCommand} from './other-command.mjs';
+import {
+  MATCH_TIER,
+  otherCommand,
+  tailForms,
+  withOtherCommand,
+} from './other-command.mjs';
 import {component} from '../../api/component/component.mjs';
 import {docs} from '../../api/docs/docs.mjs';
 import {hook} from '../../api/hook/hook.mjs';
@@ -223,6 +228,28 @@ describe('withOtherCommand', () => {
     ).toEqual([hint, routes[0]]);
   });
 
+  it('keeps the pinned suggestions ahead of the hint, and the list no longer', () => {
+    expect(
+      withOtherCommand(list, at(MATCH_TIER.exact), 'Zinnet', {
+        from,
+        pinned: 1,
+      }),
+    ).toEqual([list[0], hint, list[1]]);
+    expect(
+      withOtherCommand(list, at(MATCH_TIER.exact), 'Zinnet', {
+        from,
+        pinned: 0,
+      }),
+    ).toEqual(withOtherCommand(list, at(MATCH_TIER.exact), 'Zinnet', {from}));
+    const one = [{name: 'a', reason: 'x'}];
+    expect(
+      withOtherCommand(one, at(MATCH_TIER.exact), 'Zinnet', {
+        from,
+        pinned: 1,
+      }),
+    ).toEqual(one);
+  });
+
   it('puts the hint right after the last suggestion at its tier or a better one', () => {
     const own = [
       {name: 'zinnet', reason: 'x'},
@@ -250,6 +277,27 @@ describe('withOtherCommand', () => {
         namesOf: s => human.get(s) ?? [s.name],
       }),
     ).toEqual([own[0], hint]);
+  });
+
+  it('counts a declared keyword or synonym equal to the typed name at the folded tier', () => {
+    const own = [
+      {name: 'Plinth', reason: 'x'},
+      {name: 'Quarrel', reason: 'x'},
+      {name: 'Tamsel', reason: 'x'},
+    ];
+    const keywordsOf = (/** @type {{name: string}} */ s) =>
+      s.name === 'Plinth' ? ['zin net', 'base'] : ['zinnet row'];
+    for (const tier of [MATCH_TIER.folded, MATCH_TIER.segment]) {
+      expect(
+        withOtherCommand(own, at(tier), 'Zinnet', {from, keywordsOf}),
+      ).toEqual([own[0], hint, own[1]]);
+    }
+    expect(
+      withOtherCommand(own, at(MATCH_TIER.exact), 'Zinnet', {from, keywordsOf}),
+    ).toEqual([hint, own[0], own[1]]);
+    expect(
+      withOtherCommand(own, at(MATCH_TIER.folded), 'Zinnet', {from}),
+    ).toEqual([hint, own[0], own[1]]);
   });
 
   it('leaves the hint out when every suggestion matches as well', () => {
@@ -658,4 +706,21 @@ describe("each lookup's not-found error for another command's entry", () => {
     },
     SLOW,
   );
+});
+
+describe('tailForms', () => {
+  it('folds the last path segment, as typed and with its words singular', () => {
+    expect(tailForms('widgets/Zorblet-Cards')).toEqual([
+      'zorbletcards',
+      'zorbletcard',
+    ]);
+    expect(tailForms('widgets/Glimmer-Boxes')).toEqual([
+      'glimmerboxes',
+      'glimmerboxe',
+      'glimmerbox',
+    ]);
+    expect(tailForms('Zorblet')).toEqual(['zorblet']);
+    expect(tailForms('widgets/ZorbletsCard')).toContain('zorbletcard');
+    expect(tailForms('widgets/')).toEqual([]);
+  });
 });

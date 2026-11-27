@@ -21,7 +21,8 @@
  * @position Core implementation. Consumed by List, index.ts, tested by List.test.tsx
  *
  * In a reorderable List (`List reorderable`), each row with an `itemKey`
- * that the reorderable object lets move ends with its handle. The handle
+ * that the reorderable object lets move ends with its handle, or starts with
+ * it (the object's `handle.placement`). The handle
  * comes through ListContext's `reorder` with the rest of the reorder
  * machinery (List/listReorderContext.ts). A row without one keeps its place.
  *
@@ -54,7 +55,10 @@ import {Item} from '../Item/Item';
 import {ItemListRowContext} from '../Item/ItemListRowContext';
 import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import {ItemLabelNeededContext} from '../Item/ItemLabelContext';
-import {ItemTrailingContext} from '../Item/ItemTrailingContext';
+import {
+  ItemTrailingContext,
+  type ItemEdgeControl,
+} from '../Item/ItemTrailingContext';
 import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
 import {swipeWithItemKey, type Swipe} from '../Swipe/swipeHost';
 import {themeProps} from '../utils/themeProps';
@@ -296,6 +300,8 @@ const markerStyles = stylex.create({
     justifyContent: 'center',
     flexShrink: 0,
     width: spacingVars['--spacing-4'],
+    // A row that stays put keeps its neighbours' handle room after the marker.
+    marginInlineEnd: 'var(--_item-marker-room)',
     marginTop: `calc((1em * ${typeScaleVars['--text-body-leading']} - ${MARKER_DOT_SIZE}px) / 2)`,
   },
   dot: {
@@ -357,6 +363,11 @@ const markerStyles = stylex.create({
       marginInlineStart: COUNTER_HANG,
     },
   },
+  // A counter outside the shared number columns: the room follows it, as it
+  // follows a dot. In the columns, Item pads the content cell instead.
+  roomAfter: {
+    marginInlineEnd: 'var(--_item-marker-room)',
+  },
   // Markdown's non-swipe lists allow outside marker paint. Keep their marker
   // column at the ordinary themed width, as RichText's native outside markers
   // do. The counter itself stays intrinsic and unbroken;
@@ -372,16 +383,17 @@ const markerStyles = stylex.create({
 });
 
 /** The width and height of CheckboxInput's small control. */
-const TASK_CHECKBOX_SIZE = 20;
-
 const taskMarkerStyles = stylex.create({
   // A task item's checkbox stands where the marker would, centered on the
-  // item's first line, as a task list's checkboxes are.
+  // item's first line, as a task list's checkboxes are: the box is one line
+  // tall and centers the checkbox at whatever size it draws (a theme's box).
   container: {
     alignSelf: 'flex-start',
     display: 'flex',
+    alignItems: 'center',
     flexShrink: 0,
-    marginTop: `calc((1em * ${typeScaleVars['--text-body-leading']} - ${TASK_CHECKBOX_SIZE}px) / 2)`,
+    height: `calc(1em * ${typeScaleVars['--text-body-leading']})`,
+    marginInlineEnd: 'var(--_item-marker-room)',
   },
 });
 
@@ -476,14 +488,27 @@ export function ListItem({
     reorder != null &&
     itemKey != null &&
     (reorder.options.isReorderable?.(itemKey) ?? true);
-  // The handle is the one element reordering adds to a row. With end content
-  // it joins the end slot. Without, it is the row's own child
-  // (ItemTrailingContext), since an end slot of its own would be a second
+  // Where the handle sits, and the row's style for it, come from the reorder
+  // machinery, which a List without `reorderable` never loads.
+  const reorderLayout = reorder?.session.rowLayout({
+    edge: ctx?.edge ?? 'padded',
+    handle: reorder.options.handle,
+    hasHandle,
+    hasMarker: (ctx?.listStyle ?? 'none') !== 'none',
+    hasEndContent: endContent != null,
+  });
+  // The handle is the one element reordering adds to a row. At the row's end,
+  // with end content, it joins the end slot. Elsewhere it is the row's own
+  // child (ItemTrailingContext), since a slot of its own would be a second
   // element.
-  const isHandleInRow = hasHandle && endContent == null;
+  const isHandleInEndSlot = reorderLayout?.isInEndSlot === true;
+  const handlePlacement = reorderLayout?.placement ?? 'end';
+  const isHandleAlwaysVisible = reorderLayout?.isAlwaysVisible ?? true;
+  const isHandleInRow = reorderLayout?.isInRow ?? false;
   const rowLabel = restProps['aria-label'];
   const rowLabelledBy = restProps['aria-labelledby'];
-  const rowAlign = isHandleInRow ? (align ?? 'center') : undefined;
+  const rowAlign =
+    hasHandle && !isHandleInEndSlot ? (align ?? 'center') : undefined;
   const Handle = reorder?.session.Handle;
   const reorderHandle = useMemo(
     () =>
@@ -495,18 +520,33 @@ export function ListItem({
           rowLabel={rowLabel}
           rowLabelledBy={rowLabelledBy}
           rowAlign={rowAlign}
+          placement={handlePlacement}
+          isAlwaysVisible={isHandleAlwaysVisible}
+          isInRow={isHandleInRow}
+          isInEndSlot={isHandleInEndSlot}
         />
       ) : null,
     [
       Handle,
+      handlePlacement,
       hasHandle,
       isDisabled,
+      isHandleAlwaysVisible,
+      isHandleInEndSlot,
+      isHandleInRow,
       itemKey,
       label,
       rowAlign,
       rowLabel,
       rowLabelledBy,
     ],
+  );
+  const edgeControl = useMemo(
+    (): ItemEdgeControl | null =>
+      reorderHandle == null || isHandleInEndSlot
+        ? null
+        : {control: reorderHandle, edge: handlePlacement},
+    [handlePlacement, isHandleInEndSlot, reorderHandle],
   );
   // Under a finger, the row's hit target grows where its neighbors leave room.
   const isTouchTarget =
@@ -565,10 +605,11 @@ export function ListItem({
             markerStyles.number,
             NUMBER_STYLES[markerKind],
             hasMarkerGutter && markerStyles.gutterHang,
+            !usesNumberColumns && markerStyles.roomAfter,
           )}
         />
       ) : null,
-    [task, markerKind, hasMarkerGutter],
+    [task, markerKind, hasMarkerGutter, usesNumberColumns],
   );
 
   // A row without a handle in a reorderable List still has a name for the
@@ -588,7 +629,7 @@ export function ListItem({
       label={label}
       description={description}
       endContent={
-        reorderHandle != null && !isHandleInRow ? (
+        reorderHandle != null && isHandleInEndSlot ? (
           <>
             {endContent}
             {reorderHandle}
@@ -623,8 +664,9 @@ export function ListItem({
           edge === 'outset' && styles.edgeOutset,
           edge === 'bleed' && styles.edgeBleed,
           // A focused handle rings itself; the row's focus-within ring stays
-          // off for it (two rings, and the list clips the row's sides).
-          reorderHandle && reorder?.session.rowStyle,
+          // off for it (two rings, and the list clips the row's sides). A row
+          // that stays put keeps its neighbours' handle room.
+          reorderLayout?.rowStyle,
           xstyle,
         ] as StyleXStyles
       }
@@ -646,7 +688,7 @@ export function ListItem({
     <>
       {/* One shape whether or not the handle is the row's own child, so the
           row keeps its element when that changes. */}
-      <ItemTrailingContext value={isHandleInRow ? reorderHandle : null}>
+      <ItemTrailingContext value={edgeControl}>
         {/* The handle is named after the row's label. */}
         <ItemLabelNeededContext value={reorderHandle != null}>
           {marked}

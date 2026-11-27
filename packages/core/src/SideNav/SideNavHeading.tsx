@@ -54,6 +54,7 @@ import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {
   NavHeadingCloseContext,
   NavHeadingDismissContext,
+  NavHeadingMenuHostContext,
 } from '../NavMenu/NavMenuContext';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -93,6 +94,10 @@ const styles = stylex.create({
   rootCollapsed: {
     justifyContent: 'center',
     paddingInline: 0,
+  },
+  // The plain collapsed heading keeps root's inline padding and only centres.
+  rootCollapsedCentered: {
+    justifyContent: 'center',
   },
   interactive: {
     cursor: {
@@ -587,7 +592,9 @@ export function SideNavHeading({
                 onPointerDown={headingMenuPointerDown}
                 {...headingMenuTouch}>
                 <NavHeadingCloseContext value={closeMenuCtx}>
-                  {menu}
+                  <NavHeadingMenuHostContext value>
+                    {menu}
+                  </NavHeadingMenuHostContext>
                 </NavHeadingCloseContext>
               </div>
             </div>,
@@ -602,7 +609,7 @@ export function SideNavHeading({
           data-testid={testId}
           {...mergeProps(
             themeProps('side-nav-heading'),
-            stylex.props(styles.root, styles.rootCollapsed, xstyle),
+            stylex.props(styles.root, styles.rootCollapsedCentered, xstyle),
             className,
             style,
           )}
@@ -821,7 +828,9 @@ export function SideNavHeading({
               onPointerDown={headingMenuPointerDown}
               {...headingMenuTouch}>
               <NavHeadingDismissContext value={dismissCtx}>
-                {menu}
+                <NavHeadingMenuHostContext value>
+                  {menu}
+                </NavHeadingMenuHostContext>
               </NavHeadingDismissContext>
             </div>
           </div>,
@@ -905,7 +914,9 @@ export function SideNavHeading({
               onPointerDown={headingMenuPointerDown}
               {...headingMenuTouch}>
               <NavHeadingDismissContext value={dismissCtx}>
-                {menu}
+                <NavHeadingMenuHostContext value>
+                  {menu}
+                </NavHeadingMenuHostContext>
               </NavHeadingDismissContext>
             </div>
           </div>,

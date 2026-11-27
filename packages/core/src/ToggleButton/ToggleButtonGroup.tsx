@@ -4,7 +4,7 @@
 
 /**
  * @file ToggleButtonGroup.tsx
- * @input Layer-scoped React context, ToggleButton children, and the shared
+ * @input ToggleButtonGroupContext, ToggleButton children, and the shared
  *   group press tracking (hooks/useGroupPressTracking)
  * @output Exports ToggleButtonGroup component and types
  * @position Groups toggle buttons for single or multi-select behavior
@@ -19,15 +19,7 @@
  * - /packages/cli/assets/templates/blocks/components/ToggleButton/ (showcase blocks)
  */
 
-import {
-  useCallback,
-  use,
-  useMemo,
-  useRef,
-  type ReactNode,
-  type Ref,
-} from 'react';
-import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import {useCallback, useMemo, useRef, type ReactNode, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {ButtonSize} from '../Button';
@@ -43,52 +35,26 @@ import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {mergeProps} from '../utils';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {themeProps} from '../utils/themeProps';
-
-// =============================================================================
-// Context
-// =============================================================================
-
-interface ToggleButtonGroupContextValue {
-  /** Currently selected value(s). */
-  selectedValues: Set<string>;
-  /** Toggle a value on/off. */
-  toggle: (value: string) => void;
-  /** Group size default — individual buttons can override. */
-  size?: ButtonSize;
-  /** Group disabled state. */
-  isDisabled?: boolean;
-  /** The group tracks a press across its toggles that have a value. */
-  tracksPress?: boolean;
-}
-
-const ToggleButtonGroupContext =
-  createLayerScopedContext<ToggleButtonGroupContextValue | null>(
-    'ToggleButtonGroupContext',
-    1,
-    null,
-  );
-ToggleButtonGroupContext.displayName = 'ToggleButtonGroupContext';
-
-/**
- * Hook for ToggleButton to read group context.
- * Returns null when used outside a group.
- */
-export function useToggleButtonGroup(): ToggleButtonGroupContextValue | null {
-  return use(ToggleButtonGroupContext);
-}
+import {ToggleButtonGroupContext} from './ToggleButtonGroupContext';
 
 // =============================================================================
 // Styles
 // =============================================================================
 
 const styles = stylex.create({
+  // Members wrap onto more rows, so each label keeps its full width.
+  // Each member keeps its own surface, so each row draws its own ends.
+  // A single member wider than the container truncates.
   group: {
     display: 'inline-flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
+    maxWidth: '100%',
   },
   vertical: {
     flexDirection: 'column',
+    flexWrap: 'nowrap',
     alignItems: 'stretch',
   },
 });

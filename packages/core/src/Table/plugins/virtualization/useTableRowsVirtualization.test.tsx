@@ -267,6 +267,35 @@ describe('actual Table virtualization', () => {
     );
     warn.mockRestore();
   });
+  it('windows when the capability is added after mount, and renders every row again when it is removed', () => {
+    function Toggle({isOn}: {isOn: boolean}) {
+      const virtualization = useTableRowsVirtualization({
+        rowHeight: 48,
+        initialViewportHeight: 240,
+      });
+      return (
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          virtualization={isOn ? virtualization : undefined}
+        />
+      );
+    }
+    const mountedRows = (container: HTMLElement) =>
+      Array.from(container.querySelectorAll('tbody > tr')).filter(
+        row => row.getAttribute('aria-hidden') !== 'true',
+      );
+    const {container, rerender} = render(<Toggle isOn={false} />);
+    expect(mountedRows(container)).toHaveLength(100);
+    rerender(<Toggle isOn />);
+    expect(mountedRows(container)).toHaveLength(9);
+    expect(screen.getByRole('table')).toHaveAttribute('aria-rowcount', '101');
+    rerender(<Toggle isOn={false} />);
+    expect(mountedRows(container)).toHaveLength(100);
+    cleanup();
+  });
+
   it('preserves legacy full rendering and empty-state semantics', () => {
     const {container} = render(
       <Table data={data} columns={columns} idKey="id" />,

@@ -287,6 +287,318 @@ describe('a theme family whose member’s registry is TypeScript', () => {
   });
 });
 
+describe('a theme family whose member’s registry is TSX, built by the CLI in its own process', () => {
+  // The CLI process runs in plain Node, outside this runner's loader, which
+  // would load `.tsx` itself.
+  for (const ext of ['ts', 'tsx', 'jsx']) {
+    it(`compiles a .${ext} registry beside the family outputs, and the family module loads in plain Node`, () => {
+      // The helper import leaves out its extension, as a single build allows.
+      write('fam/size.ts', `export const size: number = 16;\n`);
+      write(
+        `fam/icons.${ext}`,
+        ext !== 'ts'
+          ? `import * as React from 'react';\nimport {size} from './size';\nexport const calmIcons = {close: <svg width={size} />};\n`
+          : `import * as React from 'react';\nimport {size} from './size';\nexport const calmIcons = {close: React.createElement('svg', {width: size})};\n`,
+      );
+      write(
+        'fam/ocean.ts',
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
+      );
+      write(
+        'fam/ocean-calm.ts',
+        `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nimport {calmIcons} from './icons.${ext}';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', icons: calmIcons});\n`,
+      );
+      const run = cli([
+        'theme',
+        'build',
+        '--family',
+        'fam/ocean.ts',
+        'fam/ocean-calm.ts',
+        '--family-key',
+        'ocean-family',
+      ]);
+      expect(run.stderr).not.toContain('Cannot import family registry');
+      expect(run.status).toBe(0);
+      expect(read('fam/ocean-family.js')).toContain(
+        `"./ocean-family.modules/icons.${ext}.js"`,
+      );
+      const loaded = spawnSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `const m = await import(${JSON.stringify(path.join(dir, 'fam/ocean-family.js'))}); console.log(m.oceanCalmTheme.icons.close.props.width);`,
+        ],
+        {cwd: dir, encoding: 'utf8', timeout: 60_000},
+      );
+      expect(loaded.stderr).toBe('');
+      expect(loaded.stdout.trim()).toBe('16');
+    });
+  }
+});
+
+describe('a theme family whose registry reaches a TSX entry of a linked workspace package', () => {
+  it('stops when the member imports the package, naming the file, and writes nothing', () => {
+    write(
+      'packages/calm-icons/package.json',
+      '{"name":"calm-icons","type":"module","exports":"./icons.tsx"}\n',
+    );
+    write(
+      'packages/calm-icons/icons.tsx',
+      `import * as React from 'react';\nexport const calmIcons = {close: <svg width={16} />};\n`,
+    );
+    fs.symlinkSync(
+      path.join(dir, 'packages/calm-icons'),
+      path.join(dir, 'node_modules/calm-icons'),
+      'dir',
+    );
+    write(
+      'fam/ocean.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nimport {calmIcons} from 'calm-icons';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', icons: calmIcons});\n`,
+    );
+    const run = cli([
+      'theme',
+      'build',
+      '--family',
+      'fam/ocean.ts',
+      'fam/ocean-calm.ts',
+      '--family-key',
+      'ocean-family',
+    ]);
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain('Cannot import family registry');
+    expect(run.stderr).toContain('calm-icons');
+    expect(exists('fam/ocean-family.js')).toBe(false);
+  });
+  it('stops when a local registry of the member imports the package, naming the file, and writes nothing', () => {
+    write(
+      'packages/calm-icons/package.json',
+      '{"name":"calm-icons","type":"module","exports":"./icons.tsx"}\n',
+    );
+    write(
+      'packages/calm-icons/icons.tsx',
+      `import * as React from 'react';\nexport const calmIcons = {close: <svg width={16} />};\n`,
+    );
+    fs.symlinkSync(
+      path.join(dir, 'packages/calm-icons'),
+      path.join(dir, 'node_modules/calm-icons'),
+      'dir',
+    );
+    write('fam/icons.ts', `export {calmIcons} from 'calm-icons';\n`);
+    write(
+      'fam/ocean.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nimport {calmIcons} from './icons.ts';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', icons: calmIcons});\n`,
+    );
+    const run = cli([
+      'theme',
+      'build',
+      '--family',
+      'fam/ocean.ts',
+      'fam/ocean-calm.ts',
+      '--family-key',
+      'ocean-family',
+    ]);
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain('Cannot import family registry');
+    expect(run.stderr).toContain('calm-icons');
+    expect(run.stderr).not.toContain('-check-');
+    expect(exists('fam/ocean-family.js')).toBe(false);
+    expect(exists('fam/ocean-family.modules')).toBe(false);
+    expect(
+      fs.readdirSync(path.join(dir, 'fam')).filter(f => f.includes('-check-')),
+    ).toEqual([]);
+  });
+});
+
+describe('a theme family whose member’s slot function is in a TSX module, built by the CLI in its own process', () => {
+  it('compiles the slot module beside the family outputs, and the family module loads in plain Node', () => {
+    write(
+      'fam/slots.tsx',
+      `export const calmSlots = {\n  'code-block-copy': ({copied}: {copied: boolean}) => ({icon: copied ? 'checkDouble' : 'copy'}),\n};\n`,
+    );
+    write(
+      'fam/ocean.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nimport {calmSlots} from './slots.tsx';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', componentIcons: calmSlots});\n`,
+    );
+    const run = cli([
+      'theme',
+      'build',
+      '--family',
+      'fam/ocean.ts',
+      'fam/ocean-calm.ts',
+      '--family-key',
+      'ocean-family',
+    ]);
+    expect(run.stderr).not.toContain('Cannot import family registry');
+    expect(run.status).toBe(0);
+    expect(read('fam/ocean-family.js')).toContain(
+      "from './ocean-family.modules/slots.tsx.js'",
+    );
+    const loaded = spawnSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `const m = await import(${JSON.stringify(path.join(dir, 'fam/ocean-family.js'))}); console.log(typeof m.oceanCalmTheme);`,
+      ],
+      {cwd: dir, encoding: 'utf8', timeout: 60_000},
+    );
+    expect(loaded.stderr).toBe('');
+    expect(loaded.stdout.trim()).toBe('object');
+  });
+});
+
+describe('a theme family with a compiled registry, where the build writes nothing', () => {
+  const family = () => {
+    write('fam/icons.ts', `export const calmIcons = {close: 'calm-close'};\n`);
+    write(
+      'fam/ocean.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nimport {calmIcons} from './icons.ts';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', icons: calmIcons});\n`,
+    );
+  };
+  const args = [
+    'theme',
+    'build',
+    '--family',
+    'fam/ocean.ts',
+    'fam/ocean-calm.ts',
+    '--family-key',
+    'ocean-family',
+  ];
+
+  it('--check leaves the folder as it is', () => {
+    family();
+    expect(cli(args).status).toBe(0);
+    const before = fs.readdirSync(path.join(dir, 'fam')).sort();
+    // A read-only folder refuses any write the check would make.
+    fs.chmodSync(path.join(dir, 'fam'), 0o555);
+    try {
+      const checked = cli([...args, '--check']);
+      expect(checked.stderr).toBe('');
+      expect(checked.status).toBe(0);
+    } finally {
+      fs.chmodSync(path.join(dir, 'fam'), 0o755);
+    }
+    expect(fs.readdirSync(path.join(dir, 'fam')).sort()).toEqual(before);
+  });
+
+  it('a family outside cwd is refused before any folder is written', async () => {
+    family();
+    fs.mkdirSync(path.join(dir, 'app'));
+    // A read-only folder refuses any write made before the refusal.
+    fs.chmodSync(path.join(dir, 'fam'), 0o555);
+    try {
+      await expect(
+        quiet(() =>
+          themeBuildFamily(
+            [
+              path.join(dir, 'fam/ocean.ts'),
+              path.join(dir, 'fam/ocean-calm.ts'),
+            ],
+            {familyKey: 'ocean-family'},
+            {cwd: path.join(dir, 'app')},
+          ),
+        ),
+      ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
+    } finally {
+      fs.chmodSync(path.join(dir, 'fam'), 0o755);
+    }
+    expect(fs.readdirSync(path.join(dir, 'fam')).sort()).toEqual([
+      'icons.ts',
+      'ocean-calm.ts',
+      'ocean.ts',
+    ]);
+  });
+});
+
+describe('--check on a theme family with a compiled registry', () => {
+  const args = [
+    'theme',
+    'build',
+    '--family',
+    'fam/ocean.ts',
+    'fam/ocean-calm.ts',
+    '--family-key',
+    'ocean-family',
+  ];
+  /** @param {string} registry the member's registry import and file */
+  const family = registry => {
+    write(
+      'fam/ocean.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nimport {calmIcons} from '${registry}';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', icons: calmIcons});\n`,
+    );
+  };
+
+  it('reports a .tsx family up to date right after its build', () => {
+    write(
+      'fam/icons.tsx',
+      `import * as React from 'react';\nexport const calmIcons = {close: <svg width={16} />};\n`,
+    );
+    family('./icons.tsx');
+    expect(cli(args).status).toBe(0);
+    const checked = cli([...args, '--check']);
+    expect(checked.stderr).toBe('');
+    expect(checked.status).toBe(0);
+  });
+
+  it('reports a changed registry as stale, not as a registry it cannot import', () => {
+    write(
+      'fam/icons.tsx',
+      `import * as React from 'react';\nexport const calmIcons = {close: <svg width={16} />};\n`,
+    );
+    family('./icons.tsx');
+    expect(cli(args).status).toBe(0);
+    write(
+      'fam/icons.tsx',
+      `import * as React from 'react';\nexport const calmIcons = {close: <svg width={24} />};\n`,
+    );
+    const checked = cli([...args, '--check']);
+    expect(checked.status).not.toBe(0);
+    expect(checked.stderr + checked.stdout).toContain(
+      'ocean-family.modules/icons.tsx.js',
+    );
+    expect(checked.stderr).not.toContain('Cannot import family registry');
+  });
+
+  it('fails when a dependency of the registry no longer exports what it imports', () => {
+    write(
+      'node_modules/calm-size/package.json',
+      '{"name":"calm-size","type":"module","exports":"./index.js"}\n',
+    );
+    write('node_modules/calm-size/index.js', `export const size = 16;\n`);
+    write(
+      'fam/icons.ts',
+      `import {size} from 'calm-size';\nexport const calmIcons = {close: \`calm-\${size}\`};\n`,
+    );
+    family('./icons.ts');
+    expect(cli(args).status).toBe(0);
+    write('node_modules/calm-size/index.js', `export const width = 16;\n`);
+    const checked = cli([...args, '--check']);
+    expect(checked.status).not.toBe(0);
+    expect(checked.stderr).toContain('Cannot import family registry');
+  });
+});
+
 describe('a family build over a file of yours at a compiled path', () => {
   it('keeps the file and the TypeScript import, and warns as a single build does', async () => {
     write('fam/icons.ts', `export const calmIcons = {close: 'calm-close'};\n`);

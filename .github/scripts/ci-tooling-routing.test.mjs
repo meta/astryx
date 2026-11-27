@@ -19,6 +19,7 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 import {ungated} from './ci-pr-gate.mjs';
+import {isCheckoutRetry} from './lib/checkout-retries.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
@@ -351,10 +352,16 @@ describe('Node-tooling CI routing', () => {
     expect(ungated(ci.jobs['test-build'].if)).toBe(
       "github.event_name != 'workflow_dispatch'",
     );
+    // Two parts, each inside ten minutes on its runner: the Build package's
+    // contracts, and the vibe-tests fixtures that share its Playwright setup.
+    expect(ci.jobs['test-build'].strategy).toEqual({
+      'fail-fast': false,
+      matrix: {part: ['contracts', 'fixtures']},
+    });
     expect(
       step(ci.jobs['test-build'], 'Run Build package contracts'),
     ).toMatchObject({
-      if: BROAD_NOT_LAB,
+      if: `${BROAD_NOT_LAB} && matrix.part == 'contracts'`,
       run: 'pnpm test:build',
     });
     // The Build package's owner keeps its contracts. The list lives once, in
@@ -376,12 +383,14 @@ describe('Node-tooling CI routing', () => {
         packageScripts: JSON.parse(read('packages/build/package.json')).scripts,
       }),
     ).toEqual([]);
-    // The vibe-tests fixtures share test-build's Playwright runner.
+    // The vibe-tests fixtures run in test-build's fixtures part.
     for (const name of [
       'Verify canonical setup compositions',
       'Verify guest fixture contrast',
     ]) {
-      expect(step(ci.jobs['test-build'], name).if).toBe(BROAD_NOT_LAB);
+      expect(step(ci.jobs['test-build'], name).if).toBe(
+        `${BROAD_NOT_LAB} && matrix.part == 'fixtures'`,
+      );
     }
     // No size-base job: Main keeps the merge base's sizes, and build-storybook
     // builds the base only when Main kept no record.
@@ -444,7 +453,10 @@ describe('Node-tooling CI routing', () => {
         candidate.name === 'Skip heavy work for a specialized lane' ||
         candidate.name === 'Skip typechecks for a specialized lane' ||
         candidate.name === 'Lab-only: Lab tests + Storybook build' ||
-        candidate.name === 'Lab-only: typecheck Lab and its stories'
+        candidate.name === 'Lab-only: typecheck Lab and its stories' ||
+        // A checkout's second try and stop carry its own condition
+        // (ci-checkout-timeout.test.mjs).
+        isCheckoutRetry(candidate)
       ) {
         continue;
       }
@@ -490,9 +502,10 @@ describe('Node-tooling CI routing', () => {
       'pull-requests': 'read',
     });
     // A release-branch pull request is spec-only, but its join still runs to
-    // require the release bump's own validation.
+    // require the release bump's own validation; so does a change only to the
+    // recorded Node test times, which the Node leg plan's check gates.
     expect(testJoin.if).toBe(
-      "steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'",
+      "steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'",
     );
     expect(testJoin.env).toMatchObject({
       RELEASE_BUMP: '${{ steps.scope.outputs.release_bump }}',
