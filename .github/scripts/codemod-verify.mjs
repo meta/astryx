@@ -460,7 +460,12 @@ if (
   main().then(
     code => process.exit(code),
     err => {
-      console.error('Codemod verification failed:', err);
+      // The stack carries the message once; the whole error would repeat
+      // git's stderr in its output and stderr fields.
+      console.error(
+        'Codemod verification failed:',
+        err instanceof Error ? err.stack : err,
+      );
       process.exit(1);
     },
   );

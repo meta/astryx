@@ -227,6 +227,32 @@ try {
   });
 });
 
+describe('a git failure in the job', () => {
+  it("reaches the job's log once, with git's message", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codemod-verify-'));
+    try {
+      const git = (/** @type {string[]} */ ...args) =>
+        execFileSync('git', args, {cwd: dir, encoding: 'utf8'});
+      git('init', '-q');
+      git('config', 'user.email', 'test@example.com');
+      git('config', 'user.name', 'test');
+      git('config', 'commit.gpgsign', 'false');
+      git('commit', '-q', '--allow-empty', '-m', 'base');
+      // The repository has no origin/main, so the job's merge base fails.
+      const job = spawnSync(
+        process.execPath,
+        [path.join(import.meta.dirname, 'codemod-verify.mjs')],
+        {cwd: dir, encoding: 'utf8'},
+      );
+      expect(job.status, job.stderr).toBe(1);
+      const message = 'Not a valid object name origin/main';
+      expect(job.stderr.split(message).length - 1, job.stderr).toBe(1);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+});
+
 describe('formatting codemod output', () => {
   it('formats a file whose name a shell would expand, and only that file', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codemod-format-'));
