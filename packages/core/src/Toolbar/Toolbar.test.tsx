@@ -2,13 +2,15 @@
 
 /**
  * @file Toolbar.test.tsx
- * @input Uses vitest, @testing-library/react, user-event, Toolbar, MoreMenu
+ * @input Uses vitest, @testing-library/react, user-event, Toolbar, MoreMenu,
+ *   and the controls with arrow keys of their own that a toolbar can hold
  * @output Unit tests for Toolbar component and nested popover focus ownership
  * @position Testing; validates Toolbar implementation and post-dismissal tab stops
  *
  * SYNC: When Toolbar component changes, update tests to match new behavior
  */
 
+import {useState} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -16,6 +18,12 @@ import * as stylex from '@stylexjs/stylex';
 import {Toolbar} from './Toolbar';
 import {Button} from '../Button/Button';
 import {MoreMenu} from '../MoreMenu';
+import {Pagination} from '../Pagination/Pagination';
+import {SegmentedControl} from '../SegmentedControl/SegmentedControl';
+import {SegmentedControlItem} from '../SegmentedControl/SegmentedControlItem';
+import {Slider} from '../Slider/Slider';
+import {Tab} from '../TabList/Tab';
+import {TabList} from '../TabList/TabList';
 import {
   paddingBlockStyles,
   paddingInlineStyles,
@@ -645,5 +653,158 @@ describe('Toolbar', () => {
     await user.keyboard('{ArrowRight}');
 
     expect(buttons[0]).toHaveFocus();
+  });
+  describe('a control with arrow keys of its own inside the toolbar', () => {
+    function View() {
+      const [value, setValue] = useState('list');
+      return (
+        <SegmentedControl label="View" value={value} onChange={setValue}>
+          <SegmentedControlItem label="List" value="list" />
+          <SegmentedControlItem label="Grid" value="grid" />
+          <SegmentedControlItem label="Board" value="board" />
+        </SegmentedControl>
+      );
+    }
+    function Sections() {
+      const [value, setValue] = useState('overview');
+      return (
+        <TabList value={value} onChange={setValue}>
+          <Tab label="Overview" value="overview" />
+          <Tab label="Activity" value="activity" />
+        </TabList>
+      );
+    }
+    function Pages() {
+      const [page, setPage] = useState(2);
+      return (
+        <Pagination
+          page={page}
+          totalPages={3}
+          variant="dots"
+          onChange={setPage}
+        />
+      );
+    }
+
+    async function pressUntilFocused(
+      user: ReturnType<typeof userEvent.setup>,
+      key: string,
+      target: HTMLElement,
+    ) {
+      for (
+        let press = 0;
+        press < 12 && document.activeElement !== target;
+        press++
+      ) {
+        await user.keyboard(key);
+      }
+    }
+
+    it.each([
+      ['SegmentedControl', <View key="nested" />],
+      ['TabList', <Sections key="nested" />],
+      ['dots Pagination', <Pages key="nested" />],
+    ])(
+      'the arrow keys pass through a %s to the controls on both sides',
+      async (_name, nested) => {
+        const user = userEvent.setup();
+        render(
+          <Toolbar
+            label="Actions"
+            startContent={
+              <>
+                <Button label="Back" />
+                {nested}
+                <Button label="Share" />
+              </>
+            }
+            endContent={<Button label="Settings" />}
+          />,
+        );
+        const back = screen.getByRole('button', {name: 'Back'});
+        const share = screen.getByRole('button', {name: 'Share'});
+        const settings = screen.getByRole('button', {name: 'Settings'});
+
+        back.focus();
+        await pressUntilFocused(user, '{ArrowRight}', share);
+        expect(share).toHaveFocus();
+        await user.keyboard('{ArrowRight}');
+        expect(settings).toHaveFocus();
+        await user.keyboard('{ArrowRight}');
+        expect(back).toHaveFocus();
+
+        share.focus();
+        await pressUntilFocused(user, '{ArrowLeft}', back);
+        expect(back).toHaveFocus();
+      },
+    );
+
+    it('Home and End stay in a SegmentedControl, which owns them', async () => {
+      const user = userEvent.setup();
+      render(
+        <Toolbar
+          label="Actions"
+          startContent={
+            <>
+              <Button label="Back" />
+              <View />
+            </>
+          }
+          endContent={<Button label="Settings" />}
+        />,
+      );
+
+      screen.getByRole('radio', {name: 'Grid'}).focus();
+      await user.keyboard('{End}');
+      expect(screen.getByRole('radio', {name: 'Board'})).toHaveFocus();
+
+      await user.keyboard('{Home}');
+      expect(screen.getByRole('radio', {name: 'List'})).toHaveFocus();
+    });
+
+    it('a Slider keeps the arrow keys that change its value', async () => {
+      const user = userEvent.setup();
+      function Zoom() {
+        const [value, setValue] = useState(50);
+        return (
+          <Slider
+            label="Zoom"
+            value={value}
+            onChange={setValue}
+            min={0}
+            max={100}
+          />
+        );
+      }
+      render(
+        <Toolbar
+          label="Actions"
+          startContent={
+            <>
+              <Zoom />
+              <Button label="Share" />
+            </>
+          }
+        />,
+      );
+
+      const slider = screen.getByRole('slider');
+      slider.focus();
+      await user.keyboard('{ArrowRight}');
+
+      expect(slider).toHaveFocus();
+      expect(slider).toHaveAttribute('aria-valuenow', '51');
+    });
+
+    it('a SegmentedControl still selects the segment an arrow lands on', async () => {
+      const user = userEvent.setup();
+      render(<Toolbar label="Actions" startContent={<View />} />);
+
+      screen.getByRole('radio', {name: 'List'}).focus();
+      await user.keyboard('{ArrowRight}');
+
+      expect(screen.getByRole('radio', {name: 'Grid'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Grid'})).toBeChecked();
+    });
   });
 });
