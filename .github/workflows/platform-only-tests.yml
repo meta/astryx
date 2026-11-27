@@ -18,9 +18,6 @@ on:
   schedule:
     - cron: '43 6 * * *'
   workflow_dispatch:
-  # TEMPORARY, for the pull request's own measured run; removed before review.
-  push:
-    branches: ['ci/platform-only-tests']
 
 permissions: {}
 
