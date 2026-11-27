@@ -599,7 +599,8 @@ const styles = stylex.create({
 // Keep these calculations inline: a consumer's Babel preset can lower a
 // module-scope helper to a function expression before StyleX evaluates this
 // object, and StyleX cannot constant-evaluate that transformed helper.
-// SYNC: keep equal to MultiSelector's `sizeStyles` (/packages/core/src/MultiSelector/MultiSelector.tsx).
+// SYNC: MultiSelector's `sizeStyles` use the same line box and padding
+// (/packages/core/src/MultiSelector/MultiSelector.tsx).
 
 const sizeStyles = stylex.create({
   sm: {

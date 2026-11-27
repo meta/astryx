@@ -5,8 +5,9 @@
  * @file MultiSelectorTextSize.a11y.browser.spec.ts
  * @input The built Storybook's MultiSelector stories in Chromium and WebKit
  * @output Real-browser proof that the trigger holds its size token at the
- *   theme's text size and grows with a larger set text size instead of
- *   clipping its value, alone and inside an InputGroup
+ *   theme's text size, grows with a larger set text size instead of clipping
+ *   its value, keeps the token when badges wrap in a narrow field, and takes
+ *   an InputGroup's row
  * @position Ongoing browser check for component:MultiSelector FR13 and
  *   spec:AST-102 FR4; jsdom computes no layout
  */
@@ -123,4 +124,39 @@ test('inside an InputGroup the trigger takes the group row at both text sizes', 
       expect(Math.abs(control - group)).toBeLessThanOrEqual(2);
     }
   }
+});
+
+test('in a narrow field, badges that wrap keep the trigger at its token at the theme text size', async ({
+  page,
+}) => {
+  await open(page, 'trigger-modes');
+  const badges = page.getByRole('combobox', {name: 'Badges'});
+  const read = await badges.evaluate(el => {
+    const control = el.closest<HTMLElement>('.astryx-multi-selector');
+    if (control == null) {
+      throw new Error('no control box');
+    }
+    // Narrow the field so its badges wrap onto a second row.
+    const field = control.closest<HTMLElement>('.astryx-field') ?? control;
+    field.style.width = '150px';
+    const size = control.getAttribute('data-size') ?? 'md';
+    const probe = document.createElement('div');
+    probe.style.height = `var(--size-element-${size})`;
+    probe.style.position = 'absolute';
+    control.append(probe);
+    const token = probe.getBoundingClientRect().height;
+    probe.remove();
+    const rows = new Set(
+      [...control.querySelectorAll<HTMLElement>('.astryx-badge')].map(badge =>
+        Math.round(badge.getBoundingClientRect().top),
+      ),
+    );
+    return {
+      height: control.getBoundingClientRect().height,
+      token,
+      rows: rows.size,
+    };
+  });
+  expect(read.rows).toBeGreaterThan(1);
+  expect(read.height).toBe(read.token);
 });

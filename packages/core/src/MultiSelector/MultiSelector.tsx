@@ -205,10 +205,9 @@ const styles = stylex.create({
   triggerPlaceholder: {
     color: colorVars['--color-text-secondary'],
   },
-  // Inside an InputGroup the group's row is the height, so the trigger drops
-  // its own floor and padding and keeps one uncapped line box.
+  // Inside an InputGroup the group's row is the height (`groupStyles.inGroup`),
+  // so the trigger drops its padding and keeps one uncapped line box.
   triggerInGroup: {
-    minHeight: 0,
     paddingBlock: 0,
     lineHeight: `max(${spacingVars['--spacing-5']}, 20px, 1rem)`,
   },
@@ -547,30 +546,32 @@ const styles = stylex.create({
   },
 });
 
-// The trigger is sized by padding and a floor, not by a fixed height, as
-// Selector's is: at the theme's text size it is exactly the size token, and a
-// larger set text size grows it instead of clipping the value. The line box is
-// `--spacing-5`, floored at 20px and 1rem, and capped at what the token holds
-// inside its borders, but never below 1.5em of the trigger's own font. The
-// padding is what is left of the token, so it reaches 0 before the floor lets
-// the trigger grow. Ghost and grouped triggers keep the uncapped line box.
+// The trigger height follows the size token and the text size only: it is the
+// token, or one line box and the borders when a larger set text size makes
+// that taller. Its content, such as badges that wrap, never sets it. The line
+// box is `--spacing-5`, floored at 20px and 1rem, and capped at what the token
+// holds inside its borders, but never below 1.5em of the trigger's own font.
+// The padding is what is left of the token, so the line box stays centred.
+// Ghost and grouped triggers keep the uncapped line box.
 // Keep these calculations inline: StyleX must evaluate them as constants, and
 // a shared helper can reach StyleX as a function a consumer's Babel preset
 // lowered, which StyleX cannot evaluate.
-// SYNC: keep equal to Selector's `sizeStyles` (/packages/core/src/Selector/Selector.tsx).
+// SYNC: the line box and padding equal Selector's `sizeStyles`
+// (/packages/core/src/Selector/Selector.tsx); Selector's height follows its
+// content instead.
 const sizeStyles = stylex.create({
   sm: {
-    minHeight: sizeVars['--size-element-sm'],
+    height: `max(${sizeVars['--size-element-sm']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
     lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
     paddingBlock: `calc((${sizeVars['--size-element-sm']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
   },
   md: {
-    minHeight: sizeVars['--size-element-md'],
+    height: `max(${sizeVars['--size-element-md']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
     lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
     paddingBlock: `calc((${sizeVars['--size-element-md']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
   },
   lg: {
-    minHeight: sizeVars['--size-element-lg'],
+    height: `max(${sizeVars['--size-element-lg']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
     lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
     paddingBlock: `calc((${sizeVars['--size-element-lg']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
   },
