@@ -223,23 +223,23 @@ This record does not absorb adjacent facts:
   runtime template envelope.
 - `packages/cli/foundation/discovery/template-adapter.mjs` — current source loaders,
   normalization, projections, and shared template IO.
-- `replaceDemoMedia` in `template-adapter.mjs` — the INV8 replacement step that
-  copy and displayed code share. It replaces `/template-assets/` media URLs. In
-  motion and gesture examples, where a real Astryx component wraps docs-only
-  contents, such as `<Card><PlayingCardContents /></Card>`, it also replaces each
-  demo-content element with a generic placeholder and keeps the outer
+- `replaceTemplateDemos` in `template-adapter.mjs` — the INV8 replacement step a
+  copy runs: `replaceDemoContent` replaces each demo-content element with a
+  generic placeholder and drops that import, then `replaceDemoMedia` replaces
+  `/template-assets/` media URLs. Demo-content elements appear in motion and
+  gesture examples, where a real Astryx component wraps docs-only contents, such
+  as `<Card><PlayingCardContents /></Card>`; the element pass keeps the outer
   component. A demo-content element is an element imported from the one
-  repository-only demo-content module; the step drops that import. The module
-  and the import rule are internal mechanism, not a public contract
+  repository-only demo-content module. The module and the import rule are
+  internal mechanism, not a public contract
   (`architecture:knowledge-contracts/INV18`); `spec:AST-028` FR13 states the
   outcome. `template copy`, `template show`, and the docsite's shadcn Install
-  item run both passes; the copy receipt and the `template show` response
-  report the element count as `demoContentReplaced`. The docsite Code tab, Open
-  in Playground, the Sandbox code view, the docsite MCP server's `get()`, and
-  `astryx component <Name> --showcase` run only the element pass, so they keep
-  their fixture media (`spec:AST-033` FR23). Implementation gap:
-  the demo-content module, the element pass, and `demoContentReplaced` are not
-  built, and the shadcn Install item runs neither pass.
+  item run `replaceTemplateDemos`, and so does the docsite MCP server's
+  `template` tool; the copy receipt and the `template show` response report the
+  element count as `demoContentReplaced`. The docsite Code tab, Open in
+  Playground, the Sandbox code view, the docsite MCP server's `component` tool
+  with `showcase`, and `astryx component <Name> --showcase` run only
+  `replaceDemoContent`, so they keep their fixture media (`spec:AST-033` FR23).
 - `packages/cli/foundation/config/project.mjs` — project diagnostics and current
   integration-template re-collection.
 - `packages/cli/api/template/` — list, show, skeleton, and copy operations.
@@ -256,15 +256,15 @@ This record does not absorb adjacent facts:
 
 ## Verification
 
-| Scope                                 | Current evidence                                                              | Missing before `current`                                                                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Source shapes and integration parsing | `parse.test.mjs`, `template-suffix.test.mjs`, `template-integration.test.mjs` | One corpus check that runs every shipped page and block through the normalized boundary                                                                                                                                                                                                                                                                                                                                |
-| Catalog membership and diagnostics    | `template-adapter.test.mjs`, `project.test.mjs`                               | One catalog implementation; no duplicate collection; every invalid source reported consistently                                                                                                                                                                                                                                                                                                                        |
-| `init` projection                     | `init.test.mjs`                                                               | Selection of every named built-in page from the catalog instead of a directory scan                                                                                                                                                                                                                                                                                                                                    |
-| Docsite and sandbox projections       | `data-extraction.test.ts`, generated registry checks                          | Membership parity and live-preview coverage derived from catalog metadata                                                                                                                                                                                                                                                                                                                                              |
-| Copy boundary                         | `template.test.mjs`, `template-suffix.test.mjs`                               | Mutation coverage for preview-only asset removal and snapshot independence                                                                                                                                                                                                                                                                                                                                             |
-| Demo-content replacement              | None; not built                                                               | Copy, `template show`, shadcn Install item, Code-tab, Open in Playground, Sandbox code-view, MCP `get()`, and `--showcase` output contain no demo-content element or demo-content import; copy receipt and `template show` count the elements; the shadcn Install item contains no `/template-assets/` reference; the surfaces that only hand out source keep their fixture media; a live preview renders the original |
-| Rubric evidence                       | Versioned scorecards carrying `commit` and `rubricVersion`                    | None for architecture; scores remain audit evidence rather than authority                                                                                                                                                                                                                                                                                                                                              |
+| Scope                                 | Current evidence                                                                                                                                                                                                                    | Missing before `current`                                                                        |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Source shapes and integration parsing | `parse.test.mjs`, `template-suffix.test.mjs`, `template-integration.test.mjs`                                                                                                                                                       | One corpus check that runs every shipped page and block through the normalized boundary         |
+| Catalog membership and diagnostics    | `template-adapter.test.mjs`, `project.test.mjs`                                                                                                                                                                                     | One catalog implementation; no duplicate collection; every invalid source reported consistently |
+| `init` projection                     | `init.test.mjs`                                                                                                                                                                                                                     | Selection of every named built-in page from the catalog instead of a directory scan             |
+| Docsite and sandbox projections       | `data-extraction.test.ts`, generated registry checks                                                                                                                                                                                | Membership parity and live-preview coverage derived from catalog metadata                       |
+| Copy boundary                         | `template.test.mjs`, `template-suffix.test.mjs`                                                                                                                                                                                     | Mutation coverage for preview-only asset removal and snapshot independence                      |
+| Demo-content replacement              | `template-adapter.demo-content.test.mjs`, `copy.receipt.test.mjs`, `show.test.mjs`, `showcase.test.mjs`, `generate-shadcn-registry.test.mjs`, `sync-templates.test.mjs`, docsite `data-extraction.test.ts` and `mcp-server.test.ts` | A live preview renders the original                                                             |
+| Rubric evidence                       | Versioned scorecards carrying `commit` and `rubricVersion`                                                                                                                                                                          | None for architecture; scores remain audit evidence rather than authority                       |
 
 ## Shipped-catalog audit
 

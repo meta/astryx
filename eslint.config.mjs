@@ -251,6 +251,8 @@ export default defineConfig(
       '!packages/cli/utils/**/*.mjs',
       '!packages/cli/foundation/**/*.mjs',
       '!packages/cli/clients/cli/bin/**/*.mjs',
+      // The root config is .mjs too: lint it with the rest.
+      '!eslint.config.mjs',
       '**/*.test-violations.tsx',
       'apps/example-nextjs/*.js',
       // Generated declaration files (e.g. the CLI's `./api` type surface emitted

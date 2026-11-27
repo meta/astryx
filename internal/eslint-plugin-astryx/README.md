@@ -103,7 +103,7 @@ Named helper-default test files:
 - `packages/core/src/utils/dateParser.test.ts`
 
 These lists are the **only** exception mechanism. There is no rule option or
-`eslint.config.js` override that widens them. A new entry requires a rule-source
+`eslint.config.mjs` override that widens them. A new entry requires a rule-source
 change and a focused rule test. `navigator.language`/`navigator.languages`
 remains rejected unconditionally, implementation or test oracle.
 
@@ -569,7 +569,7 @@ Expected output in strict mode:
 
 ## Configuration
 
-The plugin is configured in `eslint.config.js`:
+The plugin is configured in `eslint.config.mjs`:
 
 ```js
 import astryxPlugin from "./internal/eslint-plugin-astryx/index.js";
@@ -589,7 +589,7 @@ const astryxConfig = isStrictMode ? astryxPlugin.configs.strict : astryxPlugin.c
 If a property legitimately needs a hardcoded value:
 
 ```js
-// In eslint.config.js
+// In eslint.config.mjs
 {
   files: ["packages/core/src/**/*.{ts,tsx}"],
   plugins: { '@astryx': astryxPlugin },
@@ -1123,7 +1123,7 @@ a WCAG contrast fix written per scheme — and moving it to the theme layer mean
 choosing which contrast-tuned status-text token those levels should read; until
 that is decided lab warns rather than blocks.
 
-**Exemptions**, kept in the rule source rather than only in `eslint.config.js`
+**Exemptions**, kept in the rule source rather than only in `eslint.config.mjs`
 so they are testable and a config edit cannot quietly turn the theme layer into
 a violation:
 
@@ -1229,7 +1229,7 @@ gradient through its alpha channel, so `rgba(0, 0, 0, 0.3)` in one of its stops
 is a 30% opacity stop and the black is discarded — `backgroundImage`, which
 paints the same gradient, is not exempt.
 
-Path exemptions live in the rule source rather than only in `eslint.config.js`,
+Path exemptions live in the rule source rather than only in `eslint.config.mjs`,
 so they are testable and a config edit cannot quietly turn the theme layer into
 a violation. That layer has ~200 colour literals and defining them is its job.
 

@@ -2,7 +2,8 @@
 
 /**
  * @input Workspace source entries, Storybook's Vite config, Astryx StyleX plugin.
- * @output Storybook config with Vite and StyleX aliases from one package table.
+ * @output Storybook config with Vite and StyleX aliases from one package table,
+ *   and a preview head that links the built favicon.
  * @position Storybook configuration; keeps workspace packages usable unbuilt.
  */
 
@@ -156,6 +157,12 @@ const config: StorybookConfig = {
     options: {},
   },
   docs: {defaultName: 'Docs'},
+  // A story frame opened on its own (iframe.html, as the browser specs load
+  // it) is a top-level page. Without an icon link the browser asks the origin
+  // for /favicon.ico, which the build does not emit, and logs a 404. The build
+  // does emit favicon.svg, which the manager page links.
+  previewHead: head =>
+    `${head}\n<link rel="icon" type="image/svg+xml" href="./favicon.svg" />`,
   viteFinal: async config => {
     const filteredPlugins =
       config.plugins?.filter(

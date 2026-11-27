@@ -67,10 +67,9 @@ export function assertEachOnce(items, legs, what = 'item') {
 
 /**
  * Which items share one leg of their own (`together`), which items each take
- * a leg of their own (`alone`), which other items may join the `together`
- * leg (`besideTogether`; every item when it is not given), and which may join
- * an `alone` item's leg (`besideAlone`; as `besideTogether` when not given).
- * @typedef {{together?: (item: string) => boolean, alone?: (item: string) => boolean, besideTogether?: (item: string) => boolean, besideAlone?: (item: string) => boolean}} KeptApart
+ * a leg of their own (`alone`), and which other items may join either kind
+ * of leg (`besideTogether`; every item when it is not given).
+ * @typedef {{together?: (item: string) => boolean, alone?: (item: string) => boolean, besideTogether?: (item: string) => boolean}} KeptApart
  */
 
 /**
@@ -79,9 +78,9 @@ export function assertEachOnce(items, legs, what = 'item') {
  * taken, for work the leg does besides these items. With `apart.together`,
  * those items go to the last leg, and only items `apart.besideTogether`
  * accepts join them there. With `apart.alone`, each of those items takes a
- * leg of its own before the last, with only the items `apart.besideAlone`
- * accepts beside it, when a leg is still left for the other items; with
- * fewer legs it goes where a `together` item goes. With one leg, or none of those items, the split is
+ * leg of its own before the last, with the same light items beside it, when
+ * a leg is still left for the other items; with fewer legs it goes where a
+ * `together` item goes. With one leg, or none of those items, the split is
  * as without it.
  * @param {string[]} items
  * @param {number} count
@@ -108,28 +107,23 @@ export function splitByDuration(items, count, cost, reserved = [], apart = {}) {
   const kept = [...keptOnly, ...lone.filter(item => !ownLegs.includes(item))];
   const keptLeg = kept.length > 0 ? legs[count - 1] : null;
   const besideKept = apart.besideTogether ?? (() => true);
-  const besideLone = apart.besideAlone ?? besideKept;
   for (const item of slowestFirst(kept, cost)) {
     keptLeg.items.push(item);
     keptLeg.total += cost(item);
   }
-  const loneLegs = new Set();
+  const apartLegs = new Set(keptLeg ? [keptLeg] : []);
   for (const [i, item] of slowestFirst(ownLegs, cost).entries()) {
     const leg = legs[count - (keptLeg ? 2 : 1) - i];
     leg.items.push(item);
     leg.total += cost(item);
-    loneLegs.add(leg);
+    apartLegs.add(leg);
   }
   const keptSet = new Set([...kept, ...ownLegs]);
   const rest = unique.filter(item => !keptSet.has(item));
   for (const item of slowestFirst(rest, cost)) {
-    const open = legs.filter(leg =>
-      leg === keptLeg
-        ? besideKept(item)
-        : loneLegs.has(leg)
-          ? besideLone(item)
-          : true,
-    );
+    const open = !besideKept(item)
+      ? legs.filter(leg => !apartLegs.has(leg))
+      : legs;
     const leg = open.reduce((best, next) =>
       next.total < best.total ? next : best,
     );
@@ -152,25 +146,17 @@ export function splitByDuration(items, count, cost, reserved = [], apart = {}) {
  * @param {string[]} items
  * @param {(item: string) => number} cost
  * @param {{budget: number, maxLegs?: number, start?: number} & KeptApart} limits
- *   `together`, `alone`, `besideTogether` and `besideAlone` keep items apart
- *   in each split, as splitByDuration does
+ *   `together`, `alone` and `besideTogether` keep items apart in each split,
+ *   as splitByDuration does
  * @returns {{count: number, shares: string[][], longest: number}} `longest`
  *   in seconds
  */
 export function fitLegsToBudget(
   items,
   cost,
-  {
-    budget,
-    maxLegs,
-    start = 1,
-    together,
-    alone: ownLeg,
-    besideTogether,
-    besideAlone,
-  },
+  {budget, maxLegs, start = 1, together, alone: ownLeg, besideTogether},
 ) {
-  const apart = {together, alone: ownLeg, besideTogether, besideAlone};
+  const apart = {together, alone: ownLeg, besideTogether};
   const unique = [...new Set(items)];
   const total = leg => leg.reduce((sum, item) => sum + cost(item), 0);
   const alone = unique.filter(item => cost(item) > budget).sort();
