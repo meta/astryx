@@ -4,8 +4,8 @@
  * @file main.test.ts
  * @input Storybook config, workspace alias table, app package dependencies,
  *   and the app's tsconfig.json.
- * @output Regression coverage for source aliases, source paths and cold-clone
- *   config loading.
+ * @output Regression coverage for source aliases, source paths, cold-clone
+ *   config loading and the preview head's icon link.
  * @position Node tests beside the Storybook configuration.
  * @description Guards three things that keep the Storybook app working from
  *   a cold clone, at three different resolution stages.
@@ -277,5 +277,22 @@ describe('storybook tsconfig.json source paths', () => {
         .map(target => `${key} -> ${target}`),
     );
     expect(missing).toEqual([]);
+  });
+});
+
+describe('storybook main.ts preview head', () => {
+  it('links the built favicon.svg, so a story frame opened on its own asks for no /favicon.ico', async () => {
+    const previewHead = config.previewHead as (
+      head: string,
+      options: unknown,
+    ) => string | Promise<string>;
+    expect(typeof previewHead).toBe('function');
+
+    const head = await previewHead('<meta name="existing" />', {});
+
+    expect(head).toContain('<meta name="existing" />');
+    expect(head).toContain(
+      '<link rel="icon" type="image/svg+xml" href="./favicon.svg" />',
+    );
   });
 });
