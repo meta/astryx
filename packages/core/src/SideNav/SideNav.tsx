@@ -326,7 +326,11 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
   },
-  // Resizable container — wraps the nav and the drag handle
+  // A resizable nav is the containing block for the overlay handle.
+  rootResizable: {
+    position: 'relative',
+  },
+  // Resizable container — wraps the nav (and the handle inside it)
   resizableContainer: {
     position: 'relative',
     display: 'flex',
@@ -740,8 +744,8 @@ export function SideNav({
     collapsed,
     (wasCollapsed: boolean): PendingRailFocus | null => {
       const nav = navRef.current;
-      // The resize handle sits beside the nav, in the resize wrapper, and goes
-      // with a collapse its Enter starts.
+      // The resize handle sits in the nav and is unmounted by a collapse
+      // its Enter starts. The wrapper remains a fallback for focus.
       const focus = wasCollapsed
         ? null
         : (noteFocusWithin(nav) ?? noteFocusWithin(resizeWrapperRef.current));
@@ -961,7 +965,12 @@ export function SideNav({
       data-testid={testId}
       {...mergeProps(
         themeProps('side-nav'),
-        stylex.props(styles.root, collapsed && styles.rootCollapsed, xstyle),
+        stylex.props(
+          styles.root,
+          collapsed && styles.rootCollapsed,
+          isResizable && styles.rootResizable,
+          xstyle,
+        ),
         className,
         resizableNavStyle,
       )}
@@ -1013,19 +1022,6 @@ export function SideNav({
           )}
         </div>
       )}
-    </nav>
-  );
-
-  // Overlay drag handle inside the nav when resizable.
-  // Uses ResizeHandle in overlay mode so the handle sits inside
-  // the panel's overflow: clip bounds.
-  // A resizable rail keeps its wrapper while collapsed, so collapsing or
-  // expanding never changes the nav's parent: the nav and its items stay
-  // mounted, and their state (an open nested group) and focus persist (FR6).
-  // Only the handle comes and goes.
-  const rail = isResizable ? (
-    <div ref={resizeWrapperRef} {...stylex.props(styles.resizableContainer)}>
-      {navElement}
       {showResizeHandle && (
         <ResizeHandle
           data-testid="astryx-sidenav-resize-handle"
@@ -1039,6 +1035,19 @@ export function SideNav({
           aria-controls={navId}
         />
       )}
+    </nav>
+  );
+
+  // The overlay handle is a child of the nav, so it stays inside the
+  // navigation landmark its aria-controls points at. Overlay positioning
+  // keeps it out of the flex flow and on the inline-end edge. The wrapper
+  // still clips the handle and stays mounted while the rail is collapsed,
+  // so collapsing or expanding never changes the nav's parent: the nav and
+  // its items stay mounted, and their state (an open nested group) and
+  // focus persist (FR6). Only the handle comes and goes.
+  const rail = isResizable ? (
+    <div ref={resizeWrapperRef} {...stylex.props(styles.resizableContainer)}>
+      {navElement}
     </div>
   ) : (
     navElement
