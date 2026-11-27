@@ -72,6 +72,16 @@ describe('testWorkers', () => {
     expect(testWorkers({cores: 40, memory: 256 * GiB, ...watch()})).toBe(
       MOST_WORKERS,
     );
+    // `run` or `list` as a file filter or a test-name pattern is still a watch.
+    expect(
+      testWorkers({cores: 10, memory: 64 * GiB, ...watch('watch', 'list')}),
+    ).toBe(5);
+    expect(
+      testWorkers({cores: 10, memory: 64 * GiB, ...watch('-t', 'run')}),
+    ).toBe(5);
+    expect(testWorkers({cores: 10, memory: 64 * GiB, ...watch('list')})).toBe(
+      MOST_WORKERS,
+    );
     expect(testWorkers({cores: 10, memory: 64 * GiB, ...watch('--run')})).toBe(
       MOST_WORKERS,
     );

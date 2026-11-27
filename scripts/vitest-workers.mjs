@@ -22,8 +22,20 @@ export const MEMORY_PER_WORKER = 2 * 1024 ** 3;
 /** A command-line worker count, in either spelling Vitest accepts. */
 const WORKERS_FLAG = /^--max-?workers(=|$)/i;
 
-/** Command-line words that make a single run rather than a watch. */
-const SINGLE_RUN = new Set(['run', '--run', 'list']);
+/** Vitest commands that make a single run rather than a watch. */
+const SINGLE_RUN_COMMANDS = new Set(['run', 'list']);
+
+/**
+ * Whether the command line makes a single run: `run` or `list` as the
+ * command (the first word after the Vitest binary), or `--run` anywhere. The
+ * same word as a file filter or a test-name pattern does not count. Reading
+ * a single run as a watch only lowers the count.
+ * @param {string[]} argv
+ * @returns {boolean}
+ */
+function singleRun(argv) {
+  return SINGLE_RUN_COMMANDS.has(argv[2] ?? '') || argv.includes('--run');
+}
 
 /**
  * The memory the run can use: the machine's, or the container's limit when
@@ -59,7 +71,7 @@ export function testWorkers({
 } = {}) {
   if (argv.some(arg => WORKERS_FLAG.test(arg))) return undefined;
   if (isCi(env)) return undefined;
-  const watch = !argv.some(arg => SINGLE_RUN.has(arg));
+  const watch = !singleRun(argv);
   const byCores = watch ? Math.floor(cores / 2) : cores - 1;
   const byMemory = Math.floor(memory / MEMORY_PER_WORKER);
   return Math.max(1, Math.min(byCores, MOST_WORKERS, byMemory));
