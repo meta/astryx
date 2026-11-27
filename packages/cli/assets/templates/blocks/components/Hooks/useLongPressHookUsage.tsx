@@ -73,8 +73,9 @@ const styles = stylex.create({
   // surface's bottom and scrolls its own actions. So the surface and the card
   // keep their size, and the layout around them does not move. The inline-
   // start edge alone places the panel; the physical left edge is removed,
-  // because it applies after a logical edge. The scroll padding is the focus
-  // ring's outer reach, so Tab scrolls each action and its ring into view.
+  // because it applies after a logical edge. The scroll padding is the
+  // default focus ring's outer reach, so Tab scrolls each action and its ring
+  // into view while Button keeps the default focus offset.
   // The extra 1px absorbs whole-pixel scrolling: browsers scroll in whole
   // pixels, but a row's top can sit at a fraction.
   panelBelowButton: {
