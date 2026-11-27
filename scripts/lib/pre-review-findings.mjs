@@ -166,19 +166,18 @@ const DOM_STATE =
  * The body of the arrow function an Effect starts on line `index`, or null
  * when the Effect takes a named function or an expression body.
  */
-export function effectBody(lines, index) {
-  const source = lines.slice(index, index + 400).join('\n');
-  const start = source.search(EFFECT);
-  const arrow = source.indexOf('=>', start);
-  if (start === -1 || arrow === -1) return null;
-  const open = source.slice(arrow + 2).search(/\S/) + arrow + 2;
-  if (source[open] !== '{' || source.slice(start, arrow).includes(',')) {
-    return null;
-  }
-  let depth = 0;
+/**
+ * Yield each non-comment, non-string code index in `source` from `start`,
+ * tracking template-literal `${...}` nesting. Recognizes strings, comments,
+ * and template literals, and no other syntax (such as regex literals).
+ *
+ * @param {string} source
+ * @param {number} [start]
+ * @returns {Generator<{index: number, char: string, templateOpened: boolean}>}
+ */
+function* scanCode(source, start = 0) {
   const modes = ['code'];
-  const templateDepths = [];
-  for (let i = open; i < source.length; i += 1) {
+  for (let i = start; i < source.length; i += 1) {
     const char = source[i];
     const next = source[i + 1];
     const mode = modes.at(-1);
@@ -203,8 +202,7 @@ export function effectBody(lines, index) {
       else if (char === '`') modes.pop();
       else if (char === '$' && next === '{') {
         modes.push('code');
-        templateDepths.push(depth);
-        depth += 1;
+        yield {index: i + 1, char: '{', templateOpened: true};
         i += 1;
       }
       continue;
@@ -217,16 +215,28 @@ export function effectBody(lines, index) {
       i += 1;
     } else if (char === "'" || char === '"' || char === '`') {
       modes.push(char);
-    } else if (char === '{') {
-      depth += 1;
-    } else if (char === '}') {
+    } else {
+      yield {index: i, char, templateOpened: false};
+    }
+  }
+}
+
+/** The scan reads text; it recognizes strings, comments, and template literals, and no other syntax. */
+export function effectBody(lines, index) {
+  const source = lines.slice(index, index + 400).join('\n');
+  const start = source.search(EFFECT);
+  const arrow = source.indexOf('=>', start);
+  if (start === -1 || arrow === -1) return null;
+  const open = source.slice(arrow + 2).search(/\S/) + arrow + 2;
+  if (source[open] !== '{' || source.slice(start, arrow).includes(',')) {
+    return null;
+  }
+  let depth = 0;
+  for (const {index: i, char} of scanCode(source, open)) {
+    if (char === '{') depth += 1;
+    else if (char === '}') {
       depth -= 1;
-      if (templateDepths.at(-1) === depth) {
-        templateDepths.pop();
-        modes.pop();
-      } else if (depth === 0) {
-        return source.slice(open + 1, i);
-      }
+      if (depth === 0) return source.slice(open + 1, i);
     }
   }
   return null;
@@ -356,47 +366,11 @@ function guardsLazyInit(text, ref) {
 function renderUses(source, uses, {lazyCounts}) {
   const found = [];
   const blocks = [];
-  const modes = ['code'];
   let statementStart = 0;
-  for (let i = 0; i < source.length; i += 1) {
-    const char = source[i];
-    const next = source[i + 1];
-    const mode = modes.at(-1);
-    if (mode === 'line-comment') {
-      if (char === '\n') modes.pop();
-      continue;
-    }
-    if (mode === 'block-comment') {
-      if (char === '*' && next === '/') {
-        modes.pop();
-        i += 1;
-      }
-      continue;
-    }
-    if (mode === "'" || mode === '"') {
-      if (char === '\\') i += 1;
-      else if (char === mode || char === '\n') modes.pop();
-      continue;
-    }
-    if (mode === '`') {
-      if (char === '\\') i += 1;
-      else if (char === '`') modes.pop();
-      else if (char === '$' && next === '{') {
-        modes.push('code');
-        blocks.push({kind: 'template', statementStart, inParentheses: true});
-        i += 1;
-        statementStart = i + 1;
-      }
-      continue;
-    }
-    if (char === '/' && next === '/') {
-      modes.push('line-comment');
-      i += 1;
-    } else if (char === '/' && next === '*') {
-      modes.push('block-comment');
-      i += 1;
-    } else if (char === "'" || char === '"' || char === '`') {
-      modes.push(char);
+  for (const {index: i, char, templateOpened} of scanCode(source)) {
+    if (templateOpened) {
+      blocks.push({kind: 'template', statementStart, inParentheses: true});
+      statementStart = i + 1;
     } else if (char === '{') {
       const header = source.slice(statementStart, i);
       blocks.push({
@@ -407,7 +381,6 @@ function renderUses(source, uses, {lazyCounts}) {
       statementStart = i + 1;
     } else if (char === '}') {
       const block = blocks.pop();
-      if (block?.kind === 'template') modes.pop();
       statementStart = block?.inParentheses ? block.statementStart : i + 1;
     } else if (char === ';') {
       statementStart = i + 1;

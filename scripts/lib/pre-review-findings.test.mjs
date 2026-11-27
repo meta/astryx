@@ -534,6 +534,8 @@ describe('effectFindings', () => {
           "  onPanRef.current = '}';",
           '  // Closing brace } inside a comment',
           '  const tag = `${ok ? "{a}" : "{b}"}`;',
+          '  const s = `}`;',
+          '  const s = `}`;',
           "  node.addEventListener('input', onInput);",
           '}, [onPan, ok]);',
         ].join('\n'),
