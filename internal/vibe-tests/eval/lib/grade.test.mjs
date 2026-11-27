@@ -126,9 +126,10 @@ const FONT_URL = 'https://fonts.gstatic.com/s/figtree/v1/a.woff2';
 
 /**
  * A browser double whose every page requests one font. The font request fails,
- * and the nth abort that follows fails with `abortError(n)`.
+ * and the nth abort that follows fails with `abortError(n)`. With `gotoError`,
+ * each page's `goto` then throws that error.
  */
-function failingFontBrowser(abortError) {
+function failingFontBrowser(abortError, {gotoError} = {}) {
   let aborts = 0;
   return {
     async newContext() {
@@ -148,6 +149,7 @@ function failingFontBrowser(abortError) {
               throw abortError(aborts);
             },
           });
+          if (gotoError) throw gotoError;
         },
         async evaluate() {},
         async waitForTimeout() {},
@@ -197,5 +199,36 @@ describe('gradeWorkspace when Playwright refuses to abort a failed font request'
     expect(grade.browserError).not.toContain('Call log');
     expect(grade.browserError).not.toContain('FAKE-COOKIE');
     expect(grade.browserError).toContain(`${FONT_URL}: route.abort: ${'x'.repeat(300 - 'route.abort: '.length)};`);
+  });
+
+  it('records a refusal for an answered route when the page then fails to load', async () => {
+    const browser = failingFontBrowser(
+      () => new Error('route.abort: Route is already handled!'),
+      {
+        gotoError: new Error('page.goto: net::ERR_FAILED'),
+      },
+    );
+    const grade = await gradeWorkspace({...fakeRun(), browser});
+    expect(grade.failure).toBe('browser');
+    expect(grade.browserError).toBe('Error: page.goto: net::ERR_FAILED');
+    // The desktop page's goto throws, so the mobile page never opens.
+    expect(grade.alreadyHandledAborts).toEqual([FONT_URL]);
+    expect(grade.abortError).toBeUndefined();
+  });
+
+  it('reports every other refusal when the page then fails to load', async () => {
+    const browser = failingFontBrowser(
+      n => new Error(`route.abort: Protocol error ${n}`),
+      {
+        gotoError: new Error('page.goto: net::ERR_FAILED'),
+      },
+    );
+    const grade = await gradeWorkspace({...fakeRun(), browser});
+    expect(grade.passed).toBe(false);
+    expect(grade.failure).toBe('browser');
+    expect(grade.browserError).toBe('Error: page.goto: net::ERR_FAILED');
+    expect(grade.abortError).toBe(
+      `Error: Playwright could not abort 1 failed font request: ${FONT_URL}: route.abort: Protocol error 1`,
+    );
   });
 });
