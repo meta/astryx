@@ -198,9 +198,10 @@ narrow exception.
 Current `main` stores explicit theme colors and has no palette field in the
 normalized theme contract. This proposal preserves that behavior.
 
-Neutral keeps its palette in a private theme-owned TypeScript file,
-`neutralPalettes.ts`, and `neutralTheme.ts` references its reviewed values
-through `neutralPaletteRefs`, which resolve to CSS colors. No palette field
+Neutral keeps its palette in a theme-owned TypeScript file,
+`neutralPalettes.ts`, which the package exports as `neutralPalettes`;
+`neutralTheme.ts` references its reviewed values through the generated
+`neutralPaletteRefs`, which resolve to CSS colors. No palette field
 enters the normalized theme contract. Neutral's palette carries its own visual
 review, tests, theme record, and release treatment rather than receiving
 implicit approval from this contract.
