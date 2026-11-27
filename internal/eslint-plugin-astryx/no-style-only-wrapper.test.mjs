@@ -36,6 +36,18 @@ const styles = stylex.create({
 // (describe/it) from inside another it() callback.
 ruleTester.run('no-style-only-wrapper', noStyleOnlyWrapperRule, {
   valid: [
+    // A member imported under another name is still a member.
+    {
+      code: `${setup}
+import {Selector as FieldSelector} from '../Selector/Selector';
+const a = <div style={{marginInlineStart: 4}}><FieldSelector label="Field" /></div>;`,
+    },
+    // So is a member read through a namespace import.
+    {
+      code: `${setup}
+import * as Core from '@astryxdesign/core';
+const a = <div style={{marginInlineStart: 4}}><Core.Selector label="Field" /></div>;`,
+    },
     // Without type information, a family:input-fields member is skipped: its
     // props omit root xstyle, so the wrapper is the only box for the style.
     {
@@ -136,6 +148,13 @@ const a = <div {...stylex.props(styles.offset)}><Tooltip label="x" /></div>;`,
   ],
 
   invalid: [
+    // A non-member imported under a member's name is not skipped.
+    {
+      code: `${setup}
+import {Button as Selector} from '../Button/Button';
+const a = <div style={{marginInlineStart: 4}}><Selector label="Go" /></div>;`,
+      errors: [{messageId: 'styleOnlyWrapper'}],
+    },
     // The motivating case: an RTL mirror on a display wrapper instead of the
     // Icon (meta/astryx#4752).
     {

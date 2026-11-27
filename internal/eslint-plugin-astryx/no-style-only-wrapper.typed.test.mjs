@@ -40,6 +40,7 @@ import {Selector} from './Selector';
 import {ValueEditor} from './ValueEditor';
 import {Button} from './Button';
 import {LooseAny, LooseIndex} from './Loose';
+import {NoProps} from './NoProps';
 const styles = stylex.create({
   column: {flexGrow: 1, flexShrink: 1, minWidth: 0},
   offset: {marginInlineStart: 4},
@@ -57,6 +58,8 @@ tester.run('no-style-only-wrapper (typed)', noStyleOnlyWrapperRule, {
     file(
       `const a = <div {...stylex.props(styles.column)}><Selector label="Field" /></div>;`,
     ),
+    // A component declared with no props cannot take xstyle either.
+    file(`const a = <div {...stylex.props(styles.column)}><NoProps /></div>;`),
     // An editor with no style prop at all: the wrapper is the only box.
     file(
       `const a = <div {...stylex.props(styles.column)}><ValueEditor value="x" /></div>;`,
