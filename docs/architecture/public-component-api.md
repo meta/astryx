@@ -554,7 +554,9 @@ Known verification gaps:
   and has no `create…` factory yet; no full inventory exists yet. Each conforms
   by adding its factory; a shipped hook's signature changes only when a real
   need arises (INV21a).
-- The passthrough lint is warning-only while known violations remain.
+- `require-baseprops-passthrough` fails strict lint in `packages/core/src`
+  (outside `theme/`) and `packages/richtext/src`; a component that takes
+  `props` whole, such as ChatSendButton, is not checked.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
 - INV24: the delta covers declarations, CSS custom properties, theme targets,
