@@ -420,8 +420,9 @@ Flags a `<div>`/`<span>` that exists only to style a single Astryx component.
 A component that extends `BaseProps` takes `xstyle`, so the wrapper adds a DOM
 node that takes the component out of its parent's flex/grid child
 relationship (this is what knocked the pagination carets off-center in #4752).
-A Field-composed input omits root `xstyle`, so a wrapper around one is not
-reported.
+With type information, a wrapper around a child whose props omit root
+`xstyle`, such as a Field-composed input, is not reported. Without type
+information, only a `family:input-fields` member is skipped.
 
 **Bad:**
 

@@ -402,10 +402,10 @@ plugin.configs.strict = {
     '@astryx/presentational-component': 'error',
     '@astryx/docblock-example-format': 'error',
     '@astryx/no-stylex-null-override': 'error',
-    // A wrapper around a child that cannot take the style itself (a
-    // family:input-fields member, or any component whose props have no root
-    // xstyle) is not reported, so every remaining report is a wrapper that can
-    // move onto the child.
+    // With type information, a wrapper around a child whose props have no
+    // root xstyle is not reported. Without type information, only a
+    // family:input-fields member is skipped, so a wrapper around another
+    // Field-composed control still reports.
     '@astryx/no-style-only-wrapper': 'error',
     '@astryx/no-wrapper-transform': 'error',
     '@astryx/no-react-introspection': 'error',
