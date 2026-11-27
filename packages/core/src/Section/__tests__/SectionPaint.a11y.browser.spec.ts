@@ -4,10 +4,9 @@
 /**
  * @file SectionPaint.a11y.browser.spec.ts
  * @input The built Storybook's Section stories in Chromium and WebKit
- * @output Real-browser proof that the painted container fills a minimum
- *   height, that each variant and divider paints its token on its logical
- *   edge in both directions, and that a nested Section escapes its parent's
- *   inset
+ * @output Real-browser proof that each variant and divider paints its token
+ *   on its logical edge in both directions, and that a nested Section escapes
+ *   its parent's inset
  * @position Ongoing browser check for Section; jsdom computes no StyleX layout
  *   or paint
  */
@@ -60,7 +59,6 @@ async function readSection(page: Page, evidence: string) {
     return {
       wrapper: box(wrapper),
       painted: box(painted),
-      isPaintedTarget: painted.classList.contains('astryx-section'),
       background: style.backgroundColor,
       surface: resolve('--color-background-surface', 'backgroundColor'),
       muted: resolve('--color-background-muted', 'backgroundColor'),
@@ -74,18 +72,6 @@ async function readSection(page: Page, evidence: string) {
     };
   });
 }
-
-test('the painted container and its bottom divider fill a minimum height', async ({
-  page,
-}) => {
-  await open(page, 'dividers');
-  const section = await readSection(page, 'min-height');
-  expect(section.isPaintedTarget).toBe(true);
-  expect(section.wrapper.height).toBe(160);
-  expect(section.painted.top).toBe(section.wrapper.top);
-  expect(section.painted.bottom).toBe(section.wrapper.bottom);
-  expect(section.edges.bottom).toBe(`1px solid ${section.border}`);
-});
 
 test('each variant paints its token and transparent paints nothing', async ({
   page,

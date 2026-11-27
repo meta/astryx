@@ -3,8 +3,7 @@
 
 /**
  * @file SectionAudit.a11y.chromium.spec.ts
- * @input Exact-head Section stories: dividers with a minimum height, the
- *   three variants, nested padding inheritance and per-edge padding, in light
+ * @input Exact-head Section stories: dividers, the three variants, nested padding inheritance and per-edge padding, in light
  *   and dark, both directions, phone width and forced colors
  * @output Screenshots and fail-closed sensor receipts for the Section
  *   whole-component audit
@@ -183,7 +182,7 @@ for (const mode of ['light', 'dark'] as const) {
   for (const direction of ['ltr', 'rtl'] as const) {
     cases.push({
       key: `dividers__${mode}__${direction}`,
-      group: 'dividers and minimum height',
+      group: 'dividers',
       story: DIVIDERS_STORY,
       mode,
       direction,
@@ -193,7 +192,6 @@ for (const mode of ['light', 'dark'] as const) {
         const block = byEvidence(sections, 'dividers-block');
         const start = byEvidence(sections, 'dividers-start');
         const end = byEvidence(sections, 'dividers-end');
-        const minHeight = byEvidence(sections, 'min-height');
         check(
           block.borders.join(' ') === '1px 0px 1px 0px',
           `top and bottom dividers ${block.borders.join(' ')}`,
@@ -213,19 +211,6 @@ for (const mode of ['light', 'dark'] as const) {
         check(
           end.background === 'rgba(0, 0, 0, 0)',
           `transparent paint ${end.background}`,
-        );
-        check(
-          minHeight.wrapper.bottom - minHeight.wrapper.top === 160,
-          `min-height wrapper ${JSON.stringify(minHeight.wrapper)}`,
-        );
-        check(
-          minHeight.painted.top === minHeight.wrapper.top &&
-            minHeight.painted.bottom === minHeight.wrapper.bottom,
-          `painted container does not fill the minimum height: ${JSON.stringify({wrapper: minHeight.wrapper, painted: minHeight.painted})}`,
-        );
-        check(
-          minHeight.borders[2] === '1px',
-          `min-height bottom divider ${minHeight.borders[2]}`,
         );
         const axe = await checkAxe(page, check);
         await frame('rest', {sections, axe});

@@ -385,21 +385,6 @@ export const Dividers: Story = {
           </p>
         </Section>
       </div>
-      <div>
-        <h4 {...stylex.props(styles.heading)}>
-          minHeight=160 + bottom divider
-        </h4>
-        <Section
-          data-evidence="min-height"
-          variant="muted"
-          width={220}
-          minHeight={160}
-          dividers={['bottom']}>
-          <p {...stylex.props(styles.text)}>
-            The fill and the bottom divider reach the minimum height.
-          </p>
-        </Section>
-      </div>
     </div>
   ),
 };

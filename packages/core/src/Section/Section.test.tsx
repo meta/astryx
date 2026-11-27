@@ -209,6 +209,7 @@ describe('Section', () => {
     const outer = container.firstElementChild as HTMLElement;
     const inner = outer.firstElementChild as HTMLElement;
     for (const element of [outer, inner]) {
+      expect(element.tagName).toBe('DIV');
       expect(element).not.toHaveAttribute('role');
       expect(element).not.toHaveAttribute('aria-label');
       expect(element).not.toHaveAttribute('tabindex');
