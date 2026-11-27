@@ -70,7 +70,7 @@ export const docs = {
     },
   ],
   theming: {
-    targets: [],
+    targets: [{className: 'astryx-chat-send-button'}],
     componentIcons: [
       {
         slot: 'chat-send-button-send',
