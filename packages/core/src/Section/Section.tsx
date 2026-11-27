@@ -182,7 +182,7 @@ export interface SectionProps extends BaseProps<HTMLElement> {
    * When omitted, each edge takes the theme's per-edge or per-axis section
    * padding, then an ancestor Section's explicit `padding`, then the theme's
    * section padding, then step 4 (16px).
-   * @default theme section padding, else 4
+   * @default theme or ancestor Section padding, else 4
    */
   padding?: SpacingStep;
   /**
