@@ -23,17 +23,21 @@ export const MEMORY_PER_WORKER = 2 * 1024 ** 3;
 const WORKERS_FLAG = /^--max-?workers(=|$)/i;
 
 /**
- * A word that may ask for watch mode, in any spelling: `--watch` or
- * `--no-watch` with or without a value, or a short-flag group with `w` in it
- * (`-w`, `-uw`, `-w=true`). A command line with one is not read as a single
- * run, whatever the value says.
+ * A word that may ask for watch mode, or turn `--run` off: any long option
+ * whose name starts with `w` (`--w`, `--watch=1`, `--watch.enabled`,
+ * `--no-watch`), any short-flag group with `w` anywhere in it (`-w`, `-uw1`,
+ * `-w0`), and `--run` with a value or negated (`--run=false`, `--no-run`).
+ * The match is broad on purpose: a command line with one is not read as a
+ * single run, whatever the value says, so a spelling it does not know leaves
+ * Vitest its own count.
  */
-const WATCH_WORD = /^(--(no-)?watch(=.*)?|-[a-zA-Z]*w[a-zA-Z]*(=.*)?)$/;
+const WATCH_WORD = /^(--(no-)?w|-[^-]*w|--(no-)?run[=.]|--no-run$)/i;
 
 /**
  * Whether the command line is surely a single run: `run` or `list` as the
  * first word after the Vitest binary, or `--run` anywhere, and no word that
- * may ask for watch mode and no `--` (Vitest reads no option after it).
+ * may ask for watch mode or turn `--run` off, and no `--` (Vitest reads no
+ * option after it).
  * Anything else, a watch or a command line this cannot read, leaves Vitest
  * its own count.
  * @param {string[]} argv

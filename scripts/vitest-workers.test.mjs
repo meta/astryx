@@ -63,6 +63,9 @@ describe('testWorkers', () => {
       ['list'],
       ['--run'],
       ['run', '-u'],
+      // A filter or path with a w in it is not an option.
+      ['run', 'packages/cli/watch'],
+      ['run', '-t', 'writes'],
       ['run', 'packages/cli'],
       ['run', '--project', 'node'],
     ])
@@ -88,6 +91,15 @@ describe('testWorkers', () => {
       ['run', '-w=true'],
       ['run', '--watch=1'],
       ['run', '--watch', '--run'],
+      // Other spellings Vitest's parser reads as watch, or as no `--run`.
+      ['run', '--w'],
+      ['run', '--w=1'],
+      ['run', '-w0'],
+      ['run', '-w1'],
+      ['run', '-uw1'],
+      ['run', '--watch.enabled'],
+      ['--run', '--no-run'],
+      ['--run=false'],
       // A value that turns watch off still leaves the run to Vitest.
       ['run', '--watch=false'],
       ['run', '--no-watch'],
