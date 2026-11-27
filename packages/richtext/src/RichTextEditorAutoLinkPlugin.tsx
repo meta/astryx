@@ -16,7 +16,9 @@
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/index.ts (exports / barrel)
+ * - /packages/richtext/src/RichTextEditorAutoLinkPlugin.doc.mjs (component docs)
  * - /packages/richtext/src/RichTextEditor.doc.mjs (usage notes)
+ * - /packages/richtext/src/RichTextEditorAutoLinkPlugin.test.tsx (tests)
  * - /packages/richtext/src/RichTextEditor.test.tsx (tests)
  * - /apps/storybook/stories/RichTextEditor.stories.tsx (story)
  *
@@ -81,10 +83,13 @@ const EXCLUDE_PARENTS: ((parent: ElementNode) => boolean)[] = [$isCodeNode];
 export interface RichTextEditorAutoLinkPluginProps {
   /**
    * Link matchers to use. Defaults to {@link DEFAULT_LINK_MATCHERS} (URLs +
-   * emails, opening in a new tab). Provide a custom array to recognize
-   * additional patterns (e.g. product-specific shortform references) — build
-   * each with `createLinkMatcherWithRegExp` from
-   * `@lexical/react/LexicalAutoLinkPlugin`.
+   * emails, opening in a new tab). An array you pass replaces the defaults:
+   * to keep URL and email links, spread {@link DEFAULT_LINK_MATCHERS} into it.
+   * Build each extra matcher (e.g. product-specific shortform references) with
+   * `createLinkMatcherWithRegExp` from `@lexical/react/LexicalAutoLinkPlugin`.
+   * Its links open in the same tab unless it returns
+   * {@link NEW_TAB_LINK_ATTRIBUTES} as `attributes`.
+   * @default DEFAULT_LINK_MATCHERS
    */
   matchers?: LinkMatcher[];
   /**
