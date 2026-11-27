@@ -6086,3 +6086,163 @@ describe('MultiSelector caller aria-labelledby', () => {
     expect(opener).toHaveAttribute('aria-labelledby', 'row-title');
   });
 });
+
+describe('MultiSelector delegated theming owners (FR4)', () => {
+  const options = ['Apple', {type: 'divider' as const}, 'Banana'];
+
+  it('keeps the Field, clear, checkbox, divider and icon parts on their own owners in the popover', async () => {
+    const user = userEvent.setup();
+    const {container} = render(
+      <MultiSelector
+        label="Fruit"
+        options={options}
+        value={['Apple']}
+        onChange={vi.fn()}
+        hasClear
+      />,
+    );
+    const combobox = screen.getByRole('combobox');
+    expect(combobox.closest('.astryx-field')).not.toBeNull();
+    expect(container.querySelector('.astryx-input-clear-icon')).not.toBeNull();
+    expect(
+      container.querySelector('.astryx-multi-selector .astryx-icon'),
+    ).not.toBeNull();
+
+    await user.click(combobox);
+    const popup = popupOf(combobox);
+    const rows = within(popup).getAllByRole('option', h);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.querySelector('.astryx-checkbox-input')).not.toBeNull();
+    }
+    expect(popup.querySelector('.astryx-divider')).not.toBeNull();
+  });
+
+  it('keeps the sheet and its heading on their own owners in the bottom sheet', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Fruit"
+        options={options}
+        value={[]}
+        onChange={vi.fn()}
+        presentation="bottom-sheet"
+      />,
+    );
+    await user.click(screen.getByRole('combobox'));
+    const dialog = await screen.findByRole('dialog', {name: 'Fruit'});
+    expect(dialog.querySelector('.astryx-bottom-sheet')).not.toBeNull();
+    const heading = within(dialog).getByRole('heading', {name: 'Fruit'});
+    expect(heading).toHaveClass('astryx-heading');
+    for (const row of within(dialog).getAllByRole('option')) {
+      expect(row.querySelector('.astryx-checkbox-input')).not.toBeNull();
+    }
+    expect(dialog.querySelector('.astryx-divider')).not.toBeNull();
+  });
+});
+
+describe('MultiSelector one panel tree (FR5)', () => {
+  const options = [
+    {
+      type: 'section' as const,
+      title: 'Fruit',
+      options: ['Apple', 'Banana'],
+    },
+    {type: 'divider' as const},
+    {
+      type: 'section' as const,
+      title: 'Vegetables',
+      options: ['Carrot'],
+    },
+  ];
+
+  /** The panel's content model: each row's role and name, in order. */
+  function panelModel(root: HTMLElement): string[] {
+    return [
+      ...root.querySelectorAll<HTMLElement>(
+        '[role="option"], [role="group"], [role="separator"], .astryx-divider, input[type="search"], input[role="combobox"]',
+      ),
+    ].map(node => {
+      const role =
+        node.getAttribute('role') ??
+        (node.matches('.astryx-divider') ? 'divider' : node.tagName);
+      const name =
+        node.getAttribute('aria-label') ??
+        (node.getAttribute('aria-labelledby') != null
+          ? (document.getElementById(node.getAttribute('aria-labelledby') ?? '')
+              ?.textContent ?? '')
+          : role === 'option'
+            ? (node.textContent ?? '')
+            : '');
+      return `${role}:${name.trim()}`;
+    });
+  }
+
+  async function openPanel(presentation: 'popover' | 'bottom-sheet') {
+    const user = userEvent.setup();
+    const view = render(
+      <MultiSelector
+        label="Produce"
+        options={options}
+        value={['Banana']}
+        onChange={vi.fn()}
+        hasSearch
+        presentation={presentation}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Produce'}));
+    if (presentation === 'bottom-sheet') {
+      await screen.findByRole('dialog', {name: 'Produce'});
+    }
+    // The panel content is the smallest box holding both the search input
+    // and the listbox; the sheet's own Heading sits outside it.
+    const listbox = screen.getByRole('listbox', h);
+    const search = screen.getByRole('combobox', h);
+    let panel: HTMLElement = listbox;
+    while (!panel.contains(search) && panel.parentElement != null) {
+      panel = panel.parentElement;
+    }
+    const model = panelModel(panel);
+    view.unmount();
+    return model;
+  }
+
+  it('renders the same search, section, divider and option content in the popover and the sheet', async () => {
+    const popover = await openPanel('popover');
+    const sheet = await openPanel('bottom-sheet');
+    // The selected option leads; every provided option is present once.
+    expect(popover.filter(row => row.startsWith('option:')).toSorted()).toEqual(
+      ['option:Apple', 'option:Banana', 'option:Carrot'],
+    );
+    expect(popover.length).toBeGreaterThan(3);
+    expect(sheet).toEqual(popover);
+  });
+
+  it('renders the same empty state in the popover and the sheet', async () => {
+    const user = userEvent.setup();
+    for (const presentation of ['popover', 'bottom-sheet'] as const) {
+      const view = render(
+        <MultiSelector
+          label="Produce"
+          options={options}
+          value={EMPTY_VALUE}
+          onChange={vi.fn()}
+          hasSearch
+          emptySearchText="Nothing matches"
+          presentation={presentation}
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Produce'}));
+      if (presentation === 'bottom-sheet') {
+        await screen.findByRole('dialog', {name: 'Produce'});
+      }
+      const search = screen.getAllByRole('combobox', h).at(-1) as HTMLElement;
+      await enterQuery(user, search, 'zzz');
+      expect(
+        await screen.findByText('Nothing matches', undefined, {timeout: 2000}),
+      ).toBeInTheDocument();
+      expect(screen.queryAllByRole('option', h)).toHaveLength(0);
+      view.unmount();
+    }
+  });
+});
