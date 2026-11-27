@@ -36,6 +36,13 @@ const styles = stylex.create({
 // (describe/it) from inside another it() callback.
 ruleTester.run('no-style-only-wrapper', noStyleOnlyWrapperRule, {
   valid: [
+    // Without type information, a family:input-fields member is skipped: its
+    // props omit root xstyle, so the wrapper is the only box for the style.
+    {
+      code: `${setup}
+import {Selector} from '../Selector/Selector';
+const a = <div {...stylex.props(styles.offset)}><Selector label="Field" /></div>;`,
+    },
     // The component is styled directly — the shape the rule is steering toward.
     {code: `${setup} const a = <Icon icon="x" xstyle={styles.mirror} />;`},
 
