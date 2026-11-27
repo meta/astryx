@@ -645,6 +645,23 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     expect(isTooltipTriggerBeforeLoad(trigger())).toBe(false);
   });
 
+  it('recounts a described trigger when TooltipDescribesContext changes above a mounted tooltip', async () => {
+    const {isTooltipTriggerBeforeLoad} = await import('./useTooltip');
+    const {TooltipDescribesContext} = await import('./tooltipPresentInterest');
+    const {rerender} = render(
+      <TooltipDescribesContext value={false}>
+        <Harness />
+      </TooltipDescribesContext>,
+    );
+    expect(isTooltipTriggerBeforeLoad(trigger())).toBe(false);
+    rerender(
+      <TooltipDescribesContext value>
+        <Harness />
+      </TooltipDescribesContext>,
+    );
+    expect(isTooltipTriggerBeforeLoad(trigger())).toBe(true);
+  });
+
   it('the load waits for a trigger to attach: a tooltip whose trigger never attaches starts none', async () => {
     function Detached() {
       const tooltip = useTooltip();

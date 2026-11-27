@@ -694,7 +694,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // out in the same task, before the frame paints, and never ahead of it.
   const [layerIds, setLayerIds] = useState<TooltipLayerIds | null>(null);
   const optionsRef = useCommittedRef(options);
-  const describesRef = useCommittedRef(use(TooltipDescribesContext));
+  const describes = use(TooltipDescribesContext);
+  const describesRef = useCommittedRef(describes);
   const [bridge] = useState(() =>
     createTooltipBridge(
       setLayerIds,
@@ -705,11 +706,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   );
   const isEnabled = options.isEnabled !== false;
   // Syncs the page's tooltip load, and the described-trigger count that
-  // `isTooltipTriggerBeforeLoad` reads, with `isEnabled` while the trigger is
-  // attached. The trigger's ref callback covers a trigger that attaches.
+  // `isTooltipTriggerBeforeLoad` reads, with `isEnabled` and
+  // `TooltipDescribesContext` while the trigger is attached. The trigger's ref
+  // callback covers a trigger that attaches.
   useEffect(() => {
     bridge.syncEnabled();
-  }, [bridge, isEnabled]);
+  }, [bridge, isEnabled, describes]);
   // Set only by a Core component that mounts the tooltip on interaction.
   const heldInterestRef = use(TooltipPresentInterestContext);
   const Surface = useSyncExternalStore(subscribe, getSurface, getServerSurface);

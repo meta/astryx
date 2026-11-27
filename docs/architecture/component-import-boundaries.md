@@ -147,8 +147,8 @@ one pending load per module, caches a success, and resets after a failure.
   the surface once the load has landed and the hover delay has passed, if the
   pointer is still on the trigger; otherwise the next hover shows it. Keyboard
   focus still on the trigger shows it when the load lands. A tap on a
-  `Tooltip` trigger before load is not held: the next tap shows the tooltip
-  (`component:Tooltip` FR14).
+  `Tooltip` trigger before load is not held: the next tap is handled as on a
+  loaded tooltip (`component:Tooltip` FR5, FR14).
 - **INV5 — The load moves nothing.** Loading changes no box in the page: the
   trigger's size, position, and content are the same before and after. No
   closed surface paints during the load. The surface paints in the top layer

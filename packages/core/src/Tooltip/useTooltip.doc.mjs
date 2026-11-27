@@ -209,7 +209,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Toggle-style trigger: own button calls show()/hide() per press, sets aria-describedby={describedBy}, aria-expanded (true while held), keeps its own name. Info icon: use InfoTip.',
+          'Toggle-style trigger: own button calls show()/hide() per press, sets aria-describedby={describedBy || undefined}, aria-expanded (true while held), keeps its own name. Info icon: use InfoTip.',
       },
       {
         guidance: false,
