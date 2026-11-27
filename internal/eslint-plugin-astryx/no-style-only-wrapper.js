@@ -5,12 +5,13 @@
  * @description Disallow a `<div>`/`<span>` that exists only to style a single
  * Astryx component — style the component directly via `xstyle`.
  *
- * A component that extends `BaseProps` takes `xstyle`
- * (`@astryx/require-base-props` enforces that). A Field-composed control omits
- * root `xstyle` instead (family:input-fields FR10), so the rule reports a
- * wrapper only when its child can take the style. Wrapping such a child in a
- * styled host element to position or transform it adds a DOM node that is not
- * part of the component contract: it drops the component out of its parent's
+ * `@astryx/require-base-props` makes public props extend `BaseProps`, which
+ * carries `xstyle`. A Field-composed control omits root `xstyle` from it
+ * instead (family:input-fields FR10). With type information, the rule reports
+ * a wrapper only when its child can take the style; without it, see the
+ * fallback below. Wrapping a child that takes `xstyle` in a styled host
+ * element to position or transform it adds a DOM node that is not part of the
+ * component contract: it drops the component out of its parent's
  * flex/grid child relationship, can break centering and alignment, and gives
  * themes a node they cannot reach.
  *
@@ -183,10 +184,10 @@ const rule = {
     hasSuggestions: true,
     messages: {
       styleOnlyWrapper:
-        '<{{wrapper}}> exists only to style <{{component}}>, which takes ' +
-        'xstyle, so pass the styles to <{{component}}> via xstyle and drop the ' +
-        "wrapper — an extra DOM node changes the parent's flex/grid child " +
-        'relationship and can break alignment.',
+        '<{{wrapper}}> exists only to style <{{component}}>. Pass the styles ' +
+        'to <{{component}}> via xstyle and drop the wrapper — an extra DOM node ' +
+        "changes the parent's flex/grid child relationship and can break " +
+        'alignment.',
       moveToXstyle: 'Move the styles onto <{{component}}> via xstyle',
     },
     schema: [
