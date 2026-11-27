@@ -292,7 +292,8 @@ const rule = {
     /**
      * The name a JSX tag's component has where it is exported: the imported
      * name for `import {Selector as S}`, and the last segment for
-     * `<Core.Selector>`.
+     * `<Core.Selector>`. A default import gives no name, because no
+     * family:input-fields member has a default export.
      */
     function importedComponentName(nameNode) {
       if (nameNode.type === 'JSXMemberExpression') {
@@ -302,9 +303,10 @@ const rule = {
         return null;
       }
       const binding = importedBindings.get(nameNode.name);
-      return binding == null || binding.name === 'default'
-        ? nameNode.name
-        : binding.name;
+      if (binding == null) {
+        return nameNode.name;
+      }
+      return binding.name === 'default' ? null : binding.name;
     }
 
     function propsTakeXstyle(type) {
