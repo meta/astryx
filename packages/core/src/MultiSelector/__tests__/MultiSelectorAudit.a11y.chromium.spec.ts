@@ -789,19 +789,16 @@ for (const direction of ['ltr', 'rtl'] as const) {
         .isVisible()
         .catch(() => false);
       check(emptyShown, 'no empty-search state');
+      // With no options, the popup is a group, named as the listbox is, so
+      // axe runs with no exception.
+      const popupId = await search.getAttribute('aria-controls');
+      const popupRole = await page
+        .locator(`[id="${popupId}"]`)
+        .getAttribute('role');
+      check(popupRole === 'group', `empty popup role: ${popupRole}`);
       const result = await axe(page);
-      // The empty-panel message is presentational, so the listbox has no
-      // option children here and axe flags that one listbox. The receipt
-      // records that node and does not fail on it; any other violation fails.
-      const listboxId = await search.getAttribute('aria-controls');
-      const expected = result.violations.filter(v =>
-        v.startsWith(`aria-required-children #${listboxId}:`),
-      );
-      checkAxe(check, {
-        ...result,
-        violations: result.violations.filter(v => !expected.includes(v)),
-      });
-      await frame('no-results', {emptyShown, axe: result, expected});
+      checkAxe(check, result);
+      await frame('no-results', {emptyShown, popupRole, axe: result});
       await page.keyboard.press('Escape');
       await expect(trigger).toHaveAttribute('aria-expanded', 'false');
       await settle(page);
