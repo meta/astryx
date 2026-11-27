@@ -631,7 +631,9 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
     const key = keys.join(', ');
 
     it(`${dir} (${key}): registry matches doc derived`, () => {
-      for (const k of keys) expect(derivedVarRegistry[k]).toBeDefined();
+      for (const k of keys) {
+        expect(derivedVarRegistry[k]).toBeDefined();
+      }
       expect(keys.flatMap(k => derivedVarRegistry[k] ?? [])).toEqual(
         docDerived,
       );
@@ -640,7 +642,9 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
     // generateThemeRules looks the registry up by the theme's components key,
     // so a key that is not one of the doc's targets never expands.
     it(`${dir} (${key}): registry key is a documented theming target`, () => {
-      for (const k of keys) expect(docTargetKeys).toContain(k);
+      for (const k of keys) {
+        expect(docTargetKeys).toContain(k);
+      }
     });
   }
 
@@ -657,12 +661,15 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
           `${dir}: has theming.derived but no DIR_TO_REGISTRY_KEY mapping. ` +
             `Add the mapping and a derivedVarRegistry entry.`,
         );
-      } else
-        for (const key of [mapped].flat())
-          if (!derivedVarRegistry[key])
+      } else {
+        for (const key of [mapped].flat()) {
+          if (!derivedVarRegistry[key]) {
             missing.push(
               `${dir} (${key}): has theming.derived but no derivedVarRegistry entry.`,
             );
+          }
+        }
+      }
     }
     expect(missing).toEqual([]);
   });

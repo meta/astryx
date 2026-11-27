@@ -166,11 +166,14 @@ function holdAnchorAtRest(anchor: Element): () => void {
 }
 
 const styles = stylex.create({
-  // Default popover surface — background, radius, shadow.
+  // Default popover surface — background, text color, radius, shadow.
   // Applied automatically unless hasSurface is false.
   // Consumers that need a raw positioned layer should use useLayer instead.
   surface: {
     backgroundColor: colorVars['--color-background-popover'],
+    // The browser gives `[popover]` `CanvasText`, which follows the color
+    // scheme and not the theme.
+    color: colorVars['--color-text-primary'],
     '--_popover-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_popover-radius)',
     boxShadow: shadowVars['--shadow-low'],
@@ -374,8 +377,8 @@ export interface UsePopoverOptions {
   tabBehavior?: 'contain' | 'pageOrder';
 
   /**
-   * Whether to apply the default popover surface (background, border-radius,
-   * box-shadow) to the content wrapper.
+   * Whether to apply the default popover surface (background, text color,
+   * border-radius, box-shadow) to the content wrapper.
    *
    * Set to false when the popover content provides its own surface styling
    * (e.g., mega menus with custom layouts). If you find yourself opting out,
