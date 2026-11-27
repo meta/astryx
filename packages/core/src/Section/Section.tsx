@@ -97,8 +97,10 @@ const minHeightFillStyles = stylex.create({
   },
   inner: {
     flexGrow: 1,
-    // Content taller than a set `height` overflows the painted container,
-    // as it does without flex, instead of stretching it.
+    // A flex item's minimum height is its content height by default. Removing
+    // that minimum lets `height: 100%` hold under a set `height`, so taller
+    // content overflows the painted container, as it does without flex,
+    // instead of stretching it.
     minHeight: 0,
   },
 });
