@@ -117,7 +117,14 @@ describe('MultiSelector bottom-sheet load', () => {
     render(
       <MultiSelector
         label="Labels"
-        options={['Bug', 'Feature']}
+        options={[
+          {
+            value: 'bug',
+            label: 'Bug',
+            action: <button type="button">Edit Bug</button>,
+          },
+          {value: 'feature', label: 'Feature'},
+        ]}
         value={[]}
         onChange={onChange}
         presentation="bottom-sheet"
@@ -138,6 +145,14 @@ describe('MultiSelector bottom-sheet load', () => {
     fireEvent.click(trigger);
     fireEvent.keyDown(trigger, {key: 'Enter'});
     fireEvent.keyDown(trigger, {key: ' '});
+    // The keys that move the highlight have no list to move across.
+    for (const key of ['ArrowDown', 'End', 'PageDown', 'ArrowUp', 'Home']) {
+      fireEvent.keyDown(trigger, {key});
+    }
+    fireEvent.keyDown(trigger, {key: 'End'});
+    // In a grid the inline arrows cannot reach the row's action either.
+    fireEvent.keyDown(trigger, {key: 'ArrowRight'});
+    fireEvent.keyDown(trigger, {key: 'ArrowRight'});
     expect(onChange).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -150,12 +165,15 @@ describe('MultiSelector bottom-sheet load', () => {
     const listboxId = trigger.getAttribute('aria-controls');
     expect(document.getElementById(listboxId ?? '')).toHaveAttribute(
       'role',
-      'listbox',
+      'grid',
     );
-    const active = trigger.getAttribute('aria-activedescendant');
-    if (active != null) {
-      expect(document.getElementById(active)).not.toBeNull();
-    }
+    // The sheet opens on the opening row, not where the keys would have taken
+    // the highlight, and not on its action cell.
+    const active = document.getElementById(
+      trigger.getAttribute('aria-activedescendant') ?? '',
+    );
+    expect(active).toHaveAttribute('role', 'row');
+    expect(active).toHaveTextContent('Bug');
     expect(screen.getAllByRole('dialog', {hidden: true})).toHaveLength(1);
     expect(onChange).not.toHaveBeenCalled();
   });

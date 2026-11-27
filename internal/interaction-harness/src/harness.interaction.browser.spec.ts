@@ -8314,7 +8314,10 @@ test.describe('page freeze', () => {
     // The page's own handlers: the touch-down starts a 400 ms travel, and the
     // lift records how far it had run.
     await page.evaluate(() => {
-      const box = document.getElementById('box')!;
+      const box = document.getElementById('box');
+      if (box == null) {
+        throw new Error('no box');
+      }
       addEventListener(
         'pointerdown',
         () => {
