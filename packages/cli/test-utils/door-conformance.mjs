@@ -238,6 +238,26 @@ async function runThrough(door, argv, setUp) {
 }
 
 /**
+ * How many example runs one door-conformance file starts at a time: at most
+ * 4, the count CI's 4-core runners run, and no more than the box's cores. A
+ * box with more load than cores is shared with other work: from one run per
+ * core of load the count falls to 2 at 1.5 runs per core and stays there. The
+ * Vitest run's own workers make the load about one run per core, so a busy CI
+ * leg still runs 4. Never fewer than 2: one at a time, the 460 runs take 240 s
+ * on a quiet box, too close to the hook's bound on a loaded one.
+ * @param {{cores?: number, load?: number}} [box] the box's cores and its
+ *   1-minute load average
+ * @returns {number}
+ */
+export function doorRunsAtOnce({
+  cores = os.availableParallelism(),
+  load = os.loadavg()[0],
+} = {}) {
+  const perCore = load / Math.max(1, cores);
+  return Math.max(2, Math.min(4, cores, Math.round(4 * (2 - perCore))));
+}
+
+/**
  * Run `tasks` with at most `limit` at a time.
  * @template T
  * @param {Array<() => Promise<T>>} tasks
@@ -277,7 +297,7 @@ export function describeDoorConformance(folder) {
     const runs = new Map();
 
     beforeAll(async () => {
-      const limit = Math.max(2, Math.min(16, os.availableParallelism()));
+      const limit = doorRunsAtOnce();
       const results = await inBatches(
         examples.flatMap(({argv}) => [
           () => runThrough('bin', argv, setUp),
@@ -289,7 +309,8 @@ export function describeDoorConformance(folder) {
         runs.set(cli, {bin: results[2 * index], host: results[2 * index + 1]});
       });
       // Each folder runs every example twice (bin and host entry), `limit` at a
-      // time: 4 on CI's 4-core runners. The three folders together took 467 s
+      // time: 4 on CI's 4-core runners, fewer on a box busy with other work
+      // (doorRunsAtOnce). The three folders together took 467 s
       // on a slow CI leg, so one folder takes about a third of that. 10 minutes
       // leaves a wide margin, and a hung hook that starts early in its leg
       // fails by this hook's name. Later in a leg, the shard watchdog names
