@@ -18,7 +18,7 @@
     "@monaco-editor/react": "^4.8.0-rc.3",
     "@stylexjs/stylex": "catalog:",
     "@vercel/analytics": "^2.0.1",
-    "@vercel/speed-insights": "^2.0.0",
+    "@vercel/speed-insights": "^2.1.0",
     "@astryxdesign/charts": "*",
     "@astryxdesign/cli": "*",
     "@astryxdesign/core": "*",
@@ -33,14 +33,14 @@
     "@astryxdesign/vega": "*",
     "@astryxdesign/template-icons": "*",
     "fflate": "^0.8.2",
-    "lucide-react": "^1.66.0",
+    "lucide-react": "^1.77.0",
     "lz-string": "^1.5.0",
-    "monaco-editor": "^0.55.1",
-    "next": "16.3.6",
+    "monaco-editor": "^0.57.0",
+    "next": "16.4.6",
     "prettier": "catalog:",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "recharts": "^3.10.1"
+    "recharts": "^3.11.0"
   },
   "devDependencies": {
     "@babel/core": "catalog:",
@@ -53,7 +53,7 @@
     "@types/lz-string": "^1.5.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "autoprefixer": "^10.6.2",
+    "autoprefixer": "^10.7.0",
     "shadcn": "4.19.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
