@@ -21,12 +21,17 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 /**
- * An environment folder setting, when it names an absolute path.
+ * An environment folder setting, when it names an absolute path on the given
+ * platform. Windows paths are read with Windows rules on any host, so the
+ * folders of another platform can be worked out and tested anywhere.
  * @param {string | undefined} value
+ * @param {NodeJS.Platform} [platform]
  * @returns {string | null}
  */
-export function absoluteDirSetting(value) {
-  return typeof value === 'string' && value !== '' && path.isAbsolute(value)
+export function absoluteDirSetting(value, platform = process.platform) {
+  const isAbsolute =
+    platform === 'win32' ? path.win32.isAbsolute : path.isAbsolute;
+  return typeof value === 'string' && value !== '' && isAbsolute(value)
     ? value
     : null;
 }
@@ -53,7 +58,8 @@ export function userCacheDir({
   const join = platform === 'win32' ? path.win32.join : path.join;
   if (platform === 'win32') {
     return join(
-      absoluteDirSetting(env.LOCALAPPDATA) ?? join(home, 'AppData', 'Local'),
+      absoluteDirSetting(env.LOCALAPPDATA, platform) ??
+        join(home, 'AppData', 'Local'),
       'astryx',
       'Cache',
     );
@@ -80,7 +86,8 @@ export function userConfigDir({
   const join = platform === 'win32' ? path.win32.join : path.join;
   if (platform === 'win32') {
     return join(
-      absoluteDirSetting(env.APPDATA) ?? join(home, 'AppData', 'Roaming'),
+      absoluteDirSetting(env.APPDATA, platform) ??
+        join(home, 'AppData', 'Roaming'),
       'astryx',
     );
   }
