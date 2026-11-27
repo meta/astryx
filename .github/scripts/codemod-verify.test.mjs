@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {execFileSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,6 +13,8 @@ import {
   formatFiles,
   report,
 } from './codemod-verify.mjs';
+
+const MODULE_URL = new URL('./codemod-verify.mjs', import.meta.url).href;
 
 const root = path.resolve(import.meta.dirname, '../..');
 const workflow = yaml.parse(
@@ -133,10 +135,11 @@ describe('the allow-manual-edit owner exception', () => {
 });
 
 describe('consumer paths with shell characters', () => {
-  // A route group, a dollar sign, a space and a backtick: a shell string
-  // would break on each, and the file would be skipped as new.
+  // A route group, a dynamic segment, a dollar sign, a space and a backtick:
+  // a shell string would break on each, and the file would be skipped as new.
   const changed = [
     'apps/sandbox/src/app/(raw)/page.tsx',
+    'apps/sandbox/src/app/[id]/page.tsx',
     'apps/sandbox/src/$cost.tsx',
     'apps/sandbox/src/two words.tsx',
     'apps/sandbox/src/tick`tock.tsx',
@@ -174,6 +177,76 @@ describe('consumer paths with shell characters', () => {
       for (const file of changed)
         expect(baseVersion(base, file, {cwd: dir}), file).toBe('base\n');
       expect(baseVersion(base, added, {cwd: dir})).toBeNull();
+      // Read in a child process, so the test sees what the job's log would:
+      // a new file reads as null and prints nothing.
+      const child = spawnSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `import {baseVersion} from ${JSON.stringify(MODULE_URL)};
+process.stdout.write(String(baseVersion(process.argv[1], process.argv[2], {cwd: process.argv[3]})));`,
+          base,
+          added,
+          dir,
+        ],
+        {encoding: 'utf8'},
+      );
+      expect(child.status, child.stderr).toBe(0);
+      expect(child.stdout).toBe('null');
+      expect(child.stderr).toBe('');
+      // A path that was a directory at the base is no file of it.
+      expect(baseVersion(base, 'apps/sandbox/src/app', {cwd: dir})).toBeNull();
+      // A git failure in the file list throws once, with git's message.
+      const listing = spawnSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `import {changedFiles} from ${JSON.stringify(MODULE_URL)};
+try {
+  changedFiles('no-such-base', {cwd: process.argv[1]});
+} catch (error) {
+  process.stdout.write(String(error.stderr));
+  process.exitCode = 3;
+}`,
+          dir,
+        ],
+        {encoding: 'utf8'},
+      );
+      expect(listing.status, listing.stderr).toBe(3);
+      expect(listing.stdout).toMatch(/no-such-base/);
+      expect(listing.stderr).toBe('');
+      // Any other git failure is not a new file: it throws, with git's message.
+      expect(() => baseVersion('no-such-base', changed[0], {cwd: dir})).toThrow(
+        /Not a valid object name no-such-base/,
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+});
+
+describe('a git failure in the job', () => {
+  it("reaches the job's log once, with git's message", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codemod-verify-'));
+    try {
+      const git = (/** @type {string[]} */ ...args) =>
+        execFileSync('git', args, {cwd: dir, encoding: 'utf8'});
+      git('init', '-q');
+      git('config', 'user.email', 'test@example.com');
+      git('config', 'user.name', 'test');
+      git('config', 'commit.gpgsign', 'false');
+      git('commit', '-q', '--allow-empty', '-m', 'base');
+      // The repository has no origin/main, so the job's merge base fails.
+      const job = spawnSync(
+        process.execPath,
+        [path.join(import.meta.dirname, 'codemod-verify.mjs')],
+        {cwd: dir, encoding: 'utf8'},
+      );
+      expect(job.status, job.stderr).toBe(1);
+      const message = 'Not a valid object name origin/main';
+      expect(job.stderr.split(message).length - 1, job.stderr).toBe(1);
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
