@@ -1208,10 +1208,10 @@ export const WithDateFilters: Story = {
   },
   decorators: [
     Story => (
-      // Up to 700 px wide, and no wider than the viewport, so a narrow screen
-      // shows the field as a phone does instead of a page that scrolls
-      // sideways.
-      <div style={{width: '100%', maxWidth: 700}}>
+      // 700 px on a wide canvas, as before. On a narrow canvas the frame
+      // takes the viewport less the story padding, so the page does not
+      // scroll sideways and the field shows as a phone shows it.
+      <div style={{width: 'min(700px, calc(100vw - 32px))'}}>
         <Story />
       </div>
     ),
