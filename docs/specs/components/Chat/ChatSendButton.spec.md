@@ -60,8 +60,9 @@ icon, styling, and ref seams available for standalone composition.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: additive `chat-send-button-send` component icon slot;
-  non-null caller overrides and the default glyph are preserved
+- Compatibility class: nonbreaking. The `chat-send-button-send` slot is additive;
+  `sendIcon={null}` is a visual change: it hides the glyph instead of showing
+  `arrowUp` (`spec:AST-017` FR3).
 - Controlled/uncontrolled behavior: not applicable; explicit props take
   precedence over context-derived values
 - Migration decision: callers that use `null` to request the default omit
