@@ -13,7 +13,7 @@
  */
 
 import {StrictMode, useState} from 'react';
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {
   act,
   cleanup,
@@ -1536,6 +1536,10 @@ describe('SegmentedControl target, size and ref (FR1, FR6, FR8)', () => {
 });
 
 describe('SegmentedControl focus handlers cannot cancel built-in focus behavior (FR4)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   function treatFocusAsKeyboardFocus() {
     const matches = HTMLElement.prototype.matches;
     vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
@@ -1607,7 +1611,6 @@ describe('SegmentedControl focus handlers cannot cancel built-in focus behavior 
     screen.getByText('before').focus();
     act(() => screen.getByRole('radio', {name: 'Grid'}).focus());
     expect(hintIsOpen()).toBe(true);
-    vi.restoreAllMocks();
   });
 
   it('still closes the keyboard hint on blur when a caller onBlur calls preventDefault', () => {
@@ -1630,6 +1633,5 @@ describe('SegmentedControl focus handlers cannot cancel built-in focus behavior 
     expect(hintIsOpen()).toBe(true);
     act(() => screen.getByText('before').focus());
     expect(hintIsOpen()).toBe(false);
-    vi.restoreAllMocks();
   });
 });
