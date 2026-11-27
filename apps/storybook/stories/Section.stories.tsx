@@ -504,6 +504,16 @@ export const MinHeight: Story = {
         </Section>
       </div>
       <div>
+        <h4 {...stylex.props(styles.heading)}>height=80, 200px content</h4>
+        <Section
+          data-evidence="height-overflow-plain"
+          variant="muted"
+          width={220}
+          height={80}>
+          <div {...stylex.props(styles.tallBlock)} />
+        </Section>
+      </div>
+      <div>
         <h4 {...stylex.props(styles.heading)}>
           height=80 + minHeight=40, 200px content
         </h4>

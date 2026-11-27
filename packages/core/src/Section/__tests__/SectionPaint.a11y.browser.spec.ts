@@ -235,9 +235,11 @@ test('content taller than a set height overflows the painted container, with or 
   page,
 }) => {
   await open(page, 'min-height');
-  const section = await readSection(page, 'height-overflow');
-  expect(section.wrapper.height).toBe(80);
-  expect(section.painted.height).toBe(80);
+  for (const evidence of ['height-overflow-plain', 'height-overflow']) {
+    const section = await readSection(page, evidence);
+    expect(section.wrapper.height).toBe(80);
+    expect(section.painted.height).toBe(80);
+  }
 });
 
 /** The painted padding per physical edge, and the padding a child that reads
