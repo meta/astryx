@@ -29,7 +29,7 @@ import type {
   SegmentedControlSize,
   SegmentedControlLayout,
 } from './SegmentedControlContext';
-import {mergeProps, composeEventHandlers} from '../utils';
+import {mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {useSize} from '../SizeContext/SizeContext';
 import type {BaseProps} from '../BaseProps';
@@ -393,10 +393,10 @@ export function SegmentedControl({
   // on the current segment) is a no-op, matching click behavior.
   const handleContainerFocus = useCallback(
     (e: React.FocusEvent<HTMLDivElement>) => {
+      // The public API promises no cancellation of focus behavior, so a
+      // caller preventDefault() does not stop the hint, the Tab-stop sync,
+      // or selection-follows-focus.
       onFocusProp?.(e);
-      if (e.defaultPrevented) {
-        return;
-      }
       hint.onFocus(e);
       handleFocus(e);
       if (isDisabled) {
@@ -429,6 +429,14 @@ export function SegmentedControl({
       }
     },
     [onFocusProp, hint, handleFocus, isDisabled, onChange, selection, value],
+  );
+
+  const handleContainerBlur = useCallback(
+    (e: React.FocusEvent<HTMLDivElement>) => {
+      onBlurProp?.(e);
+      hint.onBlur(e);
+    },
+    [onBlurProp, hint],
   );
 
   const contextValue = useMemo(
@@ -476,7 +484,7 @@ export function SegmentedControl({
         )}
         onKeyDown={handleContainerKeyDown}
         onFocus={handleContainerFocus}
-        onBlur={composeEventHandlers(onBlurProp, hint.onBlur)}
+        onBlur={handleContainerBlur}
         {...mergeProps(
           themeProps('segmented-control', {size}),
           stylex.props(
