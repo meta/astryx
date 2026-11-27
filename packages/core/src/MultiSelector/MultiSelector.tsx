@@ -2378,8 +2378,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     }
 
     // Empty state — no real items to show. With no options, the popup is a
-    // group named by the label (an empty listbox is invalid); the message is
-    // its content, next to the input, and the live region also announces it.
+    // group, named as the listbox is. An empty listbox or grid is invalid. The
+    // message is the group's content, and the live region also announces it.
     // While isLoading the options have not arrived yet, so asserting either
     // message would be a claim the component cannot make; the trigger's
     // spinner covers it.
