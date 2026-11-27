@@ -1891,7 +1891,11 @@ export function Tokenizer<T extends SearchableItem>({
   // disabled reason is input-local and stays.
   const localStatus = inputGroup ? undefined : status;
 
-  const {ariaLabelledBy: groupLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {
+    ariaLabelledBy: groupLabelledBy,
+    ariaDescribedBy,
+    isInvalid,
+  } = getInputARIA(
     inputLabelId,
     [
       !inputGroup && description ? descriptionId : null,
@@ -1904,6 +1908,9 @@ export function Tokenizer<T extends SearchableItem>({
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ],
     inputGroup,
+    // The caller's own status reaches the invalid state even grouped, where
+    // the local one is dropped from the visual presentation.
+    status?.type,
   );
   // Grouped, the input is named by the group label and its own hidden label;
   // a caller aria-labelledby joins either naming.
@@ -2100,9 +2107,7 @@ export function Tokenizer<T extends SearchableItem>({
                   // An error status is exposed on the combobox as on every other field
                   // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
                   // aria-required / aria-invalid still applies.
-                  aria-invalid={
-                    localStatus?.type === 'error' || rest['aria-invalid']
-                  }
+                  aria-invalid={isInvalid || rest['aria-invalid']}
                   __queryEntries={createEntries}
                   debounceMs={debounceMs}
                   onKeyDown={handleKeyDown}

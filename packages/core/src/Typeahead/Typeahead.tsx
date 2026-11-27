@@ -707,7 +707,7 @@ export function Typeahead<T extends SearchableItem>({
     [isDisabled, showToken, handleEnterEditMode, statusTooltipDescribedBy],
   );
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelId,
     [
       description ? descriptionId : null,
@@ -719,6 +719,7 @@ export function Typeahead<T extends SearchableItem>({
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ],
     inputGroup,
+    status?.type,
   );
 
   // A caller aria-labelledby names the input together with the field's own
@@ -835,9 +836,7 @@ export function Typeahead<T extends SearchableItem>({
                   // An error status is exposed on the combobox as on every other field
                   // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
                   // aria-required / aria-invalid still applies.
-                  aria-invalid={
-                    status?.type === 'error' || rest['aria-invalid']
-                  }
+                  aria-invalid={isInvalid || rest['aria-invalid']}
                   onChangeQuery={onChangeQuery}
                   onOpenChange={handleOpenChange}
                   menu={menu}

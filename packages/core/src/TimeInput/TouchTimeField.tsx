@@ -249,7 +249,7 @@ export function TouchTimeField({
   });
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({status, statusVariant, isInGroup: !!inputGroup});
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
@@ -259,6 +259,7 @@ export function TouchTimeField({
       ariaDescribedByProp,
     ],
     inputGroup,
+    status?.type,
   );
 
   const fireChange = useCallback(
@@ -434,7 +435,7 @@ export function TouchTimeField({
         aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={status?.type === 'error' ? 'true' : undefined}
+        aria-invalid={isInvalid ? 'true' : undefined}
         aria-busy={isBusy || undefined}
         aria-expanded={isSheetOpen}
         aria-haspopup="dialog"

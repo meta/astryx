@@ -772,7 +772,11 @@ function PointerDateField({
       isInGroup: !!inputGroup,
     });
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {
+    ariaLabelledBy,
+    ariaDescribedBy,
+    isInvalid: statusInvalid,
+  } = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
@@ -787,6 +791,7 @@ function PointerDateField({
       ariaDescribedByProp,
     ],
     inputGroup,
+    fieldStatus?.type,
   );
 
   const fieldElementRef = useRef<HTMLDivElement | null>(null);
@@ -1045,9 +1050,7 @@ function PointerDateField({
         }
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={
-          fieldStatus?.type === 'error' || isInvalid ? 'true' : undefined
-        }
+        aria-invalid={statusInvalid || isInvalid ? 'true' : undefined}
         aria-busy={isBusy || undefined}
         aria-expanded={popover.isOpen}
         aria-haspopup="dialog"

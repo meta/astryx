@@ -3318,7 +3318,7 @@ describe('Tokenizer', () => {
       ).toBeInTheDocument();
     });
 
-    it('does not mark the input invalid from a local status the group drops', () => {
+    it('marks the input invalid from its own error status while the group drops its presentation', () => {
       render(
         <InputGroup label="Recipients">
           <InputGroupText>To</InputGroupText>
@@ -3334,7 +3334,9 @@ describe('Tokenizer', () => {
       );
 
       const input = screen.getByRole('combobox', {name: 'Recipients People'});
-      expect(input).not.toHaveAttribute('aria-invalid', 'true');
+      // The field itself is invalid even grouped, where the presentation
+      // drops the local status message (WCAG 4.1.2).
+      expect(input).toHaveAttribute('aria-invalid', 'true');
       expect(screen.queryByText('Local error')).not.toBeInTheDocument();
     });
 

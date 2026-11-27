@@ -379,7 +379,7 @@ export function NativeDateField({
       isInGroup: !!inputGroup,
     });
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
@@ -391,6 +391,7 @@ export function NativeDateField({
       ariaDescribedByProp,
     ],
     inputGroup,
+    status?.type,
   );
 
   // Whether the control has focus — which, on a touch device, means its
@@ -701,9 +702,7 @@ export function NativeDateField({
           }
           aria-describedby={ariaDescribedBy}
           aria-required={isEffectivelyRequired ? 'true' : undefined}
-          aria-invalid={
-            fieldStatus?.type === 'error' || !isInputValid ? 'true' : undefined
-          }
+          aria-invalid={isInvalid || !isInputValid ? 'true' : undefined}
           aria-busy={isBusy || undefined}
           dir={controlProps.dir ?? textDirection}
           {...stylex.props(
