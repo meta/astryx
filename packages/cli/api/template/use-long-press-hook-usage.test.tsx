@@ -50,7 +50,7 @@ vi.mock('@astryxdesign/core/Card', () => ({
 
 // The node project loads Core's built bundle, which the StyleX stub does not
 // reach either. A plain stand-in for VStack shows the surface's style list on
-// `data-style`, so a case reads whether the surface scrolls.
+// `data-style`, so a case reads that the surface does not scroll.
 vi.mock('@astryxdesign/core/Layout', async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
   VStack: ({
@@ -74,6 +74,8 @@ function panelPosition(menu: HTMLElement | null): {
   top?: string;
   transform?: string;
   insetInlineStart?: string;
+  overflowY?: string;
+  maxHeight?: string;
 } {
   return JSON.parse(menu?.getAttribute('data-style') ?? '{}');
 }
@@ -347,8 +349,9 @@ describe('useLongPressHookUsage example', () => {
 
     // A narrow card has no room on either side of the button, so the panel
     // opens below it in both left-to-right and right-to-left layouts. It does
-    // not move up over the button, and the surface scrolls to reach it rather
-    // than growing, so a centered preview around the example does not shift.
+    // not move up over the button. It keeps to the room below the button and
+    // scrolls its own actions, so the surface neither grows nor scrolls, and a
+    // centered preview around the example does not shift.
     vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(
       DOMRect.fromRect({x: 0, y: 0, width: 260, height: 216}),
     );
@@ -362,12 +365,10 @@ describe('useLongPressHookUsage example', () => {
       insetInlineStart: '16px',
       top: '112px',
       transform: 'none',
-    });
-    expect(openSurfaceStyle).toMatchObject({
-      minHeight: 216,
       overflowY: 'auto',
-      scrollbarWidth: 'none',
+      maxHeight: '104px',
     });
+    expect(openSurfaceStyle).not.toHaveProperty('overflowY');
 
     // A button too near the end edge: the panel's end edge meets the button's.
     const belowEnd = openFrom(
@@ -379,12 +380,10 @@ describe('useLongPressHookUsage example', () => {
       insetInlineStart: '64px',
       top: '112px',
       transform: 'none',
-    });
-    expect(openSurfaceStyle).toMatchObject({
-      minHeight: 216,
       overflowY: 'auto',
-      scrollbarWidth: 'none',
+      maxHeight: '104px',
     });
+    expect(openSurfaceStyle).not.toHaveProperty('overflowY');
 
     // Right to left: the button starts the row at the right edge, and the
     // panel's start edge meets the button's start edge, measured from the
@@ -399,47 +398,10 @@ describe('useLongPressHookUsage example', () => {
       insetInlineStart: '16px',
       top: '112px',
       transform: 'none',
-    });
-    expect(openSurfaceStyle).toMatchObject({
-      minHeight: 216,
       overflowY: 'auto',
-      scrollbarWidth: 'none',
+      maxHeight: '104px',
     });
-  });
-
-  it('keeps a panel below the button when Actions is pressed again after the card scrolls', () => {
-    renderExample();
-    const surface = getSurface();
-    const actionsButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-expanded]',
-    );
-    if (!actionsButton) {
-      throw new Error('Expected the Actions button');
-    }
-    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(
-      DOMRect.fromRect({x: 0, y: 0, width: 260, height: 216}),
-    );
-    vi.spyOn(actionsButton, 'getBoundingClientRect').mockReturnValue(
-      DOMRect.fromRect({x: 16, y: 64, width: 88, height: 40}),
-    );
-    act(() => {
-      actionsButton.click();
-    });
-    // The card scrolls 30px to reach the panel's lower actions. The button
-    // moves up in the viewport by as much.
-    Object.defineProperty(surface, 'scrollTop', {
-      configurable: true,
-      value: 30,
-    });
-    vi.spyOn(actionsButton, 'getBoundingClientRect').mockReturnValue(
-      DOMRect.fromRect({x: 16, y: 34, width: 88, height: 40}),
-    );
-    act(() => {
-      actionsButton.click();
-    });
-    const menu = container.querySelector<HTMLElement>('[role="group"]');
-    expect(menu?.textContent).toContain('Opened by button at (16, 112)');
-    expect(panelPosition(menu)).toMatchObject({top: '112px'});
+    expect(openSurfaceStyle).not.toHaveProperty('overflowY');
   });
 
   it('provides an explicit Actions button fallback and returns focus when closed', () => {

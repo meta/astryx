@@ -46,12 +46,6 @@ const styles = stylex.create({
     // only the prefixed property; Chrome and Firefox read it too.
     WebkitUserSelect: 'none',
   },
-  // A panel below the button can reach past the surface's bottom. The surface
-  // then scrolls instead of growing, so the layout around it does not move.
-  // A scrollbar that takes space would narrow the card and can wrap the Actions
-  // button to a new row under the panel, so the scrollbar is hidden. Wheel,
-  // touch, and focus still scroll the surface.
-  surfaceScrollsPanel: {overflowY: 'auto', scrollbarWidth: 'none'},
   // The card fills the surface, so the area that listens for the press is
   // the area a person sees.
   card: {flexGrow: 1},
@@ -66,12 +60,16 @@ const styles = stylex.create({
     transform: `translateY(min(0px, max(-${y}px, calc(${surfaceHeight - y}px - 100%))))`,
     zIndex: 1,
   }),
-  // The inline-start edge alone places the panel, so a scrollbar on either
-  // side of the scrolling surface cannot move it away from the button. The
-  // physical left edge is removed, because it applies after a logical edge.
-  panelBelowButton: {left: null, transform: 'none'},
-  panelInlineStart: (inlineStart: number) => ({
+  // Below the button, the panel keeps to the room between the button and the
+  // surface's bottom and scrolls its own actions. So the surface and the card
+  // keep their size, and the layout around them does not move. The panel's
+  // own scrollbar shows that there is more. The inline-start edge alone
+  // places the panel; the physical left edge is removed, because it applies
+  // after a logical edge.
+  panelBelowButton: {left: null, transform: 'none', overflowY: 'auto'},
+  panelBelowButtonBox: (inlineStart: number, maxHeight: number) => ({
     insetInlineStart: `${inlineStart}px`,
+    maxHeight: `${maxHeight}px`,
   }),
 });
 
@@ -187,9 +185,11 @@ export default function UseLongPressHookUsage() {
     const x =
       surfaceLeft +
       (isRtl ? surfaceWidth - inlineStart - MENU_WIDTH : inlineStart);
-    // The surface can already be scrolled to reach an open panel.
-    const y = buttonRect.bottom + MENU_GAP + (surface?.scrollTop ?? 0);
-    openMenuAt({x, y}, 'button', Math.round(inlineStart));
+    openMenuAt(
+      {x, y: buttonRect.bottom + MENU_GAP},
+      'button',
+      Math.round(inlineStart),
+    );
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
@@ -219,10 +219,7 @@ export default function UseLongPressHookUsage() {
       <VStack
         ref={surfaceRef}
         data-testid="long-press-surface"
-        xstyle={[
-          styles.surface,
-          menu?.inlineStart != null && styles.surfaceScrollsPanel,
-        ]}
+        xstyle={styles.surface}
         onTouchStart={handleTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -261,7 +258,10 @@ export default function UseLongPressHookUsage() {
               styles.panel(menu.x, menu.y, menu.surfaceHeight),
               menu.inlineStart != null && styles.panelBelowButton,
               menu.inlineStart != null &&
-                styles.panelInlineStart(menu.inlineStart),
+                styles.panelBelowButtonBox(
+                  menu.inlineStart,
+                  menu.surfaceHeight - menu.y,
+                ),
             ]}>
             <VStack gap={1}>
               <Text type="supporting" color="secondary">
