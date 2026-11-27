@@ -11,20 +11,9 @@
  */
 
 import {defineConfig} from 'vitest/config';
+import {PLATFORM_ONLY} from './platform-only-cases.mjs';
 
-/** Each leg's file and the case only its platform runs. */
-export const PLATFORM_ONLY = [
-  {
-    os: 'windows-latest',
-    file: 'packages/cli/foundation/fs/path-safety.test.mjs',
-    case: 'reads Windows drive paths',
-  },
-  {
-    os: 'macos-latest',
-    file: 'packages/native/src/icons/defaults.test.ts',
-    case: 'names only SF Symbols the system has',
-  },
-];
+export {PLATFORM_ONLY};
 
 export default defineConfig({
   test: {
