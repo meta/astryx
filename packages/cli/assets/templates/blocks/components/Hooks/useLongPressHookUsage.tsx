@@ -16,6 +16,7 @@ import {Card} from '@astryxdesign/core/Card';
 import {useLongPress} from '@astryxdesign/core/hooks';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Heading, Text} from '@astryxdesign/core/Text';
+import {focusVars} from '@astryxdesign/core/theme/tokens.stylex';
 
 type TriggerSource = 'long press' | 'right-click' | 'button';
 
@@ -25,10 +26,21 @@ interface MenuPosition {
   // The surface's height when the panel opened, so CSS can keep the panel in it.
   surfaceHeight: number;
   source: TriggerSource;
+  // Set when the panel opens below the Actions button: its distance from the
+  // surface's inline-start edge. Such a panel never moves up over the button.
+  inlineStart: number | null;
+  // The height that cuts the last visible action of a below-button panel
+  // through its middle, read once when the panel renders. Null when the
+  // actions fit; not set before the read.
+  panelCap?: number | null;
 }
 
 const MENU_GAP = 8;
 const MENU_WIDTH = 180;
+// The share of the last visible action that shows when a below-button panel
+// does not fit: a partly visible row is the cue that the list scrolls, with
+// every scrollbar style.
+const CUT_ROW_SHOWN = 0.6;
 // Room for the panel's note and its three actions in every theme (the tallest
 // theme's panel is about 202px), so the panel stays inside the surface.
 const SURFACE_MIN_HEIGHT = 216;
@@ -57,7 +69,45 @@ const styles = stylex.create({
     transform: `translateY(min(0px, max(-${y}px, calc(${surfaceHeight - y}px - 100%))))`,
     zIndex: 1,
   }),
+  // Below the button, the panel keeps to the room between the button and the
+  // surface's bottom and scrolls its own actions. So the surface and the card
+  // keep their size, and the layout around them does not move. The inline-
+  // start edge alone places the panel; the physical left edge is removed,
+  // because it applies after a logical edge. The scroll padding is the
+  // default focus ring's outer reach, so Tab scrolls each action and its ring
+  // into view while Button keeps the default focus offset.
+  // The extra 1px absorbs whole-pixel scrolling: browsers scroll in whole
+  // pixels, but a row's top can sit at a fraction.
+  panelBelowButton: {
+    left: null,
+    transform: 'none',
+    overflowY: 'auto',
+    scrollPaddingBlock: `calc(${focusVars['--focus-outline-offset']} + ${focusVars['--focus-outline-width']} + 1px)`,
+  },
+  panelBelowButtonBox: (inlineStart: number, maxHeight: number) => ({
+    insetInlineStart: `${inlineStart}px`,
+    maxHeight: `${maxHeight}px`,
+  }),
 });
+
+// The tallest panel height that shows the last visible action at
+// CUT_ROW_SHOWN, within the room below the button. Null when the actions fit.
+function capAtPartRow(panel: HTMLElement, room: number): number | null {
+  if (panel.scrollHeight <= room) {
+    return null;
+  }
+  const contentTop = panel.getBoundingClientRect().top - panel.scrollTop;
+  let cap: number | null = null;
+  for (const row of panel.querySelectorAll('button')) {
+    const rect = row.getBoundingClientRect();
+    const cut = rect.top - contentTop + rect.height * CUT_ROW_SHOWN;
+    if (cut > room) {
+      break;
+    }
+    cap = Math.floor(cut);
+  }
+  return cap;
+}
 
 export default function UseLongPressHookUsage() {
   const surfaceRef = useRef<HTMLElement>(null);
@@ -69,7 +119,11 @@ export default function UseLongPressHookUsage() {
     'Hold on touch, right-click, or use Actions.',
   );
 
-  const openMenuAt = (point: {x: number; y: number}, source: TriggerSource) => {
+  const openMenuAt = (
+    point: {x: number; y: number},
+    source: TriggerSource,
+    inlineStart: number | null = null,
+  ) => {
     const surface = surfaceRef.current;
     if (!surface) {
       return;
@@ -77,7 +131,13 @@ export default function UseLongPressHookUsage() {
     const rect = surface.getBoundingClientRect();
     const x = Math.max(0, Math.round(point.x - rect.left));
     const y = Math.max(0, Math.round(point.y - rect.top));
-    setMenu({x, y, surfaceHeight: Math.round(rect.height), source});
+    setMenu({
+      x,
+      y,
+      surfaceHeight: Math.round(rect.height),
+      source,
+      inlineStart,
+    });
   };
 
   // Only the four touch handlers belong on the DOM element; start, moveTo, and
@@ -119,18 +179,67 @@ export default function UseLongPressHookUsage() {
     openMenuAt({x: e.clientX, y: e.clientY}, 'right-click');
   };
 
-  // The panel opens beside the Actions button, never over it: before the
-  // button when there is room, after it otherwise (the button can wrap to the
-  // start of its own row on a narrow card).
+  // The panel opens beside the Actions button when a side has room. On a
+  // narrower card it opens below the button, so it never covers the trigger.
   const handleOpenFromButton = (e: MouseEvent<HTMLButtonElement>) => {
     const buttonRect = e.currentTarget.getBoundingClientRect();
-    const surfaceLeft = surfaceRef.current?.getBoundingClientRect().left ?? 0;
+    const surfaceRect = surfaceRef.current?.getBoundingClientRect();
+    const surfaceLeft = surfaceRect?.left ?? 0;
+    const surfaceRight = surfaceRect?.right ?? 0;
     const hasRoomBefore =
       buttonRect.left - surfaceLeft >= MENU_WIDTH + MENU_GAP;
-    const x = hasRoomBefore
-      ? buttonRect.left - MENU_WIDTH - MENU_GAP
-      : buttonRect.right + MENU_GAP;
-    openMenuAt({x, y: buttonRect.top}, 'button');
+    const hasRoomAfter =
+      surfaceRight - buttonRect.right >= MENU_WIDTH + MENU_GAP;
+    if (hasRoomBefore) {
+      openMenuAt(
+        {x: buttonRect.left - MENU_WIDTH - MENU_GAP, y: buttonRect.top},
+        'button',
+      );
+      return;
+    }
+    if (hasRoomAfter) {
+      openMenuAt({x: buttonRect.right + MENU_GAP, y: buttonRect.top}, 'button');
+      return;
+    }
+    const surface = surfaceRef.current;
+    const isRtl =
+      surface != null && getComputedStyle(surface).direction === 'rtl';
+    // Distances from the surface's inline-start edge.
+    const surfaceWidth = surfaceRight - surfaceLeft;
+    const buttonStart = isRtl
+      ? surfaceRight - buttonRect.right
+      : buttonRect.left - surfaceLeft;
+    const buttonEnd = isRtl
+      ? surfaceRight - buttonRect.left
+      : buttonRect.right - surfaceLeft;
+    const inlineStart = Math.max(
+      0,
+      buttonStart + MENU_WIDTH <= surfaceWidth
+        ? buttonStart
+        : buttonEnd - MENU_WIDTH,
+    );
+    const x =
+      surfaceLeft +
+      (isRtl ? surfaceWidth - inlineStart - MENU_WIDTH : inlineStart);
+    openMenuAt(
+      {x, y: buttonRect.bottom + MENU_GAP},
+      'button',
+      Math.round(inlineStart),
+    );
+  };
+
+  // A below-button panel reads its rows once when it renders, then caps its
+  // height so the last visible action is cut through its middle.
+  const measurePanel = (panel: HTMLDivElement | null) => {
+    if (
+      panel == null ||
+      menu?.inlineStart == null ||
+      menu.panelCap !== undefined
+    ) {
+      return;
+    }
+    const panelCap = capAtPartRow(panel, menu.surfaceHeight - menu.y);
+    setMenu({...menu, panelCap});
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
@@ -191,11 +300,20 @@ export default function UseLongPressHookUsage() {
 
         {menu && (
           <Card
+            ref={measurePanel}
             role="group"
             aria-label="Document actions"
             padding={2}
             width={MENU_WIDTH}
-            xstyle={styles.panel(menu.x, menu.y, menu.surfaceHeight)}>
+            xstyle={[
+              styles.panel(menu.x, menu.y, menu.surfaceHeight),
+              menu.inlineStart != null && styles.panelBelowButton,
+              menu.inlineStart != null &&
+                styles.panelBelowButtonBox(
+                  menu.inlineStart,
+                  menu.panelCap ?? menu.surfaceHeight - menu.y,
+                ),
+            ]}>
             <VStack gap={1}>
               <Text type="supporting" color="secondary">
                 Opened by {menu.source} at ({menu.x}, {menu.y})

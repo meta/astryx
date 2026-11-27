@@ -59,6 +59,8 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
     baseURL,
     screenshot: 'only-on-failure',
+    // Traces record request headers, so a spec that ever sends a credential
+    // must turn tracing off for itself.
     trace: 'retain-on-failure',
   },
   webServer: {

@@ -59,7 +59,9 @@ const RETINA_SRC = /@2x(\.dark)?\.[a-zA-Z0-9]+$/;
  * sibling takes the light one's width so the two never shift on toggle.
  */
 export function displayWidthFor(src: string): number | undefined {
-  if (!RETINA_SRC.test(src)) return undefined;
+  if (!RETINA_SRC.test(src)) {
+    return undefined;
+  }
   const size = blogImageSizes[src];
   return size ? Math.round(size.width / 2) : undefined;
 }

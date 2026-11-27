@@ -5,8 +5,11 @@
  * @description Disallow a `<div>`/`<span>` that exists only to style a single
  * Astryx component — style the component directly via `xstyle`.
  *
- * Every public component extends `BaseProps`, so it takes `xstyle`
- * (`@astryx/require-base-props` enforces that). Wrapping one in a styled host
+ * `@astryx/require-base-props` makes public props extend `BaseProps`, which
+ * carries `xstyle`. A Field-composed control omits root `xstyle` from it
+ * instead (family:input-fields FR10). With type information, the rule reports
+ * a wrapper only when its child can take the style; without it, see the
+ * fallback below. Wrapping a child that takes `xstyle` in a styled host
  * element to position or transform it adds a DOM node that is not part of the
  * component contract: it drops the component out of its parent's
  * flex/grid child relationship, can break centering and alignment, and gives
@@ -27,6 +30,15 @@
  *     `role`, `aria-*`, `data-*`, an event handler, another spread — means the
  *     element has a job beyond styling.
  *   - it has exactly one child, a JSX element imported from Astryx.
+ *   - the child can take the style itself: its props have a root `xstyle`.
+ *     A Field-composed input omits root `xstyle` (family:input-fields FR10)
+ *     and its `containerXstyle` has no box to style inside an InputGroup or
+ *     a `horizontal-labels` FormLayout, so the wrapper is the only box that
+ *     can carry the style. With type information the rule reads the child's
+ *     props; without it, it skips the family's members, read from the
+ *     family record (`input-field-family-members.js`). Without types, the
+ *     fallback skips `family:input-fields` members only; CheckboxList,
+ *     RadioList and Slider, which FR10 also binds, are typed-path only.
  *   - the styles it applies contain no *structural* property (`display`, the
  *     flex/grid container properties, `gap`, `padding`). Those change the
  *     child's own formatting context rather than just its box, so the wrapper
@@ -40,6 +52,10 @@
  */
 
 import {resolveImportedStyleProperties} from './stylex-style-source.js';
+import ts from 'typescript';
+import {inputFieldFamilyMembers} from './input-field-family-members.js';
+
+const UNREADABLE_TYPE_FLAGS = ts.TypeFlags.Any | ts.TypeFlags.Unknown;
 
 /**
  * Style properties whose effect depends on the wrapper existing as its own
@@ -168,10 +184,10 @@ const rule = {
     hasSuggestions: true,
     messages: {
       styleOnlyWrapper:
-        '<{{wrapper}}> exists only to style <{{component}}>. Astryx components ' +
-        'extend BaseProps, so pass the styles to <{{component}}> via xstyle and ' +
-        'drop the wrapper — an extra DOM node changes the parent\'s flex/grid ' +
-        'child relationship and can break alignment.',
+        '<{{wrapper}}> exists only to style <{{component}}>. Pass the styles ' +
+        'to <{{component}}> via xstyle and drop the wrapper — an extra DOM node ' +
+        "changes the parent's flex/grid child relationship and can break " +
+        'alignment.',
       moveToXstyle: 'Move the styles onto <{{component}}> via xstyle',
     },
     schema: [
@@ -212,14 +228,14 @@ const rule = {
     const options = context.options[0] ?? {};
     const allowFiles = options.allowFiles ?? [];
     const filename = context.filename ?? context.getFilename();
-    if (allowFiles.some((pattern) => filename.includes(pattern))) {
+    if (allowFiles.some(pattern => filename.includes(pattern))) {
       return {};
     }
 
     const wrapperElements = new Set(options.wrapperElements ?? ['div', 'span']);
     const componentSources = (
       options.componentSources ?? ['^@astryxdesign/', '^@xds/', '^\\.\\.?/']
-    ).map((pattern) => new RegExp(pattern));
+    ).map(pattern => new RegExp(pattern));
     const allowComponents = new Set(
       options.allowComponents ?? DEFAULT_ALLOW_COMPONENTS,
     );
@@ -232,6 +248,84 @@ const rule = {
     const importedBindings = new Map();
     /** JSX elements to check once the whole file (imports + styles) is known. */
     const candidates = [];
+
+    const sourceCodeForTypes = context.sourceCode ?? context.getSourceCode();
+    const services = sourceCodeForTypes.parserServices;
+    const checker =
+      services?.program != null && services.esTreeNodeToTSNodeMap != null
+        ? services.program.getTypeChecker()
+        : null;
+
+    /**
+     * Whether the child can take the wrapper's style itself. With types,
+     * whether its props have an `xstyle`; a component declared with no props
+     * cannot take one. A type the rule cannot read (an `any` or `unknown`
+     * component, or props that are `any`, `unknown`, an index signature, or a
+     * union with any such member or an `xstyle` member) counts as yes, so the
+     * rule still reports. Without types, every component except a
+     * family:input-fields member, matched by its imported name.
+     */
+    function childTakesXstyle(child) {
+      if (checker != null) {
+        const tsNode = services.esTreeNodeToTSNodeMap.get(child.openingElement);
+        if (tsNode == null) {
+          return true;
+        }
+        const componentType = checker.getTypeAtLocation(tsNode.tagName);
+        if ((componentType.flags & UNREADABLE_TYPE_FLAGS) !== 0) {
+          return true;
+        }
+        const signature = checker.getResolvedSignature(tsNode);
+        if (signature == null) {
+          return true;
+        }
+        const propsSymbol = signature.getParameters()[0];
+        if (propsSymbol == null) {
+          return false;
+        }
+        const propsType = checker.getTypeOfSymbolAtLocation(
+          propsSymbol,
+          tsNode,
+        );
+        return propsTakeXstyle(propsType);
+      }
+      return !inputFieldFamilyMembers().has(
+        importedComponentName(child.openingElement.name),
+      );
+    }
+
+    /**
+     * The name a JSX tag's component has where it is exported: the imported
+     * name for `import {Selector as S}`, and the last segment for
+     * `<Core.Selector>`. A default import gives no name, because no
+     * family:input-fields member has a default export.
+     */
+    function importedComponentName(nameNode) {
+      if (nameNode.type === 'JSXMemberExpression') {
+        return nameNode.property.name;
+      }
+      if (nameNode.type !== 'JSXIdentifier') {
+        return null;
+      }
+      const binding = importedBindings.get(nameNode.name);
+      if (binding == null) {
+        return nameNode.name;
+      }
+      return binding.name === 'default' ? null : binding.name;
+    }
+
+    function propsTakeXstyle(type) {
+      if ((type.flags & UNREADABLE_TYPE_FLAGS) !== 0) {
+        return true;
+      }
+      if (type.isUnion()) {
+        return type.types.some(propsTakeXstyle);
+      }
+      if (type.getStringIndexType() != null) {
+        return true;
+      }
+      return type.getProperty('xstyle') != null;
+    }
 
     function isAstryxComponent(nameNode) {
       const root = jsxNameRoot(nameNode);
@@ -319,14 +413,14 @@ const rule = {
     }
 
     function hasStructuralStyles(styleExpressions) {
-      return styleExpressions.some((expression) => {
+      return styleExpressions.some(expression => {
         const properties = resolveStyleProperties(expression);
         // Unresolvable styles (imported objects) are treated as non-structural:
         // the wrapper still looks purely decorative from here.
         if (properties == null) {
           return false;
         }
-        return properties.some((name) => STRUCTURAL_PROPERTIES.has(name));
+        return properties.some(name => STRUCTURAL_PROPERTIES.has(name));
       });
     }
 
@@ -348,7 +442,7 @@ const rule = {
             importedBindings.set(local, {source, name: 'default'});
           }
         }
-        if (!componentSources.some((pattern) => pattern.test(source))) {
+        if (!componentSources.some(pattern => pattern.test(source))) {
           return;
         }
         for (const specifier of node.specifiers) {
@@ -394,9 +488,9 @@ const rule = {
           byKey.set(
             key,
             body.properties
-              .filter((property) => property.type === 'Property')
-              .map((property) => property.key?.name ?? property.key?.value)
-              .filter((name) => name != null),
+              .filter(property => property.type === 'Property')
+              .map(property => property.key?.name ?? property.key?.value)
+              .filter(name => name != null),
           );
         }
         stylexCreateProperties.set(node.id.name, byKey);
@@ -451,7 +545,7 @@ const rule = {
           }
 
           const children = node.children.filter(
-            (child) => !isIgnorableChild(child),
+            child => !isIgnorableChild(child),
           );
           if (children.length !== 1) {
             return;
@@ -474,6 +568,10 @@ const rule = {
             return;
           }
 
+          if (!childTakesXstyle(child)) {
+            return;
+          }
+
           const data = {wrapper: opening.name.name, component: componentName};
           const report = {node, messageId: 'styleOnlyWrapper', data};
 
@@ -483,13 +581,13 @@ const rule = {
             opening.attributes.length === 1 &&
             opening.attributes[0].type === 'JSXSpreadAttribute';
           const childHasXstyle = child.openingElement.attributes.some(
-            (attribute) =>
+            attribute =>
               attribute.type === 'JSXSpreadAttribute' ||
               attribute.name?.name === 'xstyle',
           );
           if (onlyStylexSpread && !childHasXstyle && styleExpressions.length) {
             const styleText = styleExpressions
-              .map((expression) => sourceCode.getText(expression))
+              .map(expression => sourceCode.getText(expression))
               .join(', ');
             const xstyleValue =
               styleExpressions.length === 1
