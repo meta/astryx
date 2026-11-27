@@ -4,7 +4,8 @@
  * @file Grades one workspace: type check, build, then the task probe in Chromium.
  * @input a workspace, its arm, its task, and a shared browser
  * @output a pass or fail with the reason, probe steps, screenshots, axe counts,
- *   and the font requests whose abort Playwright refused as already answered
+ *   the font requests whose abort Playwright refused as already answered, and
+ *   an error for every other refused abort
  * @position Called by run.mjs after each agent run, and by its self-test
  */
 
@@ -132,12 +133,16 @@ export const ALREADY_HANDLED = 'Route is already handled';
 
 /** Whether `error` is Playwright's refusal to abort a route that is already answered. */
 export function isAlreadyHandled(error) {
-  return String(error?.message ?? error).replace(/^route\.abort: /, '').startsWith(ALREADY_HANDLED);
+  return String(error?.message ?? error)
+    .replace(/^route\.abort: /, '')
+    .startsWith(ALREADY_HANDLED);
 }
 
 /** The first line of an error, at most 300 characters: a Playwright error can carry a call log with request headers. */
 export function firstLine(error) {
-  return String(error?.message ?? error).split('\n', 1)[0].slice(0, 300);
+  return String(error?.message ?? error)
+    .split('\n', 1)[0]
+    .slice(0, 300);
 }
 
 /** The address without its query: the grade keeps only where a request went. */
@@ -153,16 +158,19 @@ function originAndPath(url) {
 /** One error that names every font request whose abort failed, with the first line of each error. */
 function abortFailure(failures) {
   const noun = failures.length === 1 ? 'request' : 'requests';
-  const list = failures.map(({url, message}) => `${url}: ${message}`).join('; ');
-  return new Error(`Playwright could not abort ${failures.length} failed font ${noun}: ${list}`);
+  const list = failures
+    .map(({url, message}) => `${url}: ${message}`)
+    .join('; ');
+  return new Error(
+    `Playwright could not abort ${failures.length} failed font ${noun}: ${list}`,
+  );
 }
 
 /**
  * Blocks every request and socket except the local server and the allowed font
  * hosts. A font request that fails is aborted. When Playwright refuses that
  * abort because the route is already answered, `routeLog` records the address
- * in `alreadyHandledAborts`. Any other refusal goes to `abortFailures`, which
- * the probe then throws.
+ * in `alreadyHandledAborts`. Any other refusal goes to `abortFailures`.
  */
 async function localOnly(context, origin, routeLog) {
   await context.route('**/*', async route => {
@@ -173,8 +181,13 @@ async function localOnly(context, origin, routeLog) {
       await route.fulfill({response: await route.fetch({timeout: FONT_TIMEOUT_MS})});
     } catch {
       await route.abort().catch(error => {
-        if (isAlreadyHandled(error)) routeLog.alreadyHandledAborts.push(originAndPath(url));
-        else routeLog.abortFailures.push({url: originAndPath(url), message: firstLine(error)});
+        if (isAlreadyHandled(error))
+          routeLog.alreadyHandledAborts.push(originAndPath(url));
+        else
+          routeLog.abortFailures.push({
+            url: originAndPath(url),
+            message: firstLine(error),
+          });
       });
     }
   });
@@ -204,12 +217,11 @@ function watchErrors(page, origin, pageErrors, consoleErrors) {
   });
 }
 
-async function probeInBrowser({browser, url, task, outDir}) {
+async function probeInBrowser({browser, url, task, outDir, routeLog}) {
   const steps = await loadProbe(task);
   const screenshots = {};
   const pageErrors = [];
   const consoleErrors = [];
-  const routeLog = {alreadyHandledAborts: [], abortFailures: []};
   let axe;
   let probe;
 
@@ -243,15 +255,15 @@ async function probeInBrowser({browser, url, task, outDir}) {
     await mobile.close();
   }
 
-  // A route handler's error reaches no caller, so the probe throws one error for all of them here.
-  if (routeLog.abortFailures.length > 0) throw abortFailure(routeLog.abortFailures);
-  return {probe, axe, pageErrors, consoleErrors, screenshots, alreadyHandledAborts: routeLog.alreadyHandledAborts};
+  return {probe, axe, pageErrors, consoleErrors, screenshots};
 }
 
 /**
  * Pass means: the type check and the build exit 0, every probe step passes,
  * and the page throws no uncaught error. The arm's own commands decide the
- * first two, so a broken config cannot pass by printing nothing.
+ * first two, so a broken config cannot pass by printing nothing. A refused
+ * abort of a failed font request also fails the grade, unless Playwright
+ * refused it because the route was already answered.
  */
 export async function gradeWorkspace({workspace, arm, task, browser, outDir}) {
   fs.mkdirSync(outDir, {recursive: true});
@@ -279,14 +291,31 @@ export async function gradeWorkspace({workspace, arm, task, browser, outDir}) {
   }
 
   const server = await serveStatic(dist);
+  const routeLog = {alreadyHandledAborts: [], abortFailures: []};
+  let thrown = null;
   try {
-    Object.assign(grade, await inBrowserTurn(() => probeInBrowser({browser, url: server.url, task, outDir})));
+    Object.assign(
+      grade,
+      await inBrowserTurn(() =>
+        probeInBrowser({browser, url: server.url, task, outDir, routeLog}),
+      ),
+    );
   } catch (error) {
-    grade.failure ??= 'browser';
-    grade.browserError = String(error);
-    return grade;
+    thrown = {error};
   } finally {
     await server.close();
+  }
+  // A route handler's error reaches no caller, so the grade reads the refused
+  // aborts here, also after a probe that threw.
+  grade.alreadyHandledAborts = routeLog.alreadyHandledAborts;
+  if (routeLog.abortFailures.length > 0) {
+    grade.failure ??= 'browser';
+    grade.abortError = String(abortFailure(routeLog.abortFailures));
+  }
+  if (thrown !== null) {
+    grade.failure ??= 'browser';
+    grade.browserError = String(thrown.error);
+    return grade;
   }
   if (!grade.probe.passed) grade.failure ??= 'probe';
   if (grade.pageErrors.length > 0) grade.failure ??= 'page-error';
