@@ -29,6 +29,7 @@ import {
   allInodes,
   userConfig,
   hasModuleHooks,
+  maskCacheCount,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 import {REPO_ROOT} from '../test-utils/repo-root.mjs';
 import {COMPONENT_REPLACES_CLI} from '../foundation/integrations/cli-requirement.mjs';
@@ -248,10 +249,7 @@ describe.skipIf(process.platform !== 'linux' || process.getuid?.() === 0)(
           const r = hosted(tmp, {ask, door, cwd: project});
           return {
             ...r,
-            stdout: r.stdout
-              .split(tmp)
-              .join('<cache>')
-              .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)'),
+            stdout: maskCacheCount(r.stdout.split(tmp).join('<cache>')),
           };
         };
         const tmp = keptTmp('hosted-doors');

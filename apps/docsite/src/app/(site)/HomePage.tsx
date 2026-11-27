@@ -148,6 +148,8 @@ const styles = stylex.create({
     paddingBlockStart: 'var(--astryx-marketing-section-gap)',
     // Smaller than the section gap — the footer adds its own top spacing.
     paddingBlockEnd: spacingVars['--spacing-12'],
+    // SYNC: the cover sizes in _landing/BlogShowcase.tsx state the width of
+    // a blog cover with these two gutters.
     paddingInline: spacingVars['--spacing-6'],
     gap: 'var(--astryx-marketing-section-gap)',
   },
@@ -282,9 +284,12 @@ function HeroContent({contentRef}: {contentRef: Ref<HTMLElement>}) {
 }
 
 export function HomePage({
+  coreComponentCount,
   templatesPreview,
   themesStore,
 }: {
+  /** Public Core components, rounded down to the nearest 10. */
+  coreComponentCount: number;
   templatesPreview: ReactNode;
   themesStore: ReactNode;
 }) {
@@ -382,12 +387,13 @@ export function HomePage({
       </HeroReelProvider>
       <VStack ref={showcaseRef} xstyle={styles.showcaseOverlay}>
         <FeaturesShowcase
+          coreComponentCount={coreComponentCount}
           templatesPreview={templatesPreview}
           themesStore={themesStore}
         />
         <AboutShowcase />
         <BlogShowcase />
-        <DiscoverShowcase />
+        <DiscoverShowcase coreComponentCount={coreComponentCount} />
       </VStack>
     </div>
   );

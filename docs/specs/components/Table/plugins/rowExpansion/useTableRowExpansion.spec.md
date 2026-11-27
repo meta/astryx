@@ -69,12 +69,13 @@ The detail-row expansion control names the row it acts on without making callers
 
 ## Behavioral contract
 
-| ID  | Invariant                                                                                                                                                                                                                                                                 | Basis                                         | Evidence state                               |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | -------------------------------------------- |
-| FR1 | `UseTableRowExpansionConfig<T>` accepts optional `getRowLabel?: (item: T) => string`. The hook supplies the existing row item; it does not infer text from columns or DOM or use that text as a row key.                                                                  | Caller-owned identity; DEC-1                  | Approved; implementation verified separately |
-| FR2 | Trim surrounding whitespace. A nonempty result supplies `{label}` to `@astryx.tableRowExpansion.expandRowNamed` or `collapseRowNamed`, according to expansion state. An absent callback or whitespace-only result uses the existing `expandRow` or `collapseRow` message. | DEC-1; internationalization message ownership | Approved; implementation verified separately |
-| FR3 | This module resolves names in the rendered control's translation context; `architecture:internationalization` owns that provider's scope and locale/override updates, including when it surrounds only Table inside the hook's caller.                                    | Internationalization provider boundary        | Verification required                        |
-| FR4 | The row's context-menu action retains generic localized expand/collapse wording. Row labels do not add visible text, alter layout or change control roles, `aria-expanded`, keyboard operation, focus or panel behavior.                                                  | Table FR7; additive compatibility             | Verification required                        |
+| ID  | Invariant                                                                                                                                                                                                                                                                 | Basis                                         | Evidence state                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------- |
+| FR1 | `UseTableRowExpansionConfig<T>` accepts optional `getRowLabel?: (item: T) => string`. The hook supplies the existing row item; it does not infer text from columns or DOM or use that text as a row key.                                                                  | Caller-owned identity; DEC-1                  | Approved; implementation verified separately               |
+| FR2 | Trim surrounding whitespace. A nonempty result supplies `{label}` to `@astryx.tableRowExpansion.expandRowNamed` or `collapseRowNamed`, according to expansion state. An absent callback or whitespace-only result uses the existing `expandRow` or `collapseRow` message. | DEC-1; internationalization message ownership | Approved; implementation verified separately               |
+| FR3 | This module resolves names in the rendered control's translation context; `architecture:internationalization` owns that provider's scope and locale/override updates, including when it surrounds only Table inside the hook's caller.                                    | Internationalization provider boundary        | Verification required                                      |
+| FR4 | The row's context-menu action retains generic localized expand/collapse wording. Row labels do not add visible text, alter layout or change control roles, `aria-expanded`, keyboard operation, focus or panel behavior.                                                  | Table FR7; additive compatibility             | Verification required                                      |
+| FR5 | While a row's panel is open, the panel carries the divider below the row, and the row shows none.                                                                                                                                                                         | Table FR14                                    | Verified by row-expansion glide and divider browser checks |
 
 ### Transformation and precedence order
 
@@ -84,6 +85,7 @@ The detail-row expansion control names the row it acts on without making callers
 ### Performance and resources
 
 - **PR1:** naming adds no dataset scan, observation, asynchronous work or independent expansion state. Existing hook lifetimes remain owned by the hook.
+- Known limit (non-normative): a toggle re-renders only the rows whose expanded state changed when the caller's row callbacks are stable; when they change on every render, a toggle still re-renders every row.
 
 ## Accessibility contract
 
@@ -102,11 +104,12 @@ The detail-row expansion control names the row it acts on without making callers
 
 ## Verification map
 
-| Contract | Verification                                                  | States                                     | Failure expectation                                                      |
-| -------- | ------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
-| FR1-FR2  | Row-expansion tests and Storybook accessible-name probes      | Omitted, blank, named, collapsed, expanded | Removing interpolation or blank fallback produces wrong names            |
-| FR3      | Provider-placement/locale-update regressions                  | Provider around only Table; locale changes | Resolving in the caller's hook context fails the control-name assertions |
-| FR4      | Existing panel/menu/keyboard tests and matched browser checks | Named controls and context-menu action     | Named menu copy or altered state/focus fails compatibility checks        |
+| Contract | Verification                                                            | States                                                      | Failure expectation                                                           |
+| -------- | ----------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| FR1-FR2  | Row-expansion tests and Storybook accessible-name probes                | Omitted, blank, named, collapsed, expanded                  | Removing interpolation or blank fallback produces wrong names                 |
+| FR3      | Provider-placement/locale-update regressions                            | Provider around only Table; locale changes                  | Resolving in the caller's hook context fails the control-name assertions      |
+| FR4      | Existing panel/menu/keyboard tests and matched browser checks           | Named controls and context-menu action                      | Named menu copy or altered state/focus fails compatibility checks             |
+| FR5      | TableRowGlide and TableStickyDividers browser specs; FR14 unit coverage | Open and closed panels, pinned cells, theme and app borders | A row divider above an open panel, or none below it, fails the divider checks |
 
 ## Decision log
 

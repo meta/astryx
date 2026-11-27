@@ -68,7 +68,9 @@ import {createSharedContext} from '../../../utils/sharedContext';
 
 registerEnglishFallback(english);
 import {TableContext} from '../../TableContext';
+import {defaultCellRenderer} from '../../columnUtils';
 import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
+import {reducedMotionTransform} from '../../../motion/reducedMotion.stylex';
 
 // =============================================================================
 // Types
@@ -367,7 +369,10 @@ const treeStyles = stylex.create({
   },
   chevronIcon: {
     transitionProperty: 'transform',
-    transitionDuration: '150ms',
+    transitionDuration: {
+      default: `calc(150ms * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
   },
   // The RTL mirror is folded into each state's transform rather than living on
   // a parent span. Both are `transform`, so on one element the later value
@@ -707,10 +712,7 @@ export function useTableTreeData<T extends Record<string, unknown>>(
                   <TreeCellContent item={item}>
                     {originalRenderCell
                       ? originalRenderCell(item)
-                      : String(
-                          (item[col.key] as
-                            string | number | null | undefined) ?? '',
-                        )}
+                      : defaultCellRenderer(item, col.key)}
                   </TreeCellContent>
                 ),
               };

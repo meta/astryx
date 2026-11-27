@@ -32,7 +32,10 @@ import {assertWithin} from '../fs/path-safety.mjs';
 import {findLocalIntegrationManifestOrNull} from '../integrations/manifest-writer.mjs';
 import {loadManifestObject} from '../integrations/integrations.mjs';
 import {levenshteinDistance} from '../text/string-utils.mjs';
-import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {
+  astryxDefinitionsByName,
+  currentDefinitionName,
+} from './icon-definition-discovery.mjs';
 import {generatedTypesPath} from './icon-set-paths.mjs';
 import {
   lookExport,
@@ -327,16 +330,16 @@ export function writeIconSetData(set, next, {extraDefinitions = []} = {}) {
   for (const name of Object.keys(parsed.map ?? {})) {
     if (!known.has(name)) {
       throw new IconSetAuthoringError(
-        `"${name}" is not an icon definition. Use an Astryx icon definition (astryx docs cli/experimental/icon-definitions), or add your own.`,
+        `"${name}" is not an icon meaning. Use an Astryx icon meaning (astryx docs cli/experimental/icon-definitions), or add your own.`,
         'ERR_INVALID_ARGUMENT',
         [
           ...closestNames(name, [...known]).map(each => ({
             name: each,
-            reason: 'a known icon definition',
+            reason: 'a known icon meaning',
           })),
           {
             name: `astryx experimental icon new-definition ${name} --set ${set.name}`,
-            reason: 'add it as your own definition',
+            reason: 'add it as your own meaning',
           },
         ],
       );
@@ -583,10 +586,15 @@ function resolveFile(base) {
  * @param {string} file
  * @param {string} module the specifier, for messages
  * @param {string} exportName
+ * @param {{own?: string}} [options] `own`: the set's generated module, whose
+ *   names are never the library's ({@link iconCandidates})
  */
-export function assertIconExport(file, module, exportName) {
-  if (!moduleExportOrigin(file, exportName)) {
-    const names = followedExportNames(file);
+export function assertIconExport(file, module, exportName, {own} = {}) {
+  const names = followedExportNames(file, ownModules(own));
+  const exported =
+    moduleExportOrigin(file, exportName) != null &&
+    (own == null || exportName === 'default' || names.includes(exportName));
+  if (!exported) {
     throw new IconSetAuthoringError(
       exportName === 'default'
         ? `"${module}" has no default export.`
@@ -609,6 +617,27 @@ export function assertIconExport(file, module, exportName) {
   }
 }
 
+/**
+ * The files a library read does not follow into: the set's generated module,
+ * by its path and its real path. A library that re-exports the set (its root
+ * entry has `export * from` the generated module) then gives only its
+ * own icons.
+ * @param {string} [own] the generated module's absolute path
+ * @returns {Set<string>}
+ */
+function ownModules(own) {
+  /** @type {Set<string>} */
+  const files = new Set();
+  if (own == null) return files;
+  files.add(own);
+  try {
+    files.add(fs.realpathSync(own));
+  } catch {
+    // Not written yet: nothing re-exports it.
+  }
+  return files;
+}
+
 /** A SCREAMING_CASE name: two or more capitals, digits, or underscores. */
 const SCREAMING_CASE_RE = /^[A-Z][A-Z0-9_]+$/u;
 
@@ -619,15 +648,17 @@ const SCREAMING_CASE_RE = /^[A-Z][A-Z0-9_]+$/u;
  * Left out: `default`, `Icon`, `…Provider` and `…Context` components, SCREAMING_CASE constants, number and boolean
  * exports, packs of other exports ({@link isIconPack}), and `exclude`.
  * @param {string} file
- * @param {{adapter?: boolean, exclude?: string[]}} [options] `exclude`: export
- *   names that are not icons
+ * @param {{adapter?: boolean, exclude?: string[], own?: string}} [options]
+ *   `exclude`: export names that are not icons; `own`: the set's generated
+ *   module, whose names are the set's own and never the library's, even when
+ *   the library re-exports it
  * @returns {Array<{name: string, adapt: boolean, scalar: string | null}>}
  */
-function iconCandidates(file, {adapter = false, exclude = []} = {}) {
+function iconCandidates(file, {adapter = false, exclude = [], own} = {}) {
   const skipped = new Set(exclude);
   /** @type {Array<{name: string, adapt: boolean, scalar: string | null}>} */
   const out = [];
-  const names = followedExportNames(file);
+  const names = followedExportNames(file, ownModules(own));
   const exported = new Set(names);
   for (const name of names) {
     if (name === 'default' || name === 'Icon' || skipped.has(name)) continue;
@@ -769,9 +800,10 @@ export function modulePrefix(file, options) {
  * ({@link lookPositions}), read from its icon exports once. A large module
  * reports its reading, as {@link libraryIcons} does.
  * @param {string} file
- * @param {{adapter?: boolean, module?: string, progress?: (line: string) => void}} [options]
- *   `module`: the module as the author named it, for progress; `progress`:
- *   hears the reading of a large module
+ * @param {{adapter?: boolean, own?: string, module?: string, progress?: (line: string) => void}} [options]
+ *   `own`: the set's generated module, never read as the library's
+ *   ({@link iconCandidates}); `module`: the module as the author named it,
+ *   for progress; `progress`: hears the reading of a large module
  * @returns {{prefix: string[], positions: Array<Set<string>>}}
  */
 export function moduleNaming(file, options = {}) {
@@ -779,7 +811,7 @@ export function moduleNaming(file, options = {}) {
   let count = 0;
   return readingLibrary(
     file,
-    {label, progress: options.progress},
+    {label, progress: options.progress, own: options.own},
     () => {
       const candidates = iconCandidates(file, options);
       count = candidates.length;
@@ -1013,9 +1045,10 @@ export function preferredLook(positions, prefer = []) {
  * and name without the look words (`XOutline24WGHT500Icon` is `x`,
  * `XIcon`), and its `looks`, every export that draws the glyph.
  * @param {string} file
- * @param {{adapter?: boolean, exclude?: string[], prefer?: string[] | ((positions: Array<Set<string>>) => string[]), module?: string, progress?: (line: string) => void, summary?: (summary: LibraryLookSummary) => void}} [options]
+ * @param {{adapter?: boolean, exclude?: string[], own?: string, prefer?: string[] | ((positions: Array<Set<string>>) => string[]), module?: string, progress?: (line: string) => void, summary?: (summary: LibraryLookSummary) => void}} [options]
  *   `adapter`: whether the set declares one; `exclude`: export names that
- *   are not icons; `prefer`: look words to prefer (the set's default
+ *   are not icons; `own`: the set's generated module, never read as the
+ *   library's ({@link iconCandidates}); `prefer`: look words to prefer (the set's default
  *   variant), or a function that gives them from the library's look
  *   positions before any glyph is picked; `module`: the module as the author named it, for progress;
  *   `progress`: hears the reading of a large module;
@@ -1028,7 +1061,7 @@ export function libraryIcons(file, options = {}) {
   let all = [];
   return readingLibrary(
     file,
-    {label, progress: options.progress},
+    {label, progress: options.progress, own: options.own},
     () => {
       all = collectLibraryIcons(file, options);
       const prefer =
@@ -1048,7 +1081,7 @@ export function libraryIcons(file, options = {}) {
     icons =>
       icons.length === all.length
         ? `Found ${icons.length} icons in ${label}.`
-        : `Found ${icons.length} icons in ${label}, drawn by ${all.length} exports in their looks.`,
+        : `Found ${icons.length} icons in ${label}, drawn by ${all.length} exports across its look words.`,
   );
 }
 
@@ -1058,14 +1091,17 @@ export function libraryIcons(file, options = {}) {
  * runs and the line `found` gives after.
  * @template T
  * @param {string} file
- * @param {{label: string, progress?: (line: string) => void}} reading
- *   `label`: the module as the author named it
+ * @param {{label: string, progress?: (line: string) => void, own?: string}} reading
+ *   `label`: the module as the author named it; `own`: the set's generated
+ *   module, left out of the count ({@link iconCandidates})
  * @param {() => T} read
  * @param {(result: T) => string} found
  * @returns {T}
  */
-function readingLibrary(file, {label, progress}, read, found) {
-  const exportCount = progress ? followedExportNames(file).length : 0;
+function readingLibrary(file, {label, progress, own}, read, found) {
+  const exportCount = progress
+    ? followedExportNames(file, ownModules(own)).length
+    : 0;
   if (progress == null || exportCount < PROGRESS_FROM) return read();
   progress(`Reading ${exportCount} exports of ${label}...`);
   const result = read();
@@ -1140,7 +1176,7 @@ export function libraryLooks(all, prefer = []) {
  * looks are grouped. A large module reports its reading, as
  * {@link libraryIcons} does.
  * @param {string} file
- * @param {{adapter?: boolean, exclude?: string[], module?: string, progress?: (line: string) => void}} [options]
+ * @param {{adapter?: boolean, exclude?: string[], own?: string, module?: string, progress?: (line: string) => void}} [options]
  *   `module`: the module as the author named it, for progress; `progress`:
  *   hears the reading of a large module
  * @returns {LibraryIcon[]}
@@ -1149,7 +1185,7 @@ export function everyLibraryIcon(file, options = {}) {
   const label = options.module ?? path.basename(file);
   return readingLibrary(
     file,
-    {label, progress: options.progress},
+    {label, progress: options.progress, own: options.own},
     () => collectLibraryIcons(file, options),
     icons => `Found ${icons.length} exports in ${label}.`,
   );
@@ -1158,7 +1194,7 @@ export function everyLibraryIcon(file, options = {}) {
 /**
  * {@link everyLibraryIcon} without progress.
  * @param {string} file
- * @param {{adapter?: boolean, exclude?: string[]}} [options]
+ * @param {{adapter?: boolean, exclude?: string[], own?: string}} [options]
  * @returns {LibraryIcon[]}
  */
 function collectLibraryIcons(file, options = {}) {
@@ -1277,15 +1313,15 @@ export function checkNewDefinition(set, given) {
   const doc = {...given, name: definitionNameFromInput(given.name)};
   if (!/^[a-z][a-zA-Z0-9]*$/u.test(doc.name)) {
     throw new IconSetAuthoringError(
-      `Invalid icon definition name "${doc.name}": use camelCase (aiHelper) or kebab-case (ai-helper), starting with a lower-case letter.`,
+      `Invalid icon meaning name "${doc.name}": use camelCase (aiHelper) or kebab-case (ai-helper), starting with a lower-case letter.`,
       'ERR_INVALID_ARGUMENT',
     );
   }
   if (astryxDefinitionsByName().has(doc.name)) {
     throw new IconSetAuthoringError(
-      `Astryx already has the icon definition "${doc.name}"; map to it instead of adding your own.`,
+      `Astryx already has the icon meaning "${doc.name}"; map to it instead of adding your own.`,
       'ERR_INVALID_ARGUMENT',
-      [{name: `--definition ${doc.name}`, reason: "use Astryx's definition"}],
+      [{name: `--definition ${doc.name}`, reason: "use Astryx's meaning"}],
     );
   }
   const description = (doc.description ?? '').trim();
@@ -1296,7 +1332,7 @@ export function checkNewDefinition(set, given) {
   ];
   if (!description || words.length === 0) {
     throw new IconSetAuthoringError(
-      `A new icon definition needs --description and --words: one sentence on what the icon is for, and the words people search for.`,
+      `A new icon meaning needs --description and --words: one sentence on what the icon is for, and the words people search for.`,
       'ERR_MISSING_ARGUMENT',
     );
   }
@@ -1310,7 +1346,7 @@ export function checkNewDefinition(set, given) {
  */
 export function definitionFile(set, name) {
   return assertWithin(`definitions/${name}.doc.mjs`, set.dir, {
-    label: 'icon definition file',
+    label: 'icon meaning file',
   });
 }
 
@@ -1351,7 +1387,7 @@ export function writeDefinitionFile(set, doc) {
 const GENERATED_HEADER = [
   '// Generated by `astryx experimental icon` (new-set, add, map): one export per icon of this set.',
   '// Edit with those commands; a statement added by hand is kept.',
-  '// themeIcons has one entry per built-in icon definition in map (the names Core renders), not one per icon;',
+  '// themeIcons has one entry per built-in icon meaning in map (the names Core renders), not one per icon;',
   '// the import lines above it give it local names for the re-exported icons.',
   '// themeIcons<Variant> draws the same names in that variant, for each variant an icon draws.',
 ];
@@ -1368,6 +1404,39 @@ const GENERATED_HEADER = [
  * @returns {string[]}
  */
 function generatedStatements(text, label) {
+  return statementTexts(text, label).map(normalizedStatement);
+}
+
+/**
+ * The marked form of each statement of a module that carries a pure mark of
+ * its own, keyed by its normalized (unmarked) form: written back as it was,
+ * with the mark spelled as the CLI writes it, so a mark written by hand
+ * survives the next rewrite.
+ * @param {string} text
+ * @param {string} label the module's path, for the error
+ * @returns {Map<string, string>}
+ */
+function markedStatements(text, label) {
+  /** @type {Map<string, string>} */
+  const marked = new Map();
+  for (const statement of statementTexts(text, label)) {
+    if (statement.search(PURE_MARK) === -1) continue;
+    marked.set(
+      normalizedStatement(statement),
+      collapsedStatement(statement.replace(PURE_MARK, PURE)),
+    );
+  }
+  return marked;
+}
+
+/**
+ * The text of each top-level statement of a module, as written, with a
+ * separator after each type member a formatter left without one.
+ * @param {string} text
+ * @param {string} label the module's path, for the error
+ * @returns {string[]}
+ */
+function statementTexts(text, label) {
   let ast;
   try {
     ast = parse(text, {sourceType: 'module', plugins: ['jsx', 'typescript']});
@@ -1390,7 +1459,7 @@ function generatedStatements(text, label) {
       const at = end - start;
       statement = `${statement.slice(0, at)};${statement.slice(at)}`;
     }
-    return normalizedStatement(statement);
+    return statement;
   });
 }
 
@@ -1400,6 +1469,15 @@ function generatedStatements(text, label) {
  * @param {string} statement
  */
 function normalizedStatement(statement) {
+  return collapsedStatement(statement.replace(PURE_MARK, ''));
+}
+
+/**
+ * A statement's text with whitespace, quotes, padding and trailing
+ * separators normalized, its comments as written.
+ * @param {string} statement
+ */
+function collapsedStatement(statement) {
   return statement
     .replace(/\s+/gu, ' ')
     .replace(/"((?:[^"'\\]|\\.)*)"/gu, "'$1'")
@@ -1523,6 +1601,32 @@ export function generatedTypesMatch(actual, expected, label) {
 /** The local name the generated module gives the set's adapter. */
 const ADAPTER_LOCAL = 'adaptIcon';
 
+/**
+ * A bundler's mark that a call has no side effects (`/* @__PURE__ *\/` or
+ * `/*#__PURE__*\/`), so an app that uses a few icons drops the rest. The
+ * module is written with the marks and read without them, so a module an
+ * older CLI wrote (no marks) reads the same.
+ */
+const PURE_MARK = /\/\*\s*[#@]__PURE__\s*\*\/\s*/gu;
+
+/** The mark the generated module writes before each top-level call. */
+const PURE = '/* @__PURE__ */ ';
+
+/**
+ * A normalized statement as the module writes it: an adapted icon's call
+ * marked pure, and any other statement with the marks it was read with.
+ * @param {string} statement
+ * @param {Map<string, string>} marked the module's statements that carried
+ *   their own marks, from {@link markedStatements}
+ */
+function writtenStatement(statement, marked) {
+  const adapted = `= ${ADAPTER_LOCAL}(`;
+  if (statement.startsWith('export const ') && statement.includes(adapted)) {
+    return statement.replace(adapted, `= ${PURE}${ADAPTER_LOCAL}(`);
+  }
+  return marked.get(statement) ?? statement;
+}
+
 export {THEME_MAP_NAME};
 
 /** How the generated module imports React for its theme map. */
@@ -1530,6 +1634,17 @@ const REACT_IMPORT = "import {createElement} from 'react'";
 
 /** The built-in icon definitions: the shared names a theme map covers. */
 const BUILT_IN = new Set(ICON_NAMES);
+
+/**
+ * The set's generated module as an absolute path: the `own` file a library
+ * read leaves out ({@link iconCandidates}).
+ * @param {DiscoveredIconSet} set
+ * @param {string} packageDir
+ * @returns {string}
+ */
+export function ownModuleOf(set, packageDir) {
+  return path.resolve(packageDir, generatedModulePath(set, packageDir));
+}
 
 /**
  * The generated icons module of a set, from the package root: `generated`
@@ -1677,6 +1792,8 @@ export function generatedModuleText(
       .map(variantThemeMapName),
   ];
   const lines = before == null ? [] : generatedStatements(before, generated);
+  const marked =
+    before == null ? new Map() : markedStatements(before, generated);
   const lineSet = new Set(lines);
   // Written once, below: the adapter's import, React's createElement, and
   // the theme map. Every lookup below is by name, so a library of twenty
@@ -1789,7 +1906,7 @@ export function generatedModuleText(
     if (reexport) {
       themeImports.add(`import${reexport.slice('export'.length)}`);
     }
-    return `  ${name}: createElement(${exportName}, ${THEME_ELEMENT_PROPS}),`;
+    return `  ${name}: ${PURE}createElement(${exportName}, ${THEME_ELEMENT_PROPS}),`;
   };
   if (themeName) {
     const byId = new Map(data.icons.map(icon => [icon.id, icon]));
@@ -1818,7 +1935,7 @@ export function generatedModuleText(
       ...(themeName ? [REACT_IMPORT] : []),
       ...adapterLine,
       ...[...imports, ...themeImports].sort(),
-      ...[...exports].sort(),
+      ...[...exports].sort().map(line => writtenStatement(line, marked)),
     ].map(terminated),
     ...(themeName
       ? theme.length > 0
@@ -2338,15 +2455,21 @@ export function typecheckNote(pkg) {
 
 /**
  * A definition name as `map` keys it: camelCase. The docs list each
- * definition by its kebab id too (`eye-slash`), so that spelling resolves.
+ * definition by its kebab id too (`eye-slash`), so that spelling resolves,
+ * and a replaced definition's name resolves to the definition that replaced
+ * it.
  * @param {string} name
  * @param {Set<string>} known the definitions the set may map
+ * @param {Parameters<typeof currentDefinitionName>[1]} [set] the set whose
+ *   own replaced names count too
  * @returns {string}
  */
-export function definitionNameOf(name, known) {
+export function definitionNameOf(name, known, set) {
   if (known.has(name)) return name;
   const camel = name.replace(/-([a-z0-9])/gu, (_, c) => c.toUpperCase());
-  return known.has(camel) ? camel : name;
+  if (known.has(camel)) return camel;
+  const current = currentDefinitionName(camel, set);
+  return current != null && known.has(current) ? current : name;
 }
 
 /**

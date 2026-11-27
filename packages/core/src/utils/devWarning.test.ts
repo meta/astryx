@@ -103,3 +103,36 @@ describe('warnOnce', () => {
     expect(warn).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('devPropError', () => {
+  it('names the component, the prop and the fix', () => {
+    const error = diagnostics.devPropError(
+      'Kbd',
+      'keys',
+      'is required, for example keys="mod+k".',
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe(
+      'Kbd: `keys` is required, for example keys="mod+k".',
+    );
+  });
+});
+
+describe('devMissingCallback', () => {
+  it('throws devPropError when called', () => {
+    const callback = diagnostics.devMissingCallback(
+      'Dialog',
+      'onOpenChange',
+      'is required.',
+    );
+    expect(() => callback(false)).toThrow(
+      'Dialog: `onOpenChange` is required.',
+    );
+  });
+  it('returns the same function for the same component and prop', () => {
+    const first = diagnostics.devMissingCallback('Drawer', 'onOpenChange', 'x');
+    expect(diagnostics.devMissingCallback('Drawer', 'onOpenChange', 'x')).toBe(
+      first,
+    );
+  });
+});

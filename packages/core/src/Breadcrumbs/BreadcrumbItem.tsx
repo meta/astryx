@@ -231,6 +231,7 @@ const itemStyles = stylex.create({
     width: typeScaleVars['--text-supporting-size'],
     height: typeScaleVars['--text-supporting-size'],
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   separator: {
     display: 'var(--separator-display)',
@@ -267,6 +268,16 @@ const menuStyles = stylex.create({
     ),
     overflowY: 'auto',
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     padding: spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',
@@ -274,7 +285,6 @@ const menuStyles = stylex.create({
   },
   popover: {
     minWidth: '160px',
-    marginBlock: spacingVars['--spacing-1'],
   },
 });
 
@@ -745,6 +755,9 @@ function BreadcrumbMenuTrigger({
         {
           placement: 'below',
           alignment: 'start',
+          // The layer's own clearance: the layer runtime measures it as the
+          // entrance's room to the trigger and keeps it through a flip.
+          offset: spacingVars['--spacing-1'],
           xstyle: menuStyles.popover,
         },
       )}

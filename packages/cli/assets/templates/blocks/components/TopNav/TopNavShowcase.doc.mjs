@@ -10,9 +10,4 @@ export const doc = {
   aspectRatio: 3,
   isShowcase: true,
   componentsUsed: ['Button', 'Icon', 'TopNav'],
-  icons: {
-    BellIcon: 'notification',
-    CubeIcon: 'package',
-    UserCircleIcon: 'userCircle',
-  },
 };

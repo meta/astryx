@@ -4,7 +4,10 @@
  * @file How a searcher orders the lexical ranker's matches. Search answers
  * only with what the lexical ranker matched, each with its own score and
  * reason. A match never moves past one of another score band (BANDS below)
- * or another kind, doc or not; between runs the lexical order holds. A band
+ * or another kind, doc or not; between runs the lexical order holds. The one
+ * exception is a family's root that the lexical ranker marks as leading its
+ * part with hits of keyword strength: it moves directly before the part. A
+ * band
  * can be wide: 55–99 holds keyword matches beside one-word description hits,
  * and a synonym name match can score under 55, so inside a band a weaker match
  * can lead a stronger one when the weights favor it. Inside such a
@@ -13,15 +16,25 @@
  * query of one or two words, the matches on every word keep their lexical
  * order; and an integration's matches that scored the same keep theirs.
  * Below the first result, a block of one domain is ordered by fit (tiesByFit): a part of the first result, then rarer matched
- * words, then the lexical order. Before that, a family's root leads a part of
- * its own family in their run when the part answers no query word the root
- * does not and the query names nothing that only the part is (rootsFirst).
+ * words, then the lexical order. Before that, among matches tied with the
+ * first result on score and on the query words they matched, the one whose
+ * own name holds more query words leads (tieByOwnName). Last, a family's root
+ * that the lexical ranker marks as leading a part of its own family
+ * (rootLeadsOf) moves directly before the part when it sits below it
+ * (rootsFirst), after the part's tie is ordered as one block; a root with
+ * weaker hits (weakRootsOf) moves so only inside the part's run.
  */
 
 import {entryOf} from './_entries.mjs';
-import {fold, nameWords, words} from './_query-words.mjs';
-import {searchedComponentsOf} from './_result.mjs';
-import {sameWord} from './_words.mjs';
+import {fold, nameWords, queryWords, words} from './_query-words.mjs';
+import {
+  answeredTerms,
+  movedRootsOf,
+  namedLeadsOf,
+  rootLeadsOf,
+  searchedComponentsOf,
+  weakRootsOf,
+} from './_result.mjs';
 
 /** @typedef {import('./_entries.mjs').EntryTable} EntryTable */
 
@@ -62,6 +75,8 @@ export function orderMatches(table, order, lexical, query, limit, families) {
   // Runs of consecutive lexical matches in one band and of one kind (doc or
   // not) are the only places the learned order acts: a match never crosses
   // into another band, or past a doc or a non-doc the lexical ranker placed.
+  // A family's root that the lexical ranker marks as leading its part keeps
+  // its own run here and moves to its part last (rootsFirst).
   let run = -1;
   /** @type {string} */
   let last = '';
@@ -81,9 +96,15 @@ export function orderMatches(table, order, lexical, query, limit, families) {
       learned: k === undefined ? Infinity : (place.get(k) ?? Infinity),
     };
   });
+  const roots = rootLeadsOf.get(lexical);
+  const weak = weakRootsOf.get(lexical);
+  // An entry the query names: by a name match, or by a name of two or more
+  // words the lexical ranker put first (namedLeadsOf).
+  const leads = namedLeadsOf.get(lexical);
   const named = (/** @type {Item} */ it) =>
-    (it.res.score ?? 0) >= 95 &&
-    /^(exact name|plural of the name|name )/.test(it.res.reason ?? '');
+    ((it.res.score ?? 0) >= 95 &&
+      /^(exact name|plural of the name|name )/.test(it.res.reason ?? '')) ||
+    (leads?.has(it.res) ?? false);
   // Matches the lexical ranker scored the same move as one block, in its
   // order; the learned position of the block's first match places the block
   // in its run (not its best member's, which would let one strong member lift
@@ -110,16 +131,33 @@ export function orderMatches(table, order, lexical, query, limit, families) {
     ranked = keepLexical(ranked, it => (it.res.score ?? 0) >= FULL_COVERAGE);
   }
   ranked = integrationTies(ranked);
-  if (families) ranked = rootsFirst(ranked, families, query);
+  if (ranked.length > 1 && !named(ranked[0])) {
+    ranked = tieByOwnName(ranked, query, blockOf, families);
+  }
   // Each whole tie is ordered by fit before the limit, so every limit shows
-  // the top of one answer.
-  const shown = tiesByFit(ranked, table, blockOf).slice(0, limit);
+  // the top of one answer. A root moves to its part only after that: placed
+  // first, it would split the part's tie, and the fit order would then miss
+  // the part. The fit order reads the parts of the result that leads once
+  // the roots move: a part's root, when the part comes first.
+  const head = ranked[0];
+  const headRoot = head && roots?.get(head.res);
+  const rootItem = ranked.find(it => it.res === headRoot);
+  const lead =
+    rootItem && !(weak?.has(head.res) && rootItem.band !== head.band)
+      ? rootItem
+      : head;
+  ranked = tiesByFit(ranked, table, blockOf, lead);
+  /** @type {Map<object, object>} */
+  const moved = new Map();
+  if (roots) ranked = rootsFirst(ranked, roots, moved, weak);
+  const shown = ranked.slice(0, limit);
   const response = {
     ...lexical,
     data: {...lexical.data, results: shown.map(it => it.res)},
   };
   const searched = searchedComponentsOf.get(lexical);
   if (searched) searchedComponentsOf.set(response, searched);
+  if (moved.size) movedRootsOf.set(response, moved);
   return /** @type {import('./search.type.mjs').SearchResponse} */ (response);
 }
 
@@ -139,13 +177,14 @@ const PARTS_FIRST = 2;
  * @param {Item[]} ranked
  * @param {EntryTable} table
  * @param {(item: Item) => string} blockOf
+ * @param {Item} [lead] the result the answer leads with, when that is not
+ *   `ranked[0]`: a root that rootsFirst puts ahead of its part
  * @returns {Item[]}
  */
-function tiesByFit(ranked, table, blockOf) {
+function tiesByFit(ranked, table, blockOf, lead = ranked[0]) {
   if (ranked.length < 3) return ranked;
-  const first = nameWords(String(ranked[0].res.name ?? '')).map(fold);
-  const idf = table.fields.desc.idf;
-  const rarest = Math.max(0, ...idf.values());
+  const first = nameWords(String(lead.res.name ?? '')).map(fold);
+  const {idf, rarest} = table.fields.desc;
   /** @param {Item} it */
   const related = it => {
     // A part's name words start with the first result's whole name words:
@@ -190,6 +229,76 @@ function tiesByFit(ranked, table, blockOf) {
     i = j;
   }
   return out;
+}
+
+/**
+ * The first result's tie goes to the match whose own name holds more query
+ * words. Among matches of one domain that the lexical ranker scored the same
+ * as the first result, and that matched the same query words (the terms
+ * their reasons list), the match whose name words hold more of the query's
+ * words than the first result's name moves first. A first result whose
+ * reason lists no terms keeps its place: it matched the whole query, or the
+ * query holds its title. A part of the first result never takes its place
+ * this way: rootsFirst decides between a family's root and its parts. Only
+ * the first place changes, and nothing crosses a block or a domain.
+ * @param {Item[]} ranked
+ * @param {string} query
+ * @param {(item: Item) => string} blockOf
+ * @param {Map<string, string>} [families]
+ * @returns {Item[]}
+ */
+export function tieByOwnName(ranked, query, blockOf, families) {
+  const first = ranked[0];
+  const terms = first ? answered(first) : null;
+  if (!terms || ranked.length < 2) return ranked;
+  const asked = new Set(queryWords(query));
+  /** @param {Item} it */
+  const inName = it => {
+    const own = new Set(nameWords(String(it.res.name ?? '')).map(fold));
+    let n = 0;
+    for (const w of asked) if (own.has(w)) n++;
+    return n;
+  };
+  /** @param {Set<string> | null} other */
+  const same = other =>
+    other !== null &&
+    other.size === terms.size &&
+    [...other].every(w => terms.has(w));
+  let best = 0;
+  let most = inName(first);
+  for (let j = 1; j < ranked.length; j++) {
+    const it = ranked[j];
+    if (blockOf(it) !== blockOf(first)) break;
+    if (it.res.domain !== first.res.domain || partOf(it, first, families)) {
+      continue;
+    }
+    if (!same(answered(it))) continue;
+    const n = inName(it);
+    if (n > most) {
+      best = j;
+      most = n;
+    }
+  }
+  if (best === 0) return ranked;
+  const out = [...ranked];
+  out.unshift(...out.splice(best, 1));
+  return out;
+}
+
+/**
+ * Whether a match is a part of another: its doc lists it in the other's
+ * family, or its name words start with the other's whole name words.
+ * @param {Item} it
+ * @param {Item} of
+ * @param {Map<string, string>} [families]
+ */
+function partOf(it, of, families) {
+  if (families?.get(`${it.res.domain}:${it.res.name}`) === of.res.name) {
+    return true;
+  }
+  const root = nameWords(String(of.res.name ?? '')).map(fold);
+  const name = nameWords(String(it.res.name ?? '')).map(fold);
+  return name.length > root.length && root.every((w, n) => name[n] === w);
 }
 
 /**
@@ -243,51 +352,34 @@ export function integrationTies(items) {
  * @returns {Set<string> | null}
  */
 function answered(it) {
-  const m = /^matches \d+\/\d+ terms: (.*)$/.exec(it.res.reason ?? '');
-  return m ? new Set(m[1].split(', ').map(fold)) : null;
+  return answeredTerms(it.res.reason);
 }
 
 /**
- * A family's root leads a part of its own family in their run (same band,
- * same domain) when the part adds nothing the reader asked for: the root
- * answers every query word the part answers, and no query word is a word of
- * the part's name, in any plural or stem form, that does not start a word
- * of the root's name. `tabs` puts TabList before its Tab; a query holding
- * "item" keeps ListItem before List, since "item" is only the part's. The
- * root moves just ahead of the part; nothing else moves, and nothing crosses
- * a run.
+ * A family's root leads a part of its own family: the lexical ranker names
+ * the root of each part it leads (rootLeadsOf), and a root placed below that
+ * part moves directly before it, whatever its band; before its highest part
+ * when it leads several. A root already above its part keeps its place.
+ * Nothing else moves.
  * @param {Item[]} ranked
- * @param {Map<string, string>} families each member's `domain:name`, mapped
- *   to its family's name
- * @param {string} query
+ * @param {Map<object, object>} roots each part's result, mapped to its
+ *   root's result
+ * @param {Map<object, object>} [moved] filled with each part whose root
+ *   moved, mapped to that root
+ * @param {Set<object>} [weak] parts whose root leads them only inside their
+ *   own run
  * @returns {Item[]}
  */
-export function rootsFirst(ranked, families, query) {
-  const asked = nameWords(query);
+export function rootsFirst(ranked, roots, moved, weak) {
   const out = [...ranked];
   for (let a = 0; a < out.length; a++) {
-    const part = out[a];
-    const family = families.get(`${part.res.domain}:${part.res.name}`);
-    if (!family) continue;
-    const b = out.findIndex(
-      (it, n) =>
-        n > a &&
-        it.band === part.band &&
-        it.res.domain === part.res.domain &&
-        it.res.name === family,
-    );
+    const root = roots.get(out[a].res);
+    if (!root) continue;
+    const b = out.findIndex((it, n) => n > a && it.res === root);
     if (b < 0) continue;
-    const ofPart = answered(part);
-    const ofRoot = answered(out[b]);
-    if (ofRoot && (!ofPart || [...ofPart].some(w => !ofRoot.has(w)))) continue;
-    const rootWords = nameWords(family);
-    const own = nameWords(String(part.res.name)).filter(
-      w => !rootWords.some(r => r.startsWith(w)),
-    );
-    // A query word is a part word in any plural or stem form, as search
-    // reads words: `statuses` is the Status in FieldStatus.
-    if (own.some(w => asked.some(q => sameWord(q, w)))) continue;
+    if (weak?.has(out[a].res) && out[b].band !== out[a].band) continue;
     out.splice(a, 0, ...out.splice(b, 1));
+    moved?.set(out[a + 1].res, root);
   }
   return out;
 }

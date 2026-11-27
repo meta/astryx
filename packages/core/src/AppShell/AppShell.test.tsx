@@ -40,6 +40,7 @@ import {TopNav, TopNavHeading, TopNavItem} from '../TopNav';
 import {TextInput} from '../TextInput';
 import {useAppShellMobile} from './AppShellMobileContext';
 import {Theme, defineTheme} from '../theme';
+import {loadMobileNavDrawer} from '../MobileNav/MobileNavToggle';
 
 // jsdom doesn't implement showModal/close on <dialog>, so we mock them
 beforeAll(() => {
@@ -56,14 +57,37 @@ beforeAll(() => {
 });
 
 // Mock ResizeObserver
+// Records what each observer watches, so a test can send the notification a
+// browser sends after it lays those elements out.
+const resizeObservers = new Set<MockResizeObserver>();
 class MockResizeObserver {
   callback: ResizeObserverCallback;
+  targets = new Set<Element>();
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
+    resizeObservers.add(this);
   }
-  observe() {}
-  unobserve() {}
-  disconnect() {}
+  observe(target: Element) {
+    this.targets.add(target);
+  }
+  unobserve(target: Element) {
+    this.targets.delete(target);
+  }
+  disconnect() {
+    this.targets.clear();
+    resizeObservers.delete(this);
+  }
+}
+
+function notifyResizeObservers() {
+  for (const resizeObserver of [...resizeObservers]) {
+    const entries = [...resizeObserver.targets].map(
+      target => ({target}) as ResizeObserverEntry,
+    );
+    if (entries.length > 0) {
+      resizeObserver.callback(entries, resizeObserver);
+    }
+  }
 }
 
 vi.stubGlobal('ResizeObserver', MockResizeObserver);
@@ -126,6 +150,12 @@ afterEach(() => {
   act(() => {
     document.documentElement.removeAttribute('data-astryx-theme');
   });
+});
+
+// These cases test the drawer once it has loaded. MobileNavDrawer.test.tsx
+// tests the closed placeholder and the load itself.
+beforeAll(async () => {
+  await loadMobileNavDrawer();
 });
 
 describe('AppShell', () => {
@@ -238,6 +268,47 @@ describe('AppShell', () => {
     fireEvent.click(skipLink);
     expect(document.activeElement).toBe(main);
   });
+
+  it('leaves the URL alone when the skip link is activated, so a hash router stays on its page', async () => {
+    window.history.replaceState(null, '', '#/orders/46');
+    try {
+      render(
+        <AppShell>
+          <div>Content</div>
+        </AppShell>,
+      );
+      const skipLink = screen.getByTestId('skip-to-content');
+      // The link keeps its href for a page without script.
+      expect(skipLink).toHaveAttribute('href', '#astryx-app-shell-main');
+      expect(fireEvent.click(skipLink)).toBe(false);
+      expect(document.activeElement).toBe(screen.getByRole('main'));
+      // A followed link changes the URL a task after the click, so the check
+      // waits for that task first.
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(window.location.hash).toBe('#/orders/46');
+    } finally {
+      window.history.replaceState(null, '', ' ');
+    }
+  });
+
+  it.each([
+    ['Cmd', {metaKey: true}],
+    ['Ctrl', {ctrlKey: true}],
+    ['Shift', {shiftKey: true}],
+  ])(
+    'keeps the browser action for a %s-click on the skip link, and still moves focus to main',
+    (_, modifier) => {
+      render(
+        <AppShell>
+          <div>Content</div>
+        </AppShell>,
+      );
+      expect(
+        fireEvent.click(screen.getByTestId('skip-to-content'), modifier),
+      ).toBe(true);
+      expect(document.activeElement).toBe(screen.getByRole('main'));
+    },
+  );
 
   it('gives a second shell its own main id; the first keeps the fixed id', () => {
     const view = render(
@@ -627,6 +698,263 @@ describe('AppShell', () => {
       }
     },
   );
+
+  // ===========================================================================
+  // First paint before the shell reads the window
+  // ===========================================================================
+
+  describe('first paint before the shell reads the window', () => {
+    const UNREAD_SIDE_NAV = 'unreadWidthPoint__sideNavStyles.';
+    const UNREAD_CORNER = 'unreadWidthPoint__cornerStyles.';
+
+    function serverHost(app: React.ReactElement): HTMLElement {
+      const host = document.createElement('div');
+      host.innerHTML = renderToString(app);
+      return host;
+    }
+
+    it('hides the inline side nav and the elevated corner below the breakpoint in the server HTML', () => {
+      const host = serverHost(
+        <AppShell
+          variant="elevated"
+          topNav={<TopNav heading="App" />}
+          sideNav={<TestSideNav />}>
+          <div>Content</div>
+        </AppShell>,
+      );
+
+      const panel = host.querySelector('.astryx-layout-panel');
+      expect(panel?.className).toContain(`${UNREAD_SIDE_NAV}md`);
+      expect(host.innerHTML).toContain(`${UNREAD_CORNER}md`);
+    });
+
+    it('uses the rule of the selected width point', () => {
+      const host = serverHost(
+        <AppShell sideNav={<TestSideNav />} mobileNav={{breakpoint: 'lg'}}>
+          <div>Content</div>
+        </AppShell>,
+      );
+
+      expect(host.querySelector('.astryx-layout-panel')?.className).toContain(
+        `${UNREAD_SIDE_NAV}lg`,
+      );
+    });
+
+    it.each([
+      ['an SSR hint that renders the phone layout', {defaultIsMobile: true}],
+      ['breakpoint none', {breakpoint: 'none' as const}],
+    ])('adds no rule for %s', (_case, mobileNav) => {
+      const host = serverHost(
+        <AppShell sideNav={<TestSideNav />} mobileNav={mobileNav}>
+          <div>Content</div>
+        </AppShell>,
+      );
+
+      expect(host.innerHTML).not.toContain(UNREAD_SIDE_NAV);
+    });
+
+    it('adds no rule for a theme that moves the width point', () => {
+      const theme = defineTheme({
+        name: 'unread-width-theme',
+        adaptations: {widthBreakpoints: {lg: 1100}},
+      });
+      const host = serverHost(
+        <Theme theme={theme}>
+          <AppShell sideNav={<TestSideNav />} mobileNav={{breakpoint: 'lg'}}>
+            <div>Content</div>
+          </AppShell>
+        </Theme>,
+      );
+
+      expect(host.querySelector('.astryx-layout-panel')).not.toBeNull();
+      expect(host.innerHTML).not.toContain(UNREAD_SIDE_NAV);
+    });
+
+    it('adds no rule on a render that reads the window first', () => {
+      const {container} = render(
+        <AppShell sideNav={<TestSideNav />}>
+          <div>Content</div>
+        </AppShell>,
+      );
+
+      expect(container.innerHTML).not.toContain(UNREAD_SIDE_NAV);
+    });
+
+    it.each([
+      ['below the breakpoint', true],
+      ['at or above the breakpoint', false],
+    ])(
+      'drops the rule once hydration reads the window %s',
+      async (_case, isBelow) => {
+        const app = (
+          <AppShell
+            variant="elevated"
+            topNav={<TopNav heading="App" />}
+            sideNav={<TestSideNav />}>
+            <div>Content</div>
+          </AppShell>
+        );
+        const host = document.createElement('div');
+        let root: ReturnType<typeof hydrateRoot> | undefined;
+        try {
+          document.body.appendChild(host);
+          host.innerHTML = renderToString(app);
+          expect(host.innerHTML).toContain(UNREAD_SIDE_NAV);
+
+          mockMql = createMockMatchMedia(isBelow);
+          vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+          await act(async () => {
+            root = hydrateRoot(host, app);
+          });
+
+          expect(host.innerHTML).not.toContain(UNREAD_SIDE_NAV);
+          expect(host.innerHTML).not.toContain(UNREAD_CORNER);
+          // Below the breakpoint the shell is in its mobile layout (the
+          // drawer is mounted); otherwise the side nav stays inline.
+          expect(host.querySelector('dialog') != null).toBe(isBelow);
+          expect(host.querySelector('.astryx-layout-panel') != null).toBe(
+            !isBelow,
+          );
+        } finally {
+          act(() => root?.unmount());
+          host.remove();
+        }
+      },
+    );
+
+    describe('top nav', () => {
+      const UNREAD_REGION = 'unreadWidthPoint__topNavRegionStyles.';
+
+      function topNavWithAllRegions() {
+        return (
+          <TopNav
+            heading={<TopNavHeading heading="App" />}
+            centerContent={<TopNavItem label="Docs" href="/docs" />}
+            endContent={<button type="button">Sign in</button>}>
+            <TopNavItem label="Home" href="/" />
+          </TopNav>
+        );
+      }
+
+      it("hides the full bar's start and center content below the breakpoint in the server HTML", () => {
+        const host = serverHost(
+          <AppShell topNav={topNavWithAllRegions()}>
+            <div>Content</div>
+          </AppShell>,
+        );
+
+        const hidden = host.querySelectorAll(`[class*="${UNREAD_REGION}md"]`);
+        expect(hidden).toHaveLength(2);
+        expect(hidden[0].textContent).toBe('Home');
+        expect(hidden[1].textContent).toBe('Docs');
+        // The heading and the end content keep painting, as in the mobile bar.
+        expect(
+          host
+            .querySelector('.astryx-top-nav-heading')
+            ?.closest(`[class*="${UNREAD_REGION}"]`),
+        ).toBeNull();
+        expect(
+          host.querySelector('button')?.closest(`[class*="${UNREAD_REGION}"]`),
+        ).toBeNull();
+      });
+
+      it('uses the rule of the selected width point', () => {
+        const host = serverHost(
+          <AppShell
+            topNav={topNavWithAllRegions()}
+            mobileNav={{breakpoint: 'lg'}}>
+            <div>Content</div>
+          </AppShell>,
+        );
+
+        expect(
+          host.querySelectorAll(`[class*="${UNREAD_REGION}lg"]`),
+        ).toHaveLength(2);
+      });
+
+      it.each([
+        ['mobileNav false, which keeps the full bar', false as const],
+        [
+          'a mobileNav node, which keeps the full bar',
+          <MobileNav key="n">Menu</MobileNav>,
+        ],
+        ['an SSR hint that renders the mobile bar', {defaultIsMobile: true}],
+        ['breakpoint none', {breakpoint: 'none' as const}],
+      ])('adds no rule for %s', (_case, mobileNav) => {
+        const host = serverHost(
+          <AppShell topNav={topNavWithAllRegions()} mobileNav={mobileNav}>
+            <div>Content</div>
+          </AppShell>,
+        );
+
+        expect(host.innerHTML).not.toContain(UNREAD_REGION);
+      });
+
+      it('adds no rule for a theme that moves the width point', () => {
+        const theme = defineTheme({
+          name: 'unread-top-nav-width-theme',
+          adaptations: {widthBreakpoints: {md: 900}},
+        });
+        const host = serverHost(
+          <Theme theme={theme}>
+            <AppShell topNav={topNavWithAllRegions()}>
+              <div>Content</div>
+            </AppShell>
+          </Theme>,
+        );
+
+        expect(host.textContent).toContain('Home');
+        expect(host.innerHTML).not.toContain(UNREAD_REGION);
+      });
+
+      it('adds no rule to a TopNav outside AppShell', () => {
+        const host = serverHost(topNavWithAllRegions());
+
+        expect(host.innerHTML).not.toContain(UNREAD_REGION);
+      });
+
+      it.each([
+        ['below the breakpoint', true],
+        ['at or above the breakpoint', false],
+      ])(
+        'drops the rule once hydration reads the window %s',
+        async (_case, isBelow) => {
+          const app = (
+            <AppShell topNav={topNavWithAllRegions()}>
+              <div>Content</div>
+            </AppShell>
+          );
+          const host = document.createElement('div');
+          let root: ReturnType<typeof hydrateRoot> | undefined;
+          try {
+            document.body.appendChild(host);
+            host.innerHTML = renderToString(app);
+            const serverNav = host.querySelector('nav.astryx-top-nav');
+            expect(host.innerHTML).toContain(UNREAD_REGION);
+
+            mockMql = createMockMatchMedia(isBelow);
+            vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+            await act(async () => {
+              root = hydrateRoot(host, app);
+            });
+
+            expect(host.innerHTML).not.toContain(UNREAD_REGION);
+            const nav = host.querySelector('nav.astryx-top-nav');
+            expect(nav?.getAttribute('data-mode')).toBe(
+              isBelow ? 'mobile-bar' : null,
+            );
+            // Above the breakpoint the full bar stays the server's element.
+            if (!isBelow) {
+              expect(nav).toBe(serverNav);
+            }
+          } finally {
+            act(() => root?.unmount());
+            host.remove();
+          }
+        },
+      );
+    });
+  });
 
   // ===========================================================================
   // Mobile overlay (default MobileNav wrapping sideNav)
@@ -1292,6 +1620,9 @@ describe('AppShell main keyboard access', () => {
 
   beforeEach(() => {
     frames = [];
+    // Earlier suites leave their own observer in place; these tests send the
+    // browser's notification through the recording one.
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
     vi.stubGlobal(
       'requestAnimationFrame',
       vi.fn((callback: FrameRequestCallback) => {
@@ -1341,6 +1672,10 @@ describe('AppShell main keyboard access', () => {
   }
 
   function remeasure() {
+    // The browser lays main out and notifies before the window resizes.
+    act(() => {
+      notifyResizeObservers();
+    });
     act(() => {
       window.dispatchEvent(new Event('resize'));
     });
@@ -1459,12 +1794,16 @@ describe('AppShell main keyboard access', () => {
     remeasure();
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
 
-    // Back in fill, main is measured as it attaches, with no other signal.
+    // Back in fill, main is measured at the first resize notification, with
+    // no other signal.
     rerender(
       <AppShell topNav={<div>Nav</div>}>
         <p>Long content</p>
       </AppShell>,
     );
+    act(() => {
+      notifyResizeObservers();
+    });
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '0');
   });
 

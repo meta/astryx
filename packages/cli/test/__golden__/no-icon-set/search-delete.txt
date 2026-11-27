@@ -1,4 +1,4 @@
-Results for "delete" (20)
+Results for "delete" (20 of 23)
 name:        AlertDialog
 domain:      component
 package:     @astryxdesign/core
@@ -19,22 +19,32 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/Dialog
 command:     pnpm exec astryx component Dialog
-name:        global/uninstall
-section:     reset
+name:        cli/api/functions/theme-remove
 domain:      doc
 package:     @astryxdesign/cli
-command:     pnpm exec astryx docs global/uninstall reset
-parent:      pnpm exec astryx docs global/uninstall --index
+command:     pnpm exec astryx docs cli/api/functions/theme-remove
+parent:      pnpm exec astryx docs cli/api/functions
 name:        cli/api/functions/theme-template
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs cli/api/functions/theme-template
 parent:      pnpm exec astryx docs cli/api/functions
+name:        cli/commands/theme-remove
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/commands/theme-remove
+parent:      pnpm exec astryx docs cli/commands
 name:        cli/commands/theme-template
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs cli/commands/theme-template
 parent:      pnpm exec astryx docs cli/commands
+name:        cli/skill-places
+section:     keep
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/skill-places keep
+parent:      pnpm exec astryx docs cli/skill-places --index
 name:        global/computer-agent-guide
 section:     choose
 domain:      doc
@@ -46,6 +56,12 @@ section:     agent-guide
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs global/uninstall agent-guide
+parent:      pnpm exec astryx docs global/uninstall --index
+name:        global/uninstall
+section:     reset
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs global/uninstall reset
 parent:      pnpm exec astryx docs global/uninstall --index
 name:        migration/migration-setup
 section:     foundation-smoke-test
@@ -84,18 +100,3 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/Button
 command:     pnpm exec astryx component Button
-name:        ButtonGroup
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/ButtonGroup
-command:     pnpm exec astryx component ButtonGroup
-name:        IconButton
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/IconButton
-command:     pnpm exec astryx component IconButton
-name:        ToggleButton
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/ToggleButton
-command:     pnpm exec astryx component ToggleButton

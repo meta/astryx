@@ -21,7 +21,7 @@ export const docs = {
       name: 'icon',
       type: 'ReactNode',
       description:
-        'Icon element rendered inside the button. An Astryx Icon with no explicit size defaults to sm for sm/md buttons and md for lg buttons.',
+        'Icon element rendered inside the button: `<Icon icon="close" />` for a built-in meaning, or `<Icon icon={TrashIcon} />` for any SVG component from your icon library. An Astryx Icon with no explicit size defaults to sm for sm/md buttons and md for lg buttons.',
       required: true,
       slotElements: [{__element: 'Icon', props: {icon: 'check'}}],
     },
@@ -62,7 +62,7 @@ export const docs = {
       name: 'tooltip',
       type: 'string',
       description:
-        "Tooltip text shown on hover and keyboard focus. It also describes the button, unless it repeats the button's accessible name.",
+        "Tooltip text shown on hover and keyboard focus. It also describes the button, unless it repeats the button's accessible name. The text shows above the button; for another side, rich content, or control over when it shows, wrap the button in `Tooltip` instead (`placement`, `content`, `isOpen`).",
     },
     {
       name: 'onClick',
@@ -242,7 +242,7 @@ export const docsDense = {
   },
   propDescriptions: {
     label: 'accessible label; used as aria-label, not rendered as visible text',
-    icon: 'icon element rendered inside button; unsized Astryx Icon defaults to sm for sm/md buttons and md for lg',
+    icon: 'icon element rendered inside button (`<Icon icon="close" />`, or `<Icon icon={TrashIcon} />` for any SVG from your icon library); unsized Astryx Icon defaults to sm for sm/md buttons and md for lg',
     variant: 'visual style variant',
     size: 'size variant',
     elevation:
@@ -251,7 +251,7 @@ export const docsDense = {
       'shows loading spinner, blocks re-activation but stays focusable (aria-disabled, not native disabled)',
     isDisabled: 'disables button; uses aria-disabled instead of native disabled',
     tooltip:
-      'tooltip on hover + keyboard focus; also describes the button unless it repeats the accessible name',
+      'tooltip text on hover + keyboard focus, shown above; also describes the button unless it repeats the accessible name; other side, rich content or open control: wrap in Tooltip instead, without this prop (placement, content, isOpen)',
     onClick: 'standard click handler',
     clickAction: 'async click handler w/ automatic loading state',
     isInterruptible:

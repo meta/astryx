@@ -78,6 +78,16 @@ function computeSingleLineFit(
   floor: number,
   ceiling: number,
 ): number {
+  // Every item fits: no indicator, so none is reserved. Without this check
+  // a set whose last item is narrower than the indicator could fold although
+  // it fits.
+  const allWidth =
+    orderedWidths.reduce((sum, width) => sum + width, 0) +
+    gap * Math.max(0, orderedWidths.length - 1);
+  if (orderedWidths.length <= ceiling && allWidth <= availableWidth) {
+    return orderedWidths.length;
+  }
+
   let totalWidth = 0;
   let count = 0;
 

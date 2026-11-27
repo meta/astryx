@@ -11,7 +11,7 @@ An open source design system that's fully customizable and built for how we buil
 **Currently in Beta** · Built on [React 19+](https://react.dev) and [StyleX](https://stylexjs.com)
 
 [![npm version](https://img.shields.io/npm/v/@astryxdesign/core?label=npm&color=cb3837&logo=npm)](https://www.npmjs.com/package/@astryxdesign/core)
-[![license MIT](https://img.shields.io/npm/l/@astryxdesign/core?color=blue)](LICENSE)
+[![license MIT](https://img.shields.io/github/license/meta/astryx?color=blue)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/meta/astryx/wiki/Contributing)
 
 [![Docs](https://img.shields.io/badge/Docs-astryx.atmeta.com-6741d9?logo=readthedocs&logoColor=white)](https://astryx.atmeta.com)
@@ -53,6 +53,12 @@ pnpm add -D @astryxdesign/cli
 # yarn
 yarn add @astryxdesign/core @astryxdesign/theme-neutral @stylexjs/stylex
 yarn add -D @astryxdesign/cli
+```
+
+Then finish setup with `init`, once, before you write UI. It asks no questions, prints the getting-started steps (styles, theme), and saves the Astryx guide to `AGENTS.md`/`CLAUDE.md` so you and your agents build with Astryx instead of guessing:
+
+```bash
+npx @astryxdesign/cli init   # or: pnpm exec astryx init / yarn astryx init
 ```
 
 You can also install the CLI once for your computer, so `astryx` works in any folder and every coding agent knows Astryx; in a project, it still runs that project's own version:
@@ -132,10 +138,13 @@ the [Component Lifecycle](https://github.com/meta/astryx/wiki/Component-Lifecycl
 the [Contributing Templates](https://github.com/meta/astryx/wiki/Contributing-Templates),
 and the [Blog Review Rubric](https://github.com/meta/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria). Read the relevant rubric before opening a PR.
 
-Quick start for contributors: this repo uses **Node 22+ on an active LTS line**
-and **pnpm 11**. Install pnpm directly, or enable
-[Corepack](https://nodejs.org/api/corepack.html) once so the pinned pnpm version
-installs automatically:
+For local development, install the Node.js version pinned in [`.nvmrc`](.nvmrc)
+and use **pnpm 11**. If you use nvm, run `nvm install` from the repository root.
+The [CLI package](packages/cli/package.json) supports Node.js 22.13.0 and later
+when run in consumer projects.
+
+Install pnpm directly, or enable [Corepack](https://nodejs.org/api/corepack.html)
+so the pinned pnpm version installs automatically:
 
 ```bash
 corepack enable

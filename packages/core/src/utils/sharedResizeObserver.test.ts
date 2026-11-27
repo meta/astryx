@@ -357,4 +357,38 @@ describe('sharedResizeObserver', () => {
       }
     });
   });
+
+  it('splits the first delivery from later notifications', async () => {
+    const {splitFirstResizeDelivery} = await import('./sharedResizeObserver');
+    const onFirst = vi.fn();
+    const onLater = vi.fn();
+    const onResize = splitFirstResizeDelivery(onFirst, onLater);
+
+    // One delivery: the first notification measures, the rest do nothing.
+    onResize();
+    onResize();
+    onResize();
+    expect(onFirst).toHaveBeenCalledTimes(1);
+    expect(onLater).not.toHaveBeenCalled();
+
+    // A later delivery.
+    await Promise.resolve();
+    onResize();
+    onResize();
+    expect(onFirst).toHaveBeenCalledTimes(1);
+    expect(onLater).toHaveBeenCalledTimes(2);
+  });
+
+  it('reaches later notifications when the first measurement throws', async () => {
+    const {splitFirstResizeDelivery} = await import('./sharedResizeObserver');
+    const onLater = vi.fn();
+    const onResize = splitFirstResizeDelivery(() => {
+      throw new Error('measure failed');
+    }, onLater);
+
+    expect(onResize).toThrow('measure failed');
+    await Promise.resolve();
+    onResize();
+    expect(onLater).toHaveBeenCalledTimes(1);
+  });
 });

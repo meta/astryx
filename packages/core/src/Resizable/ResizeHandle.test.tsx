@@ -168,6 +168,35 @@ describe('ResizeHandle', () => {
     );
   });
 
+  const ALL_KEYS = [
+    'ArrowRight',
+    'ArrowLeft',
+    'ArrowUp',
+    'ArrowDown',
+    'Home',
+    'End',
+    'Enter',
+  ];
+  it.each([
+    {modifiers: {altKey: true}, keys: ALL_KEYS},
+    {modifiers: {ctrlKey: true}, keys: ALL_KEYS},
+    {modifiers: {metaKey: true}, keys: ALL_KEYS},
+    {modifiers: {metaKey: true, shiftKey: true}, keys: ALL_KEYS},
+    {modifiers: {shiftKey: true}, keys: ['Home', 'End', 'Enter']},
+  ])(
+    'leaves a key with $modifiers that the map does not name to the page',
+    ({modifiers, keys}) => {
+      render(<Harness />);
+      const separator = getSeparator();
+      act(() => separator.focus());
+      for (const key of keys) {
+        const isNotConsumed = fireEvent.keyDown(separator, {key, ...modifiers});
+        expect(isNotConsumed, key).toBe(true);
+        expect(separator, key).toHaveAttribute('aria-valuenow', '200');
+      }
+    },
+  );
+
   it('jumps to the minimum on Home', () => {
     render(<Harness />);
     const separator = getSeparator();
@@ -1330,6 +1359,124 @@ describe('ResizeHandle', () => {
       'aria-valuenow',
       String(200 + KEYBOARD_STEP),
     );
+  });
+
+  it('runs a caller onDoubleClick and still collapses on a double-click (FR7)', () => {
+    const onDoubleClick = vi.fn();
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          collapsible: true,
+        }}
+        handleProps={{onDoubleClick}}
+      />,
+    );
+    const separator = getSeparator();
+    fireEvent.doubleClick(separator);
+    expect(onDoubleClick).toHaveBeenCalledTimes(1);
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+  });
+
+  it('keeps its own focus tracking and collapse when a caller cancels the event (FR7)', () => {
+    const cancel = (event: React.SyntheticEvent) => event.preventDefault();
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          collapsible: true,
+        }}
+        handleProps={{
+          isAlwaysVisible: false,
+          onFocus: cancel,
+          onBlur: cancel,
+          onDoubleClick: cancel,
+        }}
+      />,
+    );
+    const separator = getSeparator();
+    const pill = separator.querySelector('.astryx-resize-handle-pill');
+    act(() => separator.focus());
+    expect(pill).toHaveStyle({opacity: '1'});
+    act(() => separator.blur());
+    expect(pill).toHaveStyle({opacity: '0'});
+    fireEvent.doubleClick(separator);
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+  });
+
+  it('runs caller onFocus and onBlur and still reveals a hidden pill on focus (FR7)', () => {
+    const onFocus = vi.fn();
+    const onBlur = vi.fn();
+    render(<Harness handleProps={{isAlwaysVisible: false, onFocus, onBlur}} />);
+    const separator = getSeparator();
+    const pill = separator.querySelector('.astryx-resize-handle-pill');
+    expect(pill).toHaveStyle({opacity: '0'});
+    act(() => separator.focus());
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(pill).toHaveStyle({opacity: '1'});
+    act(() => separator.blur());
+    expect(onBlur).toHaveBeenCalledTimes(1);
+    expect(pill).toHaveStyle({opacity: '0'});
+  });
+
+  it('keeps a caller ARIA attribute and className on the Handle (FR7)', () => {
+    render(
+      <Harness
+        handleProps={{'aria-controls': 'sidebar', className: 'caller-handle'}}
+      />,
+    );
+    const separator = getSeparator();
+    expect(separator).toHaveAttribute('aria-controls', 'sidebar');
+    expect(separator).toHaveClass('caller-handle');
+    expect(separator).toHaveClass('astryx-resize-handle');
+  });
+
+  it('replaces the Grip pill with caller children and keeps the Grab zone (FR1)', () => {
+    const resizable = makeResizable();
+    render(
+      <ResizeHandle resizable={resizable} label="Resize">
+        <span data-testid="grip" />
+      </ResizeHandle>,
+    );
+    const separator = getSeparator();
+    expect(separator.querySelector('.astryx-resize-handle-pill')).toBeNull();
+    expect(screen.getByTestId('grip').parentElement).toBe(separator);
+    fireEvent.pointerDown(getHitArea(), {
+      pointerId: 1,
+      clientX: 0,
+      button: 0,
+    });
+    expect(resizable._onResizeStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a pointer drag when disabled (FR3)', () => {
+    const resizable = makeResizable();
+    render(<ResizeHandle resizable={resizable} label="Resize" isDisabled />);
+    const hitArea = getHitArea();
+    fireEvent.pointerDown(hitArea, {pointerId: 1, clientX: 0, button: 0});
+    fireEvent.pointerMove(hitArea, {pointerId: 1, clientX: 40, clientY: 0});
+    fireEvent.pointerUp(hitArea, {pointerId: 1, clientX: 40, clientY: 0});
+    expect(resizable._onResizeStart).not.toHaveBeenCalled();
+    expect(resizable._onResizeMove).not.toHaveBeenCalled();
+  });
+
+  it('reflects its direction on the resize-handle target (FR4)', () => {
+    const {rerender} = render(
+      <ResizeHandle resizable={makeResizable()} label="Resize" />,
+    );
+    expect(getSeparator()).toHaveAttribute('data-direction', 'horizontal');
+    rerender(
+      <ResizeHandle
+        resizable={makeResizable()}
+        label="Resize"
+        direction="vertical"
+      />,
+    );
+    expect(getSeparator()).toHaveAttribute('data-direction', 'vertical');
   });
 });
 

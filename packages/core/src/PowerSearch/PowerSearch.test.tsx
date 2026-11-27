@@ -24,6 +24,7 @@ import {PowerSearch} from './PowerSearch';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {PowerSearchConfig, PowerSearchFilter} from './types';
 import {TestIcon} from '../__tests__/TestIcon';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // =============================================================================
 // Test infrastructure
@@ -535,22 +536,23 @@ describe('PowerSearch', () => {
 
     it('shows the reason tooltip on hover when disabled with a reason', async () => {
       renderSearch();
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('You need edit access to search');
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent('You need edit access to search');
       const wrapper = screen.getByRole('group');
       fireEvent.mouseEnter(wrapper);
-      await waitFor(() => expect(isOpen(tooltip)).toBe(true));
+      fireEvent.pointerMove(wrapper);
+      await waitFor(() => expect(isOpen(tooltip())).toBe(true));
       fireEvent.mouseLeave(wrapper);
-      await waitFor(() => expect(isOpen(tooltip)).toBe(false));
+      await waitFor(() => expect(isOpen(tooltip())).toBe(false));
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderSearch();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
-      await waitFor(() => expect(isOpen(tooltip)).toBe(true));
+      await waitFor(() => expect(isOpen(tooltip())).toBe(true));
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -587,7 +589,7 @@ describe('PowerSearch', () => {
     it('links the reason tooltip via aria-describedby', () => {
       renderSearch();
       const input = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

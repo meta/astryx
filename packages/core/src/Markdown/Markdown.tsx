@@ -39,7 +39,13 @@ import {CheckboxListItem} from '../CheckboxList/CheckboxListItem';
 import {Blockquote} from '../Blockquote/Blockquote';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
-import {ListMarkerScope, type ListMarker} from '../List/ListContext';
+import {
+  ListEdgeScope,
+  ListStaticContext,
+  listStaticMark,
+  ListMarkerScope,
+  type ListMarker,
+} from '../List/ListContext';
 import {Table} from '../Table/Table';
 import {TableRow} from '../Table/TableRow';
 import {TableCell} from '../Table/TableCell';
@@ -110,6 +116,11 @@ import {
 } from '../i18n/useComponentTranslator';
 import {useDirection} from '../i18n/useDirection';
 import english from '../i18n/generated-english/Markdown/Markdown.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -412,42 +423,27 @@ const cellAlignStyles = stylex.create({
  * Cell sizing for Markdown's own default Table part, layered over Table's
  * wrap-mode defaults.
  *
- * Table sizes wrap-mode cells with `max-width: 0` + `word-break: break-word`,
- * and its header cell also applies nowrap + ellipsis. Those defaults zero every
- * column's min-content contribution, so automatic layout divides the container
- * equally: a six-column Markdown table squashes to a few characters per cell,
- * identifiers split mid-word, header labels ellipsize, and nothing ever
- * overflows into the Scroll region that exists to take the width.
- *
- * Here the cell reports an honest min-content, the header wraps instead of
- * truncating, and `box-sizing: content-box` makes the per-column `ch` floor a
- * floor on the text box rather than on the padded border box — so the floor
- * means the same number of characters at every density, with no padding
- * arithmetic to keep in sync with Table's own tokens.
- *
- * Data-driven `Table` keeps its released wrap mode; only Markdown's part is
- * restyled.
+ * Table's wrapping columns already follow their content and scroll when they
+ * do not fit. The header wraps instead of truncating. Overflow stays visible.
+ * `box-sizing: content-box` puts the per-column `ch` floor on the text box,
+ * not the padded box, so the floor holds the same number of characters at
+ * every density.
  */
 const markdownTableCellStyles = stylex.create({
   cell: {
     boxSizing: 'content-box',
-    maxWidth: 'none',
     overflow: 'visible',
-    overflowWrap: 'break-word',
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-2'],
-    wordBreak: 'normal',
   },
   headerCell: {
     boxSizing: 'content-box',
-    maxWidth: 'none',
     overflow: 'visible',
     overflowWrap: 'break-word',
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-2'],
     textOverflow: 'clip',
     whiteSpace: 'normal',
-    wordBreak: 'normal',
   },
   // Inline Code sets `word-break: break-word` so a long token cannot widen a
   // paragraph. Inside a table cell that same rule zeroes the token's
@@ -636,21 +632,6 @@ const styles = stylex.create({
     '--container-padding-inline-end': '0px',
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
-  },
-  // Static Markdown lists never host swipe actions. Let outside counter ink
-  // paint through both ordered and unordered ancestors; general List and
-  // swipe-capable rows retain their own inline clip (component:List FR9).
-  blockIndent: {
-    marginInline: `calc(-1 * ${spacingVars['--spacing-2']})`,
-    overflowInline: 'visible',
-  },
-  // Numbered document lists keep their ordinary text inset regardless of
-  // counter width, matching RichText's native outside markers (AST-061 FR11).
-  // These rows have no swipe actions: unlike general List, their outside ink
-  // may paint past the gutter instead of being clipped at a finite threshold.
-  markerGutter: {
-    marginInlineStart: `calc(-1 * (${spacingVars['--spacing-2']} + ${spacingVars['--spacing-4']}))`,
-    paddingInlineStart: spacingVars['--spacing-4'],
   },
   // HR
   hr: {
@@ -1335,8 +1316,7 @@ function getElementSpacing(
 /**
  * Content-derived width floors for a Markdown table's columns, in `ch`.
  *
- * Once the cells stop clamping themselves (see `markdownTableCellStyles`),
- * automatic table layout already gives every column its min-content — the
+ * Table's automatic layout already gives every column its min-content — the
  * longest unbreakable token — so no identifier can split mid-word. That floor
  * is honest but not readable: a prose column's longest word is short, so six
  * prose columns in a narrow container still wrap one word per line. The
@@ -1812,18 +1792,121 @@ function renderBlock(
                 isLast && styles.noMarginBlockEnd,
               ),
             )}>
-            <CheckboxList
-              label={t('@astryx.markdown.taskList')}
-              isLabelHidden
-              value={checkedValues}
-              containerXstyle={styles.blockIndent}
-              isReadOnly
-              density="compact">
+            {/* Task rows never swipe, so each checkbox's focus ring draws
+                whole on the column edge. */}
+            <ListStaticContext value={listStaticMark()}>
+              <CheckboxList
+                label={t('@astryx.markdown.taskList')}
+                isLabelHidden
+                value={checkedValues}
+                isReadOnly
+                density="compact">
+                {/* Flush rows put each checkbox on the text line inside the
+                    column, as Markdown's other lists do. */}
+                <ListEdgeScope edge="flush">
+                  {node.children.map((item, i) => {
+                    const firstChild = item.children[0];
+                    const isInline =
+                      item.children.length === 1 &&
+                      firstChild?.type === 'paragraph';
+
+                    const label = isInline ? (
+                      <>
+                        {firstChild.children.map((c, j) =>
+                          renderInline(
+                            c,
+                            j,
+                            onLinkClick,
+                            cursor,
+                            citationCtx,
+                            linkComponent,
+                            inlinePlugins,
+                            components,
+                            preparedPlugins,
+                          ),
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {item.children.map((c, j) =>
+                          renderBlock(
+                            c,
+                            j,
+                            item.children.length,
+                            density,
+                            headingLevelStart,
+                            onLinkClick,
+                            cursor,
+                            citationCtx,
+                            contentWidthValue,
+                            contentAlign,
+                            linkComponent,
+                            inlinePlugins,
+                            components,
+                            preparedPlugins,
+                            t,
+                            codeLanguages,
+                            headingProjection,
+                            listDepth + 1,
+                            innerDirectionScope(item, directionScope),
+                          ),
+                        )}
+                      </>
+                    );
+
+                    return (
+                      <CheckboxListItem
+                        // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown task items are rendered from positional AST nodes
+                        key={i}
+                        value={`task-${i}`}
+                        label={label}
+                        dir={blockDirection(item, directionScope)}
+                        {...(recordsSourceLines
+                          ? sourceLineAttributes(blockSourceLines(item))
+                          : undefined)}
+                      />
+                    );
+                  })}
+                </ListEdgeScope>
+              </CheckboxList>
+            </ListStaticContext>
+          </div>
+        );
+      }
+
+      return (
+        <div
+          key={index}
+          {...mergeProps(
+            themeProps('markdown-list', {density}),
+            stylex.props(
+              spacing,
+              contentWidthValue != null
+                ? dynamicStyles.proseWidth(contentWidthValue)
+                : null,
+              contentAlign !== 'start'
+                ? dynamicStyles.proseAlign(ALIGN_MARGIN[contentAlign])
+                : null,
+              isFirst && styles.noMarginBlockStart,
+              isLast && styles.noMarginBlockEnd,
+            ),
+          )}>
+          {/* Static Markdown lists never host swipe actions, so outside
+              counter ink paints through the list's inline edge. */}
+          <ListStaticContext value={listStaticMark()}>
+            <List
+              listStyle={node.ordered ? 'decimal' : 'disc'}
+              density="compact"
+              edge="flush"
+              start={node.ordered ? node.start : undefined}>
               {node.children.map((item, i) => {
                 const firstChild = item.children[0];
                 const isInline =
                   item.children.length === 1 &&
                   firstChild?.type === 'paragraph';
+
+                // Check if this entire list item is "new" — if so, fade the
+                // whole item as a block instead of fading individual text spans.
 
                 const label = isInline ? (
                   <>
@@ -1869,155 +1952,64 @@ function renderBlock(
                   </>
                 );
 
+                // Each task item on this shared list path keeps its checked state
+                // (FR23): it shows a read-only checkbox where its marker
+                // would be, named by its text.
+                const firstParagraph = item.children.find(
+                  block => block.type === 'paragraph',
+                );
+                const task =
+                  item.checked == null
+                    ? undefined
+                    : {
+                        isChecked: item.checked,
+                        label:
+                          firstParagraph?.type === 'paragraph'
+                            ? markdownAstText(
+                                firstParagraph.children,
+                                extension =>
+                                  markdownExtensionText(
+                                    preparedPlugins,
+                                    extension,
+                                  ),
+                              )
+                            : t('@astryx.markdown.taskList'),
+                      };
+
+                const itemDirection = blockDirection(item, directionScope);
+                // A numbered item that reads against its list keeps its counter
+                // beside its own text, so its text never widens the counter
+                // column that the other rows share.
+                const readsAgainstList =
+                  node.ordered &&
+                  itemDirection != null &&
+                  directionScope != null &&
+                  itemDirection !== directionScope.around;
+
                 return (
-                  <CheckboxListItem
-                    // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown task items are rendered from positional AST nodes
+                  <ListMarkerScope
+                    // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown list items are rendered from positional AST nodes
                     key={i}
-                    value={`task-${i}`}
-                    label={label}
-                    dir={blockDirection(item, directionScope)}
-                    {...(recordsSourceLines
-                      ? sourceLineAttributes(blockSourceLines(item))
-                      : undefined)}
-                  />
+                    marker={
+                      (node.ordered ? NUMBER_MARKERS : BULLET_MARKERS)[
+                        listDepth % 3
+                      ]
+                    }
+                    task={task}
+                    hasMarkerGutter={node.ordered}
+                    isOutsideNumberColumns={readsAgainstList}>
+                    <ListItem
+                      label={label}
+                      dir={itemDirection}
+                      {...(recordsSourceLines
+                        ? sourceLineAttributes(blockSourceLines(item))
+                        : undefined)}
+                    />
+                  </ListMarkerScope>
                 );
               })}
-            </CheckboxList>
-          </div>
-        );
-      }
-
-      return (
-        <div
-          key={index}
-          {...mergeProps(
-            themeProps('markdown-list', {density}),
-            stylex.props(
-              spacing,
-              contentWidthValue != null
-                ? dynamicStyles.proseWidth(contentWidthValue)
-                : null,
-              contentAlign !== 'start'
-                ? dynamicStyles.proseAlign(ALIGN_MARGIN[contentAlign])
-                : null,
-              isFirst && styles.noMarginBlockStart,
-              isLast && styles.noMarginBlockEnd,
-            ),
-          )}>
-          <List
-            listStyle={node.ordered ? 'decimal' : 'disc'}
-            density="compact"
-            start={node.ordered ? node.start : undefined}
-            xstyle={[styles.blockIndent, node.ordered && styles.markerGutter]}>
-            {node.children.map((item, i) => {
-              const firstChild = item.children[0];
-              const isInline =
-                item.children.length === 1 && firstChild?.type === 'paragraph';
-
-              // Check if this entire list item is "new" — if so, fade the
-              // whole item as a block instead of fading individual text spans.
-
-              const label = isInline ? (
-                <>
-                  {firstChild.children.map((c, j) =>
-                    renderInline(
-                      c,
-                      j,
-                      onLinkClick,
-                      cursor,
-                      citationCtx,
-                      linkComponent,
-                      inlinePlugins,
-                      components,
-                      preparedPlugins,
-                    ),
-                  )}
-                </>
-              ) : (
-                <>
-                  {item.children.map((c, j) =>
-                    renderBlock(
-                      c,
-                      j,
-                      item.children.length,
-                      density,
-                      headingLevelStart,
-                      onLinkClick,
-                      cursor,
-                      citationCtx,
-                      contentWidthValue,
-                      contentAlign,
-                      linkComponent,
-                      inlinePlugins,
-                      components,
-                      preparedPlugins,
-                      t,
-                      codeLanguages,
-                      headingProjection,
-                      listDepth + 1,
-                      innerDirectionScope(item, directionScope),
-                    ),
-                  )}
-                </>
-              );
-
-              // Each task item on this shared list path keeps its checked state
-              // (FR23): it shows a read-only checkbox where its marker
-              // would be, named by its text.
-              const firstParagraph = item.children.find(
-                block => block.type === 'paragraph',
-              );
-              const task =
-                item.checked == null
-                  ? undefined
-                  : {
-                      isChecked: item.checked,
-                      label:
-                        firstParagraph?.type === 'paragraph'
-                          ? markdownAstText(
-                              firstParagraph.children,
-                              extension =>
-                                markdownExtensionText(
-                                  preparedPlugins,
-                                  extension,
-                                ),
-                            )
-                          : t('@astryx.markdown.taskList'),
-                    };
-
-              const itemDirection = blockDirection(item, directionScope);
-              // A numbered item that reads against its list keeps its counter
-              // beside its own text, so its text never widens the counter
-              // column that the other rows share.
-              const readsAgainstList =
-                node.ordered &&
-                itemDirection != null &&
-                directionScope != null &&
-                itemDirection !== directionScope.around;
-
-              return (
-                <ListMarkerScope
-                  // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown list items are rendered from positional AST nodes
-                  key={i}
-                  marker={
-                    (node.ordered ? NUMBER_MARKERS : BULLET_MARKERS)[
-                      listDepth % 3
-                    ]
-                  }
-                  task={task}
-                  hasMarkerGutter={node.ordered}
-                  isOutsideNumberColumns={readsAgainstList}>
-                  <ListItem
-                    label={label}
-                    dir={itemDirection}
-                    {...(recordsSourceLines
-                      ? sourceLineAttributes(blockSourceLines(item))
-                      : undefined)}
-                  />
-                </ListMarkerScope>
-              );
-            })}
-          </List>
+            </List>
+          </ListStaticContext>
         </div>
       );
     }
@@ -2280,6 +2272,13 @@ export function Markdown<
   'data-testid': testId,
   ...props
 }: MarkdownProps<Plugins>): React.ReactElement {
+  if (process.env.NODE_ENV !== 'production' && children == null) {
+    throw devPropError(
+      'Markdown',
+      'children',
+      "is required: the Markdown source as a string, for example <Markdown>{'# Title'}</Markdown>.",
+    );
+  }
   const t = useComponentTranslator();
   const direction = useDirection();
   // Keep one list while it names the same values, so an inline

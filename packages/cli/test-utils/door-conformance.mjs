@@ -149,7 +149,7 @@ function readTree(root, base, into = new Map()) {
  * @param {'bin' | 'host entry'} door
  * @param {string[]} argv
  * @param {(dir: string) => void} setUp
- * @returns {Promise<{status: number | null, stdout: string, stderr: string, changes: Record<string, string | null>}>}
+ * @returns {Promise<{status: number | null, signal: string | null, timedOut: boolean, stdout: string, stderr: string, changes: Record<string, string | null>}>}
  */
 async function runThrough(door, argv, setUp) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-door-'));
@@ -208,8 +208,15 @@ async function runThrough(door, argv, setUp) {
   child.stderr.setEncoding('utf8');
   child.stdout.on('data', chunk => (stdout += chunk));
   child.stderr.on('data', chunk => (stderr += chunk));
-  const timer = setTimeout(() => child.kill('SIGKILL'), RUN_TIMEOUT_MS);
-  const status = await new Promise(resolve => child.on('close', resolve));
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill('SIGKILL');
+  }, RUN_TIMEOUT_MS);
+  /** @type {[number | null, string | null]} */
+  const [status, signal] = await new Promise(resolve =>
+    child.on('close', (code, sig) => resolve([code, sig])),
+  );
   clearTimeout(timer);
   // Each run's own folders read as placeholders.
   const real = fs.realpathSync(base);
@@ -231,10 +238,46 @@ async function runThrough(door, argv, setUp) {
   }
   return {
     status,
+    signal,
+    timedOut,
     stdout: placeholders(stdout),
     stderr: placeholders(stderr),
     changes,
   };
+}
+
+/**
+ * How many example runs one door-conformance file starts at a time: at most
+ * 4, the count CI's 4-core runners run, and no more than the box's cores. A
+ * box with more load than cores is shared with other work: from one run per
+ * core of load the count falls to 2 at 1.5 runs per core and stays there. The
+ * Vitest run's own workers make the load about one run per core, so a busy CI
+ * leg still runs 4. Never fewer than 2: one at a time, the 460 runs take 240 s
+ * on a quiet box, too close to the hook's bound on a loaded one.
+ * @param {{cores?: number, load?: number}} [box] the box's cores and its
+ *   1-minute load average
+ * @returns {number}
+ */
+export function doorRunsAtOnce({
+  cores = os.availableParallelism(),
+  load = os.loadavg()[0],
+} = {}) {
+  const perCore = load / Math.max(1, cores);
+  return Math.max(2, Math.min(4, cores, Math.round(4 * (2 - perCore))));
+}
+
+/**
+ * How a run ended, for a failure message: a run with no exit status was
+ * killed, by this file's hung-run timer or by something else.
+ * @param {{status: number | null, signal?: string | null, timedOut?: boolean} | undefined} run
+ * @returns {string}
+ */
+export function howRunEnded(run) {
+  if (!run) return 'did not run';
+  if (run.status !== null) return `exited with status ${run.status}`;
+  if (run.timedOut)
+    return `was killed by the ${RUN_TIMEOUT_MS / 1000} s hung-run timer (${run.signal ?? 'SIGKILL'})`;
+  return `was killed by ${run.signal ?? 'an unknown signal'}, not by the hung-run timer`;
 }
 
 /**
@@ -277,7 +320,7 @@ export function describeDoorConformance(folder) {
     const runs = new Map();
 
     beforeAll(async () => {
-      const limit = Math.max(2, Math.min(16, os.availableParallelism()));
+      const limit = doorRunsAtOnce();
       const results = await inBatches(
         examples.flatMap(({argv}) => [
           () => runThrough('bin', argv, setUp),
@@ -289,7 +332,8 @@ export function describeDoorConformance(folder) {
         runs.set(cli, {bin: results[2 * index], host: results[2 * index + 1]});
       });
       // Each folder runs every example twice (bin and host entry), `limit` at a
-      // time: 4 on CI's 4-core runners. The three folders together took 467 s
+      // time: 4 on CI's 4-core runners, fewer on a box busy with other work
+      // (doorRunsAtOnce). The three folders together took 467 s
       // on a slow CI leg, so one folder takes about a third of that. 10 minutes
       // leaves a wide margin, and a hung hook that starts early in its leg
       // fails by this hook's name. Later in a leg, the shard watchdog names
@@ -302,7 +346,10 @@ export function describeDoorConformance(folder) {
 
     it.each(examples.map(({cli}) => [cli]))('%s', cli => {
       const {bin, host} = runs.get(cli) ?? {};
-      expect(bin?.status, `${cli} finished through the bin`).not.toBeNull();
+      expect(
+        bin?.status,
+        `${cli} finished through the bin (it ${howRunEnded(bin)})`,
+      ).not.toBeNull();
       expect(host).toEqual(bin);
     });
   });

@@ -10,17 +10,26 @@
  * - /packages/core/src/PowerSearch/index.ts
  */
 
-import type {OperatorValue, FilterValue, EnumItem} from './types';
+import type {
+  OperatorValue,
+  FilterValue,
+  EnumItem,
+  DateTimeRange,
+} from './types';
 import type {InternalConfig} from './useInternalConfig';
 import type {Locale, TranslatorFn} from '../i18n';
 import {
   formatCalendarInstant,
+  formatCalendarInstantRange,
   type CalendarSystem,
 } from '../utils/calendarSystem';
 import {truncateCharacters} from '../utils/characters';
 import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/PowerSearch/formatFilterValue.generated';
 import {resolveDateZone} from './powerSearchDateZone';
+import {relativeDateLabel} from './relativeDateOptions';
+import {resolveDateTimeRangePart} from './resolveDateTimeRangePart';
+import {createListFormatter} from '../i18n/listFormat';
 
 registerEnglishFallback(english);
 
@@ -91,16 +100,39 @@ export function formatDateAbsolute(
   );
 }
 
-function formatRelativeDate(value: string): string {
-  // value is stored as a descriptive string like "7d" or "1w"
-  return value;
-}
-
-function formatDateRange(
-  _value: {start: unknown; end: unknown},
-  t: TranslatorFn,
-): string {
-  return t('@astryx.powersearch.valueEditor.dateRange');
+/**
+ * The one reading of a `date_range` value: each part's calendar day in the
+ * zone `resolveDateZone` names, as the range editor reads it. A `NOW` or
+ * `RELATIVE` part resolves to an instant first. The locale writes the fields
+ * both days share once, and one day alone when both parts fall on it.
+ * `canReadClock` is false on the server and in the hydrating render, which
+ * must write the same markup: a range with a `NOW` or `RELATIVE` part then
+ * has no reading, and the result is null.
+ */
+export function formatDateRange(
+  range: DateTimeRange,
+  locale: Locale,
+  timezoneID: string | undefined,
+  calendar: CalendarSystem = 'gregory',
+  canReadClock = true,
+): string | null {
+  const readsClock =
+    range.start.type !== 'ABSOLUTE' || range.end.type !== 'ABSOLUTE';
+  if (readsClock && !canReadClock) {
+    return null;
+  }
+  const nowSeconds = readsClock ? Date.now() / 1000 : 0;
+  const [start, end] = [range.start, range.end].map(
+    part => new Date(resolveDateTimeRangePart(part, nowSeconds) * 1000),
+  );
+  return formatCalendarInstantRange(
+    calendar,
+    start,
+    end,
+    {year: 'numeric', month: 'short', day: 'numeric'},
+    locale,
+    resolveDateZone(timezoneID, true),
+  );
 }
 
 /**
@@ -117,6 +149,36 @@ export function formatFilterValue(
   locale: Locale,
   timezoneID?: string,
   calendar: CalendarSystem = 'gregory',
+): string {
+  return formatFilterValueForRender(
+    _config,
+    operatorValue,
+    filterValue,
+    maxLength,
+    t,
+    locale,
+    timezoneID,
+    calendar,
+    true,
+  );
+}
+
+/**
+ * `formatFilterValue` for a component's render. `canReadClock` is false on
+ * the server and in the hydrating render, which must write the same markup:
+ * a date range with a `NOW` or `RELATIVE` part then reads as the catalog's
+ * "date range".
+ */
+export function formatFilterValueForRender(
+  _config: InternalConfig,
+  operatorValue: OperatorValue,
+  filterValue: FilterValue,
+  maxLength: number,
+  t: TranslatorFn,
+  locale: Locale,
+  timezoneID: string | undefined,
+  calendar: CalendarSystem,
+  canReadClock: boolean,
 ): string {
   switch (filterValue.type) {
     case 'empty':
@@ -156,7 +218,7 @@ export function formatFilterValue(
       if (items.length === 1) {
         return truncate(items[0], maxLength);
       }
-      const joined = items.join(', ');
+      const joined = createListFormatter(locale)(items);
       if (joined.length <= maxLength) {
         return joined;
       }
@@ -175,7 +237,7 @@ export function formatFilterValue(
         if (labels.length === 1) {
           return truncate(labels[0], maxLength);
         }
-        const joined = labels.join(', ');
+        const joined = createListFormatter(locale)(labels);
         if (joined.length <= maxLength) {
           return joined;
         }
@@ -199,7 +261,7 @@ export function formatFilterValue(
       if (entities.length === 1) {
         return truncate(entities[0].label, maxLength);
       }
-      const joined = entities.map(e => e.label).join(', ');
+      const joined = createListFormatter(locale)(entities.map(e => e.label));
       if (joined.length <= maxLength) {
         return joined;
       }
@@ -225,10 +287,22 @@ export function formatFilterValue(
       );
 
     case 'date_relative':
-      return formatRelativeDate(filterValue.value);
+      return operatorValue.type === 'date_relative'
+        ? relativeDateLabel(operatorValue, filterValue.value, t)
+        : filterValue.value;
 
-    case 'date_range':
-      return formatDateRange(filterValue.value, t);
+    case 'date_range': {
+      const days = formatDateRange(
+        filterValue.value,
+        locale,
+        timezoneID,
+        calendar,
+        canReadClock,
+      );
+      return days == null
+        ? t('@astryx.powersearch.valueEditor.dateRange')
+        : truncate(days, maxLength);
+    }
 
     case 'custom':
       if (operatorValue.type === 'custom') {

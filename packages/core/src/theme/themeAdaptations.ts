@@ -3,9 +3,10 @@
 /**
  * @file themeAdaptations.ts
  * @input Ordered environment-conditioned theme value rules from defineTheme
- * @output Validated breakpoint metadata, the compact definition, and resolved
- *   CSS-first rule layers
- * @position Theme system core; consumed by defineTheme, AppShell, and the CSS compiler
+ * @output Validated breakpoint metadata and resolved CSS-first rule layers;
+ *   re-exports the breakpoint vocabulary, the size-edge spellings and the
+ *   compact definition from breakpoints.ts
+ * @position Theme system core; consumed by defineTheme and the CSS compiler
  *
  * Adaptations are deliberately closed and ordered. Width points are fixed names,
  * sparse rules and reserved token routing are rejected during normalization,
@@ -38,65 +39,39 @@ import {assertNoTokenCycles, resolveAdaptationLocalTokens} from './localTokens';
 // Public authoring vocabulary
 // =============================================================================
 
-/** Fixed names for viewport-width tier start points. */
-export const WIDTH_BREAKPOINT_NAMES = ['sm', 'md', 'lg', 'xl', '2xl'] as const;
+// The breakpoint vocabulary lives in breakpoints.ts, which imports nothing, so
+// a component that reads the compact definition loads none of this module.
+import {
+  WIDTH_BREAKPOINT_NAMES,
+  DEFAULT_WIDTH_BREAKPOINTS,
+  widthBelowFeature,
+  heightBelowFeature,
+  widthFromFeature,
+  belowStyleKey,
+  compactDefinition,
+  DEFAULT_COMPACT_DEFINITION,
+  type WidthBreakpointName,
+  type WidthBreakpoints,
+  type BelowEdges,
+  type CompactDefinition,
+} from './breakpoints';
 
-/** One fixed viewport-width breakpoint name. */
-export type WidthBreakpointName = (typeof WIDTH_BREAKPOINT_NAMES)[number];
-
-/** A complete, validated map of viewport-width tier start points in CSS px. */
-export type WidthBreakpoints = Record<WidthBreakpointName, number>;
-
-/** The default Astryx viewport-width tier start points in CSS px. */
-export const DEFAULT_WIDTH_BREAKPOINTS: Readonly<WidthBreakpoints> =
-  Object.freeze({
-    sm: 640,
-    md: 768,
-    lg: 1024,
-    xl: 1280,
-    '2xl': 1536,
-  });
-
-/**
- * When a screen is compact, for a component that chooses a presentation by
- * screen size (`spec:AST-012` FR9): width below the theme's effective `md`
- * point, or height below 500. The numbers are the same on every platform (CSS
- * pixels on the web, points on iOS, density-independent pixels on Android).
- */
-export interface CompactDefinition {
-  /** Compact below this viewport width: the effective `md` point. */
-  readonly widthBelow: number;
-  /** Compact below this viewport height. */
-  readonly heightBelow: number;
-  /** The definition as a media query list, without the `@media` keyword. */
-  readonly query: string;
-  /** Compact and a coarse primary pointer, without the `@media` keyword. */
-  readonly coarsePointerQuery: string;
-}
-
-/** The viewport height below which a screen is compact (`spec:AST-012` FR9). */
-const COMPACT_HEIGHT_BELOW = 500;
-
-/**
- * The compact definition for a theme's width points (`spec:AST-012` FR9).
- * Pass a theme's effective width breakpoints; omit them for the defaults.
- */
-export function compactDefinition(
-  points: Readonly<Pick<WidthBreakpoints, 'md'>> = DEFAULT_WIDTH_BREAKPOINTS,
-): CompactDefinition {
-  const width = `(width < ${points.md}px)`;
-  const height = `(height < ${COMPACT_HEIGHT_BELOW}px)`;
-  return Object.freeze({
-    widthBelow: points.md,
-    heightBelow: COMPACT_HEIGHT_BELOW,
-    query: `${width}, ${height}`,
-    coarsePointerQuery: `${width} and (pointer: coarse), ${height} and (pointer: coarse)`,
-  });
-}
-
-/** The compact definition at the default width points. */
-export const DEFAULT_COMPACT_DEFINITION: CompactDefinition =
-  compactDefinition();
+export {
+  WIDTH_BREAKPOINT_NAMES,
+  DEFAULT_WIDTH_BREAKPOINTS,
+  widthBelowFeature,
+  heightBelowFeature,
+  widthFromFeature,
+  belowStyleKey,
+  compactDefinition,
+  DEFAULT_COMPACT_DEFINITION,
+};
+export type {
+  WidthBreakpointName,
+  WidthBreakpoints,
+  BelowEdges,
+  CompactDefinition,
+};
 
 /** Inclusive lower and exclusive upper edges for one width condition. */
 export interface ThemeAdaptationWidthCondition {
@@ -719,10 +694,10 @@ function mediaQueryForCondition(
       );
     }
     if (from !== undefined) {
-      parts.push(`(width >= ${points[from]}px)`);
+      parts.push(widthFromFeature(points[from]));
     }
     if (below !== undefined) {
-      parts.push(`(width < ${points[below]}px)`);
+      parts.push(widthBelowFeature(points[below]));
     }
   }
   if (condition.pointer !== undefined) {

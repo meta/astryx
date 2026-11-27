@@ -27,6 +27,9 @@ A theme may keep an approved palette in a theme-owned source file. Authors and
 tools can use it to select and audit explicit theme colors. `defineTheme()` still
 receives the explicit values that control rendered output; it does not receive,
 inherit, validate, publish, or resolve palette data.
+A theme may instead opt into the palette input that `spec:AST-008` FR19 owns;
+`defineTheme()` then receives that input's resolved tokens, and this record's
+palette file does not apply to it.
 
 Semantic tokens remain the primary interface for components and applications.
 The palette is a starting point for color decisions and contrast testing, not a
@@ -195,10 +198,12 @@ narrow exception.
 Current `main` stores explicit theme colors and has no palette field in the
 normalized theme contract. This proposal preserves that behavior.
 
-Neutral is the intended first adopter in a separate follow-up. Its palette can
-live in a private theme-owned TypeScript file, while `neutralTheme.ts` explicitly
-references reviewed values that resolve to CSS colors. That adoption requires its own
-visual review, tests, theme record, and release treatment rather than receiving
+Neutral keeps its palette in a theme-owned TypeScript file,
+`neutralPalettes.ts`, which the package exports as `neutralPalettes`;
+`neutralTheme.ts` references its reviewed values through the generated
+`neutralPaletteRefs`, which resolve to CSS colors. No palette field
+enters the normalized theme contract. Neutral's palette carries its own visual
+review, tests, theme record, and release treatment rather than receiving
 implicit approval from this contract.
 
 The existing sandbox generator remains useful design evidence. A production

@@ -72,6 +72,52 @@ describe('component detail prop controls', () => {
     });
   });
 
+  it('labels a plain-tag slot element with the prop name', () => {
+    expect(
+      parsePropType('ReactNode', 'icon', [
+        {__element: 'svg', props: {viewBox: '0 0 24 24'}},
+      ]),
+    ).toEqual({
+      kind: 'element',
+      options: [{label: 'icon', componentName: 'svg'}],
+    });
+  });
+
+  it('keeps tag names as labels when a prop offers several plain tags', () => {
+    expect(
+      parsePropType('ReactNode', 'media', [
+        {__element: 'img', props: {alt: ''}},
+        {__element: 'video', props: {}},
+      ]),
+    ).toEqual({
+      kind: 'element',
+      options: [
+        {label: 'img', componentName: 'img'},
+        {label: 'video', componentName: 'video'},
+      ],
+    });
+  });
+
+  it('keeps the tag name as the label of a plain-tag children slot', () => {
+    expect(
+      parsePropType('ReactNode', 'children', [{__element: 'span', props: {}}]),
+    ).toEqual({
+      kind: 'slot-list',
+      options: [{label: 'span', componentName: 'span'}],
+    });
+  });
+
+  it('keeps the component name as the label of a component slot element', () => {
+    expect(
+      parsePropType('ReactNode', 'topNav', [
+        {__element: 'TopNav', props: {label: 'Navigation'}},
+      ]),
+    ).toEqual({
+      kind: 'element',
+      options: [{label: 'TopNav', componentName: 'TopNav'}],
+    });
+  });
+
   it('expands mixed string-literal and boolean unions into enum options', () => {
     const control = parsePropType("'auto' | boolean", 'hasHoverIndication');
 
@@ -88,6 +134,12 @@ describe('component detail prop controls', () => {
       expect(coerceDefault('false', control)).toBe(false);
       expect(coerceDefault("'auto'", control)).toBe('auto');
     }
+  });
+
+  it('gives a SyntaxThemeDefinition prop the syntax theme preset control', () => {
+    expect(parsePropType('SyntaxThemeDefinition', 'theme')).toEqual({
+      kind: 'syntax-theme',
+    });
   });
 
   it('derives IconType options from the canonical icon registry', () => {

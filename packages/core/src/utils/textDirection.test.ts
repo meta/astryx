@@ -8,7 +8,15 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {textDirectionProps} from './textDirection';
+import {createElement, isValidElement} from 'react';
+import {
+  cutText,
+  cutTextDirection,
+  textDirectionProps,
+  truncatedTextStyles,
+  withTextDirection,
+} from './textDirection';
+import * as stylex from '@stylexjs/stylex';
 
 describe('textDirectionProps', () => {
   it('lays out plain text with no right-to-left letter left to right', () => {
@@ -59,5 +67,67 @@ describe('textDirectionProps', () => {
     expect(textDirectionProps(null)).toEqual({});
     expect(textDirectionProps(undefined)).toEqual({});
     expect(textDirectionProps(['a', 'b'])).toEqual({});
+  });
+});
+
+describe('withTextDirection', () => {
+  it('puts plain left-to-right text in a dir="ltr" span', () => {
+    const node = withTextDirection('https://');
+    expect(isValidElement(node)).toBe(true);
+    expect(node).toMatchObject({
+      type: 'span',
+      props: {dir: 'ltr', children: 'https://'},
+    });
+  });
+
+  it('returns text with a right-to-left letter, an empty string and a rich node as they are', () => {
+    expect(withTextDirection('\u05e9\u05dc\u05d5\u05dd')).toBe(
+      '\u05e9\u05dc\u05d5\u05dd',
+    );
+    expect(withTextDirection('')).toBe('');
+    const rich = createElement('b', null, 'bold');
+    expect(withTextDirection(rich)).toBe(rich);
+  });
+});
+
+describe('cutText', () => {
+  const cut = stylex.create({label: {overflow: 'hidden'}});
+  type SpanProps = {dir?: string; className?: string; children?: unknown};
+  const props = (node: ReturnType<typeof cutText>) => node.props as SpanProps;
+
+  it('gives plain left-to-right text its own direction and the page alignment', () => {
+    const span = cutText('Monthly revenue', cut.label);
+    expect(span.type).toBe('span');
+    expect(props(span).dir).toBe('ltr');
+    expect(props(span).className).toBe(
+      stylex.props(cut.label, truncatedTextStyles.pageAlign).className,
+    );
+    expect(props(span).children).toBe('Monthly revenue');
+  });
+
+  it('gives right-to-left text its own direction, and leaves mixed text and a rich node alone', () => {
+    expect(props(cutText('הכנסה חודשית', cut.label)).dir).toBe('rtl');
+    expect(props(cutText('iPhone של דנה', cut.label)).dir).toBeUndefined();
+    const rich = createElement('b', null, 'bold');
+    const span = cutText(rich, cut.label);
+    expect(props(span).dir).toBeUndefined();
+    expect(props(span).className).toBe(stylex.props(cut.label).className);
+  });
+});
+
+describe('cutTextDirection', () => {
+  it("reads a cut label's direction from its own content, on any page", () => {
+    expect(cutTextDirection('Monthly')).toEqual({dir: 'ltr'});
+    expect(cutTextDirection(30)).toEqual({dir: 'ltr'});
+    expect(cutTextDirection('C++')).toEqual({dir: 'ltr'});
+    expect(cutTextDirection('חודשי')).toEqual({dir: 'rtl'});
+    expect(cutTextDirection('דוח 2026')).toEqual({dir: 'rtl'});
+    expect(cutTextDirection('تقرير شهري')).toEqual({dir: 'rtl'});
+  });
+
+  it('leaves a label that mixes both scripts to the page, as before', () => {
+    expect(cutTextDirection('Invoice for שירה כהן')).toEqual({});
+    expect(cutTextDirection('iPhone של דנה')).toEqual({});
+    expect(cutTextDirection(createElement('b', null, 'bold'))).toEqual({});
   });
 });

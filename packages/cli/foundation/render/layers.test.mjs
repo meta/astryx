@@ -38,4 +38,31 @@ describe('openLayerMarkup', () => {
     expect(read.at(-1)).toContain('style="last"');
     host.remove();
   });
+
+  it('keeps a control on the page that a press opens as drawn open, without its overlays', async () => {
+    await layerDocument();
+    const g = /** @type {any} */ (globalThis);
+    const host = g.document.createElement('div');
+    g.document.body.appendChild(host);
+    const trigger = g.document.createElement('button');
+    trigger.className = 'astryx-top-nav-menu';
+    trigger.setAttribute('aria-haspopup', 'true');
+    trigger.setAttribute('aria-expanded', 'false');
+    host.appendChild(trigger);
+    const layer = g.document.createElement('div');
+    layer.setAttribute('data-astryx-layer-root', '');
+    host.appendChild(layer);
+    trigger.addEventListener('click', () => {
+      trigger.setAttribute('aria-expanded', 'true');
+      layer.__astryxPopoverOpen = true;
+      layer.textContent = 'menu';
+    });
+    const read = await openLayerMarkup(host, fn => fn());
+    const drawn = read.find(html =>
+      html.includes('class="astryx-top-nav-menu"'),
+    );
+    expect(drawn).toContain('aria-expanded="true"');
+    expect(drawn).not.toContain('data-astryx-layer-root');
+    host.remove();
+  });
 });

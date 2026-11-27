@@ -10,7 +10,7 @@
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
-import {useState} from 'react';
+import {createRef, useState} from 'react';
 import {
   render,
   screen,
@@ -25,6 +25,10 @@ import {FormLayout} from '../FormLayout/FormLayout';
 import {LinkProvider} from '../Link/LinkProvider';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {
+  getTooltipDescriptions,
+  tooltipTextOnHover,
+} from '../__tests__/tooltipDescription';
 
 afterEach(() => {
   __resetLiveRegionsForTest();
@@ -178,23 +182,15 @@ describe('Pagination', () => {
       ).toBeNull();
     });
 
-    it('gives the prev/next carets a hover tooltip matching their accessible name', () => {
+    it('gives the prev/next carets a hover tooltip matching their accessible name', async () => {
       // The carets are icon-only, so sighted users need a visible label on
       // hover, not just the accessible name. The tooltip reuses the same
       // localized string, so it adds no description (Button FR12).
       render(<Pagination page={3} onChange={() => {}} totalPages={5} />);
       const prev = screen.getByRole('button', {name: 'Go to previous page'});
       const next = screen.getByRole('button', {name: 'Go to next page'});
-      expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Go to previous page'),
-      ).toBe(true);
-      expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Go to next page'),
-      ).toBe(true);
+      expect(await tooltipTextOnHover(prev)).toBe('Go to previous page');
+      expect(await tooltipTextOnHover(next)).toBe('Go to next page');
       expect(prev).not.toHaveAttribute('aria-describedby');
       expect(next).not.toHaveAttribute('aria-describedby');
     });
@@ -1733,30 +1729,21 @@ describe('Pagination', () => {
   // ---------------------------------------------------------------------------
 
   describe('page size selector', () => {
-    it('renders page size selector when pageSizeOptions provided', () => {
-      render(
+    it('shows an "Items per page" field only with pageSizeOptions', () => {
+      const {rerender} = render(
+        <Pagination page={1} onChange={() => {}} totalItems={100} />,
+      );
+      expect(screen.queryByText('Items per page')).not.toBeInTheDocument();
+      rerender(
         <Pagination
           page={1}
           onChange={() => {}}
           totalItems={100}
-          pageSize={10}
-          pageSizeOptions={[10, 20, 50]}
+          pageSizeOptions={[10, 20]}
           onPageSizeChange={() => {}}
         />,
       );
-      // The selector should be present (hidden label "Items per page")
-      const nav = screen.getByRole('navigation');
-      expect(nav).toBeInTheDocument();
-    });
-
-    it('does not render page size selector when pageSizeOptions not provided', () => {
-      render(<Pagination page={1} onChange={() => {}} totalPages={5} />);
-      // No selector trigger should be present
-      const nav = screen.getByRole('navigation');
-      // Only prev/next + page buttons should exist
-      const buttons = within(nav).getAllByRole('button');
-      // 2 nav buttons + page buttons
-      expect(buttons.length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText('Items per page')).toBeInTheDocument();
     });
   });
 
@@ -2250,7 +2237,7 @@ describe('Pagination', () => {
       expect(onChange.mock.calls).toEqual([[3]]);
     });
 
-    it('shows the tooltip of each link control, and none for an unavailable end', () => {
+    it('shows the tooltip of each link control, and none for an unavailable end', async () => {
       render(
         <Pagination
           page={1}
@@ -2262,11 +2249,21 @@ describe('Pagination', () => {
         />,
       );
       // First and Previous are unavailable on page 1. Next and Last are links.
+      // Their tooltips repeat their names, so they show on hover and add no
+      // description.
       expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .map(tooltip => tooltip.textContent),
-      ).toEqual(['Go to next page', 'Go to last page']);
+        await tooltipTextOnHover(
+          screen.getByRole('link', {name: 'Go to next page'}),
+        ),
+      ).toBe('Go to next page');
+      expect(
+        await tooltipTextOnHover(
+          screen.getByRole('link', {name: 'Go to last page'}),
+        ),
+      ).toBe('Go to last page');
+      expect(getTooltipDescriptions()).toHaveLength(0);
+      // Only the two links mounted a tooltip.
+      expect(screen.queryAllByRole('tooltip', {hidden: true})).toHaveLength(2);
     });
 
     it('keeps the dots a radio group and links only Previous and Next', async () => {
@@ -2573,7 +2570,11 @@ describe('Pagination', () => {
         // A router sets the page after the click, so `onChange` keeps none.
         const {rerender} = render(<LinksBesideButton />);
         screen.getByRole('link', {name: 'Go to next page'}).focus();
-        await user.keyboard('{Enter}');
+        // The press shows page 3 at once and goes back to the controlled page
+        // when its transition ends. The assertion waits for that end.
+        await act(async () => {
+          await user.keyboard('{Enter}');
+        });
         // The page did not arrive: Next shows page 2 again, as a link.
         expect(
           screen.getByRole('link', {name: 'Go to next page'}),
@@ -2618,6 +2619,94 @@ describe('Pagination', () => {
         rerender(<LinksBesideButton page={2} />);
         expect(outside).toHaveFocus();
       });
+    });
+  });
+
+  describe('page count precedence', () => {
+    it('uses totalPages over the count derived from totalItems', () => {
+      render(
+        <Pagination
+          page={1}
+          onChange={() => {}}
+          totalItems={200}
+          pageSize={10}
+          totalPages={5}
+        />,
+      );
+      expect(
+        screen.getByRole('button', {name: 'Go to page 5'}),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', {name: 'Go to page 6'}),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('ellipsis', () => {
+    it('hides each ellipsis from assistive technology', () => {
+      const {container} = render(
+        <Pagination page={5} onChange={() => {}} totalPages={10} />,
+      );
+      const ellipses = Array.from(container.querySelectorAll('nav *')).filter(
+        el => el.children.length === 0 && el.textContent?.trim() === '…',
+      );
+      expect(ellipses.length).toBe(2);
+      for (const el of ellipses) {
+        expect(el.closest('[aria-hidden="true"]')).not.toBeNull();
+      }
+    });
+  });
+
+  describe('landmark styling inputs and name', () => {
+    it('forwards ref, className and style to the landmark', () => {
+      const ref = createRef<HTMLElement>();
+      render(
+        <Pagination
+          ref={ref}
+          page={1}
+          onChange={() => {}}
+          totalPages={3}
+          className="caller-class"
+          style={{marginTop: 7}}
+        />,
+      );
+      const nav = screen.getByRole('navigation');
+      expect(ref.current).toBe(nav);
+      expect(nav).toHaveClass('caller-class');
+      expect(nav).toHaveClass('astryx-pagination');
+      expect(nav).toHaveStyle({marginTop: '7px'});
+    });
+
+    it('keeps the computed name when a caller passes aria-label', () => {
+      render(
+        <Pagination
+          page={1}
+          onChange={() => {}}
+          totalPages={3}
+          label="Results pages"
+          aria-label="Caller name"
+        />,
+      );
+      expect(
+        screen.getByRole('navigation', {name: 'Results pages'}),
+      ).toBeInTheDocument();
+    });
+
+    it('lets a caller aria-labelledby name the landmark', () => {
+      render(
+        <>
+          <h2 id="results-heading">Search results</h2>
+          <Pagination
+            page={1}
+            onChange={() => {}}
+            totalPages={3}
+            aria-labelledby="results-heading"
+          />
+        </>,
+      );
+      expect(
+        screen.getByRole('navigation', {name: 'Search results'}),
+      ).toBeInTheDocument();
     });
   });
 

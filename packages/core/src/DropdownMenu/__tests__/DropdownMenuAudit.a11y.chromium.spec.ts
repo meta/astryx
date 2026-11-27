@@ -240,21 +240,21 @@ const CASES: Case[] = [
     'forced-colors-focus-icon-end-content',
     'mode-parity',
     'keyboard-open',
-    'Forced colors: focused icon/end-content row has a Highlight outline',
+    'Forced colors: focused icon/end-content row has a forced system-color outline',
     {forcedColors: 'after'},
   ),
   c(
     'forced-colors-focus-icon-end-content-dark',
     'mode-parity',
     'keyboard-open',
-    'Forced colors: focused icon/end-content row has a Highlight outline',
+    'Forced colors: focused icon/end-content row has a forced system-color outline',
     {forcedColors: 'after', mode: 'dark'},
   ),
   c(
     'forced-colors-focus-destructive',
     'mode-parity',
     'keyboard-last-row',
-    'Forced colors: focused destructive icon row has a Highlight outline',
+    'Forced colors: focused destructive icon row has a forced system-color outline',
     {forcedColors: 'after'},
   ),
   c(
@@ -424,17 +424,27 @@ async function drive(page: Page, scenario: Case) {
   }
 }
 
-/** The computed system-color focus indicator on the active menu row. */
+/**
+ * The computed focus indicator on the active menu row, and the page's system
+ * colors. Forced colors replace the ring's token color with a color that the
+ * browser chooses. Chromium uses Highlight. Firefox does not follow Highlight:
+ * its ring is the same as its CanvasText in every palette tested.
+ */
 async function forcedColorsFocusIndicator(page: Page) {
   return page.locator(':focus').evaluate(node => {
-    const probe = document.createElement('span');
-    probe.style.color = 'Highlight';
-    document.body.append(probe);
-    const expectedHighlight = getComputedStyle(probe).color;
-    probe.remove();
+    const systemColor = (name: string) => {
+      const probe = document.createElement('span');
+      probe.style.color = name;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
     const style = getComputedStyle(node);
     return {
-      expectedHighlight,
+      highlight: systemColor('Highlight'),
+      canvasText: systemColor('CanvasText'),
+      canvas: systemColor('Canvas'),
       color: style.outlineColor,
       style: style.outlineStyle,
       width: Number.parseFloat(style.outlineWidth),
@@ -647,18 +657,44 @@ async function capture(page: Page, scenario: Case) {
     const isOpen = scenario.drive !== 'closed';
     const measureBox = async () =>
       isOpen ? subject.boundingBox() : page.locator(TRIGGER).boundingBox();
-    const firstBox = await measureBox();
-    await nextFrames(page);
-    const box = await measureBox();
-    if (firstBox == null || box == null) {
+    const initialBox = await measureBox();
+    if (initialBox == null) {
       throw new Error(`${scenario.state}: subject has no layout box`);
     }
-    const geometryDelta = Math.max(
-      Math.abs(box.x - firstBox.x),
-      Math.abs(box.y - firstBox.y),
-      Math.abs(box.width - firstBox.width),
-      Math.abs(box.height - firstBox.height),
-    );
+    let firstBox = initialBox;
+    let box = initialBox;
+    let geometryDelta = Infinity;
+    let maxObservedDelta = 0;
+    let missingBox = false;
+    // Opening can place the menu between frame samples. The receipt needs a
+    // settled pair, not two frames chosen before the layout stops moving.
+    await expect
+      .poll(
+        async () => {
+          await nextFrames(page);
+          const nextBox = await measureBox();
+          if (nextBox == null) {
+            // Stop sampling and fail below; do not wait for a box to reappear.
+            missingBox = true;
+            return 0;
+          }
+          firstBox = box;
+          box = nextBox;
+          geometryDelta = Math.max(
+            Math.abs(box.x - firstBox.x),
+            Math.abs(box.y - firstBox.y),
+            Math.abs(box.width - firstBox.width),
+            Math.abs(box.height - firstBox.height),
+          );
+          maxObservedDelta = Math.max(maxObservedDelta, geometryDelta);
+          return geometryDelta;
+        },
+        {message: `${scenario.state}: geometry settles before capture`},
+      )
+      .toBeLessThanOrEqual(0.5);
+    if (missingBox) {
+      throw new Error(`${scenario.state}: subject has no layout box`);
+    }
 
     const observed = await page.evaluate(
       ({open}) => {
@@ -956,7 +992,13 @@ async function capture(page: Page, scenario: Case) {
       expect(focusIndicator?.width ?? 0).toBeGreaterThanOrEqual(2);
       // Inset by the ring's own width (the focus-outline-width token).
       expect(focusIndicator?.offset).toBe(`-${focusIndicator?.width}px`);
-      expect(focusIndicator?.color).toBe(focusIndicator?.expectedHighlight);
+      const engine = page.context().browser()?.browserType().name();
+      expect(focusIndicator?.color).toBe(
+        engine === 'firefox'
+          ? focusIndicator?.canvasText
+          : focusIndicator?.highlight,
+      );
+      expect(focusIndicator?.color).not.toBe(focusIndicator?.canvas);
     }
     if (scenario.forcedColors === 'before-control') {
       // With `outline-style: none`, Chromium still computes the declared
@@ -1015,7 +1057,13 @@ async function capture(page: Page, scenario: Case) {
         forcedColorsFocusIndicator: focusIndicator,
         pageErrors: pageErrors.length,
         geometry: box,
-        settledRender: {initial: firstBox, final: box, maxDelta: geometryDelta},
+        settledRender: {
+          opening: initialBox,
+          maxObservedDelta,
+          initial: firstBox,
+          final: box,
+          maxDelta: geometryDelta,
+        },
       },
       image: {
         file,

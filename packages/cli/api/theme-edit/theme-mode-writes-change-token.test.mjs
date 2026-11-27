@@ -135,25 +135,29 @@ describe('a one-mode theme', () => {
       mode: 'light',
     });
     expect(light.data.notes.join(' ')).toMatch(/applies there/);
-    const own = await refusal(() =>
-      themeEditSet('om', 'color', '#00ff00', {cwd, on: 'button', mode: 'dark'}),
+    const own = await themeEditSet('om', 'color', '#00ff00', {
+      cwd,
+      on: 'button',
+      mode: 'dark',
+    });
+    expect(own.data.notes.join(' ')).toMatch(
+      /its own mode, the same as no --mode/,
     );
-    expect(own.code).toBe('ERR_THEME_NO_MODE');
-    expect(own.run[0]).toMatch(/set om color '#00ff00' --on button$/);
   }, 240_000);
 });
 
 describe('a link color', () => {
-  it('points to the token its color prop reads, on the link', async ctx => {
+  it('goes into the token its color prop reads, on the link, in the mode typed', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('f7', {cwd, like: 'neutral'});
-    const r = await refusal(() =>
-      themeEditSet('f7', 'color', 'red', {cwd, on: 'link', mode: 'dark'}),
+    await themeEditSet('f7', 'color', 'red', {cwd, on: 'link', mode: 'dark'});
+    const rules = [...cssOf('f7').matchAll(/([^{}]*)\{([^{}]*)\}/g)].filter(
+      m => /--color-text-accent: red/.test(m[2]),
     );
-    expect(r.run).toEqual([
-      expect.stringMatching(
-        /set f7 --color-text-accent red --on link --mode dark$/,
-      ),
-    ]);
+    expect(rules.length).toBeGreaterThan(0);
+    for (const m of rules) {
+      expect(m[1]).toMatch(/astryx-link/);
+      expect(m[1]).not.toMatch(/:scope\[data-theme="light"\]/);
+    }
   }, 240_000);
 });

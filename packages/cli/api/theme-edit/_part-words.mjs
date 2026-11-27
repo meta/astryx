@@ -16,7 +16,21 @@
  * @type {Array<[RegExp, {on: string, when?: string, role?: string, level?: string, missing?: string}]>}
  */
 export const OVERRIDES = [
+  // (Design systems' names for parts Core has under another name: an
+  // underline nav is a row of tabs; a navigation rail is the side nav.)
+  [/\bunderline[- ]?navs?\b/, {on: 'tab'}],
+  [/\b(?:navigation|nav) rails?\b/, {on: 'side-nav'}],
+  // (A page's title is its top heading, never the page.)
+  [/\bpage (?:titles?|headings?|headers?)\b/, {on: 'heading', level: '1'}],
   [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
+  // (An action, "a toast's action", is the button it holds: before
+  // "button" or at the end of a phrase only. "Action items", "the actions
+  // column" and "an actions menu" are other parts. A call to action is the
+  // primary button, below.)
+  [
+    /(?<!\bcalls? to )\bactions?(?:\s+buttons?\b|(?=\s*(?:$|[,.;:!?)])))/,
+    {on: 'button'},
+  ],
   // (The page's main panel, the area its content sits in.)
   [
     /\b(?:main\s+)?content\s+(?:area|panel|region|pane)s?\b|\bmain\s+(?:area|panel|pane)s?\b/,
@@ -28,7 +42,15 @@ export const OVERRIDES = [
   ],
   [/\baccordions?\b/, {on: 'collapsible'}],
   [/\bcombo ?box(es)?\b/, {on: 'complex-selector'}],
-  [/\bnotifications?\b/, {on: 'toast'}],
+  // A calendar's range band, and the band a hover would select.
+  [
+    /\b(?:calendar\s+)?range\s+preview(?:\s+bands?)?\b|\bpreview\s+bands?\b/,
+    {on: 'calendar-range-preview'},
+  ],
+  [/\b(?:calendar\s+)?range\s+bands?\b/, {on: 'calendar-range'}],
+  // (Other design systems' names for the same parts: a snackbar is a
+  // toast, a lozenge a badge, the form controls the inputs.)
+  [/\b(?:notifications?|snack ?bars?)\b/, {on: 'toast'}],
   [/\b(focus (ring|outline)s?)\b/, {on: 'focus-ring'}],
   [/\b((modal |dialog )?(overlay|scrim|backdrop))\b/, {on: 'overlay'}],
   [/\bicons?\b/, {on: 'icons'}],
@@ -45,7 +67,7 @@ export const OVERRIDES = [
   [/\b(status dots?)\b/, {on: 'status-dot'}],
   // (Its indicator too: "the progress indicator".)
   [
-    /\b(progress( bar)?( fill| indicators?)?|loading bar)\b/,
+    /\b(progress( bars?)?( fill| indicators?)?|loading bar)\b/,
     {on: 'progress-bar-fill'},
   ],
   [
@@ -56,7 +78,12 @@ export const OVERRIDES = [
     /\b((dropdown |context )?menu (items?|options?|entries)|dropdown items?)\b/,
     {on: 'dropdown-menu-item'},
   ],
-  [/\b(nav(igation)? (links?|items?))\b/, {on: 'top-nav-item'}],
+  // (A top nav's or a navbar's links are its items, never the top nav and
+  // every link.)
+  [
+    /\b((?:top )?(?:nav(igation)?(?: ?bar)?|navbar) (links?|items?))\b/,
+    {on: 'top-nav-item'},
+  ],
   // A context menu is its own part in Core (its items are the dropdown
   // menu's items, which it reuses).
   [/\b(context ?menus?|right[- ]click menus?)\b/, {on: 'context-menu'}],
@@ -76,14 +103,19 @@ export const OVERRIDES = [
     {on: 'top-nav-heading'},
   ],
   [
-    /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? )\b(header|top ?bar|title ?bar|nav ?bar|app ?bar|masthead)\b/,
+    /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? )\b(header|top ?bar|title ?bar|nav(?:igation)? ?bar|app ?bar|masthead)\b/,
     {on: 'app-shell-header'},
   ],
   [/\b(page|app background|whole background|body background)\b/, {on: 'page'}],
   // A radio's dot is its own part (the mark a checked radio shows).
   [/\bradio( button)?s?'?\s+dots?\b/, {on: 'radio-indicator-dot'}],
   [/\b(radio( buttons?)?|radios)\b/, {on: 'radio-indicator'}],
-  [/\b(primary|main) buttons?\b/, {on: 'button', when: 'variant:primary'}],
+  // (The accent buttons and the call to action are the primary button:
+  // the one the accent fills.)
+  [
+    /\b(primary|main|accent) buttons?\b|\b(?:ctas?|calls? to action)(?: buttons?)?\b/,
+    {on: 'button', when: 'variant:primary'},
+  ],
   [/\bsecondary buttons?\b/, {on: 'button', when: 'variant:secondary'}],
   [/\bghost buttons?\b/, {on: 'button', when: 'variant:ghost'}],
   [
@@ -106,7 +138,7 @@ export const OVERRIDES = [
   ],
   [/\b(skeletons?( loaders?)?|loading placeholders?)\b/, {on: 'skeleton'}],
   [
-    /\b(inputs?|text ?box(es)?|text ?fields?|form fields?|fields?)\b/,
+    /\b(inputs?|text ?box(es)?|text ?fields?|form (fields?|controls?|elements?)|fields?)\b/,
     {on: 'inputs'},
   ],
   // A checkbox is the box itself; the checks group (checkbox and radio)
@@ -148,15 +180,21 @@ export const OVERRIDES = [
     /\b(kbds?|keyboard (keys?|shortcuts?|chips?)|key ?(chips?|caps?)|shortcut keys?)\b/,
     {on: 'kbd'},
   ],
-  [/\b(badges?|chips?|tags?)\b/, {on: 'badge'}],
+  // (Kbd's key badges, each key's own box, by their own name.)
+  [/\bkey badges?\b/, {on: 'kbd-key'}],
+  [/\b(badges?|chips?|tags?|lozenges?)\b/, {on: 'badge'}],
   [/\bh([1-6])\b/, {on: 'heading'}],
+  // (A large title, the biggest title a screen has, is its top heading.)
+  [/\blarge titles?\b/, {on: 'heading', level: '1'}],
+  // (A display heading is the heading's largest display look.)
+  [/\bdisplay (?:headings?|titles?|text)\b/, {on: 'heading', when: 'type:display-1'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
   [/\b(modals?|popups?)\b/, {on: 'dialog'}],
   [/\bcode\b/, {on: 'code', role: 'code'}],
   // Small, secondary and supporting text, captions and fine print: the
   // supporting text style, not the base size.
   [
-    /\b((?:small|secondary|supporting|helper|hint|caption|muted) (?:text|copy)|fine print|captions?)\b/,
+    /\b((?:small|secondary|supporting|helper|hint|caption|muted) (?:text|copy)|fine print|captions?|footnotes?)\b/,
     {on: 'body', role: 'supporting'},
   ],
   [/\bbody( text)?\b/, {on: 'body', role: 'body'}],
