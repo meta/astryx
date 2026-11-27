@@ -52,7 +52,7 @@ vi.mock('@astryxdesign/core/Card', () => ({
   true;
 
 function panelPosition(menu: HTMLElement | null): {
-  left?: string;
+  left?: string | null;
   top?: string;
   transform?: string;
   insetInlineStart?: string;
@@ -340,7 +340,7 @@ describe('useLongPressHookUsage example', () => {
     );
     expect(belowLtr?.textContent).toContain('Opened by button at (16, 112)');
     expect(panelPosition(belowLtr)).toMatchObject({
-      left: 'auto',
+      left: null,
       insetInlineStart: '16px',
       top: '112px',
       transform: 'none',
@@ -356,7 +356,7 @@ describe('useLongPressHookUsage example', () => {
     );
     expect(belowEnd?.textContent).toContain('Opened by button at (64, 112)');
     expect(panelPosition(belowEnd)).toMatchObject({
-      left: 'auto',
+      left: null,
       insetInlineStart: '64px',
       top: '112px',
       transform: 'none',
@@ -375,7 +375,7 @@ describe('useLongPressHookUsage example', () => {
     );
     expect(belowRtl?.textContent).toContain('Opened by button at (64, 112)');
     expect(panelPosition(belowRtl)).toMatchObject({
-      left: 'auto',
+      left: null,
       insetInlineStart: '16px',
       top: '112px',
       transform: 'none',

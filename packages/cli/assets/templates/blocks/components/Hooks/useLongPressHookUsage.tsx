@@ -63,12 +63,12 @@ const styles = stylex.create({
     transform: `translateY(min(0px, max(-${y}px, calc(${surfaceHeight - y}px - 100%))))`,
     zIndex: 1,
   }),
-  // The inline-start edge places the panel, so a scrollbar on either side of
-  // the scrolling surface cannot move it away from the button.
-  panelBelowButton: (inlineStart: number) => ({
-    left: 'auto',
+  // The inline-start edge alone places the panel, so a scrollbar on either
+  // side of the scrolling surface cannot move it away from the button. The
+  // physical left edge is removed, because it applies after a logical edge.
+  panelBelowButton: {left: null, transform: 'none'},
+  panelInlineStart: (inlineStart: number) => ({
     insetInlineStart: `${inlineStart}px`,
-    transform: 'none',
   }),
 });
 
@@ -256,8 +256,9 @@ export default function UseLongPressHookUsage() {
             width={MENU_WIDTH}
             xstyle={[
               styles.panel(menu.x, menu.y, menu.surfaceHeight),
+              menu.inlineStart != null && styles.panelBelowButton,
               menu.inlineStart != null &&
-                styles.panelBelowButton(menu.inlineStart),
+                styles.panelInlineStart(menu.inlineStart),
             ]}>
             <VStack gap={1}>
               <Text type="supporting" color="secondary">
