@@ -521,6 +521,12 @@ export const docs = {
           default: "'static'",
         },
         {
+          name: 'minWidth',
+          type: 'SizeValue',
+          description:
+            'Minimum width of the item. Numbers are treated as pixels, strings are used as-is. Replaces the flex min-width reset, so size="fill" minWidth={320} grows into the free space but never shrinks below 320px; the parent stack overflows instead (and scrolls, if the stack is isScrollable).',
+        },
+        {
           name: 'isScrollable',
           type: 'boolean',
           description:
@@ -828,6 +834,7 @@ export const docsDense = {
       description: 'Controls individual item behavior in stack; polymorphic rendering.',
       propDescriptions: {
         size: 'Flex grow: static=natural size, fill=expand to remaining space.',
+        minWidth: 'Min width floor; numbers=pixels, strings=as-is. size="fill" minWidth={320} grows but never shrinks below 320px.',
         crossAlignSelf: 'Override cross-axis alignment for this item, ignoring parent.',
         as: 'HTML element to render as wrapper.',
         children: 'Item content.',

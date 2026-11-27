@@ -21,6 +21,7 @@ import {
   type StackItemCrossAlignSelf,
   type StackItemSize,
 } from './stackItem.stylex';
+import type {SizeValue} from '../utils/types';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {StackItemScrollRegion} from '../hooks/StackItemScrollRegion';
@@ -48,6 +49,16 @@ export interface StackItemProps extends BaseProps<HTMLElement> {
    * @default "static"
    */
   size?: StackItemSize;
+
+  /**
+   * Minimum width of the item.
+   * Numbers are treated as pixels, strings are used as-is (e.g., '50%').
+   *
+   * Replaces the flex `min-width: 0` reset, so `size="fill"` with a
+   * `minWidth` grows into the free space but never shrinks below the floor;
+   * the parent stack overflows instead (and scrolls, if it is `isScrollable`).
+   */
+  minWidth?: SizeValue;
 
   /**
    * Enables scrollable overflow (`overflow: auto`) for the item.
@@ -87,11 +98,18 @@ export interface StackItemProps extends BaseProps<HTMLElement> {
  *   <StackItem size="fill">Content</StackItem>
  *   <StackItem size="static">Actions</StackItem>
  * </HStack>
+ *
+ * // Detail pane that fills the rest of a scrolling strip, floored at 320px
+ * <HStack height="100%" isScrollable>
+ *   <StackItem size="static">Sidebar</StackItem>
+ *   <StackItem size="fill" minWidth={320}>Detail</StackItem>
+ * </HStack>
  * ```
  */
 export function StackItem({
   crossAlignSelf,
   size,
+  minWidth,
   isScrollable,
   as: element = 'div',
   xstyle,
@@ -107,13 +125,19 @@ export function StackItem({
     xstyle,
   );
 
+  // Inline, like Stack's sizing props, so it wins over the class-based
+  // min-width reset from stackItem().
+  const sizingStyle: React.CSSProperties = {
+    ...(minWidth != null && {
+      minWidth: typeof minWidth === 'number' ? `${minWidth}px` : minWidth,
+    }),
+  };
+
   const elementProps = {
-    ...mergeProps(
-      themeProps('stack-item', {size}),
-      stylexProps,
-      className,
-      style,
-    ),
+    ...mergeProps(themeProps('stack-item', {size}), stylexProps, className, {
+      ...style,
+      ...sizingStyle,
+    }),
     ...props,
   };
 
