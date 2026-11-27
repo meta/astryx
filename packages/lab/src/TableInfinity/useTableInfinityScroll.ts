@@ -10,6 +10,7 @@
  */
 import {useCallback, useRef, useState} from 'react';
 import {flushSync} from 'react-dom';
+import {observeMutations} from '@astryxdesign/core/internal/line-clamp';
 import {isRtlElement} from '@astryxdesign/core/internal/touch';
 import {
   coversViewport,
@@ -132,12 +133,36 @@ export function useTableInfinityScroll(
       if (node === null) {
         return;
       }
-      // Measure the attached frame's direction once, not during wheel input or paint.
-      inlineSign.current = (
-        direction == null ? isRtlElement(node) : direction === 'rtl'
-      )
-        ? -1
-        : 1;
+      // A direction change can move the inline start without remounting the frame.
+      const refreshDirection = () => {
+        const next = (
+          direction == null ? isRtlElement(node) : direction === 'rtl'
+        )
+          ? -1
+          : 1;
+        if (next !== inlineSign.current) {
+          inlineSign.current = next;
+          schedule();
+        }
+      };
+      refreshDirection();
+      const stops: Array<() => void> = [];
+      if (direction == null) {
+        for (let element: Element | null = node; element != null;) {
+          stops.push(
+            observeMutations(
+              element,
+              {attributes: true, attributeFilter: ['dir', 'class', 'style']},
+              refreshDirection,
+            ),
+          );
+          const root = element.getRootNode();
+          element =
+            element.assignedSlot ??
+            element.parentElement ??
+            (root instanceof ShadowRoot ? root.host : null);
+        }
+      }
       if (position.current !== origin) {
         schedule();
       }
@@ -166,6 +191,9 @@ export function useTableInfinityScroll(
       };
       node.addEventListener('wheel', onWheel, {passive: false});
       return () => {
+        for (const stop of stops) {
+          stop();
+        }
         node.removeEventListener('wheel', onWheel);
         if (frame.current !== null) {
           cancelAnimationFrame(frame.current);
