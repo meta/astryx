@@ -14,10 +14,10 @@
  */
 
 // Some content changes without moving focus, so a screen reader hears it only
-// through a live region. For example, a picker's "no options" message is the
-// content of its empty popup, which a person searching does not focus. When
-// that content is a caller's `ReactNode`, announce what was rendered, not a
-// built-in default (AST-056, AST-086).
+// through a live region. For example, a picker's empty message is the content
+// of its empty popup, and a person searching keeps focus in the search input.
+// When that content is a caller's `ReactNode`, announce what was rendered, not
+// a built-in default (AST-056, AST-086).
 //
 // The text comes from the DOM after render, not from React children, so text
 // that a child component generates is included. A live region that mounts
