@@ -148,6 +148,14 @@ const a = <div {...stylex.props(styles.offset)}><Tooltip label="x" /></div>;`,
   ],
 
   invalid: [
+    // A default import is never a member (no member has a default export),
+    // whatever its local name.
+    {
+      code: `${setup}
+import Selector from '../Button/Button';
+const a = <div style={{marginInlineStart: 4}}><Selector label="Go" /></div>;`,
+      errors: [{messageId: 'styleOnlyWrapper'}],
+    },
     // A non-member imported under a member's name is not skipped.
     {
       code: `${setup}
