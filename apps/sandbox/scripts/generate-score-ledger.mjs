@@ -122,8 +122,33 @@ const KNOWN_SECTION_KEYS = new Set([
 const droppedKeys = new Set();
 const malformedKeys = new Set();
 
+/** A section's BLOCKs that the snapshot cannot read. The build stops on it. */
+class LedgerShapeError extends Error {}
+
+/**
+ * A section's `blocks` lists BLOCK objects, the shape of the entry's
+ * `blocks.open`. A bare id string in their place is losslessly repairable
+ * while the entry lists a BLOCK with that id, so repair it. Any other item is
+ * not a BLOCK, so stop and name the component, the section and the item.
+ */
+function readSectionBlocks(blocks, openBlocks, component, sectionId) {
+  const where = `${component}: sections.${sectionId}.blocks`;
+  if (!Array.isArray(blocks)) {
+    throw new LedgerShapeError(`${where} is ${JSON.stringify(blocks)}, not a list of BLOCKs`);
+  }
+  return blocks.map(item => {
+    if (typeof item === 'string') {
+      const match = openBlocks.find(block => block?.id === item);
+      if (match) return match;
+      throw new LedgerShapeError(`${where} names "${item}", which blocks.open does not list`);
+    }
+    if (item != null && typeof item === 'object' && !Array.isArray(item)) return item;
+    throw new LedgerShapeError(`${where} holds ${JSON.stringify(item)}, which is not a BLOCK`);
+  });
+}
+
 /** Prune each section object to the keys `LedgerSection` declares. */
-function pruneSections(sections) {
+function pruneSections(sections, openBlocks, component) {
   if (sections == null || typeof sections !== 'object' || Array.isArray(sections)) {
     return sections;
   }
@@ -135,8 +160,9 @@ function pruneSections(sections) {
     }
     const kept_section = {};
     for (const [k, v] of Object.entries(section)) {
-      if (KNOWN_SECTION_KEYS.has(k)) kept_section[k] = v;
-      else droppedKeys.add(`sections.*.${k}`);
+      if (!KNOWN_SECTION_KEYS.has(k)) droppedKeys.add(`sections.*.${k}`);
+      else if (k === 'blocks') kept_section[k] = readSectionBlocks(v, openBlocks, component, id);
+      else kept_section[k] = v;
     }
     kept[id] = kept_section;
   }
@@ -156,7 +182,12 @@ function pruneEntry(entry) {
       if (shape.repair) kept[k] = shape.repair(v);
       continue;
     }
-    kept[k] = k === 'sections' ? pruneSections(v) : v;
+    kept[k] = v;
+  }
+  // After every key, so a section can repair a bare id from the entry's BLOCKs.
+  if ('sections' in kept) {
+    const openBlocks = isBlocksShape(kept.blocks) ? kept.blocks.open : [];
+    kept.sections = pruneSections(kept.sections, openBlocks, entry.component ?? '?');
   }
   return kept;
 }
@@ -183,6 +214,9 @@ try {
     `componentScores: snapshot of ${parsed.components.length} audited component(s) from the wiki`,
   );
 } catch (e) {
+  // A section BLOCK that the snapshot cannot read stops the build. The error
+  // names the wiki row to fix.
+  if (e instanceof LedgerShapeError) throw e;
   // Never fail the build over this — and never hang it either. The page
   // fetches the same URL at runtime and says which copy it is showing.
   const why = e.name === 'TimeoutError' ? 'no response within 5000ms' : e.message;
@@ -227,6 +261,10 @@ export interface LedgerBlock {
   summary: string;
   section?: string;
   evidence?: string;
+  /** The finding's severity as the audit recorded it, e.g. \`BLOCK\`. */
+  severity?: string;
+  /** The fix the audit proposes. */
+  fix?: string;
   /** The \`hardening\` issue filed for this BLOCK, or null if none is filed. */
   issue: number | null;
 }
