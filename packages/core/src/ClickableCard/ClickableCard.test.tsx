@@ -282,9 +282,7 @@ describe('ClickableCard', () => {
       const link = screen.getByRole('link', {name: 'Section'});
       expect(link).toHaveAttribute('aria-expanded', 'false');
       expect(link).toHaveAttribute('href', '/section');
-      expect(container.firstElementChild).not.toHaveAttribute(
-        'aria-expanded',
-      );
+      expect(container.firstElementChild).not.toHaveAttribute('aria-expanded');
     });
 
     it('apply to the hidden control of a disabled card, which stays disabled', () => {
