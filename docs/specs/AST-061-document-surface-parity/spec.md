@@ -384,7 +384,9 @@ are internal, and `Transformer` comes from `@lexical/markdown`.
 core `Toolbar` it renders, which places them as it places its own: the `ref`
 and styling on its root, and other base props on its `role="toolbar"`
 element. Its option for links that open in a new tab is `hasNewTabLinks`. `RichTextEditorAutoLinkPlugin` renders no element of
-its own, so it takes no `BaseProps`.
+its own, so it takes no `BaseProps`. `RichTextView` takes `BaseProps` and a
+`ref`, and its `ref` reaches the view's root element
+(`architecture:public-component-api` INV8).
 Rejected: Astryx document, node, and plugin types over Lexical's, because they
 would duplicate Lexical's extension model with no gain for a caller.
 
