@@ -24,7 +24,6 @@ export interface ContractIssue {
     | 'name-keyword'
     | 'name-toolkit'
     | 'platform-shadows-core'
-    | 'same-name-different-meaning'
     | 'unknown-type';
   readonly message: string;
 }
@@ -94,11 +93,10 @@ export function checkContract(contract: ComponentContract): ContractIssue[] {
   }
   collect(contract.core);
 
-  const seen = new Map<string, {platform: string; type: string}>();
   for (const platform of NATIVE_PLATFORMS) {
     const props = contract.platforms[platform] ?? {};
     collect(props);
-    for (const [name, spec] of Object.entries(props)) {
+    for (const name of Object.keys(props)) {
       if (name in contract.core) {
         add(
           'error',
@@ -112,19 +110,6 @@ export function checkContract(contract: ComponentContract): ContractIssue[] {
           'name-keyword',
           `${platform} prop "${name}" is a Swift or Kotlin keyword`,
         );
-      }
-      const type = JSON.stringify(spec.type);
-      const earlier = seen.get(name);
-      if (earlier && earlier.type !== type) {
-        add(
-          'warning',
-          'same-name-different-meaning',
-          `"${name}" has different values on ${earlier.platform} and ${platform}; ` +
-            'allowed in platform-scoped types, never in a merged type',
-        );
-      }
-      if (!earlier) {
-        seen.set(name, {platform, type});
       }
     }
   }
