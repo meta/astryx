@@ -222,8 +222,10 @@ for (const state of CORE_STATUS_MESSAGE_BINDING_STATES) {
     }
     recorded.set(state.id, result);
     const report = summarize(STATUS_MESSAGE_PATTERN, [result]);
-    // eslint-disable-next-line no-console -- the report is this run's artifact
-    console.log(formatReport(report));
+    await test.info().attach('status-message-a11y-report.txt', {
+      body: formatReport(report),
+      contentType: 'text/plain',
+    });
     expect(formatFailures(blockingResults([result]))).toBe('');
     expect(report.unrunLayers).toEqual([]);
     expect(report.counts.unexpectedPass).toBe(0);

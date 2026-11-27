@@ -360,9 +360,6 @@ export async function record(
     measured,
     screenshot: file,
   });
-  // The job log is the durable copy of each measurement when artifacts expire.
-  // eslint-disable-next-line no-console
-  console.log(`[schedule-time-grid] ${name}: ${JSON.stringify(measured)}`);
 }
 
 export interface BlockReading {

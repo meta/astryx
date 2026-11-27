@@ -193,8 +193,10 @@ for (const state of DIALOG_MODAL_BINDING_STATES) {
     const result = await runState(page, cdp, state);
     recorded.set(state.id, result);
     const report = summarize(MODAL_DIALOG_PATTERN, [result]);
-    // eslint-disable-next-line no-console -- the report is this run's artifact
-    console.log(formatReport(report));
+    await test.info().attach('dialog-a11y-report.txt', {
+      body: formatReport(report),
+      contentType: 'text/plain',
+    });
 
     expect(formatFailures(blockingResults([result]))).toBe('');
     expect(report.unrunLayers).toEqual([]);

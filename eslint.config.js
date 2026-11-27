@@ -286,7 +286,10 @@ export default defineConfig(
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-      'no-console': ['warn', {allow: ['warn', 'error']}],
+      'no-console': [
+        isStrictMode ? 'error' : 'warn',
+        {allow: ['warn', 'error']},
+      ],
       curly: isStrictMode ? 'error' : 'warn',
       '@typescript-eslint/no-non-null-assertion': 'warn',
       '@typescript-eslint/consistent-type-assertions': [
