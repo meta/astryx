@@ -234,10 +234,11 @@ This record does not absorb adjacent facts:
   internal mechanism, not a public contract
   (`architecture:knowledge-contracts/INV18`); `spec:AST-028` FR13 states the
   outcome. `template copy`, `template show`, and the docsite's shadcn Install
-  item run `replaceTemplateDemos`; the copy receipt and the `template show`
-  response report the element count as `demoContentReplaced`. The docsite Code
-  tab, Open in Playground, the Sandbox code view, the docsite MCP server's
-  `get()`, and `astryx component <Name> --showcase` run only
+  item run `replaceTemplateDemos`, and so does the docsite MCP server's
+  `template` tool; the copy receipt and the `template show` response report the
+  element count as `demoContentReplaced`. The docsite Code tab, Open in
+  Playground, the Sandbox code view, the docsite MCP server's `component` tool
+  with `showcase`, and `astryx component <Name> --showcase` run only
   `replaceDemoContent`, so they keep their fixture media (`spec:AST-033` FR23).
 - `packages/cli/foundation/config/project.mjs` — project diagnostics and current
   integration-template re-collection.
