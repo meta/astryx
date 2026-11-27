@@ -283,7 +283,7 @@ export function isTooltipTriggerBeforeLoad(element: Element): boolean {
 }
 
 // Triggers whose wrapping Tooltip repeats their accessible name, so it adds
-// no description to them (component:Tooltip AR1).
+// no description to them.
 const nameRepeatingTriggers = sharedWeakSet<Element>(
   'tooltip/use-tooltip/name-repeating-triggers',
   1,

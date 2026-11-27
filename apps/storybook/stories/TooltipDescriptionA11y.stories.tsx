@@ -4,7 +4,8 @@
  * @file TooltipDescriptionA11y.stories.tsx
  * @input Button, IconButton and Tooltip
  * @output Browser fixtures for Tooltip AR1: a tooltip that adds to its
- *   trigger's name, one that repeats it (Button FR12), and a cut Button label
+ *   trigger's name, one that repeats it (Button FR12), a cut Button label, and
+ *   a cut Button label inside a Tooltip that repeats it
  *   (Button FR18), each marked with `data-case`
  * @position Read by TooltipDescription.a11y.browser.spec.ts; `no-visual`, so
  *   the visual plan never captures these fixtures
@@ -43,6 +44,11 @@ export const Paths: Story = {
       </div>
       <div data-case="cut" style={{width: 160}}>
         <Button label="A very long button label that overflows its box" />
+      </div>
+      <div data-case="cut-repeats" style={{width: 160}}>
+        <Tooltip content="Another long button label that overflows its box">
+          <Button label="Another long button label that overflows its box" />
+        </Tooltip>
       </div>
     </div>
   ),
