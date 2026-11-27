@@ -2094,6 +2094,40 @@ describe('knowledge validation', () => {
     ).toEqual([]);
   });
 
+  it('checks a React Native platform record by its language-qualified id', async () => {
+    const root = fixtureRoot();
+    fs.mkdirSync(path.join(root, 'packages/core/src/Button'));
+    fs.writeFileSync(
+      recordPath(path.join(root, 'packages/core/src/Button/Button.spec.md')),
+      componentRecord(),
+    );
+    const file = 'docs/specs/components/Button/Button.react-native.spec.md';
+    const reactNativeProblems = async overrides => {
+      fs.writeFileSync(
+        path.join(root, file),
+        platformRecord({
+          id: 'component:react-native/Button',
+          verified_by: '[]',
+          ...overrides,
+        }),
+      );
+      return (await validateKnowledgeRoot(root)).filter(problem =>
+        problem.startsWith(file),
+      );
+    };
+
+    expect(await reactNativeProblems()).toEqual([]);
+    expect(
+      await reactNativeProblems({
+        id: 'component:swift/Button',
+        platform_of: 'component:Card',
+      }),
+    ).toEqual([
+      `${file}: id must match "^component:react-native/Button$".`,
+      `${file}: platform_of must name the core component, component:Button.`,
+    ]);
+  });
+
   it('places a flat-package platform record by the same rules as its core record', async () => {
     const root = fixtureRoot();
     const source = path.join(root, 'packages/charts/src');
