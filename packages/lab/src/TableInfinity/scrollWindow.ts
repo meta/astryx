@@ -69,15 +69,19 @@ export function jumpToItem(
   return index > end.index ? end : {index: Math.max(0, index), offset: 0};
 }
 
+export function logicalPosition(
+  geometry: ScrollGeometry,
+  position: ScrollPosition,
+): number {
+  return position.index + position.offset / geometry.itemHeight;
+}
+
 export function scrollFraction(
   geometry: ScrollGeometry,
   position: ScrollPosition,
 ): number {
-  const end = endPosition(geometry);
-  const last = end.index + end.offset / geometry.itemHeight;
-  return last === 0
-    ? 0
-    : (position.index + position.offset / geometry.itemHeight) / last;
+  const last = logicalPosition(geometry, endPosition(geometry));
+  return last === 0 ? 0 : logicalPosition(geometry, position) / last;
 }
 
 export function positionAtFraction(

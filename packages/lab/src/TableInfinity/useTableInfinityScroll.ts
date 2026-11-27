@@ -50,7 +50,11 @@ function equal(a: ScrollPosition, b: ScrollPosition) {
 export function useTableInfinityScroll(
   axes: Axes<ScrollGeometry>,
   direction: 'ltr' | 'rtl' | undefined,
-  paint: (position: Axes<ScrollPosition>, range: Ranges) => void,
+  paint: (
+    position: Axes<ScrollPosition>,
+    range: Ranges,
+    inlineSign: number,
+  ) => void,
 ) {
   const [range, setRange] = useState<Ranges>(() => ({
     row: readScrollWindow(axes.row, origin.row),
@@ -59,6 +63,35 @@ export function useTableInfinityScroll(
   const mounted = useRef(range);
   const position = useRef(origin);
   const frame = useRef<number | null>(null);
+  const inlineSign = useRef(1);
+  const readInlineSign = useCallback(() => inlineSign.current, []);
+
+  const schedule = useCallback(() => {
+    if (frame.current === null) {
+      frame.current = requestAnimationFrame(() => {
+        frame.current = null;
+        const target = position.current;
+        const previousRange = mounted.current;
+        const row = coversViewport(axes.row, target.row, previousRange.row)
+          ? previousRange.row
+          : readScrollWindow(axes.row, target.row);
+        const column = coversViewport(
+          axes.column,
+          target.column,
+          previousRange.column,
+        )
+          ? previousRange.column
+          : readScrollWindow(axes.column, target.column);
+        if (row !== previousRange.row || column !== previousRange.column) {
+          const nextRange = {row, column};
+          // Publish both ranges before translating the table so no frame has a gap.
+          flushSync(() => setRange(nextRange));
+          mounted.current = nextRange;
+        }
+        paint(target, mounted.current, inlineSign.current);
+      });
+    }
+  }, [axes, paint]);
 
   const navigate = useCallback(
     (next: Axes<ScrollPosition>) => {
@@ -70,33 +103,10 @@ export function useTableInfinityScroll(
         return false;
       }
       position.current = next;
-      if (frame.current === null) {
-        frame.current = requestAnimationFrame(() => {
-          frame.current = null;
-          const target = position.current;
-          const previousRange = mounted.current;
-          const row = coversViewport(axes.row, target.row, previousRange.row)
-            ? previousRange.row
-            : readScrollWindow(axes.row, target.row);
-          const column = coversViewport(
-            axes.column,
-            target.column,
-            previousRange.column,
-          )
-            ? previousRange.column
-            : readScrollWindow(axes.column, target.column);
-          if (row !== previousRange.row || column !== previousRange.column) {
-            const nextRange = {row, column};
-            // Publish both ranges before translating the table so no frame has a gap.
-            flushSync(() => setRange(nextRange));
-            mounted.current = nextRange;
-          }
-          paint(target, mounted.current);
-        });
-      }
+      schedule();
       return true;
     },
-    [axes, paint],
+    [schedule],
   );
 
   const navigateAxis = useCallback(
@@ -122,6 +132,15 @@ export function useTableInfinityScroll(
       if (node === null) {
         return;
       }
+      // Measure the attached frame's direction once, not during wheel input or paint.
+      inlineSign.current = (
+        direction == null ? isRtlElement(node) : direction === 'rtl'
+      )
+        ? -1
+        : 1;
+      if (position.current !== origin) {
+        schedule();
+      }
       const onWheel = (event: WheelEvent) => {
         if (event.ctrlKey) {
           return;
@@ -137,10 +156,7 @@ export function useTableInfinityScroll(
           column: advance(
             axes.column,
             current.column,
-            deltaX !== 0 &&
-              (direction == null ? isRtlElement(node) : direction === 'rtl')
-              ? -deltaX
-              : deltaX,
+            deltaX * inlineSign.current,
             event.deltaMode,
           ),
         });
@@ -157,8 +173,16 @@ export function useTableInfinityScroll(
         }
       };
     },
-    [axes, direction, navigate],
+    [axes, direction, navigate, schedule],
   );
 
-  return {range, attach, navigate, navigateAxis, moveAxis, readPosition};
+  return {
+    range,
+    attach,
+    navigate,
+    navigateAxis,
+    moveAxis,
+    readPosition,
+    readInlineSign,
+  };
 }

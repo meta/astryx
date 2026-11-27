@@ -23,9 +23,19 @@ const geometry = {
   headerHeight: 36,
 };
 
-function Fixture({direction}: {direction?: 'rtl' | 'ltr'}) {
+function Fixture({
+  direction,
+  viewportHeight = geometry.viewportHeight,
+  rowCount = geometry.rowCount,
+}: {
+  direction?: 'rtl' | 'ltr';
+  viewportHeight?: number;
+  rowCount?: number;
+}) {
   const infinity = useTableInfinityVirtualization({
     ...geometry,
+    viewportHeight,
+    rowCount,
     direction,
     viewportLabel: 'Table viewport',
     rowScrollbarLabel: 'Scroll rows',
@@ -111,6 +121,26 @@ describe('Table Infinity window', () => {
     );
     expect(viewport.closest('[dir]')).not.toBe(host);
     expect(viewport.closest('[dir]')).toHaveAttribute('dir', 'ltr');
+  });
+
+  it('announces the full range of a partially overflowing row', () => {
+    vi.useFakeTimers();
+    try {
+      render(<Fixture rowCount={10} viewportHeight={310} />);
+      const scrollbar = screen.getByRole('scrollbar', {name: 'Scroll rows'});
+      expect(scrollbar).toHaveAttribute('aria-valuemin', '0');
+      expect(Number(scrollbar.getAttribute('aria-valuemax'))).toBeGreaterThan(
+        0,
+      );
+      expect(scrollbar).toHaveAttribute('aria-valuenow', '0');
+      fireEvent.keyDown(scrollbar, {key: 'End'});
+      frame();
+      expect(scrollbar.getAttribute('aria-valuenow')).toBe(
+        scrollbar.getAttribute('aria-valuemax'),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('moves the inline scrollbar logically in RTL and keeps axes independent', () => {
