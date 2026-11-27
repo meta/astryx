@@ -22,6 +22,9 @@ export const MEMORY_PER_WORKER = 2 * 1024 ** 3;
 /** A command-line worker count, in either spelling Vitest accepts. */
 const WORKERS_FLAG = /^--max-?workers(=|$)/i;
 
+/** Command-line words that make a single run rather than a watch. */
+const SINGLE_RUN = new Set(['run', '--run', 'list']);
+
 /**
  * The memory the run can use: the machine's, or the container's limit when
  * it is lower.
@@ -42,8 +45,9 @@ function usableMemory() {
  *   default (one less than the cores).
  * - Elsewhere the machine is shared, and a Node test file can start CLI
  *   processes of its own, so Vitest's default loads a many-core machine far
- *   past its cores: the run starts one less than the cores, but at most 8
- *   and at most one per 2 GiB of memory, and at least one.
+ *   past its cores: the run starts Vitest's default (one less than the
+ *   cores, or half of them in watch mode), but at most 8 and at most one per
+ *   2 GiB of memory, and at least one.
  * @param {{cores?: number, memory?: number, env?: Record<string, string | undefined>, argv?: string[]}} [machine]
  * @returns {number | undefined}
  */
@@ -55,7 +59,8 @@ export function testWorkers({
 } = {}) {
   if (argv.some(arg => WORKERS_FLAG.test(arg))) return undefined;
   if (isCi(env)) return undefined;
-  const byCores = cores - 1;
+  const watch = !argv.some(arg => SINGLE_RUN.has(arg));
+  const byCores = watch ? Math.floor(cores / 2) : cores - 1;
   const byMemory = Math.floor(memory / MEMORY_PER_WORKER);
   return Math.max(1, Math.min(byCores, MOST_WORKERS, byMemory));
 }

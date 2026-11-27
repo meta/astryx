@@ -57,6 +57,26 @@ describe('testWorkers', () => {
       ).toBeUndefined();
   });
 
+  it("keeps a watch run at or below Vitest's watch default, half the cores", () => {
+    const watch = (/** @type {string[]} */ ...words) => ({
+      env: {},
+      argv: ['node', 'vitest', ...words],
+    });
+    expect(testWorkers({cores: 10, memory: 64 * GiB, ...watch()})).toBe(5);
+    expect(testWorkers({cores: 10, memory: 64 * GiB, ...watch('watch')})).toBe(
+      5,
+    );
+    expect(
+      testWorkers({cores: 8, memory: 64 * GiB, ...watch('--coverage')}),
+    ).toBe(4);
+    expect(testWorkers({cores: 40, memory: 256 * GiB, ...watch()})).toBe(
+      MOST_WORKERS,
+    );
+    expect(testWorkers({cores: 10, memory: 64 * GiB, ...watch('--run')})).toBe(
+      MOST_WORKERS,
+    );
+  });
+
   it('keeps 3 workers on a shared 4-core machine', () => {
     expect(testWorkers({cores: 4, memory: 16 * GiB, ...shared})).toBe(3);
   });
@@ -105,7 +125,7 @@ const repoRoot = path.resolve(
  */
 function resolvedWorkers(flags, env) {
   const script = `
-    process.argv.push(...${JSON.stringify(flags)});
+    process.argv.push('run', ...${JSON.stringify(flags)});
     const {createVitest, parseCLI} = await import('vitest/node');
     const {options} = parseCLI(['vitest', 'run', '--project', 'ui', '--project', 'node', ...${JSON.stringify(flags)}]);
     const vitest = await createVitest('test', {...options, watch: false});
@@ -136,12 +156,12 @@ describe('a ui + node run on a shared machine', () => {
   });
 
   it(
-    'gives every project the VITEST_MAX_WORKERS count',
+    'gives every project the VITEST_MAX_WORKERS count, below the cap',
     {timeout: 120_000},
     () => {
-      expect(resolvedWorkers([], {VITEST_MAX_WORKERS: '3'})).toEqual({
-        ui: 3,
-        node: 3,
+      expect(resolvedWorkers([], {VITEST_MAX_WORKERS: '2'})).toEqual({
+        ui: 2,
+        node: 2,
       });
     },
   );
