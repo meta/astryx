@@ -678,10 +678,11 @@ export function deriveLookColors({
               m,
             );
           } else {
-            if (shown.includes(m))
+            if (shown.includes(m)) {
               moved.push(
                 `--color-background-${h} takes a ${shift(badge.fill.stop, apart.fill.stop)} tint in ${m}, apart from ${twin.hue}`,
               );
+            }
             badge = apart;
           }
         }
@@ -773,10 +774,11 @@ export function deriveLookColors({
             );
           } else {
             picked[h][m] = at(h, m, apart);
-            if (shown.includes(m))
+            if (shown.includes(m)) {
               moved.push(
                 `--color-data-categorical-${h} takes a ${shift(own.stop, apart)} shade in ${m}, apart from ${like.hue}`,
               );
+            }
           }
         }
         placed.push({hue: h, color: picked[h][m].color});
@@ -917,14 +919,17 @@ export function deriveStatusColors({
      */
     fn => {
       const v = /** @type {Record<Mode, Stop>} */ ({});
-      for (const m of /** @type {Mode[]} */ (['light', 'dark']))
+      for (const m of /** @type {Mode[]} */ (['light', 'dark'])) {
         v[m] = fn(modes.includes(m) ? m : modes[0]);
+      }
       return v;
     };
   for (const id of roles) {
     const w = STATUS_ROLES[id];
     const fam = palette[id];
-    if (!w || !fam) continue;
+    if (!w || !fam) {
+      continue;
+    }
     const at =
       /**
        * @param {Mode} m
@@ -946,9 +951,13 @@ export function deriveStatusColors({
        * @returns {void}
        */
       (m, line, text = false) => {
-        if (!shown.includes(m)) return;
+        if (!shown.includes(m)) {
+          return;
+        }
         fails.push(line);
-        if (text) unread = true;
+        if (text) {
+          unread = true;
+        }
       };
     /**
      * The stop nearest `start` that reads at `needs` on every color in `bg`.
@@ -976,12 +985,13 @@ export function deriveStatusColors({
         const best =
           scored.find(x => x.r >= needs) ??
           scored.reduce((x, y) => (y.r > x.r ? y : x));
-        if (best.r < needs)
+        if (best.r < needs) {
           fail(
             m,
             `${token} reads at only ${ratioDown(best.r)}:1 in ${m} at its most readable shade (needs ${needs}:1)`,
             true,
           );
+        }
         return at(m, best.stop);
       };
     // The fill: nearest its middle that stands out from the page at 3:1 and
@@ -1028,20 +1038,23 @@ export function deriveStatusColors({
          */
         (s, ink) => {
           const c = at(m, s).color;
-          if (!standsOut(c))
+          if (!standsOut(c)) {
             fail(
               m,
               `--color-${w} stands out from the page at under ${NON_TEXT}:1 in ${m}`,
             );
-          if (!apart(c))
+          }
+          if (!apart(c)) {
             fail(m, `--color-${w} is drawn like your accent in ${m}`);
+          }
           const r = contrastRatio(ink.color, c);
-          if (r < TEXT)
+          if (r < TEXT) {
             fail(
               m,
               `--color-on-${w} reads at only ${ratioDown(r)}:1 on --color-${w} in ${m} at its most readable shade (needs ${TEXT}:1)`,
               true,
             );
+          }
           onFill[m] = ink;
           return at(m, s);
         };
@@ -1049,15 +1062,21 @@ export function deriveStatusColors({
       // standing out from the page first, then standing apart from the
       // accent. Text that reads on no stop keeps the role at the base
       // theme's colors.
-      for (const keep of [[standsOut, apart], [apart], []])
+      for (const keep of [[standsOut, apart], [apart], []]) {
         // The role's usual text first: the nearest stop it reads on, before
         // the other text on a nearer stop.
-        for (const ink of choices)
+        for (const ink of choices) {
           for (const s of allowed) {
             const c = at(m, s).color;
-            if (keep.every(ok => ok(c)) && contrastRatio(ink.color, c) >= TEXT)
+            if (
+              keep.every(ok => ok(c)) &&
+              contrastRatio(ink.color, c) >= TEXT
+            ) {
               return take(s, ink);
+            }
           }
+        }
+      }
       // No stop carries readable text: the one that carries it best.
       const best = allowed.reduce((x, y) =>
         contrastRatio(choices[0].color, at(m, y).color) >
@@ -1076,8 +1095,9 @@ export function deriveStatusColors({
         const paler = sorted.filter(
           s => s > fill[m].stop && at(m, s).color !== fill[m].color,
         );
-        if (stop <= fill[m].stop || at(m, stop).color === fill[m].color)
+        if (stop <= fill[m].stop || at(m, stop).color === fill[m].color) {
           stop = paler[0] ?? stop;
+        }
       }
       const solid = at(m, stop);
       return m === 'dark'
@@ -1141,18 +1161,28 @@ export function deriveStatusColors({
       continue;
     }
     // A one-mode theme measures its mode for both sides: one note each.
-    for (const line of fails) if (!why.includes(line)) why.push(line);
-    if (fails.length) short.push(id);
+    for (const line of fails) {
+      if (!why.includes(line)) {
+        why.push(line);
+      }
+    }
+    if (fails.length) {
+      short.push(id);
+    }
     state[id] = 'derived';
-    for (const [k, v] of Object.entries(set))
-      if (wanted(k)) tokens[k] = {family: id, ...v};
+    for (const [k, v] of Object.entries(set)) {
+      if (wanted(k)) {
+        tokens[k] = {family: id, ...v};
+      }
+    }
     const inkToken = `--color-on-${w}`;
-    if (wanted(inkToken))
+    if (wanted(inkToken)) {
       tokens[inkToken] = {
         family: onFill.light.family,
         light: onFill.light,
         dark: onFill.dark,
       };
+    }
   }
   return {tokens, roles: state, why, short};
 }

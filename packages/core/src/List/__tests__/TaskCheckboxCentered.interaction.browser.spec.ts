@@ -23,7 +23,9 @@ async function task(page: Page) {
       '#storybook-root li .astryx-checkbox-indicator',
     );
     const li = box?.closest('li');
-    if (box == null || li == null) throw new Error('no task item');
+    if (box == null || li == null) {
+      throw new Error('no task item');
+    }
     // The first line of the item's text: the first text node outside the
     // checkbox, measured by its own line box.
     const walker = document.createTreeWalker(li, NodeFilter.SHOW_TEXT, {
@@ -34,7 +36,9 @@ async function task(page: Page) {
           : NodeFilter.FILTER_SKIP,
     });
     const text = walker.nextNode();
-    if (text == null) throw new Error('no task text');
+    if (text == null) {
+      throw new Error('no task text');
+    }
     const range = document.createRange();
     range.selectNodeContents(text);
     const line = range.getClientRects()[0];
@@ -65,9 +69,13 @@ for (const [label, css] of [
       storybook(),
       'core-markdown--task-items-among-plain-items',
     );
-    if (css) await page.addStyleTag({content: css});
+    if (css) {
+      await page.addStyleTag({content: css});
+    }
     const t = await task(page);
-    if (css) expect(t.size).toBeCloseTo(css.includes('26px') ? 26 : 13, 0);
+    if (css) {
+      expect(t.size).toBeCloseTo(css.includes('26px') ? 26 : 13, 0);
+    }
     expect(Math.abs(t.offset)).toBeLessThanOrEqual(1.5);
   });
 }

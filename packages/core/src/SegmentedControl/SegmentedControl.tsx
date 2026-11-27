@@ -29,7 +29,8 @@ import type {
   SegmentedControlSize,
   SegmentedControlLayout,
 } from './SegmentedControlContext';
-import {mergeProps, composeEventHandlers} from '../utils';
+import {mergeProps} from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {joinAriaIDs} from '../utils/inputAria';
 import {useSize} from '../SizeContext/SizeContext';
 import type {BaseProps} from '../BaseProps';
@@ -393,10 +394,6 @@ export function SegmentedControl({
   // on the current segment) is a no-op, matching click behavior.
   const handleContainerFocus = useCallback(
     (e: React.FocusEvent<HTMLDivElement>) => {
-      onFocusProp?.(e);
-      if (e.defaultPrevented) {
-        return;
-      }
       hint.onFocus(e);
       handleFocus(e);
       if (isDisabled) {
@@ -428,7 +425,7 @@ export function SegmentedControl({
         onChange(nextValue);
       }
     },
-    [onFocusProp, hint, handleFocus, isDisabled, onChange, selection, value],
+    [hint, handleFocus, isDisabled, onChange, selection, value],
   );
 
   const contextValue = useMemo(
@@ -475,8 +472,11 @@ export function SegmentedControl({
           showsDisabledMessage ? disabledMessageTooltip.describedBy : undefined,
         )}
         onKeyDown={handleContainerKeyDown}
-        onFocus={handleContainerFocus}
-        onBlur={composeEventHandlers(onBlurProp, hint.onBlur)}
+        // The public API promises no cancellation of focus behavior, so a
+        // caller's preventDefault() does not stop the hint, the Tab-stop
+        // sync, or selection-follows-focus.
+        onFocus={chainEventHandlers(onFocusProp, handleContainerFocus)}
+        onBlur={chainEventHandlers(onBlurProp, hint.onBlur)}
         {...mergeProps(
           themeProps('segmented-control', {size}),
           stylex.props(

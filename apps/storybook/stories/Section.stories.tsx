@@ -331,6 +331,7 @@ export const AsymmetricPadding: Story = {
           one prop per edge (1 / 2 / 3 / 4)
         </h4>
         <Section
+          data-evidence="padding-per-edge"
           variant="muted"
           width={350}
           paddingInlineStart={1}
@@ -341,6 +342,61 @@ export const AsymmetricPadding: Story = {
             All four edges resolved independently: 4px leading, 8px trailing,
             12px top, 16px bottom.
           </p>
+        </Section>
+      </div>
+    </div>
+  ),
+};
+
+export const Dividers: Story = {
+  render: () => (
+    <div {...stylex.props(styles.storyWrapper)}>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>dividers top + bottom</h4>
+        <Section
+          data-evidence="dividers-block"
+          variant="muted"
+          width={220}
+          dividers={['top', 'bottom']}>
+          <p {...stylex.props(styles.text)}>A border above and below.</p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>dividers start</h4>
+        <Section
+          data-evidence="dividers-start"
+          variant="section"
+          width={220}
+          dividers={['start']}>
+          <p {...stylex.props(styles.text)}>
+            A border on the leading edge: left in LTR, right in RTL.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>dividers end</h4>
+        <Section
+          data-evidence="dividers-end"
+          variant="transparent"
+          width={220}
+          dividers={['end']}>
+          <p {...stylex.props(styles.text)}>
+            A border on the trailing edge: right in LTR, left in RTL.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>stacked nested sections</h4>
+        <Section data-evidence="stack" variant="section" width={220}>
+          <Section variant="muted" dividers={['bottom']}>
+            <p {...stylex.props(styles.text)}>First</p>
+          </Section>
+          <Section variant="muted" dividers={['bottom']}>
+            <p {...stylex.props(styles.text)}>Middle</p>
+          </Section>
+          <Section variant="muted">
+            <p {...stylex.props(styles.text)}>Last</p>
+          </Section>
         </Section>
       </div>
     </div>

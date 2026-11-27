@@ -31,6 +31,7 @@
 
 import {writeFile} from 'node:fs/promises';
 import {expect, test, type Frame, type Page} from '@playwright/test';
+import {safeFetchError} from '../../../.github/scripts/lib/fetch-error.js';
 
 const PREVIEW_URL_MARK = '/playground/preview#nonce=';
 const HOSTILE_ORIGIN = 'https://hostile.example';
@@ -162,9 +163,13 @@ test.describe('playground preview isolation', () => {
       async route => {
         // A new connection, so a kept-alive socket that `next start` closes
         // for idleness cannot reset this fetch.
-        const response = await route.fetch({
-          headers: {...route.request().headers(), connection: 'close'},
-        });
+        const response = await route
+          .fetch({
+            headers: {...route.request().headers(), connection: 'close'},
+          })
+          .catch(error => {
+            throw safeFetchError(error);
+          });
         const body = await response.text();
         const runtimeStart = body.indexOf('(self.webpackChunk_N_E=');
         expect(runtimeStart).toBeGreaterThan(0);

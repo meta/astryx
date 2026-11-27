@@ -10,7 +10,7 @@
  *   headless shell delivers it. So this file runs in the full build only.
  */
 
-import {expect, test} from '@astryxdesign/a11y-spec/playwright';
+import {expect, safeFetchError, test} from '@astryxdesign/a11y-spec/playwright';
 import {withStorybook} from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
@@ -32,7 +32,9 @@ test('a mouse drag on a thumb released outside its frame ends: the thumb does no
   // page, not to the frame. The frame's origin is opaque, so the Storybook's
   // module scripts load only with a CORS header.
   await page.route(`${storybook()}/**`, async route => {
-    const response = await route.fetch();
+    const response = await route.fetch().catch(error => {
+      throw safeFetchError(error);
+    });
     await route.fulfill({
       response,
       headers: {...response.headers(), 'access-control-allow-origin': '*'},
