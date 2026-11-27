@@ -293,12 +293,15 @@ describe('useLongPressHookUsage example', () => {
     if (!actionsButton) {
       throw new Error('Expected the Actions button');
     }
+    // The surface's style while the panel is open.
+    let openSurfaceStyle: ReturnType<typeof panelPosition> = {};
     const openFrom = (rect: DOMRect) => {
       vi.spyOn(actionsButton, 'getBoundingClientRect').mockReturnValue(rect);
       act(() => {
         actionsButton.click();
       });
       const menu = container.querySelector<HTMLElement>('[role="group"]');
+      openSurfaceStyle = panelPosition(surface);
       act(() => {
         surface.dispatchEvent(
           new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}),
@@ -321,9 +324,12 @@ describe('useLongPressHookUsage example', () => {
       DOMRect.fromRect({x: 16, y: 64, width: 88, height: 40}),
     );
     expect(after?.textContent).toContain('Opened by button at (112, 64)');
+    expect(openSurfaceStyle).not.toHaveProperty('overflowY');
 
     // A narrow card has no room on either side of the button, so the panel
-    // opens below it in both left-to-right and right-to-left layouts.
+    // opens below it in both left-to-right and right-to-left layouts. It does
+    // not move up over the button, and the surface scrolls to reach it rather
+    // than growing, so a centered preview around the example does not shift.
     vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(
       DOMRect.fromRect({x: 0, y: 0, width: 260, height: 216}),
     );
@@ -335,7 +341,11 @@ describe('useLongPressHookUsage example', () => {
     expect(panelPosition(belowLtr)).toMatchObject({
       left: 'clamp(0px, 16px, calc(100% - 180px))',
       top: '112px',
-      transform: 'translateY(min(0px, max(-112px, calc(216px - 100%))))',
+      transform: 'none',
+    });
+    expect(openSurfaceStyle).toMatchObject({
+      minHeight: 216,
+      overflowY: 'auto',
     });
 
     const belowRtl = openFrom(
@@ -345,7 +355,11 @@ describe('useLongPressHookUsage example', () => {
     expect(panelPosition(belowRtl)).toMatchObject({
       left: 'clamp(0px, 64px, calc(100% - 180px))',
       top: '112px',
-      transform: 'translateY(min(0px, max(-112px, calc(216px - 100%))))',
+      transform: 'none',
+    });
+    expect(openSurfaceStyle).toMatchObject({
+      minHeight: 216,
+      overflowY: 'auto',
     });
   });
 
