@@ -149,7 +149,7 @@ function readTree(root, base, into = new Map()) {
  * @param {'bin' | 'host entry'} door
  * @param {string[]} argv
  * @param {(dir: string) => void} setUp
- * @returns {Promise<{status: number | null, stdout: string, stderr: string, changes: Record<string, string | null>}>}
+ * @returns {Promise<{status: number | null, signal: string | null, timedOut: boolean, stdout: string, stderr: string, changes: Record<string, string | null>}>}
  */
 async function runThrough(door, argv, setUp) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-door-'));
@@ -208,8 +208,15 @@ async function runThrough(door, argv, setUp) {
   child.stderr.setEncoding('utf8');
   child.stdout.on('data', chunk => (stdout += chunk));
   child.stderr.on('data', chunk => (stderr += chunk));
-  const timer = setTimeout(() => child.kill('SIGKILL'), RUN_TIMEOUT_MS);
-  const status = await new Promise(resolve => child.on('close', resolve));
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill('SIGKILL');
+  }, RUN_TIMEOUT_MS);
+  /** @type {[number | null, string | null]} */
+  const [status, signal] = await new Promise(resolve =>
+    child.on('close', (code, sig) => resolve([code, sig])),
+  );
   clearTimeout(timer);
   // Each run's own folders read as placeholders.
   const real = fs.realpathSync(base);
@@ -231,6 +238,8 @@ async function runThrough(door, argv, setUp) {
   }
   return {
     status,
+    signal,
+    timedOut,
     stdout: placeholders(stdout),
     stderr: placeholders(stderr),
     changes,
@@ -255,6 +264,20 @@ export function doorRunsAtOnce({
 } = {}) {
   const perCore = load / Math.max(1, cores);
   return Math.max(2, Math.min(4, cores, Math.round(4 * (2 - perCore))));
+}
+
+/**
+ * How a run ended, for a failure message: a run with no exit status was
+ * killed, by this file's hung-run timer or by something else.
+ * @param {{status: number | null, signal?: string | null, timedOut?: boolean} | undefined} run
+ * @returns {string}
+ */
+export function howRunEnded(run) {
+  if (!run) return 'did not run';
+  if (run.status !== null) return `exited with status ${run.status}`;
+  if (run.timedOut)
+    return `was killed by the ${RUN_TIMEOUT_MS / 1000} s hung-run timer (${run.signal ?? 'SIGKILL'})`;
+  return `was killed by ${run.signal ?? 'an unknown signal'}, not by the hung-run timer`;
 }
 
 /**
@@ -323,7 +346,10 @@ export function describeDoorConformance(folder) {
 
     it.each(examples.map(({cli}) => [cli]))('%s', cli => {
       const {bin, host} = runs.get(cli) ?? {};
-      expect(bin?.status, `${cli} finished through the bin`).not.toBeNull();
+      expect(
+        bin?.status,
+        `${cli} finished through the bin (it ${howRunEnded(bin)})`,
+      ).not.toBeNull();
       expect(host).toEqual(bin);
     });
   });

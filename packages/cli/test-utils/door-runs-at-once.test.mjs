@@ -3,11 +3,12 @@
 /**
  * @file How many example runs a door-conformance file starts at a time
  * (doorRunsAtOnce): never more than CI's 4 or the box's cores, and 2 on a box
- * that other work keeps busy.
+ * that other work keeps busy; and how a failed run says it ended
+ * (howRunEnded).
  */
 
 import {describe, expect, it} from 'vitest';
-import {doorRunsAtOnce} from './door-conformance.mjs';
+import {doorRunsAtOnce, howRunEnded} from './door-conformance.mjs';
 
 describe('doorRunsAtOnce', () => {
   it('runs 4 at a time on a quiet box of 4 cores or more', () => {
@@ -39,5 +40,26 @@ describe('doorRunsAtOnce', () => {
           Math.max(2, Math.min(4, cores)),
         );
       }
+  });
+});
+
+describe('howRunEnded', () => {
+  it('names the hung-run timer when it killed the run', () => {
+    expect(howRunEnded({status: null, signal: 'SIGKILL', timedOut: true})).toBe(
+      'was killed by the 90 s hung-run timer (SIGKILL)',
+    );
+  });
+
+  it('tells a kill from elsewhere apart from the timer', () => {
+    expect(
+      howRunEnded({status: null, signal: 'SIGKILL', timedOut: false}),
+    ).toBe('was killed by SIGKILL, not by the hung-run timer');
+  });
+
+  it('gives the exit status of a run that finished', () => {
+    expect(howRunEnded({status: 2, signal: null, timedOut: false})).toBe(
+      'exited with status 2',
+    );
+    expect(howRunEnded(undefined)).toBe('did not run');
   });
 });
