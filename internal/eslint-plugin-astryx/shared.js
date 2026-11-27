@@ -35,6 +35,9 @@ export const COMPONENT_RULE_ALLOWED = new Set([
   'InternationalizationProviderProps',
   // Renders one Markdown plugin node with no element of its own (spec:AST-064)
   'MarkdownPluginNodeRendererProps',
+  // A Lexical plugin inside the editor's plugins slot: it registers behavior
+  // on the editor and renders no element of its own
+  'RichTextEditorAutoLinkPluginProps',
   // Hook return-value / editor-config prop bags — not DOM-component props
   'OverlayContainerProps',
   'PowerSearchEditorProps',
