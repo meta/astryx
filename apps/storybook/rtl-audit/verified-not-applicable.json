@@ -190,10 +190,6 @@
     "reason": "Markdown sets each prose block's and table cell's dir from its own text, so a Hebrew paragraph in a left-to-right document starts at the right edge; its unit tests and a mixed-direction story cover that. Semantic list markers, links, and caller-authored content follow browser semantics and shared components. Its own prose styling uses logical block/inline properties, a table's sideways scroll belongs to the nested Table, and it owns no directional icon, control order, physical placement, drag, or overlay."
   },
   {
-    "component": "core/Section",
-    "reason": "Section is a block-flow surface with symmetric decoration and logical padding/insets. It owns no directional glyph, inline-axis ordering, physical transform, scrolling action, dragging, overlay, or keyboard behavior."
-  },
-  {
     "component": "core/TextInput",
     "reason": "TextInput composes a native input and optional start/end affordances in logical flex flow. Padding and status placement use logical properties; owned status, clear, and visibility glyphs are non-directional, and horizontal editing behavior remains native to the input."
   },

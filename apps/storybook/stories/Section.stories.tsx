@@ -331,6 +331,7 @@ export const AsymmetricPadding: Story = {
           one prop per edge (1 / 2 / 3 / 4)
         </h4>
         <Section
+          data-evidence="padding-per-edge"
           variant="muted"
           width={350}
           paddingInlineStart={1}

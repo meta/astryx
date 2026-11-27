@@ -62,6 +62,10 @@ const variantStyles = stylex.create({
 const nestedStyles = stylex.create({
   // Outer wrapper escapes parent's container padding
   outer: {
+    // A percentage height cannot resolve against `minHeight` alone. A flex
+    // column lets the painted inner container grow to the wrapper's height.
+    display: 'flex',
+    flexDirection: 'column',
     // Escape horizontal padding using directional vars with shorthand fallback
     marginInlineStart: 'calc(-1 * var(--container-padding-inline-start, 0px))',
     marginInlineEnd: 'calc(-1 * var(--container-padding-inline-end, 0px))',
@@ -83,6 +87,7 @@ const nestedStyles = stylex.create({
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
     height: '100%',
+    flexGrow: 1,
   },
 });
 
@@ -179,7 +184,9 @@ export interface SectionProps extends BaseProps<HTMLElement> {
   /**
    * Internal padding of the section using the spacing scale.
    * Accepts numeric spacing steps: 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10.
-   * @default 4 (16px)
+   * When omitted, each edge takes the theme's section padding, then an
+   * ancestor Section's explicit `padding`, then step 4 (16px).
+   * @default the theme's section padding, else 4
    */
   padding?: SpacingStep;
   /**

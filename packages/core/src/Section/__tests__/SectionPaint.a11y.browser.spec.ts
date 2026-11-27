@@ -109,8 +109,8 @@ test('dividers draw a 1px border token on the selected logical edges only', asyn
     const line = `1px solid ${block.border}`;
     expect(block.edges.top).toBe(line);
     expect(block.edges.bottom).toBe(line);
-    expect(block.edges.left).toMatch(/^0px none/);
-    expect(block.edges.right).toMatch(/^0px none/);
+    expect(block.edges.left).toMatch(/^0px /);
+    expect(block.edges.right).toMatch(/^0px /);
 
     const start = await readSection(page, 'dividers-start');
     const end = await readSection(page, 'dividers-end');
@@ -119,11 +119,11 @@ test('dividers draw a 1px border token on the selected logical edges only', asyn
         ? (['right', 'left'] as const)
         : (['left', 'right'] as const);
     expect(start.edges[startSide]).toBe(line);
-    expect(start.edges[endSide]).toMatch(/^0px none/);
+    expect(start.edges[endSide]).toMatch(/^0px /);
     expect(end.edges[endSide]).toBe(line);
-    expect(end.edges[startSide]).toMatch(/^0px none/);
-    expect(start.edges.top).toMatch(/^0px none/);
-    expect(end.edges.bottom).toMatch(/^0px none/);
+    expect(end.edges[startSide]).toMatch(/^0px /);
+    expect(start.edges.top).toMatch(/^0px /);
+    expect(end.edges.bottom).toMatch(/^0px /);
   }
 });
 

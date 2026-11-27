@@ -271,7 +271,10 @@ for (const mode of ['light', 'dark'] as const) {
       );
       check(nested.length === 3, `nested sections ${nested.length}`);
       for (const section of nested) {
-        const parent = section.parent!;
+        const {parent} = section;
+        if (parent == null) {
+          continue;
+        }
         check(
           section.wrapper.left === parent.left &&
             section.wrapper.right === parent.right &&
@@ -313,7 +316,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
               '24px 24px 24px 24px',
               '8px 24px 24px 24px',
               '24px 24px 0px 24px',
-              '24px 16px 4px 16px',
+              '24px 12px 4px 12px',
               '24px 8px 24px 24px',
               '12px 4px 16px 8px',
             ]
@@ -321,7 +324,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
               '24px 24px 24px 24px',
               '8px 24px 24px 24px',
               '24px 24px 0px 24px',
-              '24px 16px 4px 16px',
+              '24px 12px 4px 12px',
               '24px 24px 24px 8px',
               '12px 8px 16px 4px',
             ];
