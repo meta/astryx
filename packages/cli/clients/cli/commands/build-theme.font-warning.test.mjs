@@ -17,6 +17,24 @@ import * as os from 'node:os';
 import {ensureCoreBuilt} from './ensure-core-built.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 
+/** A Next.js app at `dir` whose root layout loads Geist through next/font. */
+function writeNextFontApp(dir) {
+  fs.mkdirSync(path.join(dir, 'app'), {recursive: true});
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name": "app"}\n');
+  fs.writeFileSync(
+    path.join(dir, 'app/layout.tsx'),
+    "import {Geist} from 'next/font/google';\nconst geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n",
+  );
+}
+
+const FONTY = `export default {
+  name: 'fonty',
+  typography: {
+    body: {family: 'Space Grotesk', fallbacks: 'Arial, sans-serif'},
+    code: {family: 'JetBrains Mono'},
+  },
+};\n`;
+
 function writeTheme(dir, name, source) {
   fs.mkdirSync(dir, {recursive: true});
   const file = path.join(dir, `${name}.mjs`);
@@ -126,7 +144,7 @@ describe('theme build font-loading warning', () => {
   },
 };\n`,
     );
-    fs.mkdirSync(path.join(project, 'app'), {recursive: true});
+    writeNextFontApp(project);
     fs.writeFileSync(
       path.join(project, 'app/layout.tsx'),
       "import {Geist} from 'next/font/google';\nconst geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n",
@@ -159,6 +177,44 @@ describe('theme build font-loading warning', () => {
         expect.stringContaining('(recipe: astryx docs font-setup)'),
       ]),
     );
+  });
+
+  it('names the next/font fix for a batch where one theme names no webfont', async () => {
+    const project = path.join(tmpDir, 'project');
+    writeNextFontApp(project);
+    const fonty = writeTheme(project, 'fonty', FONTY);
+    const plain = writeTheme(
+      project,
+      'plain',
+      `export default {name: 'plain', tokens: {'--color-bg': '#000'}};\n`,
+    );
+
+    const result = await runCli(
+      [
+        'theme',
+        'build',
+        path.relative(project, fonty),
+        path.relative(project, plain),
+      ],
+      project,
+    );
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('This app loads fonts with next/font');
+    expect(result.stdout).not.toContain('Load them in your app');
+  });
+
+  it('names the next/font fix when the build runs in a folder inside the app', async () => {
+    const project = path.join(tmpDir, 'project');
+    writeNextFontApp(project);
+    const themes = path.join(project, 'src/themes');
+    const fonty = writeTheme(themes, 'fonty', FONTY);
+
+    const result = await runCli(
+      ['theme', 'build', path.relative(themes, fonty)],
+      themes,
+    );
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('This app loads fonts with next/font');
   });
 
   it('keeps --json stdout one valid envelope: notices inside, snippet suppressed', async () => {

@@ -9,6 +9,7 @@ import {nextFontFix, rootLayoutImportsNextFont} from './next-font.mjs';
 let dir;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-next-font-'));
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name": "app"}\n');
 });
 afterEach(() => {
   fs.rmSync(dir, {recursive: true, force: true});
@@ -36,6 +37,20 @@ describe('rootLayoutImportsNextFont', () => {
       "import localFont from 'next/font/local';\nconst geist = localFont({src: './Geist.woff2', variable: '--font-geist-sans'});\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n",
     );
     expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it("is true when the root layout imports one of the geist package's next/font entries", () => {
+    write(
+      'app/layout.tsx',
+      layout('geist/font/sans').replace('{Geist}', '{GeistSans}'),
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it("reads the project's root layout from a folder inside the project", () => {
+    write('app/layout.tsx', layout('next/font/google'));
+    fs.mkdirSync(path.join(dir, 'src/themes'), {recursive: true});
+    expect(rootLayoutImportsNextFont(path.join(dir, 'src/themes'))).toBe(true);
   });
 
   it('is false for a mention in a comment or a string', () => {
