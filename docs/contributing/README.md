@@ -16,4 +16,5 @@ contracts, or component contracts.
   rubric an author runs over a record before review, and the results a record
   pull request reports.
 - [Measure first-load JavaScript](first-load.md): compare a change's first
-  load with `pnpm size:pages` and, across bundlers, `pnpm size:matrix`.
+  load with `pnpm size:pages` (esbuild and Vite) and, with standalone Rolldown
+  and webpack, `pnpm size:matrix`.

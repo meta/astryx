@@ -5,7 +5,8 @@
  * @input scripts/first-load-matrix.mjs and a small Core-shaped fixture package
  * @output Tests for the page arguments, and a smoke run of every bundler over
  *   the fixture: the statically imported module is in first load, the module
- *   behind `import()` is out, and the report names both
+ *   behind `import()` is out, the Vite row equals `size:pages`' Rolldown
+ *   figures, and the report names both modules
  * @position Testing (node project)
  */
 
@@ -21,6 +22,7 @@ import {
   parseArgs,
   writeFixture,
 } from './first-load-matrix.mjs';
+import {measurePageRolldown} from './measure-reference-pages.mjs';
 
 describe('pageSpec', () => {
   it("reads INV10's pages from the record and adds the single-component pages", () => {
@@ -72,6 +74,7 @@ describe('parseArgs', () => {
 
 describe('bundleAll on a fixture package', () => {
   let work;
+  let core;
   let results;
 
   beforeAll(async () => {
@@ -79,7 +82,7 @@ describe('bundleAll on a fixture package', () => {
       fs.mkdtempSync(path.join(os.tmpdir(), 'first-load-matrix-test-')),
     );
     // The folder layout matches a Core build, so module names read as Core's.
-    const core = path.join(work, 'packages/core');
+    core = path.join(work, 'packages/core');
     const dist = path.join(core, 'dist/Widget');
     fs.mkdirSync(dist, {recursive: true});
     fs.writeFileSync(
@@ -117,11 +120,13 @@ describe('bundleAll on a fixture package', () => {
     );
     const app = path.join(work, 'app');
     const entries = writeFixture(app, core, [['widget', ['Widget']]]);
-    results = await bundleAll(app, entries.widget, path.join(work, 'out'), [
-      'Widget/shared.js',
-      'Widget/surface.js',
-      'Widget/missing.js',
-    ]);
+    results = await bundleAll(
+      app,
+      entries.widget,
+      path.join(work, 'out'),
+      ['Widget/shared.js', 'Widget/surface.js', 'Widget/missing.js'],
+      {distDir: path.join(core, 'dist'), components: ['Widget']},
+    );
   }, 120_000);
 
   afterAll(() => {
@@ -145,6 +150,14 @@ describe('bundleAll on a fixture package', () => {
       expect(result.deferred['Widget/surface.js'], bundler).toBe('out (lazy)');
       expect(result.deferred['Widget/missing.js'], bundler).toBe('absent');
     }
+  });
+
+  it("gives the page the same Vite figures as size:pages' Rolldown build", async () => {
+    const pages = await measurePageRolldown(path.join(core, 'dist'), [
+      'Widget',
+    ]);
+    expect(results['Vite 8 (Rolldown)'].gzip).toBe(pages.gzip);
+    expect(results['Vite 8 (Rolldown)'].chunks).toBe(pages.chunks);
   });
 
   it('reports the page as a Markdown table', () => {

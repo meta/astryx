@@ -3,29 +3,38 @@
 
 /**
  * @file first-load-matrix.mjs
- * @input A base and a head git ref (or a pull request number), reference pages
- *   given as Core component sets, and the deferred modules to check
- * @output Per page and bundler (Vite 8, Rolldown with inline common chunks off
- *   and at 64 KiB, webpack 5): first-load JS gzip, first-load chunk count, and
- *   whether each deferred module stays out of the first-load set, as Markdown
- *   or JSON
+ * @input A base and a head (a git ref, a pull request number, or the working
+ *   tree), reference pages given as Core component sets, and the deferred
+ *   modules to check
+ * @output Per page and bundler: first-load JS gzip, first-load chunk count,
+ *   and whether each deferred module stays out of the first-load set, as
+ *   Markdown or JSON
  * @position Run by people and review agents with `pnpm size:matrix`; not a CI
- *   job. Builds Core at each ref with `pnpm size:pages`' own `buildCore`, so
- *   both commands measure the same build; `pnpm size:pages` stays the esbuild
- *   per-page delta for INV10
+ *   job. Adds to `pnpm size:pages` (esbuild and Vite) what it lacks:
+ *   standalone Rolldown with inline common chunks off and at 64 KiB, webpack
+ *   5, and deferred-module placement. Builds Core with `size:pages`'
+ *   `buildCore`, and its Vite row is `size:pages`' own Vite build of the page
  */
 
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import zlib from 'node:zlib';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
-import {buildCore, parseReferencePages} from './measure-reference-pages.mjs';
+import {
+  buildCore,
+  buildPageRolldown,
+  parseReferencePages,
+  rolldownOutputs,
+  rolldownPageStats,
+} from './measure-reference-pages.mjs';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 const req = createRequire(import.meta.url);
+const {gzipBytes, importLevels} = req(
+  '../.github/scripts/lib/component-size.js',
+);
 const RECORD = 'docs/architecture/component-import-boundaries.md';
 
 /** The app provides these, so no bundle counts them. */
@@ -168,7 +177,7 @@ function buildCorePackage(ref, sideDir) {
     path.join(REPO, 'packages/core/node_modules'),
     path.join(packageDir, 'node_modules'),
   );
-  return packageDir;
+  return {packageDir, distDir};
 }
 
 const GENERATED_I18N =
@@ -261,107 +270,115 @@ export const coreModule = s =>
     s.replace(/\\/g, '/'),
   )?.[1];
 
-/**
- * First-load gzip and chunk count, and for each deferred module: "IN" (with its
- * minified bytes) when the first-load set has its code, "out (lazy)" when only a
- * later chunk has it, "absent" when no chunk has it.
- */
-export function summarize(outDir, firstLoad, allFiles, defer) {
-  const gz = firstLoad.reduce(
-    (n, f) =>
-      n +
-      zlib.gzipSync(fs.readFileSync(path.join(outDir, f)), {level: 9}).length,
-    0,
-  );
-  const inFirst = new Map(),
-    inAny = new Map(),
-    chunkDetail = [];
-  for (const [set, files] of [
-    [inFirst, firstLoad],
-    [inAny, allFiles],
-  ]) {
-    for (const f of files) {
-      const mods = [];
-      for (const [s, b] of sourceBytes(path.join(outDir, f)))
-        if (b > 0) {
-          const m = coreModule(s);
-          if (m) {
-            set.set(m, (set.get(m) ?? 0) + b);
-            mods.push([m, b]);
-          }
-        }
-      if (set === inFirst)
-        chunkDetail.push({
-          file: f,
-          gzip: zlib.gzipSync(fs.readFileSync(path.join(outDir, f)), {level: 9})
-            .length,
-          modules: mods.sort((x, y) => y[1] - x[1]),
-        });
-    }
-  }
-  const deferred = Object.fromEntries(
+/** Each deferred module as "IN" with its bytes, "out (lazy)" or "absent". */
+function placement(defer, inFirst, inAny, unit) {
+  return Object.fromEntries(
     defer.map(m => [
       m,
       inFirst.has(m)
-        ? `IN (${inFirst.get(m)} B min)`
+        ? `IN (${inFirst.get(m)} B ${unit})`
         : inAny.has(m)
           ? 'out (lazy)'
           : 'absent',
     ]),
   );
+}
+
+/** Bytes per Core module (`Layer/useLayer.js`) from `[source, bytes]` pairs. */
+function coreBytes(pairs) {
+  const total = new Map();
+  for (const [source, bytes] of pairs) {
+    const m = coreModule(source);
+    if (m && bytes > 0) total.set(m, (total.get(m) ?? 0) + bytes);
+  }
+  return total;
+}
+
+const byBytes = map => [...map].sort((x, y) => y[1] - x[1]);
+
+/**
+ * A Rolldown build's figures by `size:pages`' own walks: first-load gzip and
+ * chunk count from `rolldownPageStats`, and module placement from the
+ * rendered bytes of each module in each chunk.
+ */
+export function rolldownSummary(output, entryModule, defer) {
+  const {gzip, chunks} = rolldownPageStats(output, entryModule);
+  const {outputs, textByPath, entryOutput} = rolldownOutputs(output);
+  const firstLoad = [
+    ...importLevels(outputs, entryOutput, ['import-statement']).keys(),
+  ];
+  const modulesOf = file =>
+    Object.entries(outputs[file].inputs).map(([id, {bytesInOutput}]) => [
+      id,
+      bytesInOutput,
+    ]);
+  const inFirst = coreBytes(firstLoad.flatMap(modulesOf));
   return {
-    gzip: gz,
-    chunks: firstLoad.length,
+    gzip,
+    chunks,
     coreModules: inFirst.size,
-    deferred,
-    chunkDetail,
+    deferred: placement(
+      defer,
+      inFirst,
+      coreBytes(Object.keys(outputs).flatMap(modulesOf)),
+      'rendered',
+    ),
+    chunkDetail: firstLoad.map(file => ({
+      file,
+      gzip: gzipBytes(textByPath.get(file) ?? ''),
+      modules: byBytes(coreBytes(modulesOf(file))),
+    })),
   };
 }
 
-/** The entry chunk and every chunk it imports statically. */
-export function rolldownFirstLoad(output) {
-  const chunks = output.filter(o => o.type === 'chunk');
-  const byName = new Map(chunks.map(c => [c.fileName, c]));
-  const entry = chunks.find(c => c.isEntry);
-  const seen = new Set([entry.fileName]),
-    q = [entry.fileName];
-  while (q.length)
-    for (const i of byName.get(q.shift()).imports)
-      if (byName.has(i) && !seen.has(i)) {
-        seen.add(i);
-        q.push(i);
-      }
-  return {firstLoad: [...seen], all: chunks.map(c => c.fileName)};
+/**
+ * A webpack build's figures: the gzip of the entry's first-load files as one
+ * text, as `size:pages` counts a page, and module placement from the source
+ * maps.
+ */
+export function webpackSummary(outDir, firstLoad, allFiles, defer) {
+  const read = file => fs.readFileSync(path.join(outDir, file), 'utf8');
+  const mapped = files =>
+    coreBytes(files.flatMap(file => [...sourceBytes(path.join(outDir, file))]));
+  const inFirst = mapped(firstLoad);
+  return {
+    gzip: gzipBytes(firstLoad.map(read).join('')),
+    chunks: firstLoad.length,
+    coreModules: inFirst.size,
+    deferred: placement(defer, inFirst, mapped(allFiles), 'min'),
+    chunkDetail: firstLoad.map(file => ({
+      file,
+      gzip: gzipBytes(read(file)),
+      modules: byBytes(mapped([file])),
+    })),
+  };
 }
 
-/** One page bundled by each bundler in production mode. */
-export async function bundleAll(fixture, entry, outRoot, defer) {
+/** A page component (`Comp` or `Comp@Subpath`) as a `size:pages` page item. */
+const pageItem = c => {
+  const [comp, sub] = c.split('@');
+  return sub ? `${sub}:${comp}` : comp;
+};
+
+/**
+ * One page bundled by each bundler in production mode. The Vite row is
+ * `size:pages`' own build of the page from `page.distDir`; the other rows
+ * build the app entry `entry` in `fixture`.
+ */
+export async function bundleAll(fixture, entry, outRoot, defer, page) {
   const results = {};
   const NODE_ENV = {'process.env.NODE_ENV': JSON.stringify('production')};
-  {
-    const {build} = await import(pathToFileURL(req.resolve('vite')).href);
-    const out = path.join(outRoot, 'vite');
-    const r = await build({
-      root: fixture,
-      configFile: false,
-      logLevel: 'silent',
-      mode: 'production',
-      build: {
-        outDir: out,
-        emptyOutDir: true,
-        sourcemap: true,
-        modulePreload: false,
-        rollupOptions: {
-          input: entry,
-          external: EXTERNAL,
-          output: {entryFileNames: 'main.js'},
-        },
-      },
-    });
-    const output = (Array.isArray(r) ? r[0] : r).output;
-    const {firstLoad, all} = rolldownFirstLoad(output);
-    results['Vite 8 (Rolldown)'] = summarize(out, firstLoad, all, defer);
-  }
+  const vite = await buildPageRolldown(
+    page.distDir,
+    page.components.map(pageItem),
+  );
+  results['Vite 8 (Rolldown)'] = rolldownSummary(
+    vite.output,
+    vite.entryModule,
+    defer,
+  );
+  // Standalone Rolldown at the two inline-common-chunks settings that
+  // `size:pages` does not build: off, and 64 KiB as some apps configure it.
   const {rolldown} = req('rolldown');
   for (const [label, maxSize] of [
     ['Rolldown, inline common chunks off', 0],
@@ -370,8 +387,6 @@ export async function bundleAll(fixture, entry, outRoot, defer) {
       64 * 1024,
     ],
   ]) {
-    const out = path.join(outRoot, `rolldown-${maxSize}`);
-    fs.rmSync(out, {recursive: true, force: true});
     const bundle = await rolldown({
       input: entry,
       cwd: fixture,
@@ -382,17 +397,14 @@ export async function bundleAll(fixture, entry, outRoot, defer) {
       logLevel: 'silent',
       ...(maxSize > 0 ? {preserveEntrySignatures: false} : {}),
     });
-    const {output} = await bundle.write({
-      dir: out,
+    const {output} = await bundle.generate({
       format: 'esm',
       minify: true,
-      sourcemap: true,
       entryFileNames: 'main.js',
       codeSplitting: {experimentalInlineCommonChunks: {maxSize}},
     });
     await bundle.close();
-    const {firstLoad, all} = rolldownFirstLoad(output);
-    results[label] = summarize(out, firstLoad, all, defer);
+    results[label] = rolldownSummary(output, entry, defer);
   }
   {
     const webpack = req('webpack');
@@ -425,7 +437,7 @@ export async function bundleAll(fixture, entry, outRoot, defer) {
       .map(x => x.name ?? x)
       .filter(f => f.endsWith('.js'));
     const all = j.assets.map(x => x.name).filter(f => f.endsWith('.js'));
-    results['webpack 5'] = summarize(out, firstLoad, all, defer);
+    results['webpack 5'] = webpackSummary(out, firstLoad, all, defer);
   }
   return results;
 }
@@ -478,7 +490,7 @@ export function markdown(label, refs, pages, data, defer, chunks) {
           lines.push(
             `<details><summary>${page} · ${side} · ${bundler}: first-load chunks</summary>`,
             '',
-            '| Chunk | gzip B | Core modules (minified bytes, largest first) |',
+            '| Chunk | gzip B | Core modules (bytes, largest first) |',
             '| --- | ---: | --- |',
           );
           for (const c of data[side][page][bundler].chunkDetail)
@@ -506,16 +518,20 @@ async function main(argv) {
   try {
     const data = {};
     for (const side of ['base', 'head']) {
-      const corePkg = buildCorePackage(refs[side], path.join(work, side));
+      const {packageDir, distDir} = buildCorePackage(
+        refs[side],
+        path.join(work, side),
+      );
       const fixture = path.join(work, side, 'app');
-      const entries = writeFixture(fixture, corePkg, pages);
+      const entries = writeFixture(fixture, packageDir, pages);
       data[side] = {};
-      for (const [page] of pages)
+      for (const [page, components] of pages)
         data[side][page] = await bundleAll(
           fixture,
           entries[page],
           path.join(work, side, 'out', page),
           a.defer,
+          {distDir, components},
         );
     }
     const report = a.json
