@@ -635,6 +635,44 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     }
   });
 
+  it('a wrapped Button whose Tooltip repeats its cut label does not hold back the cut-label tooltip before the load (component:Button FR18, Tooltip AR1)', async () => {
+    const LABEL = 'Save and continue to the next step';
+    const proto = window.HTMLElement.prototype;
+    const scrollWidth = Object.getOwnPropertyDescriptor(proto, 'scrollWidth');
+    const offsetWidth = Object.getOwnPropertyDescriptor(proto, 'offsetWidth');
+    // Every element reports content wider than its box, as a cut label does.
+    Object.defineProperty(proto, 'scrollWidth', {
+      configurable: true,
+      get: () => 400,
+    });
+    Object.defineProperty(proto, 'offsetWidth', {
+      configurable: true,
+      get: () => 100,
+    });
+    try {
+      const {Button} = await import('../Button/Button');
+      const {isTooltipTriggerBeforeLoad} = await import('./useTooltip');
+      render(
+        <Tooltip content={LABEL}>
+          <Button label={LABEL} />
+        </Tooltip>,
+      );
+      isFocusVisible = true;
+      fireEvent.keyDown(document.body, {key: 'Tab'});
+      act(() => screen.getByRole('button', {name: LABEL}).focus());
+      // The wrapper repeats the name, so it does not describe the Button, and
+      // the cut-label tooltip shows the full label as it does after the load.
+      const button = screen.getByRole('button', {name: LABEL});
+      expect(isTooltipTriggerBeforeLoad(button)).toBe(false);
+    } finally {
+      if (scrollWidth) {
+        Object.defineProperty(proto, 'scrollWidth', scrollWidth);
+      }
+      if (offsetWidth) {
+        Object.defineProperty(proto, 'offsetWidth', offsetWidth);
+      }
+    }
+  });
   it('counts a trigger as described only while its tooltip is enabled, also when isEnabled changes after it attaches', async () => {
     const {isTooltipTriggerBeforeLoad} = await import('./useTooltip');
     const {rerender} = render(<Harness isEnabled={false} />);

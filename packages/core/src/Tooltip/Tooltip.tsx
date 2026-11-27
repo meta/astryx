@@ -26,6 +26,7 @@ import * as stylex from '@stylexjs/stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {visibleText} from '../utils/accessibleName';
 import {
+  markTriggerRepeatsName,
   useTooltip,
   type TooltipFocusTrigger,
   type TooltipTouchTrigger,
@@ -296,11 +297,15 @@ export function Tooltip({
 
       // Set aria-describedby, merging with existing
       const existingDescribedBy = el.getAttribute('aria-describedby');
-      if (!repeatsName(el, contentText)) {
+      const unmarkRepeat = repeatsName(el, contentText)
+        ? markTriggerRepeatsName(el)
+        : null;
+      if (unmarkRepeat == null) {
         setDescribedBy(el, mergeIds(existingDescribedBy, tooltip.describedBy));
       }
 
       return () => {
+        unmarkRepeat?.();
         tooltip.ref(null);
         if (existingDescribedBy) {
           el.setAttribute('aria-describedby', existingDescribedBy);
@@ -361,7 +366,10 @@ export function Tooltip({
 
     // Set aria-describedby, merging with existing
     const existingDescribedBy = firstChild.getAttribute('aria-describedby');
-    if (!repeatsName(firstChild, contentText)) {
+    const unmarkRepeat = repeatsName(firstChild, contentText)
+      ? markTriggerRepeatsName(firstChild)
+      : null;
+    if (unmarkRepeat == null) {
       setDescribedBy(
         firstChild,
         mergeIds(existingDescribedBy, tooltip.describedBy),
@@ -369,6 +377,7 @@ export function Tooltip({
     }
 
     return () => {
+      unmarkRepeat?.();
       tooltip.ref(null);
       if (existingDescribedBy) {
         firstChild.setAttribute('aria-describedby', existingDescribedBy);

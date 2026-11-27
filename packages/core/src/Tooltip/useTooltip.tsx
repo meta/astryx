@@ -35,7 +35,12 @@ import type {LayerTouchTrigger} from '../Layer/useTouchTrigger';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {warnOnce} from '../utils/devWarning';
 import {afterNextPaint, createModuleLoader} from '../utils/moduleLoader';
-import {sharedState, sharedStore, sharedWeakMap} from '../utils/sharedRealm';
+import {
+  sharedState,
+  sharedStore,
+  sharedWeakMap,
+  sharedWeakSet,
+} from '../utils/sharedRealm';
 import {isElement} from '../utils/nodeType';
 import {
   TooltipDescribesContext,
@@ -270,7 +275,30 @@ const describedTriggers = sharedWeakMap<Element, number>(
  * `aria-describedby` tells this, so this is false.
  */
 export function isTooltipTriggerBeforeLoad(element: Element): boolean {
-  return getSurface() == null && (describedTriggers.get(element) ?? 0) > 0;
+  return (
+    getSurface() == null &&
+    (describedTriggers.get(element) ?? 0) > 0 &&
+    !nameRepeatingTriggers.has(element)
+  );
+}
+
+// Triggers whose wrapping Tooltip repeats their accessible name, so it adds
+// no description to them (component:Tooltip AR1).
+const nameRepeatingTriggers = sharedWeakSet<Element>(
+  'tooltip/use-tooltip/name-repeating-triggers',
+  1,
+);
+
+/**
+ * Marks `element` as a trigger whose Tooltip adds no description because its
+ * content repeats the trigger's name, until the returned call. Tooltip calls
+ * it where it skips the description.
+ */
+export function markTriggerRepeatsName(element: Element): () => void {
+  nameRepeatingTriggers.add(element);
+  return () => {
+    nameRepeatingTriggers.delete(element);
+  };
 }
 
 /** Counts `element` as a described trigger until the returned call. */
