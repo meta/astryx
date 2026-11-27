@@ -94,7 +94,10 @@ implementation-specific regression coverage.
   known-failure record MUST name the expectation id, component binding and state,
   observed user impact, standards reference, evidence layer, exact failure, and
   reason the migration does not fix it. Wildcards, whole-pattern suppression, and
-  unowned text reasons are prohibited. Operational tracking MUST keep one durable,
+  unowned text reasons are prohibited. A record for a failure an engine change
+  causes MAY also name the harness and the first failing engine build; it then
+  applies only from that build on, and on any other harness or earlier build the
+  expectation runs as an ordinary check. Operational tracking MUST keep one durable,
   owned gap record for that exact expectation/binding/state tuple. That gap record
   MUST state whether current authority or an objective standard settles the required
   outcome, or whether API, behavior, ownership, compatibility, or design direction
