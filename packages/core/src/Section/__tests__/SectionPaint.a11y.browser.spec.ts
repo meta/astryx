@@ -179,11 +179,12 @@ test('stacked nested Sections escape the top edge only as the first child and th
   expect(first.bottom).toBeLessThan(last.height);
 });
 
-test('the painted container fills a fixed and a percentage minHeight', async ({
+test('the painted container fills a set height, and a fixed and a percentage minHeight', async ({
   page,
 }) => {
   await open(page, 'min-height');
   for (const [evidence, minimum] of [
+    ['height-fixed', 160],
     ['min-height-fixed', 240],
     ['min-height-percent', 200],
   ] as const) {
@@ -224,6 +225,19 @@ test('a child margin collapses out of a zero-padding Section without minHeight a
   const contained = await gaps('margin-contained');
   expect(contained.top).toBe(16);
   expect(contained.bottom).toBeGreaterThanOrEqual(16);
+  // With minHeight the painted container also holds a float taller than the
+  // minimum.
+  const float = await readSection(page, 'float-contained');
+  expect(float.painted.height).toBe(100);
+});
+
+test('content taller than a set height overflows the painted container, with or without minHeight', async ({
+  page,
+}) => {
+  await open(page, 'min-height');
+  const section = await readSection(page, 'height-overflow');
+  expect(section.wrapper.height).toBe(80);
+  expect(section.painted.height).toBe(80);
 });
 
 /** The painted padding per physical edge, and the padding a child that reads

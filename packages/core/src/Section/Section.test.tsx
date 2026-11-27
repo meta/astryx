@@ -147,6 +147,7 @@ describe('Section', () => {
     );
     const root = container.firstElementChild!;
     expect(root.className).toContain('custom-class');
+    expect(root.firstElementChild!.className).not.toContain('custom-class');
   });
 
   it('accepts style prop', () => {
@@ -155,6 +156,7 @@ describe('Section', () => {
     );
     const root = container.firstElementChild as HTMLElement;
     expect(root.style.opacity).toBe('0.5');
+    expect((root.firstElementChild as HTMLElement).style.opacity).toBe('');
   });
 
   it('has two-div structure (outer + inner)', () => {

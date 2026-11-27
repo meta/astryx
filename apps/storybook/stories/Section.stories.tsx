@@ -50,6 +50,14 @@ const styles = stylex.create({
   fixedColumn: {
     height: 400,
   },
+  floated: {
+    float: 'left',
+    width: 40,
+    height: 100,
+  },
+  tallBlock: {
+    height: 200,
+  },
   spacedText: {
     fontFamily: typographyVars['--font-family-body'],
     color: colorVars['--color-text-primary'],
@@ -467,6 +475,45 @@ export const MinHeight: Story = {
           <p {...stylex.props(styles.spacedText)}>
             A 16px block margin stays inside the paint.
           </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          padding=0, minHeight=40: a 100px float stays inside
+        </h4>
+        <Section
+          data-evidence="float-contained"
+          variant="muted"
+          width={220}
+          padding={0}
+          minHeight={40}>
+          <div {...stylex.props(styles.floated)} />
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>height=160</h4>
+        <Section
+          data-evidence="height-fixed"
+          variant="muted"
+          width={220}
+          height={160}
+          dividers={['bottom']}>
+          <p {...stylex.props(styles.text)}>
+            The muted paint and the bottom divider reach 160px.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          height=80 + minHeight=40, 200px content
+        </h4>
+        <Section
+          data-evidence="height-overflow"
+          variant="muted"
+          width={220}
+          height={80}
+          minHeight={40}>
+          <div {...stylex.props(styles.tallBlock)} />
         </Section>
       </div>
     </div>
