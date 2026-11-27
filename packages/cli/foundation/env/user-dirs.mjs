@@ -22,8 +22,8 @@ import * as path from 'node:path';
 
 /**
  * An environment folder setting, when it names an absolute path on the given
- * platform. Windows paths are read with Windows rules on any host, so the
- * folders of another platform can be worked out and tested anywhere.
+ * platform. A `win32` setting is read with Windows path rules on any host, so
+ * the Windows folders can be tested anywhere.
  * @param {string | undefined} value
  * @param {NodeJS.Platform} [platform]
  * @returns {string | null}
