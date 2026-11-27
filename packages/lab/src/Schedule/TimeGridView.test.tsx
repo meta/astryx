@@ -233,7 +233,9 @@ describe('time grid initial position', () => {
       // The viewport scrolls from its first frame, so the shared hook
       // measures it in that commit too, and the keyboard reaches it there.
       expect(grid).toHaveAttribute('tabindex', '0');
-      expect(reads.scrollHeight).toBeGreaterThan(0);
+      // The time grid's own read for its initial position (one of each),
+      // plus the shared hook's one measurement pass, and no second pass.
+      expect(reads).toEqual({scrollHeight: 3, clientHeight: 7});
       unmount();
     } finally {
       vi.unstubAllGlobals();

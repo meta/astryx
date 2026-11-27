@@ -667,7 +667,13 @@ export function useScrollableArea({
     const hasGainedOverflow =
       (overflow.inline && !previous.inline) ||
       (overflow.block && !previous.block);
-    const hasRemapped = mapping !== previousMappingRef.current;
+    // Only a change of physical axis moves the scrollbar gutter. A reversed
+    // direction alone changes no geometry, and the pass that read it already
+    // used it.
+    const previousMapping = previousMappingRef.current;
+    const hasRemapped =
+      mapping.inline !== previousMapping.inline ||
+      mapping.block !== previousMapping.block;
     previousOverflowRef.current = overflow;
     previousMappingRef.current = mapping;
     // A viewport that keeps its sticky containment scrolls before it is

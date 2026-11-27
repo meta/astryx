@@ -133,6 +133,7 @@ function makeMeasurable(viewport: HTMLElement) {
  */
 function mockOwnedComputedStyle(
   writingMode: () => string = () => 'horizontal-tb',
+  direction: () => string = () => 'ltr',
 ) {
   vi.mocked(window.getComputedStyle).mockImplementation(element => {
     const owned = (axis: 'X' | 'Y') =>
@@ -151,7 +152,7 @@ function mockOwnedComputedStyle(
           return writingMode();
         }
         if (property === 'direction') {
-          return 'ltr';
+          return direction();
         }
         return property === 'display' ? 'block' : '';
       },
@@ -523,6 +524,28 @@ describe('useScrollableArea', () => {
     flushFrameCallbacks();
     expect(firstCommitReads).toBeGreaterThan(0);
     expect(styleReads() - firstCommitReads).toBe(firstCommitReads);
+  });
+
+  it('measures once as it mounts in a right-to-left page when it keeps its sticky containment', () => {
+    mockOwnedComputedStyle(undefined, () => 'rtl');
+    spyOnOverflowingGeometry();
+
+    render(<Fixture stickyContainment="always" />);
+    const viewport = screen.getByTestId('viewport');
+    expect(viewport).toHaveAttribute('tabindex', '0');
+    // The reversed inline axis is read in that one pass, and changes no
+    // geometry, so nothing measures again.
+    const styleReads = vi
+      .mocked(window.getComputedStyle)
+      .mock.calls.filter(([element]) => element === viewport).length;
+    void act(() => window.dispatchEvent(new Event('resize')));
+    flushFrameCallbacks();
+    const laterReads =
+      vi
+        .mocked(window.getComputedStyle)
+        .mock.calls.filter(([element]) => element === viewport).length -
+      styleReads;
+    expect(styleReads).toBe(laterReads);
   });
 
   it('gains and loses its tab stop as its content changes after mount when it keeps its sticky containment', async () => {
