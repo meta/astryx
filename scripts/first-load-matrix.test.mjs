@@ -82,6 +82,7 @@ describe('bundleAll on a fixture package', () => {
   let work;
   let core;
   let results;
+  let builtEntry;
 
   beforeAll(async () => {
     work = fs.realpathSync(
@@ -134,7 +135,17 @@ describe('bundleAll on a fixture package', () => {
     results = await bundleAll(
       {distDir: path.join(core, 'dist'), components: ['Widget', 'Hidden']},
       path.join(work, 'out'),
-      ['Widget/shared.js', 'Widget/surface.js', 'Widget/missing.js'],
+      [
+        'Widget/shared.js',
+        'Widget/surface.js',
+        'Widget/missing.js',
+        'Hidden/index.js',
+      ],
+    );
+    // Read now: a later size:pages build writes the same file again.
+    builtEntry = fs.readFileSync(
+      path.join(core, '__astryx-reference-page-rolldown__.mjs'),
+      'utf8',
     );
   }, 120_000);
 
@@ -172,8 +183,13 @@ describe('bundleAll on a fixture package', () => {
 
   it('builds a folder missing from the exports map in every row', () => {
     for (const [bundler, result] of Object.entries(results)) {
-      expect(result.coreModules, bundler).toBeGreaterThanOrEqual(2);
+      expect(result.deferred['Hidden/index.js'], bundler).toMatch(/^IN \(/);
     }
+  });
+
+  it('builds every row from the entry that pageEntrySource gives', () => {
+    const dist = path.join(core, 'dist');
+    expect(builtEntry).toBe(pageEntrySource(dist, ['Widget', 'Hidden']));
   });
 
   it("resolves externals and the page entry by size:pages' own rules", () => {
