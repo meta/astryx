@@ -34,7 +34,14 @@ import {
   type MultiSelectorHandle,
   type MultiSelectorChange,
 } from './MultiSelector';
-import {Suspense, startTransition, use, useRef, useState} from 'react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  useRef,
+  useState,
+  type ComponentProps,
+} from 'react';
 import {createPortal} from 'react-dom';
 import {Dialog} from '../Dialog/Dialog';
 import {Icon} from '../Icon';
@@ -6142,17 +6149,20 @@ describe('MultiSelector delegated theming owners (FR4)', () => {
 });
 
 describe('MultiSelector one panel tree (FR5)', () => {
-  const options = [
+  const options: ComponentProps<typeof MultiSelector>['options'] = [
     {
-      type: 'section' as const,
+      type: 'section',
       title: 'Fruit',
-      options: ['Apple', 'Banana'],
+      options: [
+        {value: 'Apple', label: 'Apple'},
+        {value: 'Banana', label: 'Banana'},
+      ],
     },
-    {type: 'divider' as const},
+    {type: 'divider'},
     {
-      type: 'section' as const,
+      type: 'section',
       title: 'Vegetables',
-      options: ['Carrot'],
+      options: [{value: 'Carrot', label: 'Carrot'}],
     },
   ];
 
@@ -6211,9 +6221,9 @@ describe('MultiSelector one panel tree (FR5)', () => {
     const popover = await openPanel('popover');
     const sheet = await openPanel('bottom-sheet');
     // The selected option leads; every provided option is present once.
-    expect(popover.filter(row => row.startsWith('option:')).toSorted()).toEqual(
-      ['option:Apple', 'option:Banana', 'option:Carrot'],
-    );
+    expect(
+      [...popover.filter(row => row.startsWith('option:'))].sort(),
+    ).toEqual(['option:Apple', 'option:Banana', 'option:Carrot']);
     expect(popover.length).toBeGreaterThan(3);
     expect(sheet).toEqual(popover);
   });
