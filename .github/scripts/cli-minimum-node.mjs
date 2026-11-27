@@ -22,10 +22,10 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {mergeRecord} from '../../scripts/lib/duration-split.mjs';
+import {reportDailyIssue} from './lib/daily-run-issue.mjs';
 import {drifted} from './node-time-drift.mjs';
 
 export const ISSUE_TITLE = 'CLI fails on its minimum Node';
-const BOT = 'github-actions[bot]';
 
 function parseVersion(text) {
   const match = /^v?(\d+)(?:\.(\d+|x|\*))?(?:\.(\d+|x|\*))?$/.exec(text);
@@ -84,17 +84,6 @@ export function minimumVersion(range) {
     if (lowest == null || compare(bound, lowest) < 0) lowest = bound;
   }
   return lowest.join('.');
-}
-
-async function findOpenIssue(github, context) {
-  const {data} = await github.rest.search.issuesAndPullRequests({
-    q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${ISSUE_TITLE}"`,
-  });
-  return (
-    data.items.find(
-      item => item.title === ISSUE_TITLE && item.user?.login === BOT,
-    ) ?? null
-  );
 }
 
 /**
@@ -229,50 +218,22 @@ export function runVerdict({version, legs, pack, smoke}) {
 /**
  * A failed run opens the issue, or comments on the open one; a passing run
  * closes an open issue this job opened; a run with no verdict only notes it
- * on an open issue. Returns what it did.
+ * on an open issue (lib/daily-run-issue.mjs). Returns what it did.
  */
 export async function reportIssue({github, context, verdict, version, runUrl}) {
-  const issue = await findOpenIssue(github, context);
-  // No verdict neither closes the issue nor says the CLI failed.
-  if (verdict === 'none') {
-    if (!issue) return 'none';
-    await github.rest.issues.createComment({
-      ...context.repo,
-      issue_number: issue.number,
-      body: `No verdict on Node ${version}: part of the run stopped, was cancelled or was skipped before it judged anything ([run](${runUrl})). This issue stays as it is.`,
-    });
-    return 'no verdict noted';
-  }
-  if (verdict === 'pass') {
-    if (!issue) return 'none';
-    await github.rest.issues.createComment({
-      ...context.repo,
-      issue_number: issue.number,
-      body: `The CLI's tests and global-mode smoke pass on Node ${version} again: [run](${runUrl}).`,
-    });
-    await github.rest.issues.update({
-      ...context.repo,
-      issue_number: issue.number,
-      state: 'closed',
-      state_reason: 'completed',
-    });
-    return 'closed';
-  }
-  const note = `The CLI's tests or global-mode smoke failed on Node ${version}, the minimum its \`engines.node\` declares: [run](${runUrl}).`;
-  if (issue) {
-    await github.rest.issues.createComment({
-      ...context.repo,
-      issue_number: issue.number,
-      body: note,
-    });
-    return 'commented';
-  }
-  await github.rest.issues.create({
-    ...context.repo,
+  return reportDailyIssue({
+    github,
+    context,
     title: ISSUE_TITLE,
-    body: `${note}\n\nThis issue closes once a daily run passes on that version again.`,
+    verdict,
+    notes: {
+      none: `No verdict on Node ${version}: part of the run stopped, was cancelled or was skipped before it judged anything ([run](${runUrl})). This issue stays as it is.`,
+      pass: `The CLI's tests and global-mode smoke pass on Node ${version} again: [run](${runUrl}).`,
+      fail: `The CLI's tests or global-mode smoke failed on Node ${version}, the minimum its \`engines.node\` declares: [run](${runUrl}).`,
+      closesWhen:
+        'This issue closes once a daily run passes on that version again.',
+    },
   });
-  return 'created';
 }
 
 if (

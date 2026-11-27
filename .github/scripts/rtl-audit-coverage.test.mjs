@@ -1488,3 +1488,29 @@ describe('curated target order (targets.json)', () => {
     ).toBeNull();
   });
 });
+
+describe('verified N/A registry (verified-not-applicable.json)', () => {
+  it('declares each component once', () => {
+    const registry = JSON.parse(
+      fs.readFileSync(
+        new URL(
+          '../../apps/storybook/rtl-audit/verified-not-applicable.json',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    );
+    // The coverage rollup keys declarations by component name, so a second
+    // entry for one component silently replaces the first.
+    const seen = new Set();
+    const duplicates = [];
+    for (const {component} of registry) {
+      const key = component.toLowerCase();
+      if (seen.has(key)) {
+        duplicates.push(component);
+      }
+      seen.add(key);
+    }
+    expect(duplicates).toEqual([]);
+  });
+});
