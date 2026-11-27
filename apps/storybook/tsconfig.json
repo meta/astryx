@@ -11,10 +11,6 @@
         "../../packages/core/src/*/index.ts",
         "../../packages/core/src/*"
       ],
-      "@astryxdesign/theme/*": [
-        "../../packages/theme/src/*/index.ts",
-        "../../packages/theme/src/*"
-      ],
       "@astryxdesign/lab": ["../../packages/lab/src/index.ts"],
       "@astryxdesign/lab/*": [
         "../../packages/lab/src/*/index.ts",
