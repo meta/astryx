@@ -180,7 +180,8 @@ export interface SectionProps extends BaseProps<HTMLElement> {
    * Internal padding of the section using the spacing scale.
    * Accepts numeric spacing steps: 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10.
    * When omitted, each edge takes the theme's per-edge or per-axis section
-   * padding, then an ancestor Section's explicit `padding`, then the theme's
+   * padding, then the nearest ancestor Section's explicit `padding` (not
+   * across an overlay or a layout root such as AppShell), then the theme's
    * section padding, then step 4 (16px).
    * @default theme or ancestor Section padding, else 4
    */

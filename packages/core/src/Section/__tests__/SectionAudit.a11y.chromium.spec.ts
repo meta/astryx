@@ -355,9 +355,10 @@ cases.push({
       `forced-colors dividers ${block.borders.join(' ')}`,
     );
     check(
-      block.borderColors[0] !== 'rgba(0, 0, 0, 0)' &&
-        block.borderColors[0] !== block.background,
-      `forced-colors divider color ${block.borderColors[0]} on ${block.background}`,
+      [block.borderColors[0], block.borderColors[2]].every(
+        color => color !== 'rgba(0, 0, 0, 0)' && color !== block.background,
+      ),
+      `forced-colors divider colors ${block.borderColors[0]} ${block.borderColors[2]} on ${block.background}`,
     );
     await frame('rest', {block});
   },

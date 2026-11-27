@@ -211,7 +211,7 @@ describe('Section', () => {
     for (const element of [outer, inner]) {
       expect(element.tagName).toBe('DIV');
       expect(element).not.toHaveAttribute('role');
-      expect(element).not.toHaveAttribute('aria-label');
+      expect(element).not.toHaveAccessibleName();
       expect(element).not.toHaveAttribute('tabindex');
     }
   });

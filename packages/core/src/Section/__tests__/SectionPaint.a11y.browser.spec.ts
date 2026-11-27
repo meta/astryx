@@ -109,6 +109,8 @@ test('dividers draw a 1px border token on the selected logical edges only', asyn
     expect(end.edges[endSide]).toBe(line);
     expect(end.edges[startSide]).toMatch(/^0px /);
     expect(start.edges.top).toMatch(/^0px /);
+    expect(start.edges.bottom).toMatch(/^0px /);
+    expect(end.edges.top).toMatch(/^0px /);
     expect(end.edges.bottom).toMatch(/^0px /);
   }
 });
