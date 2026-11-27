@@ -30,7 +30,7 @@ import {afterAll, beforeAll, describe, it, expect, vi} from 'vitest';
 import ts from 'typescript';
 import * as build from '../../../packages/build/src/vite.ts';
 import config, {workspaceAliases} from './main.ts';
-import {existsSync, readFileSync} from 'node:fs';
+import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -198,6 +198,40 @@ describe('storybook tsconfig.json source paths', () => {
     string,
     string[]
   >;
+  /** The path from the app to `file`, with `/` on every platform. */
+  const fromApp = (file: string) =>
+    path.relative(appDir, file).split(path.sep).join('/');
+
+  /**
+   * Workspace dependencies that the app's own files import by subpath, as
+   * stories import `@astryxdesign/core/Text`. A stylesheet or other asset is
+   * not a module that tsc resolves, so it does not count.
+   */
+  const subpathDeps = [
+    ...new Set(
+      ['.storybook', 'stories']
+        .flatMap(dir =>
+          readdirSync(path.join(appDir, dir), {recursive: true})
+            .map(String)
+            .filter(file => /\.(ts|tsx|mts)$/.test(file))
+            .map(file => path.join(appDir, dir, file)),
+        )
+        .flatMap(file =>
+          [
+            ...readFileSync(file, 'utf8').matchAll(
+              /['"](@astryxdesign\/[^/'"]+)\/([^'"]+)['"]/g,
+            ),
+          ]
+            .filter(
+              ([, , subpath]) =>
+                !/\.(css|svg|png|jpe?g|gif|woff2?|json)$/.test(subpath),
+            )
+            .map(([, dep]) => dep),
+        ),
+    ),
+  ]
+    .filter(dep => workspaceDeps.includes(dep))
+    .sort();
 
   it('reads its paths', () => {
     expect(tsconfig.error).toBeUndefined();
@@ -210,11 +244,26 @@ describe('storybook tsconfig.json source paths', () => {
       const alias = workspaceAliases.find(entry => entry.pkg === dep);
       expect(alias, `${dep} needs a workspace alias`).toBeDefined();
       const entry = alias!.vite ?? `${alias!.src}/index.ts`;
-      expect(paths[dep]).toEqual([
-        path.relative(appDir, path.join(rootDir, entry)),
-      ]);
+      expect(paths[dep]).toEqual([fromApp(path.join(rootDir, entry))]);
     },
   );
+
+  it('finds the subpath imports', () => {
+    expect(subpathDeps).not.toHaveLength(0);
+  });
+
+  it.each(subpathDeps)("maps %s/* into that package's source", dep => {
+    const alias = workspaceAliases.find(entry => entry.pkg === dep);
+    expect(alias, `${dep} needs a workspace alias`).toBeDefined();
+    const source = fromApp(path.join(rootDir, alias!.src));
+    const targets = paths[`${dep}/*`] ?? [];
+    expect(targets, `${dep}/* needs a paths entry`).not.toHaveLength(0);
+    for (const target of targets) {
+      expect(target.startsWith(`${source}/`), `${dep}/* -> ${target}`).toBe(
+        true,
+      );
+    }
+  });
 
   it('maps only to files and folders that exist', () => {
     const missing = Object.entries(paths).flatMap(([key, targets]) =>
