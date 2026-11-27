@@ -11,8 +11,8 @@
 
 /**
  * The error of a failed request without its call log, which lists the
- * request's headers: the first line, the method and the address of the
- * request, and the status of the response. Each address keeps only its
+ * request's headers: the first line, the method and the address of the last
+ * request, and the status of the answer to it. Each address keeps only its
  * origin and path.
  */
 export function safeFetchError(error: unknown): Error;
