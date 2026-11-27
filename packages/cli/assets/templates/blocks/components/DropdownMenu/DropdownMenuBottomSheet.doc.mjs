@@ -12,10 +12,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 3 / 4,
   componentsUsed: ['DropdownMenu', 'Stack', 'Text', 'useMediaQuery'],
-  icons: {
-    ArchiveBoxIcon: 'archive',
-    DocumentDuplicateIcon: 'copy',
-    PencilIcon: 'edit',
-    ShareIcon: 'share',
-  },
 };

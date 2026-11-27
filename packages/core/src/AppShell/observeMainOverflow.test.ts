@@ -5,28 +5,60 @@
  * @input observeMainOverflow on a main element with mocked geometry, a
  *   recorded resize observer, and frames run by hand
  * @output Regression coverage for measuring a scroll container that holds its
- *   content as direct children: the children's sizes, the children coming and
- *   going, unknown geometry, and stopping
+ *   content as direct children: no read before the first resize notification,
+ *   one measurement for that notification's delivery,
+ *   font loads, the children's sizes, the children coming and going, unknown
+ *   geometry, and stopping
  * @position Unit contract of AppShell's internal overflow observer;
  *   AppShell.test.tsx covers main becoming a keyboard stop
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {observeMainOverflow} from './observeMainOverflow';
+import type * as SharedResizeObserver from '../utils/sharedResizeObserver';
 
 const observed = vi.hoisted(
-  () => new Map<Element, {callback: () => void; stopped: boolean}>(),
+  () =>
+    new Map<
+      Element,
+      {callback: (entry: ResizeObserverEntry | null) => void; stopped: boolean}
+    >(),
 );
+const resizeObserver = vi.hoisted(() => ({exists: true}));
 
-vi.mock('../utils/sharedResizeObserver', () => ({
-  observeResize: (element: Element, callback: () => void) => {
+vi.mock('../utils/sharedResizeObserver', async importOriginal => {
+  const register = (
+    element: Element,
+    callback: (entry: ResizeObserverEntry | null) => void,
+  ) => {
     const entry = {callback, stopped: false};
     observed.set(element, entry);
     return () => {
       entry.stopped = true;
     };
-  },
-}));
+  };
+  return {
+    ...(await importOriginal<typeof SharedResizeObserver>()),
+    // Like the real one, it calls back once as it registers.
+    observeResize: (
+      element: Element,
+      callback: (entry: ResizeObserverEntry) => void,
+    ) => {
+      const stop = register(element, callback as never);
+      callback({target: element} as ResizeObserverEntry);
+      return stop;
+    },
+    observeResizeAfterLayout: (
+      element: Element,
+      callback: (entry: ResizeObserverEntry | null) => void,
+    ) => (resizeObserver.exists ? register(element, callback) : null),
+  };
+});
+
+/** The notification a browser sends after it lays `element` out. */
+function notify(element: Element) {
+  observed.get(element)?.callback({target: element} as ResizeObserverEntry);
+}
 
 function setGeometry(element: HTMLElement, client: number, scroll: number) {
   for (const [key, value] of [
@@ -45,6 +77,26 @@ function setGeometry(element: HTMLElement, client: number, scroll: number) {
   }
 }
 
+/**
+ * A font set that counts reads of `ready` and lets a test end a load.
+ * jsdom has no `document.fonts`.
+ */
+function stubFonts() {
+  const events = new EventTarget();
+  const fonts = {
+    readyReads: 0,
+    addEventListener: events.addEventListener.bind(events),
+    removeEventListener: events.removeEventListener.bind(events),
+    dispatchEvent: events.dispatchEvent.bind(events),
+    get ready() {
+      fonts.readyReads += 1;
+      return Promise.resolve(fonts);
+    },
+  };
+  Object.defineProperty(document, 'fonts', {configurable: true, value: fonts});
+  return fonts;
+}
+
 describe('observeMainOverflow', () => {
   let frames: FrameRequestCallback[];
   let main: HTMLElement;
@@ -52,6 +104,7 @@ describe('observeMainOverflow', () => {
 
   beforeEach(() => {
     observed.clear();
+    resizeObserver.exists = true;
     frames = [];
     stop = null;
     vi.stubGlobal(
@@ -85,6 +138,7 @@ describe('observeMainOverflow', () => {
   afterEach(() => {
     stop?.();
     main.remove();
+    Reflect.deleteProperty(document, 'fonts');
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -94,9 +148,61 @@ describe('observeMainOverflow', () => {
     pending.forEach(callback => callback(performance.now()));
   }
 
-  it('reports the first measurement at once, then only changes', () => {
+  it('reads no layout as it starts, and measures at the first resize notification', () => {
+    const onChange = vi.fn();
+    // Starting runs where main attaches, in React's commit.
+    stop = observeMainOverflow(main, onChange);
+    expect(window.getComputedStyle).not.toHaveBeenCalled();
+    expect(frames).toEqual([]);
+    expect(onChange).not.toHaveBeenCalled();
+
+    // The browser lays main out, then notifies: the read happens there.
+    notify(main);
+    expect(window.getComputedStyle).toHaveBeenCalledWith(main);
+    expect(onChange.mock.calls).toEqual([[false]]);
+  });
+
+  it('lets no other signal read layout before the first resize notification', () => {
     const onChange = vi.fn();
     stop = observeMainOverflow(main, onChange);
+    window.dispatchEvent(new Event('resize'));
+    runFrames();
+    expect(window.getComputedStyle).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('does not read fonts.ready, which updates style and layout in Chromium', () => {
+    const fonts = stubFonts();
+    stop = observeMainOverflow(main, vi.fn());
+    notify(main);
+    expect(fonts.readyReads).toBe(0);
+  });
+
+  it('measures again when a font finishes loading after layout', () => {
+    const fonts = stubFonts();
+    const onChange = vi.fn();
+    stop = observeMainOverflow(main, onChange);
+    notify(main);
+    expect(onChange.mock.calls).toEqual([[false]]);
+
+    // The loaded font makes the content taller than main.
+    setGeometry(main, 300, 1200);
+    fonts.dispatchEvent(new Event('loadingdone'));
+    runFrames();
+    expect(onChange.mock.calls).toEqual([[false], [true]]);
+  });
+
+  it('measures at once where no ResizeObserver exists', () => {
+    resizeObserver.exists = false;
+    const onChange = vi.fn();
+    stop = observeMainOverflow(main, onChange);
+    expect(onChange.mock.calls).toEqual([[false]]);
+  });
+
+  it('reports the first measurement, then only changes', () => {
+    const onChange = vi.fn();
+    stop = observeMainOverflow(main, onChange);
+    notify(main);
     expect(onChange.mock.calls).toEqual([[false]]);
 
     window.dispatchEvent(new Event('resize'));
@@ -109,9 +215,23 @@ describe('observeMainOverflow', () => {
     expect(onChange.mock.calls).toEqual([[false], [true]]);
   });
 
-  it('watches each direct child, so content growing inside main is measured', () => {
+  it('measures once as it starts, though main and each child send a first notification', async () => {
+    stop = observeMainOverflow(main, vi.fn());
+    // One delivery reports the children, then main.
+    for (const element of [...main.children, main]) {
+      notify(element);
+    }
+    await Promise.resolve();
+    expect(window.getComputedStyle).toHaveBeenCalledWith(main);
+    expect(frames).toEqual([]);
+  });
+
+  it('watches each direct child, so content growing inside main is measured', async () => {
     const onChange = vi.fn();
     stop = observeMainOverflow(main, onChange);
+    notify(main);
+    // A later delivery.
+    await Promise.resolve();
     const second = main.querySelector('#second');
     expect(observed.has(main)).toBe(true);
     expect(observed.has(main.querySelector('#first') as Element)).toBe(true);
@@ -119,7 +239,7 @@ describe('observeMainOverflow', () => {
 
     // The child grows; main keeps its own size.
     setGeometry(main, 300, 1200);
-    observed.get(second as Element)?.callback();
+    notify(second as Element);
     runFrames();
 
     expect(onChange).toHaveBeenLastCalledWith(true);
@@ -142,6 +262,7 @@ describe('observeMainOverflow', () => {
     const onChange = vi.fn();
     setGeometry(main, 300, 1200);
     stop = observeMainOverflow(main, onChange);
+    notify(main);
     expect(onChange.mock.calls).toEqual([[true]]);
 
     // A hidden or zero-size main is unknown, not fitting.
@@ -154,6 +275,7 @@ describe('observeMainOverflow', () => {
   it('stops every observer and listener, and measures nothing after', () => {
     const onChange = vi.fn();
     stop = observeMainOverflow(main, onChange);
+    notify(main);
     const children = Array.from(main.children);
     window.dispatchEvent(new Event('resize'));
     stop();

@@ -55,8 +55,13 @@ const how = async (theme, ask) => {
 };
 
 /** @param {Array<{commands: string[]}>} rs */
+// (The readable-text line set's own check adds beside a fill is measured
+// on its own: these asks read the rest.)
 const writes = rs =>
-  rs.flatMap(r => r.commands).filter(c => /^(set|undo) /.test(c));
+  rs
+    .filter(r => !/^readable text on that fill/.test(r.text))
+    .flatMap(r => r.commands)
+    .filter(c => /^(set|undo) /.test(c));
 
 /** Run each line as offered. @param {string[]} lines */
 const follow = async lines => {
@@ -128,9 +133,13 @@ describe('readers', () => {
   it('a color bound how cannot measure is said, never a removal', async () => {
     const t = await fresh('r4');
     const rs = await how(t, 'make the cards red but never redder than #ff0000');
-    expect(writes(rs)).toEqual([
-      `set ${t} background-color '#dc2626' --on card`,
-    ]);
+    expect(writes(rs).slice(0, 3)).toEqual(
+      ['default', 'transparent', 'muted'].map(
+        v =>
+          `set ${t} background-color '#dc2626' --on card --when variant:${v}`,
+      ),
+    );
+    expect(writes(rs).join('\n')).not.toMatch(/none/);
     expect(rs[0].text).toContain('"never redder than #ff0000" is not held');
     await follow(writes(rs));
   }, 240_000);

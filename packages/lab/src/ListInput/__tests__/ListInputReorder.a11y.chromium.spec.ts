@@ -2,15 +2,17 @@
 
 /**
  * @file ListInputReorder.a11y.chromium.spec.ts
- * @input The Lab/ListInput › Tag Options story and the A11y/ListInput ›
- *   Fixed record fixture in a built Storybook. Real Chromium touch input
- *   (CDP) and keys on a phone viewport
+ * @input The Lab/ListInput › Tag Options and Reorder Handle Options stories
+ *   and the A11y/ListInput › Fixed record fixture in a built Storybook. Real
+ *   Chromium touch input (CDP) and keys on a phone viewport
  * @output Browser evidence that on a touch screen a keyboard move slides the
  *   records it swaps rather than jumping them in one frame. UIKit's motion is
  *   the same on every touch screen. With a mouse, the records take their
  *   places without travel. Reorder mode marks the record with the list's
  *   insertion line, and stays on through each move. The Add button, each
- *   handle and a fixed record's Remove keep to the record columns
+ *   handle and a fixed record's Remove keep to the record columns. A start
+ *   handle's finger target is at least an end handle's, with each reveal
+ *   behaviour and in a host that clips at the list's edges
  * @position Chromium proof for ListInput's reorder, which runs on core List's
  *   reorder session (List/ListReorderScope.tsx)
  */
@@ -192,6 +194,87 @@ test.describe('with a mouse', () => {
   });
 });
 
+test.describe('a mouse drop that moves the first record', () => {
+  test.use({
+    hasTouch: false,
+    isMobile: false,
+    viewport: {width: 1280, height: 800},
+    deviceScaleFactor: 1,
+  });
+
+  test("starts each moved record's glide where its fields were shown, though only the first record carries the column labels", async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`,
+    );
+    const handle = page.locator(HANDLE).first();
+    await expect(handle).toBeVisible();
+    // Each record's first field top, keyed by the record.
+    const fieldTops = async () =>
+      page.evaluate(
+        async () =>
+          new Promise<Record<string, number>>(resolve =>
+            requestAnimationFrame(() =>
+              resolve(
+                Object.fromEntries(
+                  Array.from(
+                    document.querySelectorAll('[data-list-input-row]'),
+                  ).map(record => [
+                    record.getAttribute('data-list-input-row') ?? '',
+                    record
+                      .querySelector('input, [role="combobox"], button')
+                      ?.getBoundingClientRect().top ?? NaN,
+                  ]),
+                ),
+              ),
+            ),
+          ),
+      );
+    const order = async () =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll('[data-list-input-row]')).map(
+          row => row.getAttribute('data-list-input-row') ?? '',
+        ),
+      );
+    const before = await order();
+    expect(before.length).toBeGreaterThanOrEqual(3);
+    const records = page.locator('[data-list-input-row]');
+    const third = await records.nth(2).boundingBox();
+    const box = await handle.boundingBox();
+    if (box == null || third == null) {
+      throw new Error('no handle or third record');
+    }
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y + 12, {steps: 3});
+    await page.mouse.move(x, third.y + third.height * 0.75, {steps: 12});
+    await sleep(300);
+    // The other records stay still during the drag: these are their shown
+    // places just before the drop.
+    const shown = await fieldTops();
+    // The glide starts at the drop and runs on the page's animation clock.
+    // The clock stands still from just before the release until the tops are
+    // read, so the read sees the glide's first frame however slowly the test
+    // runs.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Animation.enable');
+    await cdp.send('Animation.setPlaybackRate', {playbackRate: 0});
+    await page.mouse.up();
+    const landed = await fieldTops();
+    await cdp.send('Animation.setPlaybackRate', {playbackRate: 1});
+    const after = await order();
+    expect(after[0]).toBe(before[1]);
+    // The record that became first gained the column labels, and its fields
+    // still start the glide where they were shown.
+    for (const key of before.slice(1, 3)) {
+      expect(Math.abs(landed[key] - shown[key])).toBeLessThan(2);
+    }
+  });
+});
+
 test.describe('the record columns', () => {
   for (const viewport of [
     {width: 390, height: 844},
@@ -300,6 +383,98 @@ test.describe('a record that stays put', () => {
           detail,
         ).toBeLessThanOrEqual(0.5);
       }
+    });
+  }
+});
+
+const REVEAL_BEHAVIORS = ['always', 'adaptive'] as const;
+
+test.describe('a finger on the reorder handle', () => {
+  /** The span across the first handle's centre that lands on it, each axis. */
+  async function handleTarget(
+    page: Page,
+    placement: 'start' | 'end',
+    revealBehavior: (typeof REVEAL_BEHAVIORS)[number],
+    isClipped = false,
+  ) {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=lab-listinput--reorder-handle-options&viewMode=story&args=placement:${placement};revealBehavior:${revealBehavior}`,
+    );
+    const handle = page.locator(HANDLE).first();
+    await handle.waitFor();
+    if (isClipped) {
+      // ListInput's own field root becomes a host that clips at the list's
+      // edges and publishes no padding.
+      await page.evaluate(() => {
+        const fieldRoot = document
+          .querySelector('[data-list-input-row]')
+          ?.closest<HTMLElement>('.astryx-field');
+        if (fieldRoot == null) {
+          throw new Error('no ListInput field root');
+        }
+        fieldRoot.style.setProperty('padding', '0');
+        fieldRoot.style.setProperty('overflow', 'clip');
+      });
+    }
+    // The hit area's observers settle its reach after layout.
+    await sleep(300);
+    return handle.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      const cx = box.left + box.width / 2;
+      const cy = box.top + box.height / 2;
+      const lands = (x: number, y: number) =>
+        document
+          .elementFromPoint(x, y)
+          ?.closest('button[data-astryx-list-reorder]') === element;
+      const span = (at: (offset: number) => [number, number]) => {
+        let first = Number.NaN;
+        let last = Number.NaN;
+        for (let offset = -40; offset <= 40; offset += 0.5) {
+          if (lands(...at(offset))) {
+            if (Number.isNaN(first)) {
+              first = offset;
+            }
+            last = offset;
+          }
+        }
+        return last - first + 0.5;
+      };
+      return {
+        width: span(offset => [cx + offset, cy]),
+        height: span(offset => [cx, cy + offset]),
+      };
+    });
+  }
+
+  for (const revealBehavior of REVEAL_BEHAVIORS) {
+    test.describe(`revealing ${revealBehavior}`, () => {
+      test("a start handle's target is at least as large as an end handle's", async ({
+        page,
+      }) => {
+        test.skip(
+          !(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)),
+          'the finger target applies under (pointer: coarse)',
+        );
+        const end = await handleTarget(page, 'end', revealBehavior);
+        const start = await handleTarget(page, 'start', revealBehavior);
+        const detail = JSON.stringify({start, end});
+        expect(start.width, detail).toBeGreaterThanOrEqual(end.width - 0.5);
+        expect(start.height, detail).toBeGreaterThanOrEqual(end.height - 0.5);
+      });
+
+      test("in a host that clips at the list's edges, a start handle's target is still at least as large as an end handle's", async ({
+        page,
+      }) => {
+        test.skip(
+          !(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)),
+          'the finger target applies under (pointer: coarse)',
+        );
+        const end = await handleTarget(page, 'end', revealBehavior, true);
+        const start = await handleTarget(page, 'start', revealBehavior, true);
+        const detail = JSON.stringify({start, end});
+        expect(start.width, detail).toBeGreaterThanOrEqual(end.width - 0.5);
+        expect(start.height, detail).toBeGreaterThanOrEqual(end.height - 0.5);
+      });
     });
   }
 });

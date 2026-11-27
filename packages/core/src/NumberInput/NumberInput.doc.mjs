@@ -106,15 +106,15 @@ export const docs = {
     },
     {
       name: 'startIcon',
-      type: 'IconType',
+      type: 'ReactNode | IconType',
       description:
-        'Icon to display at the start of the input. See `astryx docs icons` for valid semantic names.',
+        'Icon to display at the start of the input; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'labelIcon',
-      type: 'IconType',
+      type: 'ReactNode | IconType',
       description:
-        'Icon to display before the label text. See `astryx docs icons` for valid semantic names.',
+        'Icon to display before the label text; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'status',
@@ -165,7 +165,7 @@ export const docs = {
       name: 'formatValue',
       type: '(value: number) => string',
       description:
-        'Formats the committed value while the input is not focused. The raw numeric value is shown on focus for editing and the formatted value is exposed through aria-valuetext.',
+        'Formats the committed value while the input is not focused. The plain number, with the locale\'s decimal separator, is shown on focus for editing and the formatted value is exposed through aria-valuetext.',
     },
     {
       name: 'isWheelEnabled',
@@ -196,7 +196,7 @@ export const docs = {
       name: 'hasClear',
       type: 'boolean',
       description:
-        'Shows a clear (\u00d7) button when the input has a value. When true, the onChange callback also accepts null to signal the user cleared the input.',
+        'Shows a clear (\u00d7) button while the input has a value and is editable (not disabled or read-only). When true, the onChange callback also accepts null to signal the user cleared the input.',
       default: 'false',
     },
     {
@@ -278,6 +278,7 @@ export const docs = {
         visualProps: ['size', 'status'],
         states: ['disabled', 'readonly'],
       },
+      {className: 'astryx-number-input-stepper', states: ['direction']},
     ],
     derived: [
       // `padding` in any spelling — the shorthand, `paddingBlock`, or a lone
@@ -443,13 +444,13 @@ export const docsZh = {
     },
     {
       name: 'startIcon',
-      type: 'IconType',
-      description: '显示在输入框起始位置的图标。',
+      type: 'ReactNode | IconType',
+      description: '显示在输入框起始位置的图标；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'labelIcon',
-      type: 'IconType',
-      description: '显示在标签文本前的图标。',
+      type: 'ReactNode | IconType',
+      description: '显示在标签文本前的图标；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'status',
@@ -498,7 +499,7 @@ export const docsZh = {
       name: 'formatValue',
       type: '(value: number) => string',
       description:
-        '输入框未聚焦时格式化已提交的值。聚焦编辑时显示原始数值，并通过 aria-valuetext 提供格式化值。',
+        '输入框未聚焦时格式化已提交的值。聚焦编辑时显示使用当前语言小数分隔符的普通数值，并通过 aria-valuetext 提供格式化值。',
     },
     {
       name: 'isWheelEnabled',
@@ -528,7 +529,7 @@ export const docsZh = {
       name: 'hasClear',
       type: 'boolean',
       description:
-        '输入有值时显示清除 (×) 按鈕。启用后， onChange 回调还接受 null 表示用户已清空输入。',
+        '输入有值且可编辑（未禁用、非只读）时显示清除 (×) 按钮。启用后， onChange 回调还接受 null 表示用户已清空输入。',
       default: 'false',
     },
     {
@@ -602,6 +603,7 @@ export const docsZh = {
         visualProps: ['size', 'status'],
         states: ['disabled', 'readonly'],
       },
+      {className: 'astryx-number-input-stepper', states: ['direction']},
     ],
     derived: [
       // 任何写法的 `padding`（简写、`paddingBlock`，或单独的
@@ -782,8 +784,8 @@ export const docsDense = {
       'Explains why input is disabled. With isDisabled, shows tooltip on hover/focus + keeps input focusable via aria-disabled (field becomes read-only). Use instead of wrapping a disabled NumberInput in Tooltip.',
     placeholder: 'Placeholder text.',
     labelTooltip: 'Tooltip text in info icon at label end.',
-    startIcon: 'Icon at input start.',
-    labelIcon: 'Icon before label text.',
+    startIcon: 'Icon at input start; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    labelIcon: 'Icon before label text; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     status:
       "Validation status w/ optional message; nothing shows while typing; at Enter/blur, unreadable text, a fraction when isIntegerOnly, or any number while min > max stays w/ the field's own error message in place of status, unless status is an error w/ message (still announced + aria-invalid); warning/success never hide it; out-of-range numbers clamp.",
     onEntryErrorChange:
@@ -796,7 +798,7 @@ export const docsDense = {
     max: 'Maximum value allowed.',
     step: 'Step increment.',
     formatValue:
-      'Formats committed value at rest; raw number is shown while editing.',
+      'Formats committed value at rest; plain number (locale decimal separator) is shown while editing.',
     isWheelEnabled:
       'Allow focused wheel gestures to step value. Defaults to true.',
     hasNumberSteppers:
@@ -804,7 +806,7 @@ export const docsDense = {
     units: 'Units suffix (e.g. "%" or "GB").',
     isIntegerOnly: 'Only allow integer values.',
     hasClear:
-      'Shows clear button when input has value. onChange also accepts null on clear.',
+      'Shows clear button when input has a value and is editable. onChange also accepts null on clear.',
     htmlName:
       'HTML name for form submissions; while blur keeps rejected text, posts the committed number until an edit or a new value.',
     autoComplete: 'HTML autocomplete attribute.',

@@ -10,7 +10,11 @@
  */
 
 import {Help} from 'commander';
-import {requestedBase, runBase} from '../../../foundation/bases/resolve.mjs';
+import {CORE_BASE_NAME, coreBase} from '../../../foundation/bases/core.mjs';
+import {
+  loadedRunBase,
+  requestedBase,
+} from '../../../foundation/bases/state.mjs';
 import {
   formatCliCommand,
   quoteCommandArgument,
@@ -37,6 +41,34 @@ import {commandPath} from './command-path.mjs';
 
 /** @typedef {import('commander').Command} Command */
 /** @typedef {import('../../../foundation/bases/resolve.mjs').ActiveBase} ActiveBase */
+/** @typedef {import('../../../foundation/bases/resolve.mjs').BaseResolution} BaseResolution */
+
+/**
+ * The run's base resolution when it is known without loading the resolver:
+ * the resolver's answer once it has loaded; else Core, unless `--base` names
+ * another package. Only a project's integrations, whose load loads the
+ * resolver, and `--base` name a base other than Core.
+ * @returns {BaseResolution | null} null when only the resolver can answer
+ */
+function knownRunBase() {
+  const loaded = loadedRunBase();
+  if (loaded != null) return loaded;
+  const named = requestedBase();
+  return named == null || named === CORE_BASE_NAME
+    ? {ok: true, base: coreBase()}
+    : null;
+}
+
+/**
+ * The run's base resolution. The resolver loads only when it must answer.
+ * @returns {Promise<BaseResolution>}
+ */
+export async function runResolution() {
+  const known = knownRunBase();
+  if (known != null) return known;
+  const {runBase} = await import('../../../foundation/bases/resolve.mjs');
+  return runBase();
+}
 
 /**
  * The base help and the manifest read: the run's base, or null when it does
@@ -46,8 +78,8 @@ import {commandPath} from './command-path.mjs';
  */
 export function helpBase() {
   try {
-    const resolution = runBase();
-    return resolution.ok ? resolution.base : null;
+    const resolution = knownRunBase();
+    return resolution?.ok ? resolution.base : null;
   } catch {
     return null;
   }
@@ -409,13 +441,13 @@ export async function checkRun(program, actionCommand) {
   checkedAdapters = {};
   if (actionCommand === program) {
     // A bare run declares no step, but it answers from the run's base.
-    const resolution = runBase();
+    const resolution = await runResolution();
     if (!resolution.ok) refuseResolution(resolution);
     return;
   }
   const doc = commandDocsOf(actionCommand)?.doc;
   if (refusesHereFirst(doc, process.cwd())) return;
-  const resolution = runBase();
+  const resolution = await runResolution();
   if (!resolution.ok) refuseResolution(resolution, actionCommand);
   const base = /** @type {ActiveBase} */ (resolution.base);
   if (base.core) return;

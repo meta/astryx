@@ -17,6 +17,7 @@ import {
   recordReads,
   recordStates,
   reusedWhileUnchanged,
+  reusedWhileUnchangedSync,
   unchangedSince,
 } from './read-record.mjs';
 
@@ -27,8 +28,10 @@ import {
  */
 let TEMP_ROOT = '';
 beforeAll(() => {
-  TEMP_ROOT = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'astryx-read-record-test-'),
+  // The real path: on macOS the temporary folder is behind a symlink
+  // (/var to /private/var), and a realpath answer names the real path.
+  TEMP_ROOT = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-read-record-test-')),
   );
 });
 afterAll(() => {
@@ -53,6 +56,48 @@ describe('recordReads', () => {
     });
     expect([...seen.keys()]).toEqual(expect.arrayContaining([file, dir]));
     expect(unchangedSince(seen)).toBe(true);
+  });
+
+  it('records a promise read in nested operations and sees an edit', async () => {
+    const {file} = scratch();
+    /** @type {Map<string, string>} */
+    const outer = new Map();
+    /** @type {Map<string, string>} */
+    const inner = new Map();
+    const url = pathToFileURL(file);
+    expect(
+      await recordReads(outer, () =>
+        recordReads(inner, () => fs.promises.readFile(url, 'utf8')),
+      ),
+    ).toBe('one');
+    expect([...inner.keys()]).toEqual([file]);
+    expect([...outer.keys()]).toEqual([file]);
+    expect(unchangedSince(outer)).toBe(true);
+    fs.writeFileSync(file, 'two, longer');
+    expect(unchangedSince(outer)).toBe(false);
+    /** @type {Map<string, string>} */
+    const outside = new Map();
+    recordReads(outside, () => {});
+    expect(await fs.promises.readFile(url, 'utf8')).toBe('two, longer');
+    expect(outside.size).toBe(0);
+  });
+
+  it('treats a URL that names no local file as outside a run: a promise read rejects, an existence check says no', async () => {
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    for (const url of [
+      new URL('http://example.test/doc.txt'),
+      new URL('file:///tmp/a%2Fb.txt'),
+    ]) {
+      /** @type {Promise<unknown> | undefined} */
+      let pending;
+      expect(() => {
+        pending = recordReads(seen, () => fs.promises.readFile(url));
+      }).not.toThrow();
+      await expect(pending).rejects.toThrow();
+      expect(recordReads(seen, () => fs.existsSync(url))).toBe(false);
+    }
+    expect(seen.size).toBe(0);
   });
 
   it('sees an edit made after the operation', () => {
@@ -663,5 +708,49 @@ describe('reusedWhileUnchanged', () => {
     });
     await expect(get()).rejects.toThrow('first try');
     expect(await get()).toBe('second try');
+  });
+});
+
+describe('reusedWhileUnchangedSync', () => {
+  it('keeps a loaded value while what it read is unchanged, and loads again after an edit', () => {
+    const {file} = scratch();
+    let loads = 0;
+    const get = reusedWhileUnchangedSync(() => {
+      loads += 1;
+      return fs.readFileSync(file, 'utf8');
+    });
+    expect(get()).toBe('one');
+    expect(get()).toBe('one');
+    expect(loads).toBe(1);
+    fs.writeFileSync(file, 'two, longer');
+    expect(get()).toBe('two, longer');
+    expect(loads).toBe(2);
+    expect(get({fresh: true})).toBe('two, longer');
+    expect(loads).toBe(3);
+  });
+
+  it('counts what a kept value read as read by the operation that asks for it', () => {
+    const {file} = scratch();
+    const get = reusedWhileUnchangedSync(() => fs.readFileSync(file, 'utf8'), {
+      exact: true,
+    });
+    get();
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    recordReads(seen, () => get());
+    expect([...seen.keys()]).toEqual([file]);
+    fs.writeFileSync(file, 'two, longer');
+    expect(unchangedSince(seen)).toBe(false);
+  });
+
+  it('tries a load that threw again', () => {
+    let calls = 0;
+    const get = reusedWhileUnchangedSync(() => {
+      calls += 1;
+      if (calls === 1) throw new Error('first try');
+      return 'second try';
+    });
+    expect(() => get()).toThrow('first try');
+    expect(get()).toBe('second try');
   });
 });

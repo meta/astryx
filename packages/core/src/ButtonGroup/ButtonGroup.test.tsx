@@ -232,7 +232,7 @@ describe('ButtonGroup', () => {
     const items = (group: HTMLElement): Element[] =>
       Array.from(
         group.querySelectorAll(
-          ':scope > *:not([popover]):not(template):not(dialog)',
+          ':scope > *:not([popover]):not(template):not(dialog):not([data-astryx-tooltip-description])',
         ),
       );
 
@@ -257,14 +257,13 @@ describe('ButtonGroup', () => {
     };
 
     /**
-     * Compiles Button.tsx with the real StyleX babel plugin and returns its
+     * Compiles a source file with the real StyleX babel plugin and returns its
      * atomic rules. This is the CSS the browser actually gets — the whole point
      * is that the trailing-radius predicate comes from the SOURCE, never from a
      * string retyped in this file.
      */
-    function compileButtonRules(): CompiledRule[] {
+    function compileRules(buttonSrc: string): CompiledRule[] {
       const repoRoot = path.resolve(__dirname, '../../../..');
-      const buttonSrc = path.resolve(__dirname, '../Button/Button.tsx');
       // Babel looks bare preset names up from the cwd, the repo root, which
       // does not declare them. Resolve them from this package, which does.
       const require = createRequire(__filename);
@@ -318,7 +317,17 @@ describe('ButtonGroup', () => {
       });
     }
 
-    const COMPILED = compileButtonRules();
+    // Button's own group styles, and the trailing edge it takes from the
+    // tooltip-description owner module.
+    const COMPILED = [
+      ...compileRules(path.resolve(__dirname, '../Button/Button.tsx')),
+      ...compileRules(
+        path.resolve(
+          __dirname,
+          '../privateAttributes/tooltipDescription.stylex.ts',
+        ),
+      ),
+    ];
 
     /** A rounded (non-zero) corner is exactly this value in the compiled CSS. */
     const ROUNDED = 'var(--radius-element)';
@@ -403,6 +412,10 @@ describe('ButtonGroup', () => {
           expect(selector).toContain('[popover]');
           expect(selector).toContain('template');
           expect(selector).toContain('dialog');
+          // A tooltip's hidden description follows its trigger and is skipped
+          // by its own marker; a caller's element with a similar id counts.
+          expect(selector).toContain('[data-astryx-tooltip-description]');
+          expect(selector).not.toContain('id$=');
         }
       },
     );
@@ -450,9 +463,12 @@ describe('ButtonGroup', () => {
         const save = screen.getByRole('button', {name: 'Save'});
         const more = screen.getByRole('button', {name: 'More'});
 
-        // Precondition: the tooltip layer really is an inline DOM sibling that
-        // follows the button — this is exactly what broke `:last-child`.
+        // Precondition: the tooltip's hidden description and layer placeholder
+        // really are inline DOM siblings that follow the button — this is
+        // exactly what broke `:last-child`.
         expect(more).not.toBe(group.lastElementChild);
+        expect(more.nextElementSibling).toHaveAttribute('hidden');
+        expect(more).toHaveAccessibleDescription('More options');
         expect(items(group).at(-1)).toBe(more);
 
         expect(carriesTrailingRule(more, orientation)).toBe(true);

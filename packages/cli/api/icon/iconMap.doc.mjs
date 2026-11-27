@@ -10,10 +10,9 @@ export const doc = {
   namespace: 'cli/api',
   stability: 'experimental',
   displayName: 'iconMap()',
-  summary:
-    'Register which icon of the set being authored draws an icon definition.',
+  summary: 'Map an icon meaning to an icon of the set being authored.',
   description:
-    "Run inside an icon-set package. Sets `map[definition] = icon` in the set's data file, or removes the entry. The definition must be Astryx's or one the set declares, named by its name or kebab id. The icon must be in the set, named by its id, its export name in any case, or another name its library exports it as (`trash-2` or `Trash2`), never by one word of its id; the entry records its id. The file is written in one fixed shape, `map` keys sorted. `integration check` suggests these commands for definitions the set has a fitting icon for. Experimental: it may change or be removed in a patch release.",
+    "Run inside an icon-set package. Sets `map[definition] = icon` in the set's data file, or removes the entry. The meaning must be Astryx's or one the set declares, named by its name or kebab id. The icon must be in the set, named by its id, its export name in any case, or another name its library exports it as (`trash-2` or `Trash2`), never by one word of its id; the entry records its id. The file is written in one fixed shape, `map` keys sorted. `integration check` suggests these commands for meanings the set has a fitting icon for. Experimental: it may change or be removed in a patch release.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'iconMap(definition: string | undefined, icon?: string, options?: IconMapOptions): Promise<IconMapResponse | IconMapManyResponse>',
@@ -22,7 +21,7 @@ export const doc = {
     {
       name: 'definition',
       type: 'string | undefined',
-      description: 'The icon definition. Omit with `options.pairs`.',
+      description: 'The icon meaning. Omit with `options.pairs`.',
       required: false,
     },
     {
@@ -44,32 +43,32 @@ export const doc = {
     {
       name: 'options.remove',
       type: 'boolean',
-      description: "Remove the definition's entry.",
+      description: "Remove the meaning's entry.",
       default: 'false',
     },
     {
       name: 'options.pairs',
       type: 'string | string[]',
       description:
-        'Many entries at once: `<definition>=<icon>` pairs separated by commas or spaces, with no definition or icon argument; each icon is named as the icon argument is. Every pair is checked before any is written.',
+        'Many entries at once: `<definition>=<icon>` pairs separated by commas or spaces, with no meaning or icon argument; each icon is named as the icon argument is. Every pair is checked before any is written.',
     },
   ],
   returns: [
     {
       type: 'icon.mapMany',
       description:
-        "With pairs: the set, the data file, each entry with the icon it replaced, and whether the file changed. `templateMeanings.unmapped` lists the icon definitions the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
+        "With pairs: the set, the data file, each entry with the icon it replaced, and whether the file changed; `replacedKeys` lists each `map` key that named a replaced meaning and was written under its successor's name. `templateMeanings.unmapped` lists the icon meanings the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
     },
     {
       type: 'icon.map',
       description:
-        "The set, the data file, the definition, the icon now mapped, the icon it replaced, and whether the file changed. `templateMeanings.unmapped` lists the icon definitions the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
+        "The set, the data file, the meaning, the icon now mapped, the icon it replaced, and whether the file changed; `replacedKeys` lists each `map` key that named a replaced meaning and was written under its successor's name. `templateMeanings.unmapped` lists the icon meanings the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
     },
   ],
   throws: [
     {
       code: 'ERR_NOT_FOUND',
-      when: 'the definition is unknown, the set has no such icon, or `set` names no set in the package or one that is withdrawn (with why)',
+      when: 'the meaning is unknown, the set has no such icon, or `set` names no set in the package or one that is withdrawn (with why)',
     },
     {
       code: 'ERR_INVALID_ARGUMENT',
@@ -77,7 +76,7 @@ export const doc = {
     },
     {
       code: 'ERR_INVALID_OPTION',
-      when: '`pairs` is given with a definition, an icon, or `remove`, or `remove` with an icon',
+      when: '`pairs` is given with a meaning, an icon, or `remove`, or `remove` with an icon',
     },
     {
       code: 'ERR_PROJECT_REQUIRED',
@@ -85,7 +84,7 @@ export const doc = {
     },
     {
       code: 'ERR_MISSING_ARGUMENT',
-      when: 'the definition is missing, or the icon without `remove`',
+      when: 'the meaning is missing, or the icon without `remove`',
     },
     {
       code: 'ERR_PATH_TRAVERSAL',
@@ -97,7 +96,7 @@ export const doc = {
     },
   ],
   examples: [
-    {label: 'Map a definition', code: "await iconMap('delete', 'trash');"},
+    {label: 'Map a meaning', code: "await iconMap('delete', 'trash');"},
     {
       label: 'Remove an entry',
       code: "await iconMap('delete', undefined, {remove: true});",

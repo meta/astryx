@@ -12,6 +12,7 @@ owners: [cixzhang, imdreamrunner]
 applies_to:
   [
     packages/core/src/theme/defineTheme.ts,
+    packages/core/src/theme/breakpoints.ts,
     packages/core/src/theme/themeAdaptations.ts,
     packages/core/src/theme/syntax/defineSyntaxTheme.ts,
     packages/core/src/theme/expandColorScale.ts,
@@ -97,6 +98,9 @@ source configuration independently.
 
 - a name and optional normalized base theme;
 - higher-order color, typography, radius, and motion configuration;
+- an optional `palette` made by `themePalette()` from
+  `@astryxdesign/core/palette` (`spec:AST-008` FR19): resolved color tokens and
+  the part styles that lift secondary text, never seeds or palette metadata;
 - explicit semantic token overrides;
 - optional theme-family-local token declarations;
 - component target/style-key overrides, each optionally with `@light` and
@@ -115,12 +119,14 @@ Normalization follows one precedence order:
 
 1. the resolved base theme;
 2. values generated from color, typography, radius, and motion configuration;
-3. explicit token overrides;
-4. generated component typography followed by explicit component overrides;
-5. inherited and explicit media-surface overrides;
-6. inherited and explicit theme-local declarations, validated against the
+3. the palette's color tokens;
+4. explicit token overrides;
+5. generated component typography, then the palette's part styles, then
+   explicit component overrides;
+6. inherited and explicit media-surface overrides;
+7. inherited and explicit theme-local declarations, validated against the
    resolved token, component, and media surfaces; and
-7. inherited and explicit icon/indicator registry entries, `componentIcons`
+8. inherited and explicit icon/indicator registry entries, `componentIcons`
    entries, and the `iconVariants` list.
 
 Explicit values win within their surface. Component maps merge by component,
@@ -299,8 +305,12 @@ public surface belongs to
   touches no DOM and has no import-time side effects (`spec:AST-108` FR6).
 - `packages/core/src/theme/defineTheme.ts` owns the public input, normalized IR,
   orchestration, and extension behavior.
-- `themeAdaptations.ts` owns the fixed breakpoint/condition vocabulary,
-  validation, inherited rule ordering, axis completion, and concrete rule writes.
+- `breakpoints.ts` owns the fixed breakpoint vocabulary: the width breakpoint
+  names and defaults, the media features and the StyleX key that spell a size
+  edge, and the compact definition (`spec:AST-012` FR9). It imports nothing.
+- `themeAdaptations.ts` owns the fixed condition vocabulary, validation,
+  inherited rule ordering, axis completion, and concrete rule writes. It
+  re-exports the breakpoint vocabulary.
 - `syntax/defineSyntaxTheme.ts` constructs syntax themes before `defineTheme`
   adopts their tokens.
 - `expandColorScale.ts`, `expandTypeScale.ts`, `expandRadiusScale.ts`, and

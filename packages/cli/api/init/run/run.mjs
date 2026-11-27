@@ -16,6 +16,7 @@
  * programmatic caller stays quiet.
  */
 
+import {renderProjectAgentDocsBlock} from '../../docs/_adapter.mjs';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import {CLI_ROOT} from '../../../foundation/fs/paths.mjs';
@@ -23,11 +24,41 @@ import {PathSafetyError, assertWithin} from '../../../foundation/fs/path-safety.
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {
+  AGENT_DOC_PATHS,
+  isAstryxInitialized,
+} from '../../../foundation/agent-docs/agent-doc-state.mjs';
+import {
+  STARTER_THEME,
+  addComputerSkillFolders,
+  assertPlaceWithin,
+  integrationSkillProblems,
+  integrationSkillTexts,
+  leftoverIntegrationSkills,
+  removeIntegrationSkillFiles,
+  computerSkillText,
+  inspectAgentDocs,
+  projectInstallStep,
+  projectSkillText,
+  readProjectPlaces,
+  removeSkillPlace,
+  resolveAgentPaths,
+  saveProjectPlaces,
+  skillReceiptRow,
+  writeSkillPlace,
+} from '../_adapter.mjs';
+import {savedName} from '../../../foundation/agent-docs/skill-places.mjs';
+import {computerAgentCommand} from '../../../foundation/agent-docs/computer-agent-text.mjs';
+import {user} from '../user/user.mjs';
+import {resolveAgentDocsRoot} from '../../../foundation/agent-docs/agent-docs-target.mjs';
+import {
   AgentDocsHomeError,
   assertAgentDocsTarget,
+  removeProjectAgentDocs,
   installAgentDocs,
-  renderAgentDocsBlock,
   agentDocsTargetDir,
+  readAgentDocTexts,
+  agentDocChange,
+  managedBlockVersion,
 } from '../../../foundation/agent-docs/agent-docs.mjs';
 import {themeTemplate} from '../../theme/template/template.mjs';
 import {listTemplates} from '../../template/template.mjs';
@@ -35,7 +66,17 @@ import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {logger} from '../../logger.mjs';
 
-const VALID_FEATURES = ['agents', 'theme', 'template'];
+/**
+ * The places one run writes. `previous`: with `--to`, the project places the
+ * config saved before it, which the run moves off; null without `--to`, and
+ * with `--once`. `once`: a copy that is saved nowhere, so no later run
+ * refreshes it. `homeRefusal`: why the project root takes no project place
+ * (checkPlaces).
+ * @typedef {{places: import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace[], projectRoot: string | null, previous: import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace[] | null, once?: boolean, named?: boolean, homeRefusal?: string}} InitPlaces
+ *   `named`: the places came from `--to`, not from what the project saves
+ */
+
+export const VALID_FEATURES = ['agents', 'theme', 'template'];
 const VALID_AGENTS = ['claude', 'cursor', 'codex', 'hermes', 'muse', 'all'];
 
 /**
@@ -46,9 +87,11 @@ const VALID_AGENTS = ['claude', 'cursor', 'codex', 'hermes', 'muse', 'all'];
  * app imports that module once and passes its default to <Theme>.
  *
  * @param {string} invocation install-aware CLI invocation stem (e.g. `pnpm exec astryx`, `yarn astryx`, or `npx @astryxdesign/cli` for one-off runs)
+ * @param {string} [cwd] the project folder; its integrations' install guidance, else its package manager, names the theme install step
  * @returns {string[]} ordered list of human-facing lines
  */
-export function getNextSteps(invocation) {
+export function getNextSteps(invocation, cwd = process.cwd()) {
+  const install = projectInstallStep([STARTER_THEME.package], cwd);
   return [
     '',
     '  Next steps:',
@@ -58,14 +101,34 @@ export function getNextSteps(invocation) {
     "       and import '@astryxdesign/core/astryx.css'",
     "    3. Import components: import { Button } from '@astryxdesign/core/Button'",
     '    4. Add and wire a theme:',
-    '       npm install @astryxdesign/theme-neutral',
-    `       ${invocation} theme add neutral`,
+    `       ${install.line}`,
+    ...(install.note ? [`       (${install.note})`] : []),
+    `       ${invocation} theme add ${STARTER_THEME.slug}`,
     "       import { Theme } from '@astryxdesign/core/theme'",
     "       import { themes, defaultThemeSlug } from './astryx-themes'",
     '       <Theme theme={themes[defaultThemeSlug]}>...</Theme>',
     `       Extend an imported theme to customize it. Run \`${invocation} theme eject <slug>\` only to fork source.`,
     `       To make or change a theme: the experimental theme editor, \`${invocation} experimental theme editor new <name> --like neutral\` (then editor set / editor how).`,
     `    5. ${invocation} --help for all commands`,
+    '',
+  ];
+}
+
+/**
+ * The lines printed instead of "Next steps" when the project's agent files
+ * already held the Astryx block: the app is set up, so it needs the commands
+ * to build with, not the install steps.
+ *
+ * @param {string} invocation install-aware CLI invocation stem
+ * @returns {string[]} ordered list of human-facing lines
+ */
+export function getWorkflowSteps(invocation) {
+  return [
+    '',
+    '  Astryx is already set up here. To build UI:',
+    `    ${invocation} build "<what you're building>"   the template to start a page from`,
+    `    ${invocation} search <query>                    find components, docs, and templates`,
+    `  Setting up a new app instead: ${invocation} docs getting-started`,
     '',
   ];
 }
@@ -89,6 +152,20 @@ function sameFolder(a, b) {
 }
 
 /**
+ * One receipt line for one agent-doc file.
+ * @param {import('../init.type.mjs').InitDocsChange} change
+ * @returns {string}
+ */
+function changeLine({path: shown, change, from, to}) {
+  const version = to ? ` (Astryx ${to})` : '';
+  if (change === 'removed') return `${shown}: Astryx block removed, another agent file holds it`;
+  if (change === 'created') return `${shown} created${version}`;
+  if (change === 'unchanged') return `${shown} already current${version}, nothing changed`;
+  if (from && to && from !== to) return `${shown} updated (Astryx ${from} -> ${to})`;
+  return `${shown} updated${version}`;
+}
+
+/**
  * Install the agent-docs block; records the outcome (or soft error) on `data`.
  * Mirrors the CLI's historical soft-error policy: a PathSafetyError surfaces its
  * precise message and flags a non-zero exit; any other failure prints the
@@ -100,16 +177,7 @@ function sameFolder(a, b) {
  * @param {import('../init.type.mjs').InitRunData} data
  */
 async function applyAgents(cwd, options, invocation, data) {
-  // Validate --agent up front (a hard error, not a swallowed install failure).
-  // ERR_UNKNOWN_AGENT was defined but never wired — a typo like `--agent claud`
-  // otherwise silently fell back to writing AGENTS.md. Mirrors --features.
-  if (options.agent && !VALID_AGENTS.includes(options.agent)) {
-    throw new AstryxError(
-      `Unknown agent "${options.agent}". Valid agents: ${VALID_AGENTS.join(', ')}`,
-      undefined,
-      ERROR_CODES.ERR_UNKNOWN_AGENT,
-    );
-  }
+  // An unknown `--agent` was refused before any write (checkBlockOptions).
   try {
     const paths = options.agentDocsPath
       ? Array.isArray(options.agentDocsPath)
@@ -123,7 +191,19 @@ async function applyAgents(cwd, options, invocation, data) {
     const targetDir = paths ? cwd : root;
     // With explicit paths, installAgentDocs checks each file's own folder.
     if (!paths) assertAgentDocsTarget(targetDir);
-    const renderedBlock = await renderAgentDocsBlock(root);
+    const renderedBlock = await renderProjectAgentDocsBlock(root);
+    const before = readAgentDocTexts(targetDir, paths ?? AGENT_DOC_PATHS);
+    // Read-only, before the write: whether the project's agent docs were
+    // already current, so default mode can tell a set-up app from a new one.
+    // The files this run writes: the named ones, the preset's, or (with
+    // neither) every agent doc found at the root.
+    const preset = !paths && options.agent ? resolveAgentPaths(root, options.agent) : null;
+    data.agentDocsStatus = inspectAgentDocs(
+      paths ? targetDir : root,
+      undefined,
+      renderedBlock,
+      {paths: paths ?? (preset ? [...preset.inject, ...preset.create] : undefined)},
+    ).status;
     /** @type {string[]} */
     const skipped = [];
     const files = installAgentDocs(targetDir, {
@@ -144,7 +224,16 @@ async function applyAgents(cwd, options, invocation, data) {
             path.relative(cwd, path.join(targetDir, rel)).split(path.sep).join('/'),
           );
     data.docsWritten = written;
-    logger.log(`[ok] AI agent docs installed -> ${written.join(', ')}`);
+    const after = readAgentDocTexts(targetDir, files);
+    // The receipt names each file from the project root; the line names it
+    // from where init ran, as docsWritten does.
+    data.docsChanges = files.map(rel => ({
+      path: path.relative(root, path.join(targetDir, rel)).split(path.sep).join('/'),
+      ...agentDocChange(before.get(rel) ?? null, after.get(rel) ?? null),
+    }));
+    data.docsChanges.forEach((change, i) => {
+      logger.log(`[ok] AI agent docs: ${changeLine({...change, path: written[i]})}`);
+    });
     // A file 0.7.1 did not write (GEMINI.md, or a project-root file when init
     // runs below the root) that resolves outside the project is left as it
     // is, reported in docsError with one note; the exit code stays 0. A file
@@ -160,6 +249,9 @@ async function applyAgents(cwd, options, invocation, data) {
     // PathSafetyError carries a precise, user-actionable message — surface it
     // (and flag exit 1) instead of the generic "could not install" warning so
     // misconfigured --agent-docs-path values aren't silently swallowed.
+    // Nothing was written, so the status read before the write says nothing
+    // about this run.
+    data.agentDocsStatus = null;
     if (err instanceof PathSafetyError) {
       logger.error(`Error: ${err.message}`);
       data.docsError = {kind: 'path-safety', message: err.message};
@@ -177,6 +269,271 @@ async function applyAgents(cwd, options, invocation, data) {
       `Could not install agent docs. Try again with \`${invocation} init --features agents\`.`,
     );
     data.docsError = {kind: 'install-failed'};
+  }
+}
+
+
+/**
+ * The places this run writes: the ones `--to` named, else the project's
+ * saved places, else the AGENTS.md block.
+ * @param {string} cwd
+ * @param {InitPlaces | undefined} given
+ * @returns {Promise<InitPlaces>}
+ */
+async function placesFor(cwd, given) {
+  if (given) return given;
+  const projectRoot = resolveAgentDocsRoot(cwd);
+  const places = projectRoot
+    ? await readProjectPlaces(projectRoot)
+    : [
+        {
+          scope: /** @type {const} */ ('project'),
+          kind: /** @type {const} */ ('agents-md'),
+        },
+      ];
+  return {places, projectRoot, previous: null, named: false};
+}
+
+/**
+ * Write the Astryx skill to each place, and remove it from each project
+ * place `--to` moved off. The AGENTS.md block goes through applyAgents, as
+ * before; the skill places share the block's text.
+ *
+ * @param {string} cwd
+ * @param {import('../init.type.mjs').InitOptions} options
+ * @param {string} invocation
+ * @param {import('../init.type.mjs').InitRunData} data
+ * @param {InitPlaces} given
+ */
+async function applyPlaces(cwd, options, invocation, data, given) {
+  const {places, projectRoot, previous} = given;
+  data.to = places.map(savedName);
+  data.once = Boolean(given.once);
+  const shown = (/** @type {string} */ file) =>
+    projectRoot && !path.relative(projectRoot, file).startsWith('..')
+      ? path.relative(projectRoot, file).split(path.sep).join('/')
+      : file;
+  /** @param {import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace} place */
+  const record = (
+    place,
+    /** @type {Array<{file: string, action: import('../../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileAction, reason?: 'edited' | 'not-astryx' | 'pair-kept' | 'computer-skill', skill?: string}>} */ rows,
+  ) => {
+    for (const row of rows) {
+      const receipt = skillReceiptRow(place, row, shown, 'delete it to get the current text', cwd);
+      if (!receipt) continue;
+      data.skills.push(receipt.entry);
+      logger.log(receipt.line);
+    }
+  };
+  const projectPlaces = places.filter(place => place.scope === 'project');
+  const skillPlaces = projectPlaces.filter(place => place.kind !== 'agents-md');
+  // `--to` naming only computer places leaves the project's places as they are.
+  const kept = new Set(projectPlaces.map(savedName));
+  const leaving =
+    previous && projectRoot && projectPlaces.length > 0
+      ? previous.filter(place => !kept.has(savedName(place)))
+      : [];
+  // A project root in the home folder, or a settings folder in it, takes no
+  // project place (checkPlaces); the computer places still are written.
+  if (given.homeRefusal) {
+    logger.warn(`Note: ${given.homeRefusal}`);
+    data.docsError = {kind: 'install-failed', message: given.homeRefusal};
+    return applyComputerPlaces(places, given, data, record);
+  }
+  // What can stop the run comes before any place changes: the skill renders,
+  // and the config can take the record, which is saved once a new place
+  // holds the guidance.
+  const text =
+    skillPlaces.length > 0 && projectRoot ? await projectSkillText(projectRoot) : null;
+  // Each skill an integration declares goes into every skill place beside
+  // the project skill.
+  const declared =
+    text != null && projectRoot ? await integrationSkillTexts(projectRoot) : null;
+  if (previous && projectRoot && projectPlaces.length > 0) {
+    saveProjectPlaces(projectRoot, projectPlaces, {check: true});
+  }
+  // The new places are written before the old ones are cleared, so the
+  // project never goes without the guidance.
+  if (projectPlaces.some(place => place.kind === 'agents-md')) {
+    await applyAgents(cwd, options, invocation, data);
+    // Without a skill place, a left-out skill still loses its line in the
+    // block; say so once.
+    if (declared == null && projectRoot) {
+      for (const problem of await integrationSkillProblems(projectRoot)) {
+        logger.warn(`Note: ${problem.package}: ${problem.message}`);
+      }
+    }
+  }
+  // Whether the guidance landed in a skill place: a place whose files are
+  // all a person's own is kept as it is, so it holds no Astryx text.
+  let landed = false;
+  if (text != null && projectRoot) {
+    /** @type {string[]} */
+    const actions = [];
+    for (const place of skillPlaces) {
+      const rows = writeSkillPlace(place, projectRoot, text);
+      if (rows.some(row => row.action !== 'kept')) landed = true;
+      actions.push(...rows.map(row => row.action));
+      record(place, rows);
+      if (declared) {
+        for (const each of declared.skills) {
+          record(place, writeSkillPlace(place, projectRoot, each.text, each.name));
+        }
+        if (declared.complete) {
+          record(
+            place,
+            removeIntegrationSkillFiles(leftoverIntegrationSkills(place, projectRoot, declared.keep)),
+          );
+        }
+      }
+    }
+    for (const problem of declared?.problems ?? []) {
+      logger.warn(`Note: ${problem.package}: ${problem.message}`);
+    }
+    // Without the block, the project skill files say whether the project
+    // was set up before this run, as the agent docs do for the block.
+    if (!projectPlaces.some(place => place.kind === 'agents-md')) {
+      data.agentDocsStatus = actions.every(action => action === 'unchanged')
+        ? 'current'
+        : actions.every(action => action === 'created')
+          ? 'missing'
+          : 'stale';
+    }
+  }
+  // The move happens only when a new place holds the guidance: when every
+  // new place is a person's own file, or the block write failed, the saved
+  // places and the old files stay as they were, so the project never ends
+  // with no Astryx text and later runs keep refreshing the old place.
+  const blockStays = projectPlaces.some(place => place.kind === 'agents-md');
+  // The block holds the guidance once AGENTS.md (or the files named) took
+  // it; a linked-out file it only left as it is does not undo that.
+  const blockLanded = blockStays && data.docsWritten.length > 0 && data.docsError?.kind !== 'path-safety';
+  const moved = blockLanded || landed;
+  if (previous && projectRoot && projectPlaces.length > 0 && !moved) {
+    logger.warn(
+      `Note: Kept the Astryx guidance where it was (${previous.map(savedName).join(', ')}), and saved no new place: ${blockStays && !blockLanded ? `the Astryx block could not be written${data.docsError ? ` (${data.docsError.message})` : ''}` : 'every new place holds a file Astryx did not write or one you edited'}, so no new place holds it yet.`,
+    );
+  }
+  if (previous && projectRoot && projectPlaces.length > 0 && moved) {
+    saveProjectPlaces(projectRoot, projectPlaces);
+  }
+  for (const place of moved ? leaving : []) {
+    if (place.kind !== 'agents-md') {
+      record(place, removeSkillPlace(place, /** @type {string} */ (projectRoot)));
+      continue;
+    }
+    const root = /** @type {string} */ (projectRoot);
+    const before = readAgentDocTexts(root, AGENT_DOC_PATHS);
+    for (const rel of removeProjectAgentDocs(cwd)) {
+      const fromRoot = path.relative(root, path.join(cwd, rel)).split(path.sep).join('/');
+      const text = before.get(fromRoot) ?? null;
+      data.docsChanges.push({
+        path: fromRoot,
+        change: 'removed',
+        from: text == null ? null : managedBlockVersion(text),
+        to: null,
+      });
+    }
+  }
+
+  await applyComputerPlaces(places, given, data, record);
+
+}
+
+/**
+ * Check the places before anything is written, by any feature: a project
+ * root in the home folder, or in a settings folder in it (such as
+ * `~/.claude` holding a package.json), takes no project place, as it takes
+ * no agent docs (architecture:cli-surface INV31), and each project skill
+ * file to write or clear stays inside the project (a skills folder linked
+ * out of it, such as `.claude` linked to `~/.claude`, is refused). Returns
+ * the places with the refusal, if any, recorded.
+ * @param {InitPlaces} given
+ * @returns {InitPlaces}
+ */
+function checkPlaces(given) {
+  const {places, projectRoot, previous} = given;
+  const projectPlaces = places.filter(place => place.scope === 'project');
+  // The block alone keeps its own checks (applyAgents), so plain init and
+  // `--agent-docs-path` behave as before.
+  if (!projectRoot || projectPlaces.every(place => place.kind === 'agents-md')) {
+    return given;
+  }
+  try {
+    assertAgentDocsTarget(projectRoot);
+  } catch (err) {
+    if (!(err instanceof AgentDocsHomeError)) throw err;
+    return {...given, homeRefusal: err.message};
+  }
+  const kept = new Set(projectPlaces.map(savedName));
+  const leaving = previous ? previous.filter(place => !kept.has(savedName(place))) : [];
+  for (const place of [...projectPlaces, ...leaving]) {
+    if (place.kind !== 'agents-md') assertPlaceWithin(place, projectRoot);
+  }
+  return given;
+}
+
+/**
+ * Check the options that choose the AGENTS.md block's files once the places
+ * are known, the ones `--to` named or the project's saved places: an unknown
+ * `--agent` is refused, and `--agent` or `--agent-docs-path` with no
+ * `agents-md` place among them is refused rather than ignored.
+ * @param {import('../init.type.mjs').InitOptions} options
+ * @param {InitPlaces} given
+ */
+function checkBlockOptions(options, given) {
+  if (options.agent && !VALID_AGENTS.includes(options.agent)) {
+    throw new AstryxError(
+      `Unknown agent "${options.agent}". Valid agents: ${VALID_AGENTS.join(', ')}`,
+      undefined,
+      ERROR_CODES.ERR_UNKNOWN_AGENT,
+    );
+  }
+  const blockOptions = [
+    options.agent ? '--agent' : null,
+    options.agentDocsPath ? '--agent-docs-path' : null,
+  ].filter(Boolean);
+  if (blockOptions.length === 0 || given.places.some(place => place.kind === 'agents-md')) {
+    return;
+  }
+  throw new AstryxError(
+    given.once
+      ? `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block, which \`--once\` never writes: leave them out.`
+      : given.named === false
+        ? `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block, and this project saves its Astryx guidance in ${given.places.map(savedName).join(', ')} (astryx.config skills.to): add \`--to agents-md\` to write the block, or leave them out.`
+        : `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block: add agents-md to \`--to\`, or leave them out.`,
+    undefined,
+    ERROR_CODES.ERR_INVALID_ARGUMENT,
+  );
+}
+
+/**
+ * Write the computer places `--to` named: folders outside any project,
+ * saved in the settings file unless `--once`, and the computer-level skill.
+ * @param {import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace[]} places
+ * @param {InitPlaces} given
+ * @param {import('../init.type.mjs').InitRunData} data
+ * @param {(place: import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace, rows: ReturnType<typeof writeSkillPlace>) => void} record
+ */
+async function applyComputerPlaces(places, given, data, record) {
+  const computerFolders = places.filter(
+    place => place.scope === 'computer' && place.kind === 'folder',
+  );
+  if (computerFolders.length > 0) {
+    const text = computerSkillText(computerAgentCommand());
+    /** @type {typeof computerFolders} */
+    const landed = [];
+    for (const place of computerFolders) {
+      const rows = writeSkillPlace(place, null, text);
+      record(place, rows);
+      // A folder is saved only once it holds the guidance: nothing would
+      // ever fill a folder where every file was kept.
+      if (rows.some(row => row.action !== 'kept')) landed.push(place);
+    }
+    if (!given.once && landed.length > 0) addComputerSkillFolders(landed.map(savedName));
+  }
+  if (places.some(place => place.kind === 'user')) {
+    data.user = (await user()).data;
   }
 }
 
@@ -290,6 +647,39 @@ function applyTemplate(cwd, {templateName}, invocation, data) {
 }
 
 /**
+ * The features `--features` or `--all` names, or null when neither is given.
+ * Throws AstryxError for an unknown feature (ERR_UNKNOWN_FEATURE) and for
+ * `--all` with `--features` (ERR_INVALID_ARGUMENT). The one parser every
+ * init path uses.
+ * @param {{features?: string, all?: boolean}} options
+ * @returns {string[] | null}
+ */
+export function parseFeatures(options) {
+  if (options.all && options.features) {
+    throw new AstryxError(
+      '`--all` and `--features` cannot be used together: `--all` installs every feature, so a feature list is redundant.',
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  if (!options.features && !options.all) return null;
+  const features = options.all
+    ? VALID_FEATURES
+    : String(options.features)
+        .split(',')
+        .map(f => f.trim().toLowerCase());
+  const invalid = features.filter(f => !VALID_FEATURES.includes(f));
+  if (invalid.length > 0) {
+    throw new AstryxError(
+      `Unknown features: ${invalid.join(', ')}. Valid features: ${VALID_FEATURES.join(', ')}`,
+      undefined,
+      ERROR_CODES.ERR_UNKNOWN_FEATURE,
+    );
+  }
+  return features;
+}
+
+/**
  * Run the install path of the non-interactive init flow (the default no-flags
  * install plus `--features` / `--all`). Performs the side effects (agent-docs
  * install, template scaffold) and returns an `init.run` receipt. Progress is
@@ -297,34 +687,31 @@ function applyTemplate(cwd, {templateName}, invocation, data) {
  * names throw AstryxError with a stable code.
  *
  * @param {import('../init.type.mjs').InitOptions} [options]
- * @param {{cwd?: string}} [ctx]
+ * @param {{cwd?: string, places?: InitPlaces}} [ctx] `places`: the parsed
+ *   `--to` places; without them, the project's saved places
  * @returns {Promise<import('../init.type.mjs').InitRunResponse>}
  */
-export async function run(options = {}, {cwd = process.cwd()} = {}) {
+export async function run(options = {}, {cwd = process.cwd(), places} = {}) {
   const invocation = getCliInvocation();
 
+  // Whether the project was set up before this run: a `--to` run that moves
+  // a set-up project keeps it set up, so it prints no getting-started steps.
+  const setUpBefore = places != null && isAstryxInitialized(agentDocsTargetDir(cwd));
   // Non-interactive feature install: --features or --all.
-  if (options.features || options.all) {
-    const features = options.all
-      ? VALID_FEATURES
-      : String(options.features)
-          .split(',')
-          .map(f => f.trim().toLowerCase());
-
-    const invalid = features.filter(f => !VALID_FEATURES.includes(f));
-    if (invalid.length > 0) {
-      throw new AstryxError(
-        `Unknown features: ${invalid.join(', ')}. Valid features: ${VALID_FEATURES.join(', ')}`,
-        undefined,
-        ERROR_CODES.ERR_UNKNOWN_FEATURE,
-      );
-    }
+  const features = parseFeatures(options);
+  // The places are checked before any feature writes anything.
+  const checked =
+    !features || features.includes('agents') ? checkPlaces(await placesFor(cwd, places)) : null;
+  if (checked) checkBlockOptions(options, checked);
+  if (features) {
 
     /** @type {import('../init.type.mjs').InitRunData} */
     const data = {
       mode: 'features',
       features,
       docsWritten: [],
+      docsChanges: [],
+      agentDocsStatus: null,
       docsError: null,
       theme: false,
       themeTemplate: null,
@@ -332,9 +719,15 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
       template: null,
       templatePath: null,
       nextSteps: false,
+      to: [],
+      once: false,
+      skills: [],
+      user: null,
     };
     for (const feature of features) {
-      if (feature === 'agents') await applyAgents(cwd, options, invocation, data);
+      if (feature === 'agents') {
+        await applyPlaces(cwd, options, invocation, data, /** @type {InitPlaces} */ (checked));
+      }
       if (feature === 'theme') applyTheme(cwd, invocation, data);
       if (feature === 'template') {
         applyTemplate(cwd, {templateName: options.templateName}, invocation, data);
@@ -348,11 +741,14 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
   // steps would set up a project the folder does not have, so they are left
   // out (spec AST-081 FR3).
   const outside = isOutsideProject(cwd);
+
   /** @type {import('../init.type.mjs').InitRunData} */
   const data = {
     mode: 'default',
     features: ['agents'],
     docsWritten: [],
+    docsChanges: [],
+    agentDocsStatus: null,
     docsError: null,
     theme: false,
     themeTemplate: null,
@@ -360,8 +756,18 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
     template: null,
     templatePath: null,
     nextSteps: !outside,
+    to: [],
+    once: false,
+    skills: [],
+    user: null,
   };
-  await applyAgents(cwd, options, invocation, data);
+  await applyPlaces(cwd, options, invocation, data, /** @type {InitPlaces} */ (checked));
+  // A project whose agent docs were all current before this run is set up:
+  // the install steps would only repeat setup.
+  // A `--to` run that only moves or adds places leaves a set-up project set
+  // up.
+  const setUp = !outside && (data.agentDocsStatus === 'current' || setUpBefore);
+  data.nextSteps = !outside && !setUp;
   logger.log('');
   logger.log(
     `  Tip: \`${invocation} init --all\` also points you to the theme and page-building workflows.`,
@@ -370,6 +776,7 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
     logger.log('');
     return {type: 'init.run', data};
   }
-  for (const line of getNextSteps(invocation)) logger.log(line);
+  const steps = setUp ? getWorkflowSteps(invocation) : getNextSteps(invocation, cwd);
+  for (const line of steps) logger.log(line);
   return {type: 'init.run', data};
 }

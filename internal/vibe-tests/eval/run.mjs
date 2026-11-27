@@ -24,6 +24,7 @@ import {
   assertOutsideRepo,
   createWorkspace,
   defaultRunDir,
+  givenAndRealPaths,
   prepareArmBase,
 } from './lib/workspace.mjs';
 
@@ -226,7 +227,7 @@ export function modelMismatch(agent, model) {
 
 /** Audits the transcript, grades the workspace, and sets the record's verdict. */
 async function judge({record, lines, workspace, runRoot, arm, task, browser, model, sensitiveRoots, agent}) {
-  record.audit = auditTranscript(lines, workspace, sensitiveRoots);
+  record.audit = auditTranscript(lines, workspace, sensitiveRoots, undefined, {ownTemp: path.join(runRoot, 'tmp')});
   const outDir = path.join(runRoot, 'grade');
   fs.rmSync(outDir, {recursive: true, force: true});
   record.grade = await gradeWorkspace({workspace, arm, task, browser, outDir});
@@ -244,9 +245,7 @@ async function judge({record, lines, workspace, runRoot, arm, task, browser, mod
  * (for example the macOS temp folder) gives one folder two names.
  */
 export function sensitiveRootsFor(runDir) {
-  const roots = [runDir, path.dirname(defaultRunDir()), REPO_ROOT, os.homedir()];
-  const realOrSame = root => (fs.existsSync(root) ? fs.realpathSync(root) : root);
-  return [...new Set(roots.flatMap(root => [path.resolve(root), realOrSame(root)]))];
+  return givenAndRealPaths([runDir, path.dirname(defaultRunDir()), REPO_ROOT, os.homedir()]);
 }
 
 /** The agent facts a regrade needs, from a saved record. A run that timed out has no result. */
@@ -377,6 +376,7 @@ async function evaluate(options) {
         maxBudgetUsd: options.runBudgetUsd,
         timeoutMs: options.timeoutMs,
         transcriptPath: path.join(runRoot, 'transcript.jsonl'),
+        tempDir: path.join(runRoot, 'tmp'),
       });
       record.agent = {
         exitCode: agent.exitCode,
@@ -398,6 +398,7 @@ async function evaluate(options) {
       fs.rmSync(path.join(workspace, 'node_modules'), {recursive: true, force: true});
       log(`${name}: ${record.passed ? 'pass' : `fail (${record.failure})`} $${record.agent.costUsd?.toFixed(2) ?? '?'} · spent $${budget.spentUsd.toFixed(2)}`);
     } finally {
+      fs.rmSync(path.join(runRoot, 'tmp'), {recursive: true, force: true});
       // A run that never started an agent spent nothing.
       budget.settle(agent ? agent.result?.costUsd : 0);
     }

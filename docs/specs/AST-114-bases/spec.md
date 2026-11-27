@@ -47,8 +47,8 @@ declares the adapters it serves (FR3, FR4), what a command declares it needs
   declarations are independent; FR6 fixes the order of their checks.
 - What each adapter step computes for a given platform: the base that ships
   the adapter owns that.
-- React Native platform commands: `spec:AST-112` FR13. This record adds no
-  command extension point; `spec:AST-112` OQ5 decides the `commands`
+- React Native platform commands: `spec:AST-142` FR1. This record adds no
+  command extension point; `spec:AST-142` OQ1 decides the `commands`
   contribution.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
@@ -74,12 +74,8 @@ exports, named `<capability>.<step>`, from the closed list in FR4.
   (`spec:AST-039`), and a base that ships none of a kind gives an empty
   answer, not a refusal.
 
-  FR1 gap: in a run whose active base is not Core, `build` still names Core's layout and foundation components, the `hook --list` and
-  `swizzle --list` envelopes name `@astryxdesign/core` as their package, and
-  `doctor` reports Core and Core's themes as missing, and
-  `upgrade --from` reads Core's installed version as its target, so it
-  fails with `ERR_VERSION_DETECT` when the project installs no Core. The integration
-  manifest has no hooks root, so a base cannot ship hook descriptors.
+  FR1 gap: the integration manifest has no hooks root, so a base cannot ship
+  hook descriptors.
 
   FR1 gap: `component --list` at `--detail compact` and `--detail full`
   lists no integration's components, in a run on any base: on a base other
@@ -196,8 +192,9 @@ theme` differs from `integration add component`. A step a command can do
   | `theme template`                                | `themes.template`                  |
   | `theme build`                                   | `themes.compile`                   |
   | `theme add`, `use`, `remove`                    | `themes.appModule`                 |
-  | `experimental render`                           | `render.page`                      |
-  | `experimental render --reverse`                 | `render.reverse`                   |
+  | `experimental export`                           | `render.page`                      |
+  | `experimental export --reverse`                 | `render.reverse`                   |
+  | `experimental import`                           | `render.reverse`                   |
   | `experimental theme compile`                    | `themes.compile`                   |
   | `experimental theme add`, `use`, `remove`       | `themes.appModule`                 |
   | `experimental theme template`                   | `themes.template`                  |
@@ -306,14 +303,14 @@ help`, `astryx --help`, and a group's help MUST list only the commands,
 command reads (FR1), and every command shares its failure, `ERR_BASE_NOT_FOUND`
 before any work when the package is not a base the run can read (FR2).
 
-| Commands                                                                                                                                                                                                                                                                                                                               | Effect of `--base`                                                                                                         | Verification                       |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| `theme build`, `add`, `use`, `remove`, `targets`, `template`; `experimental theme` `compile`, `add`, `use`, `remove`, `targets`, `template`, `editor new`, `set`, `undo`, `show`, `how`, `preview add`, `preview app`; `experimental render`; `integration add theme`; `template --skeleton`, `--cdn`; `experimental render --reverse` | Runs with the named base's adapter, or refuses with `ERR_BASE_CAPABILITY` when the base does not serve the step (FR5, FR8) | Refusal tests under a fixture base |
-| `component`, `hook`, `swizzle`, `docs`, `search`, `template`, `build`, `upgrade`, `gap-report`                                                                                                                                                                                                                                         | Reads the named base's content and none of Core's (FR1)                                                                    | FR1 tests under a fixture base     |
-| `discover`, `doctor`, `doctor integration *`, `integration add`, `check`, `verify`, `pack`                                                                                                                                                                                                                                             | Judges and lists integrations against the named base, and lists the ones that do not build on it (FR9)                     | Integration loading tests          |
-| `theme list`, `eject`, `palette generate`; `experimental theme list`, `eject`, `preview list`, `preview remove`; `experimental icon` and its subcommands                                                                                                                                                                               | Lists and changes what the named base's integrations ship                                                                  | Fixture-base runs                  |
-| `init`, `postinstall`                                                                                                                                                                                                                                                                                                                  | Writes setup steps from the named base's `setup.guide`, or leaves them out (FR5)                                           | Fixture-base runs                  |
-| `help`, `--help`, `manifest`, `blog`                                                                                                                                                                                                                                                                                                   | Lists what the named base serves (FR7); every answer's `meta.answeredBy` names the base (FR2)                              | Help and manifest tests            |
+| Commands                                                                                                                                                                                                                                                                                                                                                      | Effect of `--base`                                                                                                         | Verification                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `theme build`, `add`, `use`, `remove`, `targets`, `template`; `experimental theme` `compile`, `add`, `use`, `remove`, `targets`, `template`, `editor new`, `set`, `undo`, `show`, `how`, `preview add`, `preview app`; `experimental export`; `integration add theme`; `template --skeleton`, `--cdn`; `experimental export --reverse`, `experimental import` | Runs with the named base's adapter, or refuses with `ERR_BASE_CAPABILITY` when the base does not serve the step (FR5, FR8) | Refusal tests under a fixture base |
+| `component`, `hook`, `swizzle`, `docs`, `search`, `template`, `build`, `upgrade`, `gap-report`                                                                                                                                                                                                                                                                | Reads the named base's content and none of Core's (FR1)                                                                    | FR1 tests under a fixture base     |
+| `discover`, `doctor`, `doctor integration *`, `integration add`, `check`, `verify`, `pack`                                                                                                                                                                                                                                                                    | Judges and lists integrations against the named base, and lists the ones that do not build on it (FR9)                     | Integration loading tests          |
+| `theme list`, `eject`, `palette generate`; `experimental theme list`, `eject`, `preview list`, `preview remove`; `experimental icon` and its subcommands                                                                                                                                                                                                      | Lists and changes what the named base's integrations ship                                                                  | Fixture-base runs                  |
+| `init`, `postinstall`                                                                                                                                                                                                                                                                                                                                         | Writes setup steps from the named base's `setup.guide`, or leaves them out (FR5)                                           | Fixture-base runs                  |
+| `help`, `--help`, `manifest`, `blog`                                                                                                                                                                                                                                                                                                                          | Lists what the named base serves (FR7); every answer's `meta.answeredBy` names the base (FR2)                              | Help and manifest tests            |
 
 ### Platform support
 
@@ -335,6 +332,13 @@ before any work when the package is not a base the run can read (FR2).
   `ERR_BASE_AMBIGUOUS`; INV21's adapter seam reaches a base adapter only
   through the check; INV30's package set holds the active base in Core's
   place.
+- `architecture:cli-surface` INV28: the `hook --list` and `swizzle --list`
+  envelopes name the run's active base as their `package`, and `build`'s
+  `frame` and `foundation` are empty in a run on another base (FR1).
+- `spec:AST-040`: FR11's upgrade target is the installed version of the
+  run's active base, so a project on another base needs no Core; such a run
+  checks no copied composition and keeps the agent-docs version `init`
+  writes (FR1).
 - `spec:AST-017`: FR14's commands and options appear in help unless the
   active base does not serve them, and the manifest lists them all with
   `available` (FR7); `--base` meets FR15 with the matrix above.

@@ -130,6 +130,64 @@ describe('EmptyState announcement (spec:AST-086 FR2)', () => {
     await act(async () => root.unmount());
   });
 
+  it('reads no visibility for an empty state inside a live container, and announces nothing', async () => {
+    const {EmptyState, paint} = await importEmptyState();
+    paint();
+    const checkVisibility = vi.fn(() => true);
+    const original = HTMLElement.prototype.checkVisibility;
+    HTMLElement.prototype.checkVisibility = checkVisibility;
+    let showEmpty!: () => void;
+    function Status() {
+      const [isEmpty, setIsEmpty] = useState(false);
+      showEmpty = () => setIsEmpty(true);
+      return (
+        <div role="status">
+          {isEmpty ? <EmptyState title="No results" /> : null}
+        </div>
+      );
+    }
+    const polite = recordPolite();
+    const root = mount();
+    try {
+      await act(async () => root.render(<Status />));
+      await act(async () => showEmpty());
+      await settle();
+      polite.stop();
+      expect(polite.spoken).toEqual([]);
+      expect(checkVisibility).not.toHaveBeenCalled();
+    } finally {
+      HTMLElement.prototype.checkVisibility = original;
+      await act(async () => root.unmount());
+    }
+  });
+
+  it('still reads visibility for an empty state outside a live container', async () => {
+    const {EmptyState, paint} = await importEmptyState();
+    paint();
+    const checkVisibility = vi.fn(() => true);
+    const original = HTMLElement.prototype.checkVisibility;
+    HTMLElement.prototype.checkVisibility = checkVisibility;
+    let showEmpty!: () => void;
+    function Panel() {
+      const [isEmpty, setIsEmpty] = useState(false);
+      showEmpty = () => setIsEmpty(true);
+      return <div>{isEmpty ? <EmptyState title="No results" /> : null}</div>;
+    }
+    const polite = recordPolite();
+    const root = mount();
+    try {
+      await act(async () => root.render(<Panel />));
+      await act(async () => showEmpty());
+      await settle();
+      polite.stop();
+      expect(polite.spoken).toEqual(['No results']);
+      expect(checkVisibility).toHaveBeenCalled();
+    } finally {
+      HTMLElement.prototype.checkVisibility = original;
+      await act(async () => root.unmount());
+    }
+  });
+
   it('leaves an empty state inside a live container to that container (spec:AST-086 FR4)', async () => {
     const {EmptyState, paint} = await importEmptyState();
     paint();

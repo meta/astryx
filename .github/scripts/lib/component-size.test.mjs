@@ -18,8 +18,10 @@ const {
   bundleImport,
   bundleImportsByEntry,
   classNamesIn,
+  importLevels,
   measureComponentImport,
   packageStylesheetPath,
+  reachableChunks,
   rulesForClasses,
 } = require('./component-size.js');
 
@@ -46,6 +48,44 @@ function tree(files) {
 afterEach(() => {
   for (const root of roots.splice(0))
     fs.rmSync(root, {recursive: true, force: true});
+});
+
+describe('chunk walks', () => {
+  // A metafile `outputs` graph: entry imports a and b statically, b imports c,
+  // a imports c, and entry loads lazy.js through import().
+  const outputs = {
+    'entry.js': {
+      imports: [
+        {path: 'a.js', kind: 'import-statement'},
+        {path: 'b.js', kind: 'import-statement'},
+        {path: 'lazy.js', kind: 'dynamic-import'},
+        {path: 'react', kind: 'import-statement', external: true},
+      ],
+    },
+    'a.js': {imports: [{path: 'c.js', kind: 'import-statement'}]},
+    'b.js': {imports: [{path: 'c.js', kind: 'import-statement'}]},
+    'c.js': {imports: []},
+    'lazy.js': {imports: []},
+  };
+
+  it('keeps the eager chunks in the order the gzip figures concatenate', () => {
+    expect([
+      ...reachableChunks(outputs, 'entry.js', ['import-statement']),
+    ]).toEqual(['entry.js', 'b.js', 'c.js', 'a.js']);
+  });
+
+  it('levels the same chunks breadth-first from the start at 0', () => {
+    const levels = importLevels(outputs, 'entry.js', ['import-statement']);
+    expect(Object.fromEntries(levels)).toEqual({
+      'entry.js': 0,
+      'a.js': 1,
+      'b.js': 1,
+      'c.js': 2,
+    });
+    expect(new Set(levels.keys())).toEqual(
+      reachableChunks(outputs, 'entry.js', ['import-statement']),
+    );
+  });
 });
 
 describe('component import size', () => {

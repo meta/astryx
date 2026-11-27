@@ -30,20 +30,24 @@ vi.mock('./_preview.mjs', async importOriginal => {
   ).stubRenders(real);
   return {
     ...stubbed,
-    screenshot: async (
+    screenshots: async (
       /** @type {any} */ _project,
-      /** @type {string} */ _html,
-      /** @type {string} */ png,
-    ) => {
-      fs.writeFileSync(png, 'png');
-      return {ok: true};
-    },
+      /** @type {Array<{png: string}>} */ jobs,
+    ) =>
+      jobs.map(({png}) => {
+        fs.writeFileSync(png, 'png');
+        return {ok: true};
+      }),
   };
 });
 
 const T = 240_000;
+// What a change with --png takes: the sample page and the open states.
 const LOOK =
   'open themes/t/preview.png (the sample page, a tooltip, a menu and a list drawn open below it) and themes/t/sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, drawn open); the -dark pictures show the dark mode';
+// What show --png takes besides: the family the theme sets a part of (a
+// fresh theme sets none: the buttons').
+const SHOW_LOOK = `open themes/t/sheet-actions.png (one family of components each) and ${LOOK.slice('open '.length)}`;
 
 /** @type {string} */
 let cwd;
@@ -112,7 +116,7 @@ describe('the pictures to open', () => {
     'show --png says it first and last, and in the JSON',
     async () => {
       const r = /** @type {any} */ (await themeEditShow('t', {cwd, png: true}));
-      expect(r.data.look).toBe(LOOK);
+      expect(r.data.look).toBe(SHOW_LOOK);
       const text = (
         await runCli(
           ['experimental', 'theme', 'editor', 'show', 't', '--png'],
@@ -121,8 +125,8 @@ describe('the pictures to open', () => {
       ).stdout
         .trim()
         .split('\n');
-      expect(text[0]).toBe(`look: ${LOOK}`);
-      expect(text.at(-1)).toBe(`look: ${LOOK}`);
+      expect(text[0]).toBe(`look: ${SHOW_LOOK}`);
+      expect(text.at(-1)).toBe(`look: ${SHOW_LOOK}`);
       const without = (
         await runCli(['experimental', 'theme', 'editor', 'show', 't'], cwd)
       ).stdout;

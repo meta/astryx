@@ -357,27 +357,27 @@
   },
   "@astryx.powersearch.sheet.relativeDaysAgo": {
     "defaultMessage": "{count, number} {count, plural, one {day} other {days}} ago",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 days ago\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 days ago\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeDaysFromNow": {
     "defaultMessage": "{count, number} {count, plural, one {day} other {days}} from now",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 days from now\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 days from now\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeWeeksAgo": {
     "defaultMessage": "{count, number} {count, plural, one {week} other {weeks}} ago",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 weeks ago\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 weeks ago\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeWeeksFromNow": {
     "defaultMessage": "{count, number} {count, plural, one {week} other {weeks}} from now",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 weeks from now\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 weeks from now\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeMonthsAgo": {
     "defaultMessage": "{count, number} {count, plural, one {month} other {months}} ago",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 months ago\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 months ago\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeMonthsFromNow": {
     "defaultMessage": "{count, number} {count, plural, one {month} other {months}} from now",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 months from now\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 months from now\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.fieldOperator": {
     "defaultMessage": "{field} {operator}",
@@ -831,6 +831,10 @@
     "defaultMessage": "Link copied",
     "description": "Accessible name on the Markdown heading copy button and text announced to a polite live region for ~1.5s after a successful copy. Sentence meaning \"Link copied\"; pairs with `markdownHeadingLinks.copy`."
   },
+  "@astryx.markdownHeadingLinks.copyFailed": {
+    "defaultMessage": "Failed to copy value to clipboard.",
+    "description": "Accessible name on the Markdown heading copy button and text announced once to the assertive live region after the clipboard write fails; the name shows for ~1.5s. Pairs with `markdownHeadingLinks.copy` and `markdownHeadingLinks.copied`."
+  },
   "@astryx.markdownHeadingLinks.copy": {
     "defaultMessage": "Copy link to {heading}",
     "description": "Accessible name on the Markdown heading copy button in its default state. `{heading}` is the heading's plain text, or its generated id when the text is empty; pairs with `markdownHeadingLinks.copied`."
@@ -1023,6 +1027,14 @@
     "defaultMessage": "Maximum value",
     "description": "Accessible name of the upper thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Maximum value, 80\". Never shown on screen."
   },
+  "@astryx.slider.required": {
+    "defaultMessage": "Required",
+    "description": "Screen-reader-only text that a required Slider adds to its description. One word, neutral tone."
+  },
+  "@astryx.slider.rangeValue": {
+    "defaultMessage": "{start} – {end}",
+    "description": "Text value of a range slider beside its track: the two selected values. `{start}` and `{end}` are already formatted numbers. Example: `20 – 80`."
+  },
   "@astryx.tabBar.badgedItem": {
     "defaultMessage": "{label}, {badge}",
     "description": "Screen-reader name of a bottom tab bar item that shows a badge (\"Library, 3\"). {label} is the tab's visible name; {badge} is the badge's count or its own label (\"3 unread\"). Translators may reorder the two or change the separator."
@@ -1110,6 +1122,30 @@
   "@astryx.table.sort.priority": {
     "defaultMessage": "Priority {rank, number} of {total, number}",
     "description": "Screen-reader description of a sortable Table column header button while several columns are sorted: this column's place in the sort order. The button's name is the column header text and its direction is announced from aria-sort."
+  },
+  "@astryx.tour.back": {
+    "defaultMessage": "Back",
+    "description": "Label of the button in a product tour's callout that moves to the previous step. Counterpart to `tour.next`; keep the two parallel."
+  },
+  "@astryx.tour.next": {
+    "defaultMessage": "Next",
+    "description": "Label of the button in a product tour's callout that moves to the next step. Shown on every step but the last."
+  },
+  "@astryx.tour.done": {
+    "defaultMessage": "Done",
+    "description": "Label of the button on the last step of a product tour. Pressing it finishes the tour."
+  },
+  "@astryx.tour.skip": {
+    "defaultMessage": "Skip",
+    "description": "Label of the optional button in a product tour's callout that ends the tour before its last step. Verb, as in `skip the tour`."
+  },
+  "@astryx.tour.close": {
+    "defaultMessage": "Close tour",
+    "description": "\"Close\" = shut/dismiss, not \"nearby\". Screen-reader-only label on the close (X) button of a product tour's callout. Pressing it ends the tour."
+  },
+  "@astryx.tour.stepCount": {
+    "defaultMessage": "{current, number} of {total, number}",
+    "description": "Progress text in a product tour's callout, for example `2 of 5`: the number of the step that shows, then the number of steps in the tour."
   },
   "@astryx.toast.dismiss": {
     "defaultMessage": "Dismiss notification",
@@ -1286,6 +1322,14 @@
   "@astryx.dateRangeInput.dialogLabel": {
     "defaultMessage": "Choose date range",
     "description": "Screen-reader-only accessible name for the popover dialog opened from a DateRangeInput. Imperative verb + noun phrase."
+  },
+  "@astryx.dateRangeInput.triggerLabel": {
+    "defaultMessage": "{label}: {value}",
+    "description": "Accessible name of the date range field trigger. `{label}` is the field label; `{value}` is the selected range, or the placeholder when nothing is selected. Example: `Travel dates: Mar 1 – Mar 10`."
+  },
+  "@astryx.dateRangeInput.rangeValue": {
+    "defaultMessage": "{start} – {end}",
+    "description": "The selected range on the date range field trigger. `{start}` and `{end}` are already formatted dates. Example: `Mar 1 – Mar 10`."
   },
   "@astryx.dateTimeInput.placeholder": {
     "defaultMessage": "Select a date",
@@ -1507,6 +1551,10 @@
     "defaultMessage": "{count} tool calls",
     "description": "Summary label shown in the group header when multiple tool calls are expanded. {count} is the number of calls."
   },
+  "@astryx.chatTriggerMenu.noResults": {
+    "defaultMessage": "No results",
+    "description": "Shown in a chat composer's @-mention or slash-command menu when the typed query matches no suggestion and the trigger sets no empty message of its own. Very short (2 words); neutral tone."
+  },
   "@astryx.chatTriggerMenu.searching": {
     "defaultMessage": "Searching…",
     "description": "Shown, and announced politely to screen readers, while a chat composer's @-mention or slash-command menu waits for async search results. Present participle; trailing `…` is one character."
@@ -1535,6 +1583,10 @@
     "defaultMessage": "Code",
     "description": "Screen-reader-only fallback name for a code-snippet scroll container when the code's language is unknown. \"Code\" = source code, not secret code or code of conduct."
   },
+  "@astryx.codeBlock.diffLabel": {
+    "defaultMessage": "{language} diff",
+    "description": "Header label of a CodeBlock that shows a diff of code in a language, for example `tsx diff`. {language} is the language's name. \"diff\" is also the name of the diff code format and is usually left untranslated; reorder if your language needs it."
+  },
   "@astryx.field.optional": {
     "defaultMessage": "Optional",
     "description": "Visible indicator shown next to a form field's label when the field is optional (isOptional). Mutually exclusive with the required indicator. Very short — appears inline after the label text."
@@ -1542,6 +1594,10 @@
   "@astryx.field.labelTooltip": {
     "defaultMessage": "About {label}",
     "description": "Screen-reader name of the small info button after a form field's label; the button shows help about the field. {label} is the field's visible label. Example: `About Auto-save`."
+  },
+  "@astryx.field.errorFallback": {
+    "defaultMessage": "Invalid value",
+    "description": "Screen-reader-only text that describes a text field whose error status has no message, so assistive technology hears that the value has an error. Short, no punctuation; read after the field's label."
   },
   "@astryx.field.required": {
     "defaultMessage": "Required",
@@ -1919,6 +1975,10 @@
     "defaultMessage": "Thumbnail",
     "description": "Generic screen-reader name for a Thumbnail (image preview) that has no `alt` or `label`. Last-resort fallback so the control is never nameless; prefer a real name via `alt` or `label`."
   },
+  "@astryx.thumbnail.nameWithAlt": {
+    "defaultMessage": "{label} — {alt}",
+    "description": "Accessible name of a thumbnail that has both a label and image alt text. `{label}` is the caller label, such as a file name; `{alt}` describes the image. Example: `Invoice.pdf — First page of the invoice`."
+  },
   "@astryx.timeInput.clearLabel": {
     "defaultMessage": "Clear {label}",
     "description": "Screen-reader-only label on the X that clears the value from a TimeInput. Example: `Clear Start time`."
@@ -1938,6 +1998,10 @@
   "@astryx.timestamp.copied": {
     "defaultMessage": "Copied",
     "description": "Aria label on a Timestamp copy button for ~1.5s after a successful copy, and the text announced to a polite live region. Past-participle (\"has been copied\"); pairs with `timestamp.copyValue`."
+  },
+  "@astryx.timestamp.relativeLabel": {
+    "defaultMessage": "{relative}, {date}",
+    "description": "Accessible name of a relative Timestamp: the words it shows, then the full date (\"2 hours ago, March 25, 2026 at 10:00:00 AM Coordinated Universal Time\"). {relative} must come first and stay unchanged, so voice control can find a control named by it. Translators may change the separator."
   },
   "@astryx.timestamp.detailsLabel": {
     "defaultMessage": "Timestamp details",
@@ -1975,6 +2039,10 @@
     "defaultMessage": "{count, plural, one {# selected} other {# selected}}",
     "description": "Visible text on a closed MultiSelector's trigger when it shows a count of the chosen options (`triggerDisplay=\"count\"`), for example `2 selected`. `{count}` is the number of chosen options; use a plural form if your language needs one."
   },
+  "@astryx.multiSelector.overflowCount": {
+    "defaultMessage": "+{count, number}",
+    "description": "How many more options are selected than a multi-select trigger shows: after its badges, and as the last item of its list of labels (`Red, Green, Blue, +2`). `{count}` is how many more. Translators may replace the plus sign."
+  },
   "@astryx.multiSelector.createOption": {
     "defaultMessage": "Create \"{query}\"",
     "description": "Label of the first row in a MultiSelector's search panel when `hasCreate` is set and the typed text matches no option. Picking it reports a creation to the caller. `{query}` is the trimmed text the person typed, shown in quotes."
@@ -2002,6 +2070,10 @@
   "@astryx.typeahead.resultCount": {
     "defaultMessage": "{count, number} {count, plural, one {result} other {results}}",
     "description": "Polite screen-reader announcement of how many suggestions a Typeahead search returned. Live-region text, never shown on screen; example: `1 result`, `12 results`."
+  },
+  "@astryx.tokenizer.overflowCount": {
+    "defaultMessage": "+{count, number} more",
+    "description": "Shown at the end of a one-line Tokenizer when tokens do not fit, for example `+3 more`. {count} is the number of hidden tokens. Keep it short."
   },
   "@astryx.tokenizer.tokenAdded": {
     "defaultMessage": "Added {label}",
@@ -2714,6 +2786,14 @@
   "@astryx.navigationStack.back": {
     "defaultMessage": "Back",
     "description": "Label of the back button in a lab NavigationStack's bar when the screen it returns to has no title of its own. Returns to the previous screen; keep it short, as on an iOS navigation bar."
+  },
+  "@astryx.rating.starLabel": {
+    "defaultMessage": "{value, number} of {max, plural, one {# star} other {# stars}}",
+    "description": "Accessible name of a Rating star or fractional read-only rating. value is the rating and max is the total number of stars; max picks the plural form of star."
+  },
+  "@astryx.rating.readOnlyLabel": {
+    "defaultMessage": "{label}: {rating}",
+    "description": "Complete accessible name of a read-only Rating. label is the caller-supplied group name and rating is the localized rating text, or the caller override. Translators may reorder both parts."
   },
   "@astryx.searchField.cancel": {
     "defaultMessage": "Cancel",

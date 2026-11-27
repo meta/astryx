@@ -23,6 +23,11 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {appPackages} from '../../test-utils/theme-edit-fixture.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read the drawn pages, their pictures or what a drawing
+// reports: drawn for real.)
+realRenders(true);
 
 const T = 240_000;
 
@@ -132,9 +137,13 @@ describe('a state the picture draws', () => {
 });
 
 describe('an overlay shown in place', () => {
-  it('is no wider than its cell', () => {
+  it('is held whole by its cell', () => {
+    // The overlay keeps its own width; its cell is never narrower.
+    expect(SHEET_CSS).not.toMatch(
+      /\.cs-cell \[popover\]\[data-astryx-layer-root\]\{[^}]*max-width:100%/,
+    );
     expect(SHEET_CSS).toMatch(
-      /\.cs-cell \[popover\]\[data-astryx-layer-root\]\{[^}]*max-width:100%!important/,
+      /\.cs-sheet>\.cs-cell\{[^}]*min-width:min-content/,
     );
   });
 });

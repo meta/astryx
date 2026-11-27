@@ -527,10 +527,25 @@ export class SegmentedSelectionMotion {
   attachTrack(element: HTMLElement | null): void {
     if (element !== this.track) {
       this.settle();
+      this.animator.attach(null);
+      this.after.attach(null);
     }
     this.track = element;
-    this.animator.attach(element);
-    this.after.attach(element);
+  }
+
+  /**
+   * Attaches the animators to the track at its first selection change or
+   * press. An attach holds the ::after's resting opacity with an animation,
+   * and a new animation resolves style. So the commit that mounts the control
+   * attaches nothing.
+   */
+  private engage(): void {
+    const track = this.track;
+    if (track == null || this.animator.element === track) {
+      return;
+    }
+    this.animator.attach(track);
+    this.after.attach(track);
   }
 
   /** True while the lens carries the selected surface. */
@@ -569,6 +584,7 @@ export class SegmentedSelectionMotion {
     if (this.track !== track) {
       return;
     }
+    this.engage();
     const origin = this.segmentFor(track, from);
     const destination = this.segmentFor(track, to);
     const isTouchCommit = this.committed === to;
@@ -641,6 +657,7 @@ export class SegmentedSelectionMotion {
    * Under Reduced Motion a finger's release cross-fades.
    */
   begin(track: HTMLElement, origin: HTMLElement | null, isFinger = true): void {
+    this.engage();
     const segments = segmentsOf(track);
     const boxOf = boxesIn(track);
     const boxes = new Map(segments.map(segment => [segment, boxOf(segment)]));
@@ -1630,14 +1647,14 @@ export function useSegmentedSelectionMotion(
   isTracking: boolean,
 ): {
   readonly selection: SegmentedSelection;
-  /** The radiogroup's callback ref: it attaches the animators to the node. */
+  /** The radiogroup's callback ref: it gives the motion the node. */
   readonly attachTrack: RefCallback<HTMLElement>;
 } {
   const [motion] = useState(() => new SegmentedSelectionMotion());
   const previousValueRef = useRef(value);
-  // The lens is the radiogroup's own pseudo-elements. The animators attach to
-  // it while the touch presentation applies or while a press can drag it,
-  // which any pointer can.
+  // The lens is the radiogroup's own pseudo-elements. The motion holds the
+  // radiogroup while the touch presentation applies or while a press can drag
+  // it, which any pointer can.
   const isEnabled = isPresenting || isTracking;
 
   // Syncs the lens animators with the pointer presentation: a flip hands any
@@ -1663,8 +1680,8 @@ export function useSegmentedSelectionMotion(
   // the pointer, through that segment's click.
   const clickWait = useSegmentedTouchTracking(trackRef, motion, isTracking);
 
-  // The animators attach to the radiogroup while enabled. The lens aims at
-  // boxes measured when its motion began, so a resize hands the surface back.
+  // The motion holds the radiogroup while enabled. The lens aims at boxes
+  // measured when its motion began, so a resize hands the surface back.
   const attachTrack = useCallback(
     (track: HTMLElement | null) => {
       if (track == null || !isEnabled) {

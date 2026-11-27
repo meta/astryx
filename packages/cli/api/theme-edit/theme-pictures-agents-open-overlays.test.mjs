@@ -3,7 +3,7 @@
 /**
  * @file The pictures agents open show the overlays: the sample page has a
  * strip of a tooltip, a popover, a menu and a list drawn open below it; the
- * overlays sheet shows the small overlays first, five to a row, without the
+ * overlays sheet shows the small overlays first, about five to a row, without the
  * parts of an overlay alone. A change names the pictures to take, and
  * counts what the theme's changes did not reach near its top; show lists
  * those last, where a tail of its output keeps them.
@@ -23,6 +23,11 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read the drawn pages, their pictures or what a drawing
+// reports: drawn for real.)
+realRenders(true);
 
 const T = 240_000;
 const ED = ['experimental', 'theme', 'editor'];
@@ -63,7 +68,7 @@ describe('the sample page', () => {
 
 describe('the overlays sheet', () => {
   it(
-    'shows the small overlays first, five to a row, and no part of an overlay alone',
+    'shows the small overlays first, about five to a row, and no part of an overlay alone',
     async () => {
       await themeEditShow('t', {cwd, section: 'overlays'});
       const html = fs.readFileSync(
@@ -80,7 +85,7 @@ describe('the overlays sheet', () => {
       for (const part of ['DialogHeader', 'DrawerHeader', 'CommandPaletteItem'])
         expect(cells).not.toContain(part);
       expect(SHEET_CSS).toContain(
-        '.cs-open-group .cs-sheet{grid-template-columns:repeat(5,minmax(0,1fr))}',
+        '.cs-section-overlays .cs-open-group .cs-sheet>.cs-cell{flex-basis:200px}',
       );
     },
     T,
@@ -97,7 +102,7 @@ describe('what a change says', () => {
       expect(see).toMatch(/show t --png writes themes\/t\/preview\.png/);
       expect(see).toContain('themes/t/sheet-overlays.png');
       const at = lines.findIndex(l =>
-        /^missed: +\d+ miss(es)? on \d+ parts? the theme's changes did not reach/.test(
+        /^missed: +this change left \d+ new miss(es)?; \d+ miss(es)? on \d+ parts? the theme's changes did not reach \(/.test(
           l,
         ),
       );
