@@ -25,6 +25,11 @@ import {realRenders} from '../../test-utils/theme-render-stub.mjs';
 // (These cases measure drawn pages: drawn for real.)
 realRenders(true);
 
+// node-leg: own
+// (The dialog header is measured on the whole sheet. That one browser run
+// draws two whole sheets against a fixed bound, so it runs on a Node leg
+// with no other real-Chrome file.)
+
 const T = 300_000;
 
 /** @type {string} */

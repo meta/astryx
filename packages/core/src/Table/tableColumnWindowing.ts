@@ -1,31 +1,103 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+'use client';
+
 /**
  * @file tableColumnWindowing.ts
  * @input A `Table.virtualization` value
- * @output The rows capability, the columns capability with the column
- *   windowing it carries, or why the value cannot window; the mapping between
+ * @output The rows capability with the row windowing it carries, the columns
+ *   capability with the column windowing it carries, or why the value cannot
+ *   window; the plan of a Table that does not window; the mapping between
  *   mounted cells and full-table column positions
- * @position Table's base wiring for column windowing. The column hook puts
- *   its implementation in the capability value, so a Table that never
- *   imports the hook carries only this wiring, not the column planner,
- *   the inline window or the spacer cells.
+ * @position Table's base wiring for windowing. Each virtualization hook puts
+ *   its implementation in the capability value, so a Table that never imports
+ *   a hook carries only this wiring, not the window controller, the shared
+ *   engine, the column planner or the spacer cells.
  */
-import type {
-  FocusEventHandler,
-  MouseEventHandler,
-  PointerEventHandler,
-  ReactElement,
-  ReactNode,
-  RefObject,
+import {
+  useMemo,
+  type FocusEventHandler,
+  type MouseEventHandler,
+  type PointerEventHandler,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
 } from 'react';
 import {sharedKey} from '../utils/sharedRealm';
 import type {InlineListWindowGeometrySource} from '../virtualization/useInlineListWindow';
 import type {TableColumn} from './types';
-import {
-  getTableVirtualizationConfig,
-  type TableVirtualizationCapability,
+import type {
+  TableVirtualizationCapability,
+  UseTableRowsVirtualizationConfig,
 } from './plugins/virtualization/useTableRowsVirtualization';
+import type {
+  TableWindowResult,
+  UseTableWindowOptions,
+} from './plugins/virtualization/useTableWindow';
+
+// Registered keys, so a swizzled Table reads a capability the package's hook
+// made, and the package reads a copy's.
+export const ROWS_CAPABILITY = sharedKey('table/virtualization-capability', 1);
+export const ROWS_WINDOWING = sharedKey('table/rows-windowing', 1);
+
+/** Private consumption seam. Parent validates geometry and all logical inputs. */
+export function getTableVirtualizationConfig(
+  capability: unknown,
+): Readonly<UseTableRowsVirtualizationConfig> | undefined {
+  if (
+    typeof capability !== 'object' ||
+    capability === null ||
+    !(ROWS_CAPABILITY in capability)
+  ) {
+    return undefined;
+  }
+  return (
+    capability as {
+      readonly [ROWS_CAPABILITY]: Readonly<UseTableRowsVirtualizationConfig>;
+    }
+  )[ROWS_CAPABILITY];
+}
+
+/** The row windowing a rows capability carries. */
+export interface TableRowsWindowing {
+  /**
+   * Plans the mounted rows. A Table calls it as a hook, so adding or
+   * removing the capability is a Table remount boundary.
+   */
+  useWindow: <T>(options: UseTableWindowOptions<T>) => TableWindowResult;
+}
+
+/** The row windowing a rows capability carries, or undefined. */
+export function getTableRowsWindowing(
+  capability: unknown,
+): TableRowsWindowing | undefined {
+  return typeof capability === 'object' &&
+    capability !== null &&
+    ROWS_WINDOWING in capability
+    ? (capability as Record<symbol, TableRowsWindowing>)[ROWS_WINDOWING]
+    : undefined;
+}
+
+const NO_POSITION_WIDTHS: ReadonlyMap<number, number> = new Map();
+function noRowFocus(): void {}
+
+/** The plan of a Table that does not window: every row mounts. */
+export function useUnwindowedTable<T>({
+  data,
+}: UseTableWindowOptions<T>): TableWindowResult {
+  const rowCount = data.length;
+  return useMemo(
+    () => ({
+      segments: rowCount === 0 ? [] : [{type: 'rows', start: 0, end: rowCount}],
+      logicalPositionWidths: NO_POSITION_WIDTHS,
+      isWindowed: false,
+      isFixedHeight: false,
+      onRowFocus: noRowFocus,
+      onRowBlur: noRowFocus,
+    }),
+    [rowCount],
+  );
+}
 
 // A registered key, so a swizzled Table reads a capability the package's hook
 // made, and the package reads a copy's. It differs from the rows key, so each

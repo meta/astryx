@@ -262,7 +262,7 @@ const styles = stylex.create({
     opacity: 0,
     pointerEvents: 'none' as const,
   },
-  // The first measurement's edges replace none that a frame showed. A pill
+  // The first measurement sets the edges before any frame shows them. A pill
   // takes them at once: a fade would paint the first frame without it.
   buttonPillUnfaded: {
     transitionProperty: 'none',

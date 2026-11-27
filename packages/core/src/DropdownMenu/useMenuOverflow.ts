@@ -22,8 +22,8 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 
 /**
  * Calls `onChange` when the menu resizes, its DOM changes, an image in it
- * loads, or the viewport resizes (once per frame for the window and the
- * visual viewport together). Returns the function that stops it.
+ * loads, or the viewport resizes. Window and visual-viewport resizes in one
+ * frame call `onChange` once. Returns the function that stops it.
  */
 function observeMenu(menu: HTMLElement, onChange: () => void): () => void {
   const resizeObserver =

@@ -98,6 +98,7 @@ import type {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecog
 import {VelocityTracker} from '../gestures/VelocityTracker';
 import {inertClone, paintedBackground} from '../motion/inertClone';
 import {reorder} from '../motion/uikit/reorder';
+import {reducedMotionCrossFade} from '../motion/uikit/timing';
 import {
   animatorFor,
   isMoving,
@@ -106,6 +107,7 @@ import {
   releaseMotion,
 } from '../utils/rowMotion';
 import {edgeAutoscroll, type EdgeAutoscroll} from '../utils/edgeAutoscroll';
+import {msSinceInput} from '../utils/inputAge';
 import {subscribeInput} from '../utils/inputStream';
 import {nearestScroller} from '../utils/scrollingAncestor';
 import {useTouchPresentation} from '../utils/touchPresentation';
@@ -603,6 +605,8 @@ interface PendingDrop {
    */
   readonly velocity: number;
   readonly restore: RowRestore;
+  /** The release's time, when the gesture reported one. */
+  readonly releasedAt: number | undefined;
   /** The preview's backdrop: the dropped row travels on it. */
   readonly background: string | null;
 }
@@ -695,6 +699,8 @@ export interface ReorderGestureEvent {
    * dropped row's glide starts at.
    */
   readonly velocity?: number;
+  /** At a release, its time on the motion clock. */
+  readonly time?: number;
 }
 
 /** A long press's state as a reorder gesture's; null while it waits. */
@@ -1310,6 +1316,8 @@ export class ListReorderController implements ListReorderSession {
             state: 'ended',
             y: up.clientY,
             velocity: velocity.velocity(up.timeStamp).y,
+            // The release on the motion clock, from the pointer's own stamp.
+            time: motionNow() - msSinceInput(up.timeStamp, up),
           });
         }
       };
@@ -1379,6 +1387,10 @@ export class ListReorderController implements ListReorderSession {
               state === 'ended' && touch != null
                 ? velocity.velocity(touch.time).y
                 : undefined,
+            // A tracked touch keeps the time of its last move, which can be
+            // long before the lift. The recognizer ends in the lift's own
+            // task, so now is the lift.
+            time: state === 'ended' ? motionNow() : undefined,
           });
         }
       },
@@ -1400,7 +1412,7 @@ export class ListReorderController implements ListReorderSession {
         this.track(event.y);
         break;
       case 'ended':
-        this.drop(event.velocity ?? 0);
+        this.drop(event.velocity ?? 0, event.time);
         break;
       case 'cancelled':
         this.cancel();
@@ -1795,7 +1807,7 @@ export class ListReorderController implements ListReorderSession {
    * The drop: the move is reported, and on its commit the row glides into
    * its place, starting at the release's y `velocity` in px/s.
    */
-  private drop(velocity: number): void {
+  private drop(velocity: number, releasedAt?: number): void {
     const session = this.session;
     if (session == null) {
       return;
@@ -1842,6 +1854,7 @@ export class ListReorderController implements ListReorderSession {
       droppedTop,
       velocity,
       restore: session.restore,
+      releasedAt,
       background: session.background,
     };
     options.onReorder({key, to: position});
@@ -2096,7 +2109,21 @@ export class ListReorderController implements ListReorderSession {
 
   private rebase(pending: PendingDrop): void {
     const {list} = pending;
-    const at = motionNow();
+    // Under Reduce Motion the fade starts at the release. A late commit then
+    // shortens the fade but never extends it past 200 ms. Nothing travels
+    // there, so the rows read the same at the release as now. The release is
+    // on the motion clock and never after now.
+    const now = motionNow();
+    const releasedAt = reducesMotion(list) ? pending.releasedAt : undefined;
+    const isReduced = releasedAt != null;
+    const at = releasedAt ?? now;
+    // A commit that comes after the fade's first half has passed would show
+    // the rows faded out where they were. They land at once instead, which
+    // also ends the change within the fade's time from the release.
+    // SYNC: the half is where the Reduce Motion dip lands
+    // (motion/reducedMotionPlan.ts).
+    const landsAtOnce =
+      isReduced && now - at >= reducedMotionCrossFade.durationMs / 2;
     // Every read comes before the first write, so the drop lays out once.
     const rows = pending.rows.map((element, index) => {
       if (!this.rows.holds(element, list)) {
@@ -2127,9 +2154,10 @@ export class ListReorderController implements ListReorderSession {
       !settles(row) && Math.abs(row.shift) >= MIN_MOVE_PX;
     // A drop glides under every pointer: the gesture's settle plays its
     // spring from the release's velocity, as a finger's drop does.
-    const spring = rows.some(row => row != null && glides(row))
-      ? touchMotion.glideBase(list)
-      : null;
+    const spring =
+      !landsAtOnce && rows.some(row => row != null && glides(row))
+        ? touchMotion.glideBase(list)
+        : null;
     for (const row of rows) {
       if (row == null) {
         continue;

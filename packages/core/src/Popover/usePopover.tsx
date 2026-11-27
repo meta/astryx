@@ -8,7 +8,7 @@
  *   outside watches (outsidePanClaim)
  * @output Exports the public usePopover hook with derived focus, guarded opening
  *   and an optional anchor apart from the trigger.
- *   For Popover.tsx (internal), exports usePopoverInternal and
+ *   For Astryx's own packages (internal), exports usePopoverInternal and
  *   FALLBACK_CLOSE_SELECTOR.
  * @position Higher-level layer utility; used by DatePicker, Combobox, etc.
  *
@@ -38,6 +38,7 @@ import {useAnnounce} from '../hooks/useAnnounce';
 import {containsAlongFlatTree, deepActiveElement} from '../utils/flatTree';
 import {useFocusTrapInternal} from '../hooks/useFocusTrap';
 import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isElement, isHTMLElement} from '../utils/nodeType';
 import {focusableWithin, takesFocusAsIs} from '../utils/focusReturn';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
@@ -535,6 +536,22 @@ export interface InternalPopoverOptions extends UsePopoverOptions {
   writesEntranceSide?: boolean;
   /** Called after a scroll stop places the popover afresh (`useLayerInternal`'s `onPlacedAfresh`). */
   onPlacedAfresh?: () => void;
+  /**
+   * Attributes for the surface element, for a component whose surface is
+   * its own root. They carry a role, a name that the content gives, and the
+   * component's host attributes. `className` and `style` here are dropped.
+   * Pass them as the options of those names.
+   */
+  surfaceProps?: React.HTMLAttributes<HTMLDivElement>;
+  /** The component's own ref to the surface element. */
+  surfaceRef?: React.Ref<HTMLDivElement>;
+  /**
+   * Chooses the element that a `'pageOrder'` popover follows in the focus
+   * order, each time the popover shows. `own` is this hook's choice: the
+   * trigger, or an anchor that takes focus. Null: the popover follows no
+   * element and keeps its DOM place.
+   */
+  getInvoker?: (own: HTMLElement | null) => HTMLElement | null;
 }
 
 /**
@@ -579,7 +596,7 @@ export interface InternalPopoverOptions extends UsePopoverOptions {
  */
 function usePopoverImplementation(
   options: InternalPopoverOptions = {},
-): UsePopoverReturn {
+): UsePopoverInternalReturn {
   const {
     anchorRef,
     onShow,
@@ -607,6 +624,9 @@ function usePopoverImplementation(
     getOpener,
     ownsOutsidePan = false,
     onOpenPendingChange,
+    surfaceProps: hostSurfaceProps,
+    surfaceRef,
+    getInvoker: chooseInvoker,
   } = options;
 
   // A popover that Tab passes through is never modal.
@@ -697,14 +717,22 @@ function usePopoverImplementation(
   // trigger it follows an anchor that takes focus. Otherwise it keeps its DOM
   // place. A trigger that wraps its control passes the control: browsers
   // place the popover before a control inside the invoker.
+  const chooseInvokerRef = useCommittedRef(chooseInvoker);
   const getInvoker = useCallback((): HTMLElement | null => {
     const trigger = triggerElementRef.current;
-    if (trigger != null) {
-      return focusableWithin(trigger) ?? trigger;
-    }
-    const anchor = boundAnchorRef.current;
-    return isHTMLElement(anchor) && anchor.tabIndex >= 0 ? anchor : null;
-  }, []);
+    // Read from the caller's ref, not from the last bind. A layer element
+    // that mounts again while open shows before this commit binds the anchor.
+    const option = anchorOptionRef.current;
+    const anchorElement = option == null ? null : resolvePopoverAnchor(option);
+    const own =
+      trigger != null
+        ? (focusableWithin(trigger) ?? trigger)
+        : isHTMLElement(anchorElement) && anchorElement.tabIndex >= 0
+          ? anchorElement
+          : null;
+    const choose = chooseInvokerRef.current;
+    return choose == null ? own : choose(own);
+  }, [anchorOptionRef, chooseInvokerRef]);
   const announcesOpenRef = useRef(false);
   const layer = useLayerInternal({
     mode: 'context',
@@ -1023,6 +1051,7 @@ function usePopoverImplementation(
   );
 
   const isDialogShown = role === 'dialog' && layer.isOpen;
+  const surfaceRefs = useMergedRefs(contentRef, surfaceRef);
   // Wrapped render function that includes surface styles and optional hidden close button
   const render = useCallback(
     (children: ReactNode, props?: ContextRenderProps): ReactNode => {
@@ -1038,13 +1067,14 @@ function usePopoverImplementation(
       return layer.render(
         <LayerDepthProvider>
           <div
-            ref={contentRef}
+            ref={surfaceRefs}
             // A closed surface stays mounted but hidden. It carries no dialog
             // role or name, so selectors find no hidden dialog.
             role={isDialogShown ? 'dialog' : undefined}
             aria-modal={isDialogShown && isModal ? true : undefined}
             aria-label={isDialogShown ? dialogLabel : undefined}
             tabIndex={role === 'dialog' ? -1 : undefined}
+            {...hostSurfaceProps}
             {...mergeProps(
               {...surfaceProps, className: surfaceClassName},
               (hasSurface ? surfaceEdgeProps : focusOutlineProps.focusVisible)(
@@ -1088,7 +1118,8 @@ function usePopoverImplementation(
       className,
       style,
       closeButtonLabel,
-      contentRef,
+      surfaceRefs,
+      hostSurfaceProps,
       dialogLabel,
       isDialogShown,
       role,
@@ -1109,7 +1140,19 @@ function usePopoverImplementation(
     id: layer.id,
     render,
     triggerProps,
+    isFocusInScope,
   };
+}
+
+/**
+ * @internal What a Core composition reads beyond the public return.
+ */
+export interface UsePopoverInternalReturn extends UsePopoverReturn {
+  /**
+   * Whether focus is in the popover's Escape scope: inside `surface`, or on
+   * or inside its anchor or trigger.
+   */
+  isFocusInScope: (surface: Element | null) => boolean;
 }
 
 export function usePopover<
@@ -1122,7 +1165,9 @@ export function usePopover<
     isModal?: [TabBehavior] extends ['pageOrder'] ? false : boolean;
   },
 ): UsePopoverReturn {
-  return usePopoverImplementation(options ?? {});
+  const {isFocusInScope: _isFocusInScope, ...popover} =
+    usePopoverImplementation(options ?? {});
+  return popover;
 }
 
 /**
@@ -1130,6 +1175,6 @@ export function usePopover<
  */
 export function usePopoverInternal(
   options: InternalPopoverOptions = {},
-): UsePopoverReturn {
+): UsePopoverInternalReturn {
   return usePopoverImplementation(options);
 }

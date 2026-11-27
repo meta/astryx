@@ -100,6 +100,7 @@ import {
 import {
   prepareFocusRepairOnRemoval,
   returnFocusForLastInput,
+  revealReturnTarget,
 } from '../utils/focusReturn';
 
 const styles = stylex.create({
@@ -632,9 +633,8 @@ export function BottomSheetSwitcher({
       } else {
         // With a sheet still open beneath the flow, focus returns into that
         // sheet: to the opener when it is there, else to the sheet's panel.
-        // Otherwise, like the browser's own return on close(), without
-        // scrolling: the page kept its scroll offset under the lock, and an
-        // opener scrolled out of view must not drag the page back to itself.
+        // Otherwise, like the browser's own return on close(), the focus does
+        // not scroll: the page kept its scroll offset under the lock.
         const revealed =
           left?.revealed ?? getBottomSheetBeneath(stackKeyRef.current);
         const trigger = triggerRef.current;
@@ -643,8 +643,9 @@ export function BottomSheetSwitcher({
           (trigger == null || !revealed.element.contains(trigger))
         ) {
           revealed.focus();
-        } else {
-          trigger?.focus({preventScroll: true});
+        } else if (trigger != null) {
+          trigger.focus({preventScroll: true});
+          revealReturnTarget(trigger);
         }
       }
     } else if (!hasScrim) {

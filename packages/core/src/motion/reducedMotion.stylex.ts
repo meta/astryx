@@ -4,8 +4,10 @@
  * @file reducedMotion.stylex.ts
  * @input StyleX constant definitions
  * @output reducedMotionFadeConsts (the Reduced Motion cross-fade's duration
- *   and easing) for StyleX transitions, and reducedMotionKeys (its two media
- *   keys, which a transition spells literally)
+ *   and easing) for StyleX transitions, reducedMotionKeys (its two media
+ *   keys, which a transition spells literally), and reducedMotionTransform
+ *   (the parts that drop a transform's duration to zero under a theme that
+ *   reduces motion for everyone)
  * @position The CSS side of the Reduced Motion policy (reducedMotion.ts):
  *   values a transition takes under its two Reduce Motion media keys
  *
@@ -38,4 +40,18 @@ export const reducedMotionKeys = stylex.defineConsts({
   fade: '@media (prefers-reduced-motion: reduce) and (pointer: coarse)',
   instant:
     '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))',
+});
+
+/**
+ * A transform's duration (a turn, a slide, a thumb's travel) under a theme
+ * that reduces motion for everyone. Theme writes `--_astryx-reduced-motion: 1`
+ * where it writes the reduced-motion mark, so a transition multiplies its
+ * duration by `factor` and the transform lands at once there. A slide whose
+ * end a script waits for (`transitionend`, a close hold) adds `settle`, so it
+ * still ends, after 0.01s. The person's Reduce Motion setting stays a literal
+ * media key at each transition.
+ */
+export const reducedMotionTransform = stylex.defineConsts({
+  factor: '(1 - var(--_astryx-reduced-motion, 0))',
+  settle: '0.01s * var(--_astryx-reduced-motion, 0)',
 });

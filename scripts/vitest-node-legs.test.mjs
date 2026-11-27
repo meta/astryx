@@ -28,6 +28,7 @@ import {
   WALL_SECONDS,
   WATCHDOG_MARGIN_SECONDS,
   BESIDE_REAL_CHROME_SECONDS,
+  takesOwnNodeLeg,
   drawsInRealChrome,
   nodeFileCost,
   nodeLegsApart,
@@ -296,7 +297,9 @@ describe('the Node leg plan', () => {
       ['pull request', files, plan.legs],
       ['main', main, planMainNodeLegs(main, seconds).legs],
     ]) {
-      const chrome = list.filter(file => drawsInRealChrome(file));
+      const chrome = list.filter(
+        file => drawsInRealChrome(file) && !takesOwnNodeLeg(file),
+      );
       expect(chrome.length, run).toBeGreaterThan(10);
       const cost = nodeFileCost(list, seconds);
       const legs = partitionByDuration(list, legsOf, seconds);
@@ -317,6 +320,51 @@ describe('the Node leg plan', () => {
       ))
         expect(last, `${run}: ${heavy}`).not.toContain(heavy);
     }
+  });
+
+  it('gives a marked real-Chrome file a leg of its own, with only light, non-packing files beside it, on pull requests and main', () => {
+    const own =
+      'packages/cli/api/theme-edit/theme-edit-border-added-size.test.mjs';
+    expect(takesOwnNodeLeg(own)).toBe(true);
+    expect(
+      takesOwnNodeLeg('packages/cli/api/theme-edit/theme-cut-short.test.mjs'),
+    ).toBe(false);
+    expect(takesOwnNodeLeg('scripts/vitest-node-legs.test.mjs')).toBe(false);
+    const main = nodeLegFiles(ROOT, {swizzleProofOwnJob: false});
+    for (const [run, list, legsOf] of [
+      ['pull request', files, plan.legs],
+      ['main', main, planMainNodeLegs(main, seconds).legs],
+    ]) {
+      const cost = nodeFileCost(list, seconds);
+      const legs = partitionByDuration(list, legsOf, seconds);
+      const leg = legs.find(each => each.includes(own));
+      expect(leg, run).not.toBe(legs[legs.length - 1]);
+      for (const file of leg.filter(f => f !== own)) {
+        expect(drawsInRealChrome(file), `${run}: ${file}`).toBe(false);
+        expect(cost(file), `${run}: ${file}`).toBeLessThanOrEqual(
+          BESIDE_REAL_CHROME_SECONDS,
+        );
+        expect(file, run).not.toMatch(/(^|\/)packed-[^/]*\.test\.mjs$/);
+      }
+    }
+  });
+
+  it("never packs a marked file's leg with more than twice an average leg's files, at 8, 9 or 12 legs", () => {
+    // A leg of over a thousand light files outlasts its plan on a slow
+    // runner: CodeBunny's in-house lab splits Main's files into 8 legs, a
+    // pull request into 9 and Main into 12.
+    const main = nodeLegFiles(ROOT, {swizzleProofOwnJob: false});
+    for (const [run, list] of [
+      ['pull request', files],
+      ['main', main],
+    ])
+      for (const count of [8, 9, 12]) {
+        const legs = partitionByDuration(list, count, seconds);
+        const own = legs.find(leg => leg.some(file => takesOwnNodeLeg(file)));
+        expect(own.length, `${run}, ${count} legs`).toBeLessThanOrEqual(
+          (list.length / count) * 2,
+        );
+      }
   });
 
   it("plans from each planner's sparse checkout as the legs split in a full one", () => {
@@ -434,10 +482,13 @@ describe("the CLI's legs on its minimum Node", () => {
     expect(plan.fits).toBe(true);
     expect(plan.minutes).toBeLessThanOrEqual(MIN_NODE_TARGET_MINUTES);
     if (plan.legs > 1) {
+      const cost = nodeFileCost(files, seconds);
       const fewer = splitByDuration(
         files,
         plan.legs - 1,
-        nodeFileCost(files, seconds),
+        cost,
+        [],
+        nodeLegsApart(cost),
       ).map(leg =>
         leg.reduce((sum, file) => sum + nodeFileCost(files, seconds)(file), 0),
       );

@@ -50,6 +50,17 @@ import {colorVars, focusVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {getTooltip} from '../__tests__/tooltipDescription';
 
+/** The popup the combobox names in `aria-controls`. */
+function popupOf(combobox: HTMLElement): HTMLElement {
+  const popup = document.getElementById(
+    combobox.getAttribute('aria-controls') ?? '',
+  );
+  if (popup == null) {
+    throw new Error('aria-controls names no element in the document');
+  }
+  return popup;
+}
+
 /**
  * Enters a search query as one change. Typing it key by key can land several
  * keystrokes in one frame, whose result announcements are then joined into
@@ -1549,11 +1560,13 @@ describe('MultiSelector', () => {
     await user.type(searchInput, 'xyz');
 
     expect(
-      within(screen.getByRole('listbox', h)).getByText('No results found'),
+      within(popupOf(screen.getByRole('combobox', h))).getByText(
+        'No results found',
+      ),
     ).toBeInTheDocument();
   });
 
-  it('empty-state message is not exposed as a listbox child', async () => {
+  it('with no matching options, the popup is a named group, not a listbox, and the input still controls it', async () => {
     const user = userEvent.setup();
     render(
       <MultiSelector
@@ -1568,12 +1581,20 @@ describe('MultiSelector', () => {
     await user.click(screen.getByRole('button', {name: 'Fruit'}));
     await user.type(screen.getByRole('combobox', h), 'xyz');
 
-    // role="listbox" only permits option/group children — the visual
-    // empty-state message must be presentational (it is announced through
-    // the result-count live region instead).
-    const listbox = screen.getByRole('listbox', h);
-    const empty = within(listbox).getByText('No results found');
-    expect(empty).toHaveAttribute('role', 'presentation');
+    // An empty listbox is invalid (AST-020 1.3.1, 4.1.2): with no options the
+    // popup is a group named by the label, and the message is its content.
+    // The result-count live region also announces it.
+    const combobox = screen.getByRole('combobox', h);
+    expect(screen.queryByRole('listbox', h)).toBeNull();
+    expect(combobox).toHaveAttribute('aria-expanded', 'true');
+    const popup = popupOf(combobox);
+    expect(popup).toBe(screen.getByRole('group', {name: 'Fruit', ...h}));
+    expect(popup).not.toHaveAttribute('aria-multiselectable');
+    expect(within(popup).getByText('No results found')).toBeInTheDocument();
+
+    // Matching options bring the listbox back.
+    await user.clear(combobox);
+    expect(screen.getByRole('listbox', h)).toBe(popupOf(combobox));
   });
 
   it('renders emptySearchText in place of the default message', async () => {
@@ -1592,7 +1613,7 @@ describe('MultiSelector', () => {
     await user.click(screen.getByRole('button', {name: 'Fruit'}));
     await user.type(screen.getByRole('combobox', h), 'xyz');
 
-    const listbox = screen.getByRole('listbox', h);
+    const listbox = popupOf(screen.getByRole('combobox', h));
     expect(
       within(listbox).getByText('Nothing like that here'),
     ).toBeInTheDocument();
@@ -1616,7 +1637,7 @@ describe('MultiSelector', () => {
 
     await user.click(screen.getByRole('button', {name: 'Fruit'}));
 
-    const listbox = screen.getByRole('listbox', h);
+    const listbox = popupOf(screen.getByRole('combobox', h));
     expect(within(listbox).getByText('No options')).toBeInTheDocument();
     expect(
       within(listbox).queryByText('Nothing like that here'),
@@ -1639,8 +1660,8 @@ describe('MultiSelector', () => {
     await user.click(screen.getByRole('button', {name: 'Fruit'}));
     await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
 
-    // The panel message is role="presentation", so the live region is the
-    // only thing a screen reader gets — it has to say the same words.
+    // The live region announces the panel message, so it has to say the
+    // same words.
     await waitFor(() =>
       expect(politeRegion()?.textContent).toBe('Nothing like that here'),
     );
@@ -1834,7 +1855,7 @@ describe('MultiSelector', () => {
     // Without hasSearch the trigger itself is the combobox.
     await user.click(screen.getByRole('combobox', {name: 'Fruit'}));
 
-    const listbox = screen.getByRole('listbox', h);
+    const listbox = popupOf(screen.getByRole('combobox', {name: 'Fruit'}));
     expect(within(listbox).getByText('Add a fruit first')).toBeInTheDocument();
   });
 
@@ -5099,8 +5120,8 @@ describe('MultiSelector hasCreate', () => {
     );
     await user.click(screen.getByRole('button', {name: 'Labels'}));
     await enterQuery(user, screen.getByRole('combobox', h), 'Urgent');
-    // The empty-state message is role="presentation", so the live region is
-    // what a screen reader gets — it must say what is on screen: a row.
+    // The live region announces the panel's outcome, so it must say what is
+    // on screen: a row.
     await waitFor(() => {
       expect(politeRegion()?.textContent).toBe('Create "Urgent"');
     });
@@ -5286,6 +5307,30 @@ describe('MultiSelector option actions (grid)', () => {
       />,
     );
     expect(screen.getByRole('grid', h)).toBeInTheDocument();
+  });
+
+  it('is a named group while a query matches nothing, and the grid again when it matches', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Labels"
+        options={OPTIONS}
+        value={[]}
+        onChange={() => {}}
+        hasSearch
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Labels'}));
+    const combobox = screen.getByRole('combobox', h);
+    await user.type(combobox, 'zzz');
+    // An empty grid is invalid like an empty listbox; it is never a listbox.
+    expect(screen.queryByRole('grid', h)).toBeNull();
+    expect(screen.queryByRole('listbox', h)).toBeNull();
+    expect(popupOf(combobox)).toBe(
+      screen.getByRole('group', {name: 'Labels', ...h}),
+    );
+    await user.clear(combobox);
+    expect(screen.getByRole('grid', h)).toBe(popupOf(combobox));
   });
 
   it('becomes a grid when options arrive after loading, inside a section too', async () => {

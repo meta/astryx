@@ -73,6 +73,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/ComplexSelector/ComplexSelector.generated';
 import {devPropError} from '../utils/devWarning';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -247,7 +248,7 @@ const styles = stylex.create({
     // Under reduced motion the chevron turns at once: an in-place state
     // change moves nothing (design:reduced-motion DR1–DR3).
     transitionDuration: {
-      default: durationVars['--duration-fast'],
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],

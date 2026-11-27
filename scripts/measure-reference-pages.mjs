@@ -437,7 +437,7 @@ export async function measurePage(distDir, components) {
 }
 
 /** Whether `id` is a package the app brings itself (`APP_EXTERNALS`). */
-function isAppExternal(id) {
+export function isAppExternal(id) {
   return APP_EXTERNALS.some(pattern =>
     pattern.endsWith('/*')
       ? id.startsWith(pattern.slice(0, -1))
@@ -507,6 +507,16 @@ export function rolldownPageStats(output, entryModule) {
  * of the built package ships it: Vite's defaults, module preload included.
  */
 export async function measurePageRolldown(distDir, components) {
+  const {output, entryModule} = await buildPageRolldown(distDir, components);
+  return rolldownPageStats(output, entryModule);
+}
+
+/**
+ * The Vite build behind `measurePageRolldown`: its Rolldown output and the
+ * page entry's path. `size:matrix` reads module placement from the same
+ * build.
+ */
+export async function buildPageRolldown(distDir, components) {
   const {build} = await import('vite');
   const root = path.dirname(distDir);
   // The dist resolves Core's own dependencies from the side's root.
@@ -532,7 +542,7 @@ export async function measurePageRolldown(distDir, components) {
     },
   });
   const {output} = Array.isArray(result) ? result[0] : result;
-  return rolldownPageStats(output, entryModule);
+  return {output, entryModule};
 }
 
 /**

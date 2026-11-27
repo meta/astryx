@@ -19,16 +19,6 @@
   "packages/core/src/Breadcrumbs/BreadcrumbItem.tsx": ["../Icon", "../utils"],
   "packages/core/src/Breadcrumbs/Breadcrumbs.tsx": ["../utils"],
   "packages/core/src/ButtonGroup/ButtonGroup.tsx": ["../utils"],
-  "packages/core/src/Calendar/Calendar.tsx": [
-    "../Button",
-    "../Icon",
-    "../VisuallyHidden",
-    "../hooks",
-    "../i18n",
-    "../utils",
-    "./hooks"
-  ],
-  "packages/core/src/Calendar/hooks/useCalendarDays.ts": ["../../i18n"],
   "packages/core/src/Calendar/hooks/useCalendarNavigation.ts": ["../../i18n"],
   "packages/core/src/Card/Card.tsx": ["../utils"],
   "packages/core/src/Carousel/Carousel.tsx": [
@@ -161,7 +151,6 @@
   ],
   "packages/core/src/DateInput/Wheel.tsx": ["../utils"],
   "packages/core/src/DateRangeInput/DateRangeInput.tsx": [
-    "../Calendar",
     "../Calendar/hooks",
     "../Field",
     "../Icon",

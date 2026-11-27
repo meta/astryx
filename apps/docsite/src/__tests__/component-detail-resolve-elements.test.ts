@@ -21,15 +21,15 @@ vi.mock('@astryxdesign/core', () => ({
 describe('component detail element resolution', () => {
   it('resolves external components and nested descriptors lazily', () => {
     expect(getComponent('RichTextEditor')).not.toBeNull();
-    const tourStep = resolveValue({
-      __element: 'TourStep',
+    const heroHeader = resolveValue({
+      __element: 'DialogHeroHeader',
       props: {title: 'Review'},
     });
-    expect(isValidElement(tourStep)).toBe(true);
-    expect((tourStep as ReactElement).type).not.toBe('TourStep');
+    expect(isValidElement(heroHeader)).toBe(true);
+    expect((heroHeader as ReactElement).type).not.toBe('DialogHeroHeader');
     expect(
-      ((tourStep as ReactElement).type as {displayName?: string}).displayName,
-    ).toBe('TourStep');
+      ((heroHeader as ReactElement).type as {displayName?: string}).displayName,
+    ).toBe('DialogHeroHeader');
   });
 
   it('resolves descriptor arrays from playground defaults into React elements', () => {

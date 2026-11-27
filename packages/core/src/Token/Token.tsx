@@ -26,11 +26,13 @@ import {
   sizeVars,
   durationVars,
   easeVars,
+  focusVars,
   fontWeightVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
 import {mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {useInteractiveRole} from '../hooks/useInteractiveRole';
 import {TokenLink} from './TokenLink';
@@ -193,6 +195,22 @@ const styles = stylex.create({
     overflow: 'hidden',
     minWidth: 0,
   },
+  // End content shares the cut with the label, so a long value never pushes
+  // the Remove button past the token's clip. The clip has room for a focus
+  // ring on each side, so a focused control in the end content keeps its
+  // ring; the matching negative margin keeps the layout.
+  endContent: {
+    display: {
+      default: 'inline-flex',
+      ':empty': 'none',
+    },
+    alignItems: 'center',
+    minWidth: 0,
+    overflow: 'hidden',
+    // How far a focus ring reaches outside its control.
+    padding: `calc(${focusVars['--focus-outline-width']} + ${focusVars['--focus-outline-offset']})`,
+    margin: `calc(-1 * (${focusVars['--focus-outline-width']} + ${focusVars['--focus-outline-offset']}))`,
+  },
   removeButton: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -353,6 +371,10 @@ export function Token({
   // The label cuts its own text, so a label in one script takes its direction.
   const labelDirection = cutTextDirection(label);
 
+  const endSlot = isRenderable(endContent) ? (
+    <span {...stylex.props(styles.endContent)}>{endContent}</span>
+  ) : null;
+
   const removeButton = onRemove != null && (
     <RemoveButton
       type="button"
@@ -389,7 +411,7 @@ export function Token({
         )}>
         {label}
       </Label>
-      {endContent}
+      {endSlot}
       {removeButton}
     </>
   );
@@ -502,7 +524,7 @@ export function Token({
         onLinkClick={onClick}
         LinkComponent={LinkComponent}
         icon={icon}
-        endContent={endContent}
+        endContent={endSlot}
         removeButton={removeButton}
         linkStyleProps={{
           ...stylex.props(styles.invisibleButton),
@@ -621,7 +643,7 @@ export function Token({
             {label}
           </Label>
         </button>
-        {endContent}
+        {endSlot}
         {removeButton}
       </span>,
     );

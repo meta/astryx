@@ -1666,7 +1666,11 @@ describe('Toast native motion contract', () => {
     expect(normalizeCssList(toastStyle.transitionProperty)).toBe(
       'opacity, transform',
     );
-    expect(toastStyle.transitionDuration).toBe('var(--duration-fast)');
+    // The transform lands at once under a theme that reduces motion for
+    // everyone; the 0.01s keeps its transitionend.
+    expect(toastStyle.transitionDuration).toBe(
+      'calc(var(--duration-fast) * (1 - var(--_astryx-reduced-motion, 0)) + 0.01s * var(--_astryx-reduced-motion, 0))',
+    );
     expect(toastStyle.transitionTimingFunction).toBe('var(--ease-standard)');
     expect(normalizeCssList(wrapperStyle.transitionProperty)).toBe(
       'grid-template-rows, padding',

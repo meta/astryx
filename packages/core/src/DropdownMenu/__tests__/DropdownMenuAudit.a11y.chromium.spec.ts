@@ -240,21 +240,21 @@ const CASES: Case[] = [
     'forced-colors-focus-icon-end-content',
     'mode-parity',
     'keyboard-open',
-    'Forced colors: focused icon/end-content row has a Highlight outline',
+    'Forced colors: focused icon/end-content row has a forced system-color outline',
     {forcedColors: 'after'},
   ),
   c(
     'forced-colors-focus-icon-end-content-dark',
     'mode-parity',
     'keyboard-open',
-    'Forced colors: focused icon/end-content row has a Highlight outline',
+    'Forced colors: focused icon/end-content row has a forced system-color outline',
     {forcedColors: 'after', mode: 'dark'},
   ),
   c(
     'forced-colors-focus-destructive',
     'mode-parity',
     'keyboard-last-row',
-    'Forced colors: focused destructive icon row has a Highlight outline',
+    'Forced colors: focused destructive icon row has a forced system-color outline',
     {forcedColors: 'after'},
   ),
   c(
@@ -424,17 +424,27 @@ async function drive(page: Page, scenario: Case) {
   }
 }
 
-/** The computed system-color focus indicator on the active menu row. */
+/**
+ * The computed focus indicator on the active menu row, and the page's system
+ * colors. Forced colors replace the ring's token color with a color that the
+ * browser chooses. Chromium uses Highlight. Firefox does not follow Highlight:
+ * its ring is the same as its CanvasText in every palette tested.
+ */
 async function forcedColorsFocusIndicator(page: Page) {
   return page.locator(':focus').evaluate(node => {
-    const probe = document.createElement('span');
-    probe.style.color = 'Highlight';
-    document.body.append(probe);
-    const expectedHighlight = getComputedStyle(probe).color;
-    probe.remove();
+    const systemColor = (name: string) => {
+      const probe = document.createElement('span');
+      probe.style.color = name;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
     const style = getComputedStyle(node);
     return {
-      expectedHighlight,
+      highlight: systemColor('Highlight'),
+      canvasText: systemColor('CanvasText'),
+      canvas: systemColor('Canvas'),
       color: style.outlineColor,
       style: style.outlineStyle,
       width: Number.parseFloat(style.outlineWidth),
@@ -982,7 +992,13 @@ async function capture(page: Page, scenario: Case) {
       expect(focusIndicator?.width ?? 0).toBeGreaterThanOrEqual(2);
       // Inset by the ring's own width (the focus-outline-width token).
       expect(focusIndicator?.offset).toBe(`-${focusIndicator?.width}px`);
-      expect(focusIndicator?.color).toBe(focusIndicator?.expectedHighlight);
+      const engine = page.context().browser()?.browserType().name();
+      expect(focusIndicator?.color).toBe(
+        engine === 'firefox'
+          ? focusIndicator?.canvasText
+          : focusIndicator?.highlight,
+      );
+      expect(focusIndicator?.color).not.toBe(focusIndicator?.canvas);
     }
     if (scenario.forcedColors === 'before-control') {
       // With `outline-style: none`, Chromium still computes the declared
