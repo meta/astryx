@@ -72,6 +72,13 @@ describe('testWorkers', () => {
     expect(testWorkers({cores: 40, memory: 256 * GiB, ...watch()})).toBe(
       MOST_WORKERS,
     );
+    // `vitest run --watch` keeps watching.
+    expect(
+      testWorkers({cores: 10, memory: 64 * GiB, ...watch('run', '--watch')}),
+    ).toBe(5);
+    expect(
+      testWorkers({cores: 10, memory: 64 * GiB, ...watch('run', '-w')}),
+    ).toBe(5);
     // `run` or `list` as a file filter or a test-name pattern is still a watch.
     expect(
       testWorkers({cores: 10, memory: 64 * GiB, ...watch('watch', 'list')}),
@@ -135,7 +142,7 @@ const repoRoot = path.resolve(
  */
 function resolvedWorkers(flags, env) {
   const script = `
-    process.argv.push('run', ...${JSON.stringify(flags)});
+    process.argv.push('vitest', 'run', ...${JSON.stringify(flags)});
     const {createVitest, parseCLI} = await import('vitest/node');
     const {options} = parseCLI(['vitest', 'run', '--project', 'ui', '--project', 'node', ...${JSON.stringify(flags)}]);
     const vitest = await createVitest('test', {...options, watch: false});

@@ -22,19 +22,22 @@ export const MEMORY_PER_WORKER = 2 * 1024 ** 3;
 /** A command-line worker count, in either spelling Vitest accepts. */
 const WORKERS_FLAG = /^--max-?workers(=|$)/i;
 
-/** Vitest commands that make a single run rather than a watch. */
-const SINGLE_RUN_COMMANDS = new Set(['run', 'list']);
+/** A watch flag, which keeps `vitest run` watching. */
+const WATCH_FLAG = /^(--watch(=true)?|-w)$/;
 
 /**
- * Whether the command line makes a single run: `run` or `list` as the
- * command (the first word after the Vitest binary), or `--run` anywhere. The
- * same word as a file filter or a test-name pattern does not count. Reading
- * a single run as a watch only lowers the count.
+ * Whether the command line makes a single run: `--run` anywhere, `list` as
+ * the first word after the Vitest binary, or `run` there without a watch
+ * flag (Vitest keeps `vitest run --watch` watching). The same words as a
+ * file filter or a test-name pattern, or after an option, do not count.
+ * Reading a single run as a watch only lowers the count.
  * @param {string[]} argv
  * @returns {boolean}
  */
 function singleRun(argv) {
-  return SINGLE_RUN_COMMANDS.has(argv[2] ?? '') || argv.includes('--run');
+  if (argv.includes('--run')) return true;
+  if (argv[2] === 'list') return true;
+  return argv[2] === 'run' && !argv.some(arg => WATCH_FLAG.test(arg));
 }
 
 /**
