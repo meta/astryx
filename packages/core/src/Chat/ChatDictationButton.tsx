@@ -33,6 +33,12 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Chat/ChatDictationButton.generated';
+import {devPropError} from '../utils/devWarning';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -76,7 +82,7 @@ const styles = stylex.create({
     transformOrigin: 'center',
     transitionProperty: 'transform, background-color',
     transitionDuration: {
-      default: '0.06s',
+      default: `calc(0.06s * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: 'ease-out',
@@ -119,6 +125,13 @@ export function ChatDictationButton({
   style,
   ...rest
 }: ChatDictationButtonProps) {
+  if (process.env.NODE_ENV !== 'production' && dictation == null) {
+    throw devPropError(
+      'ChatDictationButton',
+      'dictation',
+      'is required: the value of useSpeechRecognition(), for example dictation={dictation}.',
+    );
+  }
   const t = useComponentTranslator();
 
   if (isHiddenWhenUnsupported && !dictation.isSupported) {

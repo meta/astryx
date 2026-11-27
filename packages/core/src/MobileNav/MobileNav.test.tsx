@@ -29,6 +29,22 @@ beforeAll(() => {
 });
 
 describe('MobileNav', () => {
+  it('carries mobile-nav-drawer on the painted panel, with the resolved side', () => {
+    render(
+      <MobileNav isOpen={true} onOpenChange={() => {}} side="start">
+        <span>Nav content</span>
+      </MobileNav>,
+    );
+    const dialog = screen.getByRole('dialog');
+    const drawer = dialog.querySelector('.astryx-mobile-nav-drawer');
+    expect(drawer).not.toBeNull();
+    expect(drawer).toHaveAttribute('data-side', 'start');
+    expect(drawer).toContainElement(screen.getByText('Nav content'));
+    // (The overlay keeps its own target; the panel's is not on it.)
+    expect(dialog).toHaveClass('astryx-mobile-nav');
+    expect(dialog).not.toHaveClass('astryx-mobile-nav-drawer');
+  });
+
   it('renders when isOpen is true', () => {
     render(
       <MobileNav isOpen={true} onOpenChange={() => {}}>

@@ -32,6 +32,7 @@ import {themeBuild, themeBuildFamily} from './build.mjs';
 import {ensureCoreBuilt} from '../../../clients/cli/commands/ensure-core-built.mjs';
 import {editorCompileProblem} from '../../theme-edit/_adapter.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {hasModuleHooks} from '../../../test-utils/module-hooks.mjs';
 
 vi.setConfig({testTimeout: 120_000});
 
@@ -117,7 +118,7 @@ describe('N4: a family key over a file the build did not write', () => {
     );
     expect(err).toBeUndefined();
     expect(lines.join('\n')).toContain(
-      'fam/index.js has no build header (an output from a CLI before 0.6.7, or a file of your own or another tool’s), and this build of fam/ocean.ts replaces it; to keep a file of your own there, build with another --family-key.'.replace(
+      'fam/index.js has no build header (an output of an earlier build, or a file of your own or another tool’s), and this build of fam/ocean.ts replaces it; to keep a file of your own there, build with another --family-key.'.replace(
         '’',
         "'",
       ),
@@ -175,25 +176,28 @@ describe('N11: a family member’s registry imported without its extension', () 
 });
 
 describe('N10: an icon registry that imports an asset', () => {
-  it('builds, with and without --icons-specifier', async () => {
-    write('p/check.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>');
-    write('p/mark.png', 'png');
-    write(
-      'p/icons.mjs',
-      `import check from './check.svg';\nimport mark from './mark.png';\nexport const icons = {check: String(check), mark: String(mark)};\n`,
-    );
-    write(
-      'p/p.ts',
-      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {icons} from './icons.mjs';\nexport default defineTheme({name: 'p', icons});\n`,
-    );
-    const plain = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
-    expect(plain.err).toBeUndefined();
-    expect(read('p/p.js')).toContain("from './icons.mjs'");
-    const named = await captured(() =>
-      themeBuild('p/p.ts', {iconsSpecifier: './icons.mjs'}, {cwd: dir}),
-    );
-    expect(named.err).toBeUndefined();
-  });
+  it.skipIf(!hasModuleHooks)(
+    'builds, with and without --icons-specifier',
+    async () => {
+      write('p/check.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>');
+      write('p/mark.png', 'png');
+      write(
+        'p/icons.mjs',
+        `import check from './check.svg';\nimport mark from './mark.png';\nexport const icons = {check: String(check), mark: String(mark)};\n`,
+      );
+      write(
+        'p/p.ts',
+        `import {defineTheme} from '@astryxdesign/core/theme';\nimport {icons} from './icons.mjs';\nexport default defineTheme({name: 'p', icons});\n`,
+      );
+      const plain = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
+      expect(plain.err).toBeUndefined();
+      expect(read('p/p.js')).toContain("from './icons.mjs'");
+      const named = await captured(() =>
+        themeBuild('p/p.ts', {iconsSpecifier: './icons.mjs'}, {cwd: dir}),
+      );
+      expect(named.err).toBeUndefined();
+    },
+  );
 });
 
 describe('N12: a single build with --out in another folder', () => {

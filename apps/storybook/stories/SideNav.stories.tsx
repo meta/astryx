@@ -257,6 +257,51 @@ export const NestedItems: Story = {
   ),
 };
 
+/**
+ * Long nested labels with end content, in an AppShell. On a phone the
+ * SideNav opens as a drawer; on a wider screen it is an expanded rail that
+ * collapses to icons with flyouts. Each nested row spans the nav's width,
+ * truncates its label and keeps its end content inside the nav.
+ */
+export const NestedLongLabels: Story = {
+  name: 'Nested Long Labels',
+  render: () => (
+    <AppShell
+      sideNav={
+        <SideNav
+          collapsible
+          header={
+            <SideNavHeading
+              icon={
+                <NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />
+              }
+              heading="My App"
+            />
+          }>
+          <SideNavSection title="Main">
+            <SideNavItem label="Dashboard" icon={HomeIcon} href="/dashboard" />
+            <SideNavItem label="Projects" icon={FolderIcon}>
+              <SideNavItem
+                label="Quarterly planning for the platform reliability program"
+                href="/projects/planning"
+                endContent={<Badge label={12} />}
+              />
+              <SideNavItem label="Infrastructure migrations and rollouts">
+                <SideNavItem
+                  label="Regional database failover rehearsal schedule"
+                  href="/projects/migrations/failover"
+                  endContent={<Badge label="New" />}
+                />
+              </SideNavItem>
+            </SideNavItem>
+          </SideNavSection>
+        </SideNav>
+      }>
+      <Text>Content</Text>
+    </AppShell>
+  ),
+};
+
 // =============================================================================
 // With Footer
 // =============================================================================

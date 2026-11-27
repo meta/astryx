@@ -18,7 +18,12 @@
  * a `next dev`/`next build` runtime concern, not a `generate` prerequisite,
  * so it is intentionally not required here.
  *
- * Usage: node scripts/check-workspace-build.mjs
+ * The docsite's `typecheck` runs this check first too, with --for=typecheck.
+ * `tsc` reads the built packages' types and the files four `generate` steps
+ * write, so an unbuilt workspace gets a message that names the fix and the
+ * missing files instead of thousands of type errors.
+ *
+ * Usage: node scripts/check-workspace-build.mjs [--for=typecheck]
  */
 
 import {existsSync} from 'node:fs';
@@ -51,6 +56,16 @@ const REQUIRED = [
 ];
 
 const missing = REQUIRED.filter(rel => !existsSync(join(ROOT, rel)));
+
+if (missing.length > 0 && process.argv.includes('--for=typecheck')) {
+  console.error(
+    [
+      'docsite typecheck needs a built workspace: run `pnpm build` first',
+      `(missing: ${missing.join(', ')})`,
+    ].join('\n'),
+  );
+  process.exit(1);
+}
 
 if (missing.length > 0) {
   console.error(

@@ -40,6 +40,15 @@ import {getOnlyButton} from '../__tests__/fastRoleQueries';
 import {InternationalizationProvider} from '../i18n';
 import {DateTimeInput as CoreDateTimeInput} from './DateTimeInput';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
+
+// A press that starts and ends on the scrim: the browser targets the dialog
+// element with the pointer events and with the click.
+function pressScrim(dialog: HTMLElement) {
+  fireEvent.pointerDown(dialog);
+  fireEvent.pointerUp(dialog);
+  fireEvent.click(dialog);
+}
 
 function DateTimeInput(props: DateTimeInputProps) {
   return <CoreDateTimeInput {...props} nativePicker="never" />;
@@ -565,7 +574,7 @@ describe('DateTimeInput touch surface', () => {
     fireEvent.click(optionIn('Minute', '45'));
     expect(timeField()).toHaveValue('3:45 PM');
 
-    fireEvent.click(screen.getByRole('dialog'));
+    pressScrim(screen.getByRole('dialog'));
     expect(timeField()).toHaveValue('');
   });
 
@@ -1199,7 +1208,7 @@ describe('DateTimeInput touch surface', () => {
     expect(field).not.toBeDisabled();
     expect(field).toHaveAttribute('aria-disabled', 'true');
     expect(field.getAttribute('aria-describedby')).toContain(
-      screen.getByRole('tooltip', {hidden: true}).id,
+      getTooltipDescription().id,
     );
     fireEvent.click(field);
     expect(field).toHaveAttribute('aria-expanded', 'false');

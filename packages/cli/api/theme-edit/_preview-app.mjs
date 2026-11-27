@@ -35,7 +35,12 @@ import {
   assertWithin,
   PathSafetyError,
 } from '../../foundation/fs/path-safety.mjs';
-import {baseResolved, installLine, openProject} from './_project.mjs';
+import {
+  baseResolved,
+  installLine,
+  openProject,
+  packageManagerAddLine,
+} from './_project.mjs';
 import {P, wordTable} from './_tables.mjs';
 import {
   buildTheme,
@@ -90,6 +95,7 @@ import {
   analyzeTemplateNeeds,
   extractImportedPackages,
   parsedSpecifiers,
+  referencedPaths,
 } from '../../foundation/discovery/template-needs.mjs';
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {
@@ -101,8 +107,10 @@ import {
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
+import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 import {
   formatCliCommand,
+  installDependenciesCommand,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
@@ -251,8 +259,8 @@ function layoutImportsSheet(cwd, app, sheet, dir = app) {
 /**
  * The modules a file imports, from its import statements: a script's
  * through the shared reader of import statements (its syntax tree, so a
- * comment or a string says nothing), or the `@import` rules of a stylesheet
- * (comments left out).
+ * comment or a string says nothing) with the files its leading reference
+ * comments name, or the `@import` rules of a stylesheet (comments left out).
  * @param {string} file
  * @param {string} text
  * @returns {string[]}
@@ -264,7 +272,8 @@ function importSpecifiers(file, text) {
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .matchAll(/@import\s+(?:url\()?\s*['"]([^'"]+)['"]/g),
     ].map(m => m[1]);
-  return parsedSpecifiers(text);
+  // The new app's type check reads a referenced file as it reads an import.
+  return [...parsedSpecifiers(text), ...referencedPaths(text)];
 }
 
 /**
@@ -714,7 +723,7 @@ function typeScriptNotes(cwd, dir, added) {
     return hasTs
       ? []
       : [
-          `the app has no TypeScript, and the preview's files are .tsx, so the next build sets it up; to do it now: ${installLine(cwd, ['typescript', '@types/react', '@types/node']).replace(/ (add|install) /, ' $1 -D ')}`,
+          `the app has no TypeScript, and the preview's files are .tsx, so the next build sets it up; to do it now: ${typescriptInstallLine(cwd)}`,
         ];
   }
   const templates = added.filter(id => !DEFAULT_PAGE_IDS.includes(id));
@@ -4024,6 +4033,20 @@ function appRootOf(cwd, dir) {
 }
 
 /**
+ * The step that adds TypeScript and React's and Node's types to the app: the
+ * integration's install guidance when one is given, else the package
+ * manager's add command, as a dev dependency.
+ * @param {string} cwd
+ */
+function typescriptInstallLine(cwd) {
+  const packages = ['typescript', '@types/react', '@types/node'];
+  return (
+    installGuidanceFor(packages, cwd) ??
+    installLine(cwd, packages).replace(/ (add|install) /, ' $1 -D ')
+  );
+}
+
+/**
  * What a template page needs that the app lacks, from its real imports:
  * packages the app's package.json does not name (with the command that
  * adds them), packages it names that are not installed (with the install
@@ -4031,7 +4054,7 @@ function appRootOf(cwd, dir) {
  * @param {string} cwd
  * @param {string} source
  */
-function pageNeeds(cwd, source) {
+export function pageNeeds(cwd, source) {
   const pkgs = [...extractImportedPackages(source)];
   const needs = analyzeTemplateNeeds(source, cwd);
   /** @type {Record<string, string>} */
@@ -4059,29 +4082,37 @@ function pageNeeds(cwd, source) {
   const notInstalled = absent.filter(p => p in declared);
   const undeclared = absent.filter(p => !(p in declared));
   const missingPackages = [...needs.missingPackages, ...undeclared];
+  const installDeps = notInstalled.length
+    ? [installDependenciesCommand(cwd)]
+    : [];
   const commands = [
     ...(needs.installCommand
       ? [[needs.installCommand, ...undeclared].join(' ')]
       : undeclared.length
-        ? [installLine(cwd, undeclared)]
+        ? [packageManagerAddLine(cwd, undeclared)]
         : []),
-    ...(notInstalled.length ? [installCommandOf(cwd)] : []),
+    ...installDeps,
   ];
+  const guidance = missingPackages.length
+    ? installGuidanceFor(missingPackages, cwd)
+    : undefined;
   return {
     missingPackages,
     notInstalled,
     installCommand: commands.length ? commands.join(' && ') : null,
-    noCommand: needs.missingPackages.length > 0 && !needs.installCommand,
+    // The integration's line for adding them, followed by the install of
+    // what the package.json already names.
+    ...(guidance
+      ? {installGuidance: [guidance, ...installDeps].join('; then ')}
+      : {}),
+    noCommand:
+      needs.missingPackages.length > 0 &&
+      !needs.installCommand &&
+      !needs.installGuidance,
     stylexCompiler:
       pkgs.includes('@stylexjs/stylex') &&
       detectStylingSystem(cwd) !== 'stylex',
   };
-}
-
-/** The command that installs what the package.json names. @param {string} cwd */
-function installCommandOf(cwd) {
-  // The package manager `installLine` names, with its install verb.
-  return installLine(cwd, []).trim().replace(/ add$/, ' install');
 }
 
 /**
@@ -4619,7 +4650,7 @@ async function addPreview(description, options, box) {
         };
   /** @type {Array<{id: string, label: string, text: string}>} */
   const add = [];
-  /** @type {Array<{page: string, reason: string, installCommand: string | null}>} */
+  /** @type {Array<{page: string, reason: string, installCommand: string | null, installGuidance?: string}>} */
   const skipped = [];
   /** @type {Array<{page: string, why: string}>} */
   const matched = [];
@@ -4723,6 +4754,7 @@ async function addPreview(description, options, box) {
         needsCompiler
       ) {
         const installCommand = needs.installCommand;
+        const installGuidance = needs.installGuidance;
         skipped.push({
           page: pick.name,
           reason: `${skipReason({
@@ -4731,8 +4763,10 @@ async function addPreview(description, options, box) {
             stylexCompiler: needsCompiler,
           })}${needs.noCommand ? ' (the app has more than one lockfile, so install it with the package manager you use)' : ''}`,
           installCommand,
+          ...(installGuidance ? {installGuidance} : {}),
         });
-        if (installCommand) runs.push(installCommand);
+        const run = installGuidance ?? installCommand;
+        if (run) runs.push(run);
         if (needsCompiler) stylexSkipped = true;
         if (i === 0) firstSkipped = true;
         continue;
@@ -4743,7 +4777,7 @@ async function addPreview(description, options, box) {
   }
   for (const s of skipped)
     notes.push(
-      `the ${s.page} page was not added: it ${s.reason}${s.installCommand ? `; ${s.installCommand}, then add it again` : ''}`,
+      `the ${s.page} page was not added: it ${s.reason}${(s.installGuidance ?? s.installCommand) ? `; ${s.installGuidance ?? s.installCommand}, then add it again` : ''}`,
     );
   if (firstSkipped && add.length && !explicit)
     notes.push(`added ${add.map(a => a.id).join(', ')} in its place`);

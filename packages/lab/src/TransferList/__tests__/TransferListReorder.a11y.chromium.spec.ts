@@ -19,6 +19,7 @@ import {
   expect,
   test,
   type CDPSession,
+  type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -150,20 +151,45 @@ test('the panels clip nothing in the phone layout, and clip at a desktop width',
   await expect.poll(overflows).toEqual(['hidden', 'hidden']);
 });
 
-test('selected rows keep one height and one Remove column, fixed rows included', async ({
-  page,
-}) => {
+/**
+ * The selected rows of the Locked story under each `handle` option: their
+ * heights, their Remove column, their labels' column and the panel heading's.
+ */
+async function selectedRows(
+  page: Page,
+  placement: 'end' | 'start',
+  revealBehavior: 'always' | 'adaptive',
+) {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-transferlist--locked&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=lab-transferlist--locked&viewMode=story&args=placement:${placement};revealBehavior:${revealBehavior}`,
   );
-  await expect(page.locator(GRIP).first()).toBeVisible();
-  const rows = await page.evaluate(() =>
-    Array.from(document.querySelectorAll('[data-transfer-list-row]'))
+  await page.locator(GRIP).first().waitFor({state: 'attached'});
+  await page.mouse.move(1, 1);
+  return page.evaluate(() => {
+    const textLeft = (element: Element) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if ((node.textContent ?? '').trim() !== '') {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          return range.getBoundingClientRect().left;
+        }
+      }
+      return Number.NaN;
+    };
+    const rows = Array.from(
+      document.querySelectorAll('[data-transfer-list-row]'),
+    )
       .map(row => row.closest('li') as HTMLElement)
       .filter(row =>
         row.closest('ul')?.querySelector('[data-astryx-list-reorder]'),
-      )
-      .map(row => {
+      );
+    const heading = Array.from(document.querySelectorAll('[id]')).find(
+      element => element.textContent === 'Shown',
+    );
+    return {
+      headingLeft: heading == null ? Number.NaN : textLeft(heading),
+      rows: rows.map(row => {
         const remove = Array.from(row.querySelectorAll('button')).find(
           button => !button.hasAttribute('data-astryx-list-reorder'),
         );
@@ -171,6 +197,7 @@ test('selected rows keep one height and one Remove column, fixed rows included',
         const removeBox = remove?.getBoundingClientRect();
         return {
           label: row.textContent?.trim() ?? '',
+          labelLeft: textLeft(row),
           height: box.height,
           removeRight: removeBox == null ? null : box.right - removeBox.right,
           removeMiddle:
@@ -182,17 +209,57 @@ test('selected rows keep one height and one Remove column, fixed rows included',
           hasHandle: row.querySelector('[data-astryx-list-reorder]') != null,
         };
       }),
-  );
+    };
+  });
+}
+
+const HANDLE_OPTIONS = [
+  ['end', 'always'],
+  ['end', 'adaptive'],
+  ['start', 'always'],
+  ['start', 'adaptive'],
+] as const;
+
+function expectOneColumn(
+  {headingLeft, rows}: Awaited<ReturnType<typeof selectedRows>>,
+  isAtStart: boolean,
+) {
+  const detail = JSON.stringify({headingLeft, rows});
   // Both kinds of row are here: movable ones with a handle, fixed ones without.
-  expect(rows.some(row => row.hasHandle)).toBe(true);
-  expect(rows.some(row => !row.hasHandle)).toBe(true);
+  expect(
+    rows.some(row => row.hasHandle),
+    detail,
+  ).toBe(true);
+  expect(
+    rows.some(row => !row.hasHandle),
+    detail,
+  ).toBe(true);
   const [first] = rows;
   for (const row of rows) {
     expect(row.height, row.label).toBeCloseTo(first.height, 0);
     expect(row.removeRight, row.label).toBeCloseTo(first.removeRight ?? 0, 0);
     expect(Math.abs(row.removeMiddle ?? 0), row.label).toBeLessThan(1);
+    expect(row.labelLeft, `${row.label} ${detail}`).toBeCloseTo(
+      first.labelLeft,
+      0,
+    );
   }
-});
+  // At the start, the panel's heading starts in its labels' column.
+  if (isAtStart) {
+    expect(first.labelLeft, detail).toBeCloseTo(headingLeft, 0);
+  }
+}
+
+for (const [placement, revealBehavior] of HANDLE_OPTIONS) {
+  test(`selected rows keep one height, one Remove column and one label column, fixed rows included (${placement}, ${revealBehavior})`, async ({
+    page,
+  }) => {
+    expectOneColumn(
+      await selectedRows(page, placement, revealBehavior),
+      placement === 'start',
+    );
+  });
+}
 
 test.describe('with a mouse', () => {
   test.use({
@@ -200,6 +267,17 @@ test.describe('with a mouse', () => {
     isMobile: false,
     viewport: {width: 1024, height: 768},
   });
+
+  for (const [placement, revealBehavior] of HANDLE_OPTIONS) {
+    test(`selected rows keep one Remove column and one label column under a mouse (${placement}, ${revealBehavior})`, async ({
+      page,
+    }) => {
+      expectOneColumn(
+        await selectedRows(page, placement, revealBehavior),
+        placement === 'start',
+      );
+    });
+  }
 
   test('a mouse drags a handle at once and the row lands where it is dropped', async ({
     page,
@@ -261,39 +339,44 @@ test.describe('a disabled list', () => {
     deviceScaleFactor: 1,
   });
 
-  test('dims a disabled row once: its label, Remove and handle at half opacity', async ({
-    page,
-  }) => {
-    await page.goto(
-      `${storybook.origin}/iframe.html?id=a11y-transferlist--disabled&viewMode=story`,
-    );
-    await page.getByRole('switch', {name: 'Disable the list'}).click();
-    const row = page.locator('[data-transfer-list-row="owner"]');
-    const handle = 'button[data-astryx-list-reorder]';
-    await expect(row.locator(handle)).toHaveAttribute('aria-disabled', 'true');
-    // The opacity a reader sees: the product of the element's own and its
-    // ancestors' opacity, up to the row.
-    const seen = async (selector: string) =>
-      row
-        .locator(selector)
-        .first()
-        .evaluate(element => {
-          let opacity = 1;
-          for (
-            let node: Element | null = element;
-            node != null && !node.matches('[data-transfer-list-row]');
-            node = node.parentElement
-          ) {
-            opacity *= Number(getComputedStyle(node).opacity);
-          }
-          return Math.round(opacity * 100) / 100;
-        });
-    await expect.poll(() => seen('text=Owner')).toBe(0.5);
-    await expect
-      .poll(() => seen('[data-transfer-list-action="selected"]'))
-      .toBe(0.5);
-    await expect.poll(() => seen(handle)).toBe(0.5);
-  });
+  for (const placement of ['end', 'start'] as const) {
+    test(`dims a disabled row once: its label, Remove and handle at half opacity (handle at the ${placement})`, async ({
+      page,
+    }) => {
+      await page.goto(
+        `${storybook.origin}/iframe.html?id=a11y-transferlist--disabled&viewMode=story&args=handlePlacement:${placement}`,
+      );
+      await page.getByRole('switch', {name: 'Disable the list'}).click();
+      const row = page.locator('[data-transfer-list-row="owner"]');
+      const handle = 'button[data-astryx-list-reorder]';
+      await expect(row.locator(handle)).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      // The opacity a reader sees: the product of the element's own and its
+      // ancestors' opacity, up to the row.
+      const seen = async (selector: string) =>
+        row
+          .locator(selector)
+          .first()
+          .evaluate(element => {
+            let opacity = 1;
+            for (
+              let node: Element | null = element;
+              node != null && !node.matches('[data-transfer-list-row]');
+              node = node.parentElement
+            ) {
+              opacity *= Number(getComputedStyle(node).opacity);
+            }
+            return Math.round(opacity * 100) / 100;
+          });
+      await expect.poll(() => seen('text=Owner')).toBe(0.5);
+      await expect
+        .poll(() => seen('[data-transfer-list-action="selected"]'))
+        .toBe(0.5);
+      await expect.poll(() => seen(handle)).toBe(0.5);
+    });
+  }
 
   test('keeps each reorder handle focusable and disabled, with the focus where it was', async ({
     page,

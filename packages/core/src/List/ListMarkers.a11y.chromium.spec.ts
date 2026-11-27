@@ -203,7 +203,10 @@ for (const {width, mode} of [
                 const nested = content
                   .querySelector('ol')
                   ?.getBoundingClientRect();
-                const label = content.querySelector(':scope > span > span');
+                // The avatar's hidden tooltip description has no line box.
+                const label = content.querySelector(
+                  ':scope > span > span:not([hidden])',
+                );
                 const labelRect = label?.getBoundingClientRect();
                 const labelLine =
                   label == null
@@ -340,7 +343,7 @@ for (const {width, mode} of [
     }, testInfo) => {
       test.fixme(
         dir === 'rtl',
-        'Markdown lays these English items out left to right in a right-to-left page; RichText still lays them out in the page direction, so the surfaces differ until RichText gives each block its own direction.',
+        "Both surfaces now give a block its own direction, but they hold the list inset in different places: Markdown pads the list on its start side, RichText insets each item on its own start side, so where an item reads against its list the two text starts differ by one inset. Markdown's marker also has no room on the side it is drawn there. Closing this moves both surfaces.",
       );
       const errors: string[] = [];
       page.on('pageerror', error => errors.push(error.message));
@@ -661,7 +664,7 @@ for (const {name, story, probe, hasTasks} of [
     }, testInfo) => {
       test.fixme(
         dir === 'rtl',
-        'Markdown lays these English items out left to right in a right-to-left page; RichText still lays them out in the page direction, so the surfaces differ until RichText gives each block its own direction.',
+        "Both surfaces now give a block its own direction, but they hold the list inset in different places: Markdown pads the list on its start side, RichText insets each item on its own start side, so where an item reads against its list the two text starts differ by one inset. Markdown's marker also has no room on the side it is drawn there. Closing this moves both surfaces.",
       );
       await page.setViewportSize({width: 1440, height: 900});
       await page.goto(

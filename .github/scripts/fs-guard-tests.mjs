@@ -205,15 +205,21 @@ const RECORD_ROOTS = [
   'docs/families/',
   'docs/design/',
   'packages/themes/',
+  // Only the recorded test times: RECORD_LITERAL names no other path under
+  // scripts/ or .github/.
+  'scripts/',
+  '.github/',
 ];
 /** A path literal into a record root, relative (`../…/docs/specs/…`) or from the root. */
 const RECORD_LITERAL =
-  /(['"`])((?:\.\.?\/)*(?:docs\/(?:specs|families|design)|packages\/themes)(?:\/[^'"`\n]*)?)\1/g;
+  /(['"`])((?:\.\.?\/)*(?:docs\/(?:specs|families|design)|packages\/themes|scripts\/vitest-node-durations[^/'"`\n]*\.json|\.github\/playwright-leg-durations\.json)(?:\/[^'"`\n]*)?)\1/g;
 /** `path.join(root, 'docs', 'specs', …)` and the like: the whole root. */
 const RECORD_SEGMENTS =
   /(['"])(docs|packages)\1\s*,\s*(['"])(specs|families|design|themes)\3/g;
+// A changed record: a spec record, or the recorded test times, whose readers
+// run for a change only to them (spec:AST-030 FR13).
 const RECORD_PATH =
-  /^(?:docs\/(?:specs|families|design)\/|packages\/themes\/[^/]+\/[^/]+\.spec\.md$)/;
+  /^(?:docs\/(?:specs|families|design)\/|packages\/themes\/[^/]+\/[^/]+\.spec\.md$|scripts\/vitest-node-durations[^/]*\.json$|\.github\/playwright-leg-durations\.json$)/;
 
 /** The source without block comments and whole-line `//` comments, where prose names records. */
 function code(source) {
@@ -246,7 +252,8 @@ function recordPathsIn(file, source, isPath) {
   for (const [, , literal] of body.matchAll(RECORD_LITERAL)) {
     // Code or a glob computes the rest: keep the fixed part.
     const fixed = literal.split(/\$\{|[*?[{]/)[0];
-    const joined = fixed.startsWith('.')
+    // A relative literal starts with ./ or ../; `.github/…` is not one.
+    const joined = /^\.\.?\//.test(fixed)
       ? path.posix.normalize(path.posix.join(path.posix.dirname(file), fixed))
       : fixed;
     const root = RECORD_ROOTS.find(

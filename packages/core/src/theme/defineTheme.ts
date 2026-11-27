@@ -99,12 +99,13 @@ type ThemeIconOverrides = Partial<
 >;
 import type {IndicatorRegistry} from '../Indicator/types';
 import type {TypographyConfig} from './types';
+import type {ThemePalette} from '../palette/types';
 import {
   resolveOnMedia,
   type OnMediaOverrides,
   type ResolvedOnMedia,
 } from './onMediaTokens';
-import {
+import type {
   colorDefaults,
   spacingDefaults,
   sizeDefaults,
@@ -135,7 +136,8 @@ import {
 } from './themeAdaptations';
 
 import type {DomainTokenName} from './domainTokens';
-import {domainTokenDefaults} from './domainTokens/domainTokenDefaults';
+import {deepMergeComponents} from './mergeComponents';
+import {tokenDefaults} from './tokenDefaults';
 import type {SyntaxThemeDefinition} from './syntax';
 import {registerTheme} from './themeRegistry';
 import {resolveLocalTokenContract} from './localTokens';
@@ -190,8 +192,15 @@ export type TokenValue = string | [light: string, dark: string];
  *
  * The `@light` and `@dark` keys hold a style block (properties and
  * pseudo-class overrides) that applies only where the element's color mode is
- * that mode: the mode `Theme` resolves from its own `mode`, the system
- * preference, or a `MediaTheme` surface. Inside media surfaces the nearest
+ * that mode: the mode a `Theme` sets with `light` or `dark`, or a `MediaTheme`
+ * surface. Under a `system` Theme a block follows the scheme the page root
+ * draws in (its `color-scheme`, else its color-scheme meta; not a scheme set
+ * on `body` or a container): on a page that draws in one scheme, once the
+ * root Theme has mounted, that scheme's block applies whatever the reader
+ * prefers. On a page that follows the reader, and at the first paint of a
+ * server-rendered page, the reader's preference decides. Under a Theme that
+ * forces a mode, a `system` Theme's block follows the reader's preference.
+ * Inside media surfaces the nearest
  * surface decides, so a light `MediaTheme` inside a dark one takes only the
  * light block, for up to five surfaces of alternating modes nested one in
  * another. Where no enclosing mode matches, the block writes nothing, so every other
@@ -411,6 +420,25 @@ export interface DefineThemeInput<
    *  Values can be a string or [light, dark] tuple.
    *  Only include tokens you want to override; defaults fill the rest. */
   tokens?: Partial<Record<TokenName, TokenValue>>;
+  /**
+   * Colors made from a few seeds by `themePalette()` from
+   * `@astryxdesign/core/palette`: the color tokens the theme editor maps for
+   * its color settings, and the part styles that keep secondary text
+   * readable on the accent tint, the neutral track and the colored cards.
+   * `tokens` and
+   * `components` still win, one by one.
+   *
+   * @example
+   * ```
+   * import {themePalette} from '@astryxdesign/core/palette';
+   *
+   * defineTheme({
+   *   name: 'acme',
+   *   palette: themePalette({accent: '#5b3cc4', neutral: '#6b6b70'}),
+   * });
+   * ```
+   */
+  palette?: ThemePalette;
   /** Theme-family-local values keyed by any valid CSS custom-property name;
    *  prefixes do not establish ownership. */
   localTokens?: Record<string, TokenValue>;
@@ -689,23 +717,7 @@ export type ResolvedDefinedTheme<IconVariant extends string = string> =
 // All defaults merged into a single flat map
 // =============================================================================
 
-/** All Astryx token defaults as a flat map. Useful for resolving full token sets. */
-export const tokenDefaults: Record<string, string> = {
-  ...colorDefaults,
-  ...spacingDefaults,
-  ...sizeDefaults,
-  ...borderDefaults,
-  ...focusDefaults,
-  ...radiusDefaults,
-  ...shadowDefaults,
-  ...durationDefaults,
-  ...easeDefaults,
-  ...typographyDefaults,
-  ...textSizeDefaults,
-  ...fontWeightDefaults,
-  ...typeScaleDefaults,
-  ...domainTokenDefaults,
-};
+export {tokenDefaults} from './tokenDefaults';
 
 // =============================================================================
 // defineTheme
@@ -808,6 +820,66 @@ function assertCompleteMotionScale(
 }
 
 /**
+ * The theme's palette, when it has one. A palette that `themePalette()` did
+ * not make is refused: a plain object of seeds is palette input, and
+ * `defineTheme` does not run the generator itself, so that apps without a
+ * palette never ship it.
+ */
+function readPalette(input: {
+  name: string;
+  palette?: unknown;
+}): ThemePalette | undefined {
+  const {palette} = input;
+  if (palette === undefined) {
+    return undefined;
+  }
+  if (
+    palette !== null &&
+    typeof palette === 'object' &&
+    (palette as {kind?: unknown}).kind === 'theme-palette' &&
+    typeof (palette as {tokens?: unknown}).tokens === 'object'
+  ) {
+    return palette as ThemePalette;
+  }
+  throw new Error(
+    `defineTheme("${input.name}"): \`palette\` must be made by themePalette() from @astryxdesign/core/palette, got ${palette === null ? 'null' : typeof palette === 'object' ? 'a plain object' : typeof palette}. ` +
+      `Wrap the seeds: palette: themePalette({accent: '#5b3cc4'}).`,
+  );
+}
+
+/**
+ * The palette's part styles under the theme's own: a part style the theme
+ * sets wins, property by property. The palette writes each mode in its own
+ * color-mode block, so a property the theme sets for both modes leaves those
+ * blocks first.
+ */
+function withPaletteComponents(
+  palette: ThemePalette,
+  own: ComponentStyleMap | undefined,
+): ComponentStyleMap | undefined {
+  const lifted: ComponentStyleMap = {};
+  for (const [part, blocks] of Object.entries(palette.components)) {
+    lifted[part] = {};
+    for (const [block, lift] of Object.entries(blocks)) {
+      const ownStyle = own?.[part]?.[block];
+      const set = (property: string): boolean =>
+        ownStyle != null && ownStyle[property] !== undefined;
+      const style: Record<string, Record<string, string>> = {};
+      for (const mode of ['@light', '@dark'] as const) {
+        const values = Object.entries(lift[mode]).filter(
+          ([property]) => !set(property),
+        );
+        if (values.length) {
+          style[mode] = Object.fromEntries(values);
+        }
+      }
+      lifted[part][block] = style;
+    }
+  }
+  return deepMergeComponents(lifted, own);
+}
+
+/**
  * Create an Astryx theme.
  *
  * Pass only the tokens you want to override — everything else
@@ -847,6 +919,7 @@ export function defineTheme<
     );
   }
   const base = input.extends;
+  const palette = readPalette(input);
 
   // The theme's own value axes and the resolved base an `extends` supplies.
   // The same axis metadata is retained so adaptation rules can complete partial
@@ -879,9 +952,13 @@ export function defineTheme<
     syntax: input.syntax,
     tokens:
       inheritedScale != null && Object.keys(inheritedScale).length > 0
-        ? {...inheritedScale, ...input.tokens}
-        : input.tokens,
-    components: input.components,
+        ? {...inheritedScale, ...palette?.tokens, ...input.tokens}
+        : palette
+          ? {...palette.tokens, ...input.tokens}
+          : input.tokens,
+    components: palette
+      ? withPaletteComponents(palette, input.components)
+      : input.components,
   };
   const ownAxes: ThemeGenerativeAxes = {
     typography: input.typography,
@@ -993,8 +1070,8 @@ export function defineTheme<
       : {}),
     indicators,
     __inputTokens:
-      base?.__inputTokens || input.tokens
-        ? {...base?.__inputTokens, ...input.tokens}
+      base?.__inputTokens || palette || input.tokens
+        ? {...base?.__inputTokens, ...palette?.tokens, ...input.tokens}
         : undefined,
     __onDark,
     __onLight,
@@ -1106,20 +1183,6 @@ function readThemeIconNodes(
   }
   return nodes as ThemeIconOverrides;
 }
-
-// =============================================================================
-// CSS generation — re-exported from ./generateThemeRules.ts
-// =============================================================================
-
-export {
-  generateThemeRules,
-  generateThemeRulesSplit,
-  generateOnMediaCSS,
-  generateAdaptationCSS,
-  generateThemeCSS,
-  type ThemeRulesSplit,
-  type ThemeCSSOutput,
-} from './generateThemeRules';
 
 // =============================================================================
 // Type guard

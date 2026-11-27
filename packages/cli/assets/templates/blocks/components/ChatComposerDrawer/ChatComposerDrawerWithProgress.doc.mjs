@@ -10,5 +10,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Chat', 'Token', 'ProgressBar', 'Icon', 'Button', 'Layout'],
-  icons: {AtSymbolIcon: 'mention', PaperClipIcon: 'attach'},
 };

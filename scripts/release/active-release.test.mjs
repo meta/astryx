@@ -10,9 +10,12 @@
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFile, execFileSync} from 'node:child_process';
+import {promisify} from 'node:util';
+import {fileURLToPath} from 'node:url';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
   createRepository,
@@ -30,6 +33,9 @@ import {
   latestStableVersion,
   mergeBackEntries,
   nextPlannedVersion,
+  successorPlanReadiness,
+  validateCodemodPromotionApplicabilityAtRef,
+  validateCodemodPromotionApplicabilityMove,
   validateReleaseDiff,
   validateReleaseTestRepair,
   validateHistoricalReleaseMergeBack,
@@ -37,11 +43,16 @@ import {
   validateReleaseState,
   writeAuthority,
 } from './active-release.mjs';
+import {classifyReleaseDiff} from './release-paths.mjs';
 
 const CUT = '1'.repeat(40);
 const HEAD = '2'.repeat(40);
 const NEXT_HEAD = '3'.repeat(40);
+const ACTIVE_RELEASE = fileURLToPath(
+  new URL('./active-release.mjs', import.meta.url),
+);
 const BRANCH = 'release/v0.6.5';
+const execFileAsync = promisify(execFile);
 const roots = [];
 
 function fixture({withChangeset = false, changesetText = null} = {}) {
@@ -123,6 +134,39 @@ function validate(state, overrides = {}) {
     activeBranches: [BRANCH],
     ...overrides,
   });
+}
+
+function ownerRecutReceipt(
+  root,
+  {version = '0.6.5', tagSha, tagObjectType = 'commit', digestOverride} = {},
+) {
+  const document = {
+    schemaVersion: 1,
+    kind: 'tagged-unpublished-owner-recut-authority',
+    version,
+    priorTag: {
+      name: `v${version}`,
+      objectType: tagObjectType,
+      objectSha: tagSha ?? git(root, 'rev-parse', 'HEAD'),
+    },
+    publicationAbsence: {
+      npmVersion: `${version} absent for every stable package`,
+      githubRelease: 'absent',
+      deploy: 'absent',
+      mainSync: 'absent',
+    },
+    ownerAuthority: {
+      source: 'release owner',
+      time: '2026-11-20T04:41:00Z',
+      verbatim: 'recut the missed version from main',
+    },
+  };
+  const file = path.join(root, 'owner-recut.json');
+  const body = `${JSON.stringify(document, null, 2)}\n`;
+  fs.writeFileSync(file, body);
+  const digest =
+    digestOverride ?? crypto.createHash('sha256').update(body).digest('hex');
+  return `${file} SHA-256 ${digest}`;
 }
 
 afterEach(() => {
@@ -252,6 +296,369 @@ describe('one branch per release lifecycle', () => {
     expect(() => writeAuthority(root, identity(cutSha), false)).toThrow(
       'use a new release branch and version',
     );
+  });
+
+  it('keeps ordinary create stderr empty when the version tag is absent', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+
+    const {stderr} = await execFileAsync(process.execPath, [
+      ACTIVE_RELEASE,
+      'create',
+      '--root',
+      root,
+      '--version',
+      '0.6.5',
+      '--branch',
+      BRANCH,
+      '--cut-sha',
+      cutSha,
+    ]);
+
+    expect(stderr).toBe('');
+  });
+
+  it('allows only an authenticated unpublished owner recut over an existing tag', () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.5');
+    const values = identity(cutSha);
+
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root, {
+            digestOverride: '0'.repeat(64),
+          }),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt SHA-256 does not match');
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root, {version: '0.6.6'}),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt does not match the release version and tag');
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root, {
+            tagObjectType: 'tag',
+          }),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt does not match the release version and tag');
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root, {
+            tagSha: 'f'.repeat(40),
+          }),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt does not match the release version and tag');
+
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root),
+        },
+        false,
+      ),
+    ).not.toThrow();
+  });
+
+  it('runs create over an authenticated archived tag and binds the recut authority', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+    git(root, 'tag', 'v0.6.5');
+    const reference = ownerRecutReceipt(root);
+    const server = http.createServer((request, response) => {
+      if (request.url?.endsWith('/dist-tags')) {
+        response.writeHead(200, {'content-type': 'application/json'});
+        response.end(JSON.stringify({latest: '0.6.4'}));
+        return;
+      }
+      response.writeHead(404, {'content-type': 'application/json'});
+      response.end('{}');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+
+    try {
+      await execFileAsync(process.execPath, [
+        ACTIVE_RELEASE,
+        'create',
+        '--root',
+        root,
+        '--version',
+        '0.6.5',
+        '--branch',
+        BRANCH,
+        '--cut-sha',
+        cutSha,
+        '--owner-recut-receipt',
+        reference,
+        '--registry',
+        `http://127.0.0.1:${address.port}`,
+      ]);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+
+    const plan = JSON.parse(
+      fs.readFileSync(path.join(root, '.release/plan.json'), 'utf8'),
+    );
+    const marker = JSON.parse(
+      fs.readFileSync(path.join(root, '.release/active.json'), 'utf8'),
+    );
+    expect(plan.ownerRecut).toMatchObject({
+      version: '0.6.5',
+      tagName: 'v0.6.5',
+      tagSha: git(root, 'rev-parse', 'v0.6.5^{commit}'),
+      receiptSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(marker.ownerRecut).toEqual(plan.ownerRecut);
+  });
+
+  it('refuses an owner recut when npm already published the version', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+    git(root, 'tag', 'v0.6.5');
+    const reference = ownerRecutReceipt(root);
+    const server = http.createServer((_request, response) => {
+      response.writeHead(200, {'content-type': 'application/json'});
+      response.end(JSON.stringify({version: '0.6.5', latest: '0.6.5'}));
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+
+    try {
+      await expect(
+        execFileAsync(process.execPath, [
+          ACTIVE_RELEASE,
+          'create',
+          '--root',
+          root,
+          '--version',
+          '0.6.5',
+          '--branch',
+          BRANCH,
+          '--cut-sha',
+          cutSha,
+          '--owner-recut-receipt',
+          reference,
+          '--registry',
+          `http://127.0.0.1:${address.port}`,
+        ]),
+      ).rejects.toThrow(
+        /owner recut refuses v0\.6\.5 because npm already has a publication effect/,
+      );
+      expect(fs.existsSync(path.join(root, '.release/active.json'))).toBe(
+        false,
+      );
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('refuses refresh after the archived tag moves', () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+    git(root, 'tag', 'v0.6.5');
+    writeAuthority(
+      root,
+      {
+        ...identity(cutSha),
+        'owner-recut-receipt': ownerRecutReceipt(root),
+      },
+      false,
+    );
+    const {movedTagTarget} = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        parent: 'refs/heads/main',
+        name: 'movedTagTarget',
+        message: 'move archived tag',
+      },
+    ]);
+    git(root, 'tag', '-f', 'v0.6.5', movedTagTarget);
+
+    expect(() =>
+      execFileSync(
+        process.execPath,
+        [
+          ACTIVE_RELEASE,
+          'refresh',
+          '--root',
+          root,
+          '--version',
+          '0.6.5',
+          '--branch',
+          BRANCH,
+          '--cut-sha',
+          cutSha,
+        ],
+        {encoding: 'utf8'},
+      ),
+    ).toThrow(/archived owner-recut tag no longer matches its bound commit/);
+  });
+
+  it('refuses the successor command until npm stable publication', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.5');
+    writeAuthority(
+      root,
+      {
+        ...identity(cutSha),
+        'owner-recut-receipt': ownerRecutReceipt(root),
+      },
+      false,
+    );
+    const {releaseHead} = importCommits(root, [
+      {
+        ref: `refs/heads/${BRANCH}`,
+        parent: 'refs/heads/main',
+        name: 'releaseHead',
+        message: 'owner recut authority',
+        snapshot: true,
+        files: workingTreeFiles(root),
+      },
+    ]);
+    let latest = '0.6.4';
+    const server = http.createServer((request, response) => {
+      if (request.url?.endsWith('/dist-tags')) {
+        response.writeHead(200, {'content-type': 'application/json'});
+        response.end(JSON.stringify({latest}));
+        return;
+      }
+      response.writeHead(404, {'content-type': 'application/json'});
+      response.end('{}');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const args = [
+      ACTIVE_RELEASE,
+      'next-plan-version',
+      '--root',
+      root,
+      '--released-version',
+      '0.6.5',
+      '--release-ref',
+      `refs/heads/${BRANCH}`,
+      '--registry',
+      `http://127.0.0.1:${address.port}`,
+    ];
+
+    try {
+      await expect(execFileAsync(process.execPath, args)).rejects.toThrow(
+        /successor plan waits until v0\.6\.5 has a publication effect/,
+      );
+      git(root, 'tag', '-f', 'v0.6.5', releaseHead);
+      await expect(execFileAsync(process.execPath, args)).rejects.toThrow(
+        /successor plan waits until v0\.6\.5 has a publication effect/,
+      );
+      latest = '0.6.5';
+      const {stdout} = await execFileAsync(process.execPath, args);
+      expect(stdout.trim()).toBe('0.6.6');
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('holds an ordinary tagged release through npm absence or unreadability', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+    writeAuthority(root, identity(cutSha), false);
+    const {releaseHead} = importCommits(root, [
+      {
+        ref: `refs/heads/${BRANCH}`,
+        parent: 'refs/heads/main',
+        name: 'releaseHead',
+        message: 'ordinary release authority',
+        snapshot: true,
+        files: workingTreeFiles(root),
+      },
+    ]);
+    git(root, 'tag', 'v0.6.5', releaseHead);
+
+    let registryState = 'absent';
+    const server = http.createServer((request, response) => {
+      if (registryState === 'unreadable') {
+        response.writeHead(503, {'content-type': 'application/json'});
+        response.end('{}');
+        return;
+      }
+      if (request.url?.endsWith('/dist-tags')) {
+        response.writeHead(200, {'content-type': 'application/json'});
+        response.end(JSON.stringify({latest: '0.6.4'}));
+        return;
+      }
+      if (registryState === 'published') {
+        response.writeHead(200, {'content-type': 'application/json'});
+        response.end(JSON.stringify({version: '0.6.5'}));
+        return;
+      }
+      response.writeHead(404, {'content-type': 'application/json'});
+      response.end('{}');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const args = [
+      ACTIVE_RELEASE,
+      'next-plan-version',
+      '--root',
+      root,
+      '--released-version',
+      '0.6.5',
+      '--release-ref',
+      `refs/heads/${BRANCH}`,
+      '--registry',
+      `http://127.0.0.1:${address.port}`,
+    ];
+
+    try {
+      await expect(execFileAsync(process.execPath, args)).rejects.toThrow(
+        /successor plan waits until v0\.6\.5 has a publication effect/,
+      );
+      registryState = 'unreadable';
+      await expect(execFileAsync(process.execPath, args)).rejects.toThrow(
+        /successor plan cannot verify npm stable publication/,
+      );
+      registryState = 'published';
+      const {stdout} = await execFileAsync(process.execPath, args);
+      expect(stdout.trim()).toBe('0.6.6');
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('refuses an owner recut receipt when the archived tag is absent', () => {
+    const {root, cutSha} = cutFixture();
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...identity(cutSha),
+          'owner-recut-receipt': ownerRecutReceipt(root),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt requires the archived tag');
   });
 
   it("binds the release version to main's declared version at the cut", () => {
@@ -456,6 +863,97 @@ describe('active release branch authority', () => {
     ).toEqual([]);
   });
 
+  it('allows only the exact AST-057 pointers moved by codemod promotion', () => {
+    const spec = 'docs/specs/AST-057-row-actions/spec.md';
+    const sources = [
+      'packages/cli/assets/codemods/transforms/next/migrate-item-swipe-actions-to-swipe.mjs',
+      'packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs',
+    ];
+    const destinations = sources.map(file =>
+      file.replace('/transforms/next/', '/transforms/v0.7.17/'),
+    );
+    const promotionEntries = sources.map(
+      (file, index) => `R100\t${file}\t${destinations[index]}`,
+    );
+    const entries = [`M\t${spec}`, ...promotionEntries];
+    const before = `{"paths":${JSON.stringify(sources)}}\n`;
+    const after = sources.reduce(
+      (text, file, index) => text.replace(file, destinations[index]),
+      before,
+    );
+    const validateMove = overrides =>
+      validateCodemodPromotionApplicabilityMove({
+        before,
+        after,
+        entries,
+        status: 'M',
+        version: '0.7.17',
+        ...overrides,
+      });
+
+    expect(classifyReleaseDiff(entries)).toBe('version-bump');
+    expect(validateMove()).toEqual([]);
+    expect(
+      validateReleaseDiff(entries, {
+        validatedCodemodPromotionPaths: new Set([spec]),
+      }),
+    ).toEqual([]);
+    expect(validateReleaseDiff(entries)).toContain(
+      `release bump contains an unvalidated codemod-promotion applicability move: ${spec}`,
+    );
+
+    expect(validateMove({entries: entries.slice(0, -1)})).toContain(
+      `codemod promotion does not rename ${sources[1]} to ${destinations[1]}`,
+    );
+    expect(validateMove({before: `${before}${sources[0]}\n`})).toContain(
+      `${spec} must contain the exact pre-promotion pointer once: ${sources[0]}`,
+    );
+    expect(validateMove({status: 'D'})).toContain(
+      `${spec} may only be modified by a generated codemod promotion`,
+    );
+    expect(
+      validateMove({after: after.replace('{"paths"', '{"other"')}),
+    ).toContain(
+      `${spec} may change only the exact applicability pointers moved by the codemod promotion`,
+    );
+    expect(classifyReleaseDiff(['M\tdocs/specs/AST-058/spec.md'])).toBe(
+      'invalid',
+    );
+  });
+
+  it('reports a missing AST-057 record instead of reading null bytes', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-codemod-applicability-'),
+    );
+    roots.push(root);
+    const spec = 'docs/specs/AST-057-row-actions/spec.md';
+    const {base, deleted} = createRepository(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'base',
+        snapshot: true,
+        files: {[spec]: 'record\n'},
+      },
+      {
+        ref: 'refs/heads/candidate',
+        name: 'deleted',
+        parent: 'base',
+        files: {[spec]: null},
+      },
+    ]);
+
+    const result = validateCodemodPromotionApplicabilityAtRef(root, {
+      base,
+      head: deleted,
+      entries: [`D\t${spec}`],
+      version: '0.7.17',
+    });
+    expect(result.errors).toContain(
+      `${spec} must exist before and after the codemod promotion`,
+    );
+    expect(result.validatedPaths).toEqual(new Set());
+  });
+
   it('admits one post-bump test repair whose patch already merged on main', () => {
     const patchId = 'a'.repeat(40);
     const changeDigest = 'c'.repeat(64);
@@ -588,8 +1086,7 @@ describe('active release branch authority', () => {
 +  1,
  );
  after();`,
-        expected:
-          'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
+        expected: 'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
       },
       {
         diff: `diff --git a/test.mjs b/test.mjs
@@ -652,7 +1149,8 @@ describe('active release branch authority', () => {
         `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${expected}`,
       );
     }
-    const portStatements = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+    const portStatements =
+      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
 --- a/test.mjs
 +++ b/test.mjs
 @@ -1,7 +1,7 @@
@@ -673,7 +1171,8 @@ describe('active release branch authority', () => {
  cleanup();`);
     expect(portStatements).not.toContain('<unbounded changed statement>');
 
-    const multiStatementChange = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+    const multiStatementChange =
+      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
 --- a/test.mjs
 +++ b/test.mjs
 @@ -1 +1 @@
@@ -681,7 +1180,10 @@ describe('active release branch authority', () => {
 +safe(); expect(value).toBe(false);`);
     expect(multiStatementChange).toContain('expect(value).toBe(false);');
     expect(
-      repair({changedLines: undefined, changedStatements: multiStatementChange}),
+      repair({
+        changedLines: undefined,
+        changedStatements: multiStatementChange,
+      }),
     ).toContain(
       'release test repair changes an assertion, test control, timeout, retry, or snapshot: expect(value).toBe(false);',
     );
@@ -741,8 +1243,7 @@ describe('active release branch authority', () => {
     roots.push(root);
     const testFile =
       'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts';
-    const before =
-      'const ready = true;\nawait page.mouse.move(0, 150);\n\n';
+    const before = 'const ready = true;\nawait page.mouse.move(0, 150);\n\n';
     const after = 'const ready = true;\nawait mouseDrag(page);\n\n';
     const {cut} = createRepository(root, [
       {
@@ -822,8 +1323,7 @@ describe('active release branch authority', () => {
         name: 'whitespaceRepair',
         parent: 'releaseBase',
         files: {
-          [testFile]:
-            'const ready = true;\nawait mouse Drag(page);\n\n',
+          [testFile]: 'const ready = true;\nawait mouse Drag(page);\n\n',
         },
       },
       {
@@ -1282,6 +1782,39 @@ describe('published release merge-back (FR50)', () => {
     );
   });
 
+  it('admits only a byte-validated codemod applicability move', () => {
+    const spec = 'docs/specs/AST-057-row-actions/spec.md';
+    const entries = [
+      'D\t.changeset/frozen.md',
+      'M\tpackages/core/CHANGELOG.md',
+      `M\t${spec}`,
+    ];
+    const common = {
+      entries,
+      base: mainAt('0.7.0'),
+      head: mainAt('0.7.0'),
+    };
+
+    expect(
+      mergeBack({
+        ...common,
+        validatedCodemodPromotionPaths: new Set([spec]),
+      }),
+    ).toEqual([]);
+    expect(mergeBack(common)).toContain(
+      `release merge-back contains an unvalidated codemod-promotion applicability move: ${spec}`,
+    );
+    expect(
+      mergeBack({
+        ...common,
+        entries: [...entries.slice(0, -1), `D\t${spec}`],
+        validatedCodemodPromotionPaths: new Set([spec]),
+      }),
+    ).toContain(
+      `release merge-back contains an unvalidated codemod-promotion applicability move: ${spec}`,
+    );
+  });
+
   it('rejects unlisted manifests, lifecycle files, and non-release paths', () => {
     expect(
       mergeBack({
@@ -1582,6 +2115,15 @@ describe('published release merge-back (FR50)', () => {
     expect(nextPlannedVersion('0.7.0', '0.8.0')).toBe('0.8.0');
     expect(nextPlannedVersion('0.7.0', '0.7.2')).toBeNull();
     expect(nextPlannedVersion('0.7.0-canary.1')).toBeNull();
+  });
+
+  it('holds every successor plan until its release has a publication effect', () => {
+    expect(
+      successorPlanReadiness({version: '0.7.17', stablePublished: false}),
+    ).toEqual(['successor plan waits until v0.7.17 has a publication effect']);
+    expect(
+      successorPlanReadiness({version: '0.7.17', stablePublished: true}),
+    ).toEqual([]);
   });
 });
 

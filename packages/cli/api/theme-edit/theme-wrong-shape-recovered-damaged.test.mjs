@@ -27,6 +27,7 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {UNASSIGNABLE_PID} from '../../test-utils/unassignable-pid.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -333,8 +334,14 @@ describe('review on #11303', () => {
 
   it('a render folder under ten minutes old is kept, whatever its process id', async () => {
     await themeEditNew('rf', {cwd});
-    const young = path.join(cwd, 'themes/.astryx-render-999999-young1');
-    const old = path.join(cwd, 'themes/.astryx-render-999999-oldone');
+    const young = path.join(
+      cwd,
+      `themes/.astryx-render-${UNASSIGNABLE_PID}-young1`,
+    );
+    const old = path.join(
+      cwd,
+      `themes/.astryx-render-${UNASSIGNABLE_PID}-oldone`,
+    );
     for (const d of [young, old]) fs.mkdirSync(d, {recursive: true});
     const t = new Date(Date.now() - 11 * 60_000);
     fs.utimesSync(old, t, t);
@@ -345,6 +352,58 @@ describe('review on #11303', () => {
     expect(fs.existsSync(old)).toBe(false);
     fs.rmSync(young, {recursive: true, force: true});
     fs.rmSync(path.join(cwd, 'themes/rf'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('a render that ends leaves no render folder, its owner file included', async () => {
+    await themeEditNew('rn', {cwd});
+    const {withRealRenders} =
+      await import('../../test-utils/theme-render-stub.mjs');
+    await withRealRenders(() =>
+      Promise.all([
+        themeEditSet('rn', 'corners', 'small', {cwd}),
+        themeEditSet('rn', 'corners', 'large', {cwd}).catch(() => null),
+      ]),
+    );
+    expect(
+      fs
+        .readdirSync(path.join(cwd, 'themes'))
+        .filter(name => name.startsWith('.astryx-render-')),
+    ).toEqual([]);
+    fs.rmSync(path.join(cwd, 'themes/rn'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('a render folder whose maker is known gone is removed at once, however young', async () => {
+    await themeEditNew('rg', {cwd});
+    // A process of this machine that has ended.
+    const {spawnSync} = await import('node:child_process');
+    const gonePid = spawnSync(process.execPath, ['-e', '0']).pid;
+    let namespace = '';
+    try {
+      namespace = fs.readlinkSync('/proc/self/ns/pid');
+    } catch {
+      // No pid namespaces here.
+    }
+    const {hostname} = await import('node:os');
+    const gone = path.join(cwd, `themes/.astryx-render-${gonePid}-gone01`);
+    const elsewhere = path.join(cwd, `themes/.astryx-render-${gonePid}-other1`);
+    for (const [dir, space] of [
+      [gone, `${hostname()}\0${namespace}`],
+      // Another machine's process space: its process id says nothing here.
+      [elsewhere, `another-host\0${namespace}`],
+    ]) {
+      fs.mkdirSync(dir, {recursive: true});
+      fs.writeFileSync(
+        path.join(dir, '.astryx-render-owner.json'),
+        JSON.stringify({pid: gonePid, space}),
+      );
+    }
+    const {withRealRenders} =
+      await import('../../test-utils/theme-render-stub.mjs');
+    await withRealRenders(() => themeEditSet('rg', 'corners', 'small', {cwd}));
+    expect(fs.existsSync(gone)).toBe(false);
+    expect(fs.existsSync(elsewhere)).toBe(true);
+    fs.rmSync(elsewhere, {recursive: true, force: true});
+    fs.rmSync(path.join(cwd, 'themes/rg'), {recursive: true, force: true});
   }, 240_000);
 
   it('corners more from 30px never makes a container smaller', async () => {

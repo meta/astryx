@@ -103,7 +103,7 @@ Named helper-default test files:
 - `packages/core/src/utils/dateParser.test.ts`
 
 These lists are the **only** exception mechanism. There is no rule option or
-`eslint.config.js` override that widens them. A new entry requires a rule-source
+`eslint.config.mjs` override that widens them. A new entry requires a rule-source
 change and a focused rule test. `navigator.language`/`navigator.languages`
 remains rejected unconditionally, implementation or test oracle.
 
@@ -417,9 +417,12 @@ and nothing else. `@astryx/no-raw-color` covers the rest.
 ### `@astryx/no-style-only-wrapper`
 
 Flags a `<div>`/`<span>` that exists only to style a single Astryx component.
-Every component extends `BaseProps`, so it takes `xstyle` — the wrapper adds a
-DOM node that takes the component out of its parent's flex/grid child
+A component that extends `BaseProps` takes `xstyle`, so the wrapper adds a DOM
+node that takes the component out of its parent's flex/grid child
 relationship (this is what knocked the pagination carets off-center in #4752).
+With type information, a wrapper around a child whose props omit root
+`xstyle`, such as a Field-composed input, is not reported. Without type
+information, only a `family:input-fields` member is skipped.
 
 **Bad:**
 
@@ -438,13 +441,14 @@ relationship (this is what knocked the pagination carets off-center in #4752).
 The rule only fires when dropping the wrapper preserves behavior, so it stays
 quiet on wrappers that do real work:
 
-| Wrapper                                                               | Reported? |
-| --------------------------------------------------------------------- | --------- |
-| Only style attributes (`stylex.props`, `className`)                   | ✅ yes    |
-| `role`, `aria-*`, `data-*`, `ref`, a handler, `{...rest}`             | ❌ no     |
-| More than one child, or a non-Astryx / host child                     | ❌ no     |
-| Styles include `display`, flex/grid container props, `gap`, `padding` | ❌ no     |
-| Child renders no root element (`Tooltip`, providers)                  | ❌ no     |
+| Wrapper                                                                                           | Reported? |
+| ------------------------------------------------------------------------------------------------- | --------- |
+| Only style attributes (`stylex.props`, `className`)                                               | ✅ yes    |
+| `role`, `aria-*`, `data-*`, `ref`, a handler, `{...rest}`                                         | ❌ no     |
+| More than one child, or a non-Astryx / host child                                                 | ❌ no     |
+| Styles include `display`, flex/grid container props, `gap`, `padding`                             | ❌ no     |
+| Child renders no root element (`Tooltip`, providers)                                              | ❌ no     |
+| Child's props take no root `xstyle` (with types), or a family:input-fields member (without types) | ❌ no     |
 
 Style objects imported from another module are read from that module, so
 `import {rtlStyles} from '../utils'` is classified as accurately as a local
@@ -520,8 +524,8 @@ Scoped to public components (those with a `.displayName`). Opt out by omitting t
 the type, e.g. `Omit<BaseProps, 'className' | 'style'>` (as `VisuallyHidden` does),
 or mark an intentionally-unused binding with a leading underscore (`className: _className`).
 
-Currently `warn` in both tiers because known violations remain on main. Promote it
-deliberately only once the repository is clean.
+An error in strict mode and a warning in the recommended tier: the repository is
+clean, and strict lint keeps it that way.
 
 ## Usage
 
@@ -569,7 +573,7 @@ Expected output in strict mode:
 
 ## Configuration
 
-The plugin is configured in `eslint.config.js`:
+The plugin is configured in `eslint.config.mjs`:
 
 ```js
 import astryxPlugin from "./internal/eslint-plugin-astryx/index.js";
@@ -589,7 +593,7 @@ const astryxConfig = isStrictMode ? astryxPlugin.configs.strict : astryxPlugin.c
 If a property legitimately needs a hardcoded value:
 
 ```js
-// In eslint.config.js
+// In eslint.config.mjs
 {
   files: ["packages/core/src/**/*.{ts,tsx}"],
   plugins: { '@astryx': astryxPlugin },
@@ -859,6 +863,33 @@ The second spread replaced the className the first built, so `astryx-breadcrumb-
 
 Ships as a **warning in both tiers** for now. The spread check has exactly one violation in the repo, in `BreadcrumbItem.tsx`, whose fix is open in [#5332](https://github.com/meta/astryx/pull/5332); both tiers go back to `error` when that lands.
 
+### `@astryx/no-shorthand-longhand-merge`
+
+Flags a StyleX shorthand set after one of its own longhands in one merge: one `stylex.props()` call or one `xstyle` array. For example, `paddingInlineStart` in one style and then `paddingInline` in a later one.
+
+StyleX resolves such a pair by its `styleResolution` option. Storybook builds with `application-order`, where the later style usually wins; for some pairs, such as `paddingInline` after both of its longhands, the longhand wins there too. The published CSS uses `property-specificity`, where the longhand wins whatever the order. A shorthand **before** its longhand resolves the same way under both, so the rule allows it. A shorthand **after** its longhand never overrides it in the published CSS, and Storybook may show the later style instead. Either way the later style does not do what it says.
+
+**Bad:**
+
+```tsx
+const styles = stylex.create({
+  root: {paddingInlineStart: 8, paddingInlineEnd: 8},
+  collapsed: {paddingInline: 0},
+});
+stylex.props(styles.root, isCollapsed && styles.collapsed);
+```
+
+**Good:** the later style sets the same longhands, so the merge is between the same properties and the later style wins in every build.
+
+```tsx
+const styles = stylex.create({
+  root: {paddingInlineStart: 8, paddingInlineEnd: 8},
+  collapsed: {paddingInlineStart: 0, paddingInlineEnd: 0},
+});
+```
+
+**Scope:** styles declared with `stylex.create()` in the same file, including dynamic styles and local constants that pick a style. Styles in different branches of one conditional never merge, so they are not flagged. A style the rule cannot read adds nothing. So a component's own longhand followed by a caller's `xstyle` shorthand is out of scope; avoid splitting a component's base shorthand into longhands for that reason, because a caller's shorthand would then lose to it in the published CSS.
+
 ### `@astryx/disabled-cursor`
 
 Flags a `cursor` inside `stylex.create()` that does not give way to `default` on a disabled element. The cursor is the only affordance a pointer user gets **before** they commit to a click: `cursor: pointer` on a disabled control promises a click it will not honour, and `disabled`/`[aria-disabled]` do not change what the element's own declaration paints.
@@ -1096,7 +1127,7 @@ a WCAG contrast fix written per scheme — and moving it to the theme layer mean
 choosing which contrast-tuned status-text token those levels should read; until
 that is decided lab warns rather than blocks.
 
-**Exemptions**, kept in the rule source rather than only in `eslint.config.js`
+**Exemptions**, kept in the rule source rather than only in `eslint.config.mjs`
 so they are testable and a config edit cannot quietly turn the theme layer into
 a violation:
 
@@ -1202,7 +1233,7 @@ gradient through its alpha channel, so `rgba(0, 0, 0, 0.3)` in one of its stops
 is a 30% opacity stop and the black is discarded — `backgroundImage`, which
 paints the same gradient, is not exempt.
 
-Path exemptions live in the rule source rather than only in `eslint.config.js`,
+Path exemptions live in the rule source rather than only in `eslint.config.mjs`,
 so they are testable and a config edit cannot quietly turn the theme layer into
 a violation. That layer has ~200 colour literals and defining them is its job.
 
@@ -1241,7 +1272,7 @@ assumed, and none has an instance in the repo except the last:
   look for colours is a different rule.
 - **A `.css` file**, which ESLint never parses. There is one live instance:
   `packages/core/src/reset.css:291` reads
-  `var(--color-text-secondary, light-dark(#4E606F, #AAAFB5))` — the same
+  `var(--color-text-secondary, light-dark(#445564, #B0B5BB))` — the same
   defensive-fallback shape as the `Sankey` hits, and it rides with them.
 
 Everything else the rule reaches, and a probe confirms it: a `const`, an object

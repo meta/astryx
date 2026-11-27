@@ -224,6 +224,11 @@ export const docs = {
       'A click-triggered overlay anchored to a button or trigger element. Use it for secondary actions, inline confirmations, or supplementary information that does not warrant a full dialog. For hover previews use HoverCard, for brief helper text use Tooltip. Under a finger (a coarse primary pointer), it is presented like a native popover: it grows out of its trigger and shrinks back into it on the theme\u2019s motion tokens; with reduced motion it cross-fades, opacity only, in 200 ms or less.',
     bestPractices: [
       {
+        guidance: false,
+        description:
+          "Don't add your own focus return or try to turn it off. When the anchored popover closes with focus inside it, focus goes back to the opener, or to the nearest control that stands in for it, never to the page; as a BottomSheet it uses the sheet's own return. To send focus somewhere specific, focus that element in onOpenChange.",
+      },
+      {
         guidance: true,
         description:
           'Keep popover content focused on a single task or piece of information.',
@@ -242,6 +247,11 @@ export const docs = {
         guidance: false,
         description:
           'Nest popovers inside other popovers; it creates confusing focus and navigation.',
+      },
+      {
+        guidance: false,
+        description:
+          'Assume an anchored popover rises above the page in a browser without the Popover API. It then stays in the page flow. Content with a higher `z-index` can cover it, and an ancestor that clips overflow can clip it.',
       },
       {
         guidance: false,
@@ -442,6 +452,11 @@ export const docsZh = {
       'A click-triggered overlay anchored to a button or trigger element. Use it for secondary actions, inline confirmations, or supplementary information that does not warrant a full dialog. For hover previews use HoverCard, for brief helper text use Tooltip. Under a finger (a coarse primary pointer), it is presented like a native popover: it grows out of its trigger and shrinks back into it on the theme\u2019s motion tokens; with reduced motion it cross-fades, opacity only, in 200 ms or less.',
     bestPractices: [
       {
+        guidance: false,
+        description:
+          '不要自行实现或关闭焦点返回。锚定的弹出框在焦点位于其内部时关闭，焦点会回到打开它的元素，或回到最近的替代控件，绝不会落到页面上；以底部面板呈现时使用面板自身的焦点返回。若要把焦点移到特定位置，请在 onOpenChange 中聚焦该元素。',
+      },
+      {
         guidance: true,
         description:
           'Keep popover content focused on a single task or piece of information.',
@@ -460,6 +475,11 @@ export const docsZh = {
         guidance: false,
         description:
           'Nest popovers inside other popovers; it creates confusing focus and navigation.',
+      },
+      {
+        guidance: false,
+        description:
+          'Assume an anchored popover rises above the page in a browser without the Popover API. It then stays in the page flow. Content with a higher `z-index` can cover it, and an ancestor that clips overflow can clip it.',
       },
       {
         guidance: false,
@@ -533,6 +553,11 @@ export const docsDense = {
         guidance: false,
         description:
           'Nest popovers inside other popovers; it creates confusing focus and navigation.',
+      },
+      {
+        guidance: false,
+        description:
+          'Assume an anchored popover rises above page without Popover API. It stays in page flow: a higher `z-index` can cover it; an overflow-clipping ancestor can clip it.',
       },
       {
         guidance: false,

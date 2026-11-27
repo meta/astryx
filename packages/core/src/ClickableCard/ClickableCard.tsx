@@ -53,7 +53,10 @@ import {useClickableContainer} from '../hooks/useClickableContainer';
 import type {BaseProps} from '../BaseProps';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {themeProps} from '../utils/themeProps';
-import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
@@ -324,7 +327,8 @@ export interface ClickableCardProps extends BaseProps {
  *
  * A visually-hidden <button> or <a> inside the card provides the
  * accessible role and label. The card surface is a plain <div> —
- * no role or tabIndex on the container.
+ * no role or tabIndex on the container. The `aria-current` and
+ * `aria-describedby` given to the card apply to that hidden control.
  *
  * @compositionHint Use for cards that navigate to a detail page or trigger an action.
  * For toggle selection cards, use SelectableCard instead.
@@ -365,6 +369,8 @@ export function ClickableCard({
   xstyle: xstyleProp,
   className: classNameProp,
   style,
+  'aria-current': ariaCurrent,
+  'aria-describedby': ariaDescribedBy,
   ...props
 }: ClickableCardProps) {
   const pressable = usePressFeedback();
@@ -433,6 +439,14 @@ export function ClickableCard({
   // it here so the hover overlay covers the full box with no untinted ring.
   const hasBorder = variant === 'default';
 
+  // Assistive technology reads the current state and the description on the
+  // focused element. That element is the hidden link or button. The root has
+  // no role.
+  const controlAriaProps = {
+    'aria-current': ariaCurrent,
+    'aria-describedby': ariaDescribedBy,
+  };
+
   return (
     <Card
       ref={useMergedRefs(ref, containerRef)}
@@ -445,7 +459,9 @@ export function ClickableCard({
       elevation={elevation}
       {...mergeProps(
         themeProps('clickable-card', {variant}),
-        focusOutlineProps.focusWithin(),
+        // Rings for the card's own link or button only; a control in its
+        // children rings itself.
+        stylex.props(focusWithinOwner),
         classNameProp,
         style,
       )}
@@ -473,6 +489,7 @@ export function ClickableCard({
       {isLink ? (
         <LinkRoot
           ref={setInteractiveRef}
+          {...controlAriaProps}
           href={isDisabled ? undefined : href}
           target={isDisabled ? undefined : target}
           role={isDisabled ? 'link' : undefined}
@@ -481,17 +498,20 @@ export function ClickableCard({
           aria-disabled={isDisabled || undefined}
           // A disabled card keeps its Tab stop (spec:AST-085 FR1).
           tabIndex={0}
+          {...focusOwnerProps}
           {...stylex.props(styles.srOnly)}
         />
       ) : (
         <button
           ref={setInteractiveRef}
+          {...controlAriaProps}
           type="button"
           aria-label={label}
           aria-disabled={isDisabled || undefined}
           onClick={onClickProp}
           // Focusable while disabled (FR1), but inert (FR2).
           {...(isDisabled ? disabledInteractionProps() : null)}
+          {...focusOwnerProps}
           {...stylex.props(styles.srOnly)}
         />
       )}

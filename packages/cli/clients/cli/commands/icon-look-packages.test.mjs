@@ -253,7 +253,7 @@ describe('a library of icon data objects with one package per look', () => {
       `import {faXmark as XmarkRegularIconSource} from '${REGULAR}';`,
     );
     expect(generated).toContain(
-      'export const XmarkRegularIcon = adaptIcon(XmarkRegularIconSource);',
+      'export const XmarkRegularIcon = /* @__PURE__ */ adaptIcon(XmarkRegularIconSource);',
     );
     const again = await addRegular();
     expect(again.body.data).toMatchObject({added: 0, changed: false});

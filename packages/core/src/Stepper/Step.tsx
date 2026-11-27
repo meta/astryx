@@ -60,6 +60,7 @@ import {
 } from '../utils';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import type {BaseProps} from '../BaseProps';
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
@@ -346,6 +347,10 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
+    // A flex item's default `min-width: auto` keeps the body at least as wide
+    // as its content. A wide field then pushes the body past the step. Zero
+    // releases that floor.
+    minWidth: 0,
   },
 
   // ===================== HORIZONTAL LAYOUT =====================
@@ -643,10 +648,12 @@ const styles = stylex.create({
   // Optional tag
   optionalDot: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     color: colorVars['--color-text-secondary'],
   },
   optionalText: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     color: colorVars['--color-text-secondary'],
   },
 
@@ -837,7 +844,9 @@ const styles = stylex.create({
   // Flexible segment (below the node) — grows to fill the step height and
   // meets the next node's leading segment.
   otSegFlexV: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: '0%',
     minHeight: spacingVars['--spacing-2'],
   },
   // Fixed leading segment (above the node) — its height offsets the node down
@@ -1107,6 +1116,8 @@ export function Step({
   // duration, so it lands at once and carries no stale delay into a later
   // change.
   const isSingleAdvance = activeStep === previousActiveStep + 1;
+  // Under reduced motion, from the setting or a theme, the fill lands at once.
+  const reducesMotion = useReducesMotion();
   const animatedSpan = previousActiveStep;
 
   /**
@@ -1114,7 +1125,7 @@ export function Step({
    * `spanIndex`, both expressed as fractions of that span.
    */
   const fillTiming = (spanIndex: number, offset: number, share: number) => {
-    if (!isSingleAdvance || spanIndex !== animatedSpan) {
+    if (reducesMotion || !isSingleAdvance || spanIndex !== animatedSpan) {
       return styles.connectorTiming('0s', '0s');
     }
     return styles.connectorTiming(
@@ -1191,6 +1202,7 @@ export function Step({
               progress,
               status: status ?? undefined,
               disabled: isDisabled ? 'disabled' : null,
+              selected: isActive ? 'selected' : null,
             }),
             stylex.props(styles.numberBadge, numberColorStyle),
           )}>
@@ -1266,6 +1278,7 @@ export function Step({
               progress,
               status: status ?? undefined,
               disabled: isDisabled ? 'disabled' : null,
+              selected: isActive ? 'selected' : null,
             }),
             stylex.props(styles.icon, iconColorStyle),
           )}>
@@ -1318,11 +1331,13 @@ export function Step({
 
   // Both text parts carry {progress, status}, the phase vocabulary of
   // `step-indicator` above. The indicator and the label each own disabled
-  // paint, so each carries disabled; the description does not.
+  // paint, so each carries disabled; the description does not. The label also
+  // carries `selected` on the current step, as the step and indicator do.
   const labelThemeProps = themeProps('step-label', {
     progress,
     status: status ?? undefined,
     disabled: isDisabled ? 'disabled' : null,
+    selected: isActive ? 'selected' : null,
   });
   const descriptionThemeProps = themeProps('step-description', {
     progress,
@@ -1398,10 +1413,13 @@ export function Step({
   ) : null;
 
   // The step paints nothing of its own when disabled, so it carries no
-  // `disabled` selector.
+  // `disabled` selector. The current step is also `selected`, the state that
+  // marks the chosen item of tabs, navigation items and other selection
+  // controls.
   const stepThemeProps = themeProps('step', {
     progress,
     status: status ?? undefined,
+    selected: isActive ? 'selected' : null,
   });
 
   // ======= SUMMARY: this step, drawn below a collapsed track =======
@@ -1423,7 +1441,13 @@ export function Step({
             {...mergeProps(stepThemeProps, stylex.props(styles.summaryRoot))}>
             {iconLabelNode}
             {isRenderable(description) ? (
-              <span {...stylex.props(styles.description)}>{description}</span>
+              <span
+                {...mergeProps(
+                  descriptionThemeProps,
+                  stylex.props(styles.description),
+                )}>
+                {description}
+              </span>
             ) : null}
           </div>,
           summarySlot,

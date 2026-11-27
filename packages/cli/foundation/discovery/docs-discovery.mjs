@@ -37,12 +37,16 @@ import {readLiteralDoc} from '../doc-compiler/literal-doc.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
 import {BUILTIN_DOCS_DIR, BUILTIN_TOPIC_FILE_RE} from './name-roots.mjs';
 import {parseReadableDoc} from '../doc-compiler/parse-readable.mjs';
+import {ReplacementAliases} from './replacement-aliases.mjs';
 import {
+  answersTitleQuery,
   sectionKey,
   sectionKeyErrors,
   sourceTitle,
   withSourceTitle,
 } from './docs-section-key.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
+import {topicLevel} from '../doc-compiler/generated-levels.mjs';
 
 export {withSourceTitle};
 
@@ -129,6 +133,16 @@ export function isGuideRoute(target) {
  * @returns {Record<string, string>} topic name → absolute doc path
  */
 export function discoverBuiltinTopics() {
+  // These topics describe Core; they show only in a run whose base is Core.
+  if (currentNonCoreBase()) return Object.create(null);
+  return builtinTopicsForCore();
+}
+
+/**
+ * The CLI's own topics as a run on Core reads them, whatever the run's base.
+ * @returns {Record<string, string>} topic name → absolute doc path
+ */
+export function builtinTopicsForCore() {
   /** @type {Record<string, string>} */
   const topics = Object.create(null);
   if (!fs.existsSync(BUILTIN_DOCS_DIR)) return topics;
@@ -140,13 +154,15 @@ export function discoverBuiltinTopics() {
 }
 
 /**
- * The name an integration doc declares, and whether it is placed (has
- * `placement`, so it is no topic or root namespace), as docs discovery reads
- * the doc; null when the doc does not load or parse, or names nothing. A doc
- * of exported literals is read as data ({@link readDocAsData}).
+ * The name an integration doc declares, whether it is placed (has
+ * `placement`, so it is no topic or root namespace), and the generated level
+ * its category puts it in when it is a flat topic (null for a placed doc or
+ * a namespace, which sit in no level), as docs discovery reads the doc; null when
+ * the doc does not load or parse, or names nothing. A doc of exported
+ * literals is read as data ({@link readDocAsData}).
  *
  * @param {string} file an integration doc file
- * @returns {Promise<{name: string, placed: boolean} | null>}
+ * @returns {Promise<{name: string, placed: boolean, level: string | null} | null>}
  */
 export async function integrationDocDeclaration(file) {
   let doc;
@@ -158,7 +174,12 @@ export async function integrationDocDeclaration(file) {
     return null;
   }
   if (typeof doc?.name !== 'string') return null;
-  return {name: doc.name, placed: doc.placement != null};
+  const placed = doc.placement != null;
+  return {
+    name: doc.name,
+    placed,
+    level: placed || doc.type === 'namespace' ? null : topicLevel(doc.category),
+  };
 }
 
 /**
@@ -553,6 +574,34 @@ function isFolder(dir) {
 }
 
 /**
+ * Every doc file under an integration's docs root, sorted: the files
+ * {@link discoverIntegrationDocs} reads, and the skill places read for the
+ * docs that declare a skill.
+ * @param {string} docsDir
+ * @returns {string[]}
+ */
+export function docsRootFiles(docsDir) {
+  /** @type {string[]} */
+  const files = [];
+  /** @param {string} dirPath */
+  function scanDir(dirPath) {
+    for (const entry of listDirEntries(dirPath)) {
+      if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
+      const full = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        scanDir(full);
+      } else if (
+        INTEGRATION_DOC_SUFFIXES.some(suffix => entry.name.endsWith(suffix))
+      ) {
+        files.push(full);
+      }
+    }
+  }
+  if (isFolder(docsDir)) scanDir(docsDir);
+  return files.sort();
+}
+
+/**
  * Discover the topics contributed by a single loaded integration. Mirrors
  * `discoverIntegrationComponents`: walk the resolved root, take every
  * conventional doc file, and record what it declares. Unlike component
@@ -589,24 +638,7 @@ export async function discoverIntegrationDocs(
   }
   const providerId = integration.providerId ?? integration.name;
 
-  /** @type {string[]} */
-  const files = [];
-  /** @param {string} dirPath */
-  function scanDir(dirPath) {
-    for (const entry of listDirEntries(dirPath)) {
-      if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
-      const full = path.join(dirPath, entry.name);
-      if (entry.isDirectory()) {
-        scanDir(full);
-      } else if (
-        INTEGRATION_DOC_SUFFIXES.some(suffix => entry.name.endsWith(suffix))
-      ) {
-        files.push(full);
-      }
-    }
-  }
-  scanDir(docsDir);
-  files.sort();
+  const files = docsRootFiles(docsDir);
 
   /** @type {Map<string, string>} */
   const seen = new Map();
@@ -733,12 +765,39 @@ export async function discoverIntegrationDocs(
  * happens to share its index, so a partial or reordered overlay corrupts
  * everything after it (#2182).
  *
+ * A section another package added is replaced only when one side's authored
+ * `id` is the other's key or a title query the other answers. A title, or two
+ * keys titles derive, never match it, so two packages that add sections with
+ * one title both keep them.
+ *
  * @param {any} base
  * @param {any} overlay
+ * @param {MergeOptions} [options]
  * @returns {any} a new doc; neither input is mutated
  */
-export function mergeTopic(base, overlay) {
-  return mergeTopicReport(base, overlay).doc;
+export function mergeTopic(base, overlay, options) {
+  return mergeTopicReport(base, overlay, options).doc;
+}
+
+/**
+ * @typedef {object} MergeOptions
+ * @property {string} [contributor] the package that writes the overlay. A
+ *   section it adds is marked with it. It replaces a section another package
+ *   added only when one side's authored `id` is the other's key or a title
+ *   query the other answers.
+ */
+
+/** The package whose extension added a merged section. */
+const CONTRIBUTOR = Symbol('astryx.docs.contributor');
+
+/**
+ * The package whose extension added a merged section, or undefined for a
+ * section of the topic itself, including one a package replaced.
+ * @param {any} section
+ * @returns {string | undefined}
+ */
+export function sectionContributor(section) {
+  return section?.[CONTRIBUTOR];
 }
 
 /**
@@ -747,17 +806,21 @@ export function mergeTopic(base, overlay) {
  *
  * @param {any} base
  * @param {any} overlay
+ * @param {MergeOptions} [options]
  * @returns {{doc: any, unplaced: Array<{section: string, field: 'before' | 'after', key: string}>}}
  */
-export function mergeTopicReport(base, overlay) {
+export function mergeTopicReport(base, overlay, {contributor} = {}) {
   const sections = [...(base.sections ?? [])];
   /** @type {Array<{section: string, field: 'before' | 'after', key: string}>} */
   const unplaced = [];
 
   for (const authored of overlay.sections ?? []) {
-    const section = withoutPosition(authored);
-    const at = findMergeTarget(sections, section);
+    const authoredSection = withoutPosition(authored);
+    const at = findMergeTarget(sections, authoredSection, contributor);
     if (at === -1) {
+      // An added section belongs to its package: no other package's section
+      // replaces it by title.
+      const section = withContributor(authoredSection, contributor);
       const field = authored.before != null ? 'before' : 'after';
       const key = authored[field];
       if (typeof key !== 'string') {
@@ -801,6 +864,14 @@ export function mergeTopicReport(base, overlay) {
       // stable ID keeps that ID, so readers addressing it keep working. A
       // replacing section keeps the place of the one it replaces.
       const replaced = sections[at];
+      // A section that takes the place of one the topic itself holds leaves
+      // that place open to later packages, so the last package configured
+      // wins it. One that takes the place of a package's section belongs to
+      // the package that wrote it.
+      const section =
+        replaced[CONTRIBUTOR] == null
+          ? authoredSection
+          : withContributor(authoredSection, contributor);
       const replacing =
         section.id == null && replaced.id != null
           ? withSourceTitle({...section, id: replaced.id}, sourceTitle(section))
@@ -810,17 +881,7 @@ export function mergeTopicReport(base, overlay) {
       if (replaced[PLACED_AFTER] != null) {
         const placed =
           replacing === section ? withoutPosition({...section}) : replacing;
-        for (const symbol of Object.getOwnPropertySymbols(section)) {
-          if (!(symbol in placed)) {
-            Object.defineProperty(
-              placed,
-              symbol,
-              /** @type {PropertyDescriptor} */ (
-                Object.getOwnPropertyDescriptor(section, symbol)
-              ),
-            );
-          }
-        }
+        copyOwnSymbols(section, placed);
         Object.defineProperty(placed, PLACED_AFTER, {
           value: replaced[PLACED_AFTER],
           configurable: true,
@@ -834,6 +895,30 @@ export function mergeTopicReport(base, overlay) {
   return {doc: {...base, sections}, unplaced};
 }
 
+/**
+ * Does a section answer an authored id: is the id its key, or a fragment of
+ * its authored title?
+ * @param {any} section
+ * @param {string} id
+ * @returns {boolean}
+ */
+function answers(section, id) {
+  return sectionKey(section) === id || answersTitleQuery(section, id);
+}
+
+/**
+ * A copy of a section marked with the package that added it.
+ * @param {any} section
+ * @param {string | undefined} contributor
+ * @returns {any}
+ */
+function withContributor(section, contributor) {
+  if (contributor == null) return section;
+  const marked = copyOwnSymbols(section, {...section});
+  marked[CONTRIBUTOR] = contributor;
+  return marked;
+}
+
 /** The key a merged section was placed `after`, so later ones follow it. */
 const PLACED_AFTER = Symbol('astryx.docs.placedAfter');
 
@@ -845,17 +930,29 @@ const PLACED_AFTER = Symbol('astryx.docs.placedAfter');
 export function withoutPosition(section) {
   if (section?.before == null && section?.after == null) return section;
   const {before: _before, after: _after, ...rest} = section;
-  // Copy every own symbol (the provider and authored-title marks) too.
-  for (const symbol of Object.getOwnPropertySymbols(section)) {
+  return copyOwnSymbols(section, rest);
+}
+
+/**
+ * Copy each own symbol of a section (the provider, contributor, and
+ * authored-title marks) that the copy does not have yet. A spread drops the
+ * marks that are not enumerable.
+ * @param {any} from
+ * @param {any} to
+ * @returns {any} `to`
+ */
+function copyOwnSymbols(from, to) {
+  for (const symbol of Object.getOwnPropertySymbols(from)) {
+    if (Object.prototype.hasOwnProperty.call(to, symbol)) continue;
     Object.defineProperty(
-      rest,
+      to,
       symbol,
       /** @type {PropertyDescriptor} */ (
-        Object.getOwnPropertyDescriptor(section, symbol)
+        Object.getOwnPropertyDescriptor(from, symbol)
       ),
     );
   }
-  return rest;
+  return to;
 }
 
 /**
@@ -863,38 +960,53 @@ export function withoutPosition(section) {
  * Otherwise the exact title matches when at least one side has no ID: the
  * migration window in which the base or the extension adopts stable IDs
  * before the other does. Two different authored IDs stay distinct even under
- * one title.
+ * one title. A section another package added matches only when one side's
+ * authored ID is the other's key or a title query the other answers, never
+ * by title alone or two derived keys.
  *
  * @param {any[]} sections
  * @param {any} section
+ * @param {string | undefined} contributor
  * @returns {number}
  */
-function findMergeTarget(sections, section) {
+function findMergeTarget(sections, section, contributor) {
   const title = sourceTitle(section);
   const key = sectionKey(section);
+  // Across packages, an authored id is the only address: a section matches
+  // another package's section when one side's authored id is the other's key,
+  // or a title query the other's title answers. Keeping such a pair would let
+  // a title lookup shadow the id, which section keys refuse.
+  /** @param {any} candidate */
+  const addressedById = candidate =>
+    (section.id != null && answers(candidate, section.id)) ||
+    (candidate.id != null && answers(section, candidate.id));
+  /** @param {(candidate: any) => boolean} test */
+  const find = test =>
+    sections.findIndex(
+      candidate =>
+        (candidate[CONTRIBUTOR] == null ||
+          candidate[CONTRIBUTOR] === contributor ||
+          addressedById(candidate)) &&
+        test(candidate),
+    );
   // A section is addressed by its key: an authored id, or the key its title
   // derives, which is the key the topic's index shows. Matching on it means an
   // extension never appends a second section under a key already in use.
-  const byKey = () =>
-    sections.findIndex(candidate => sectionKey(candidate) === key);
+  const byKey = () => find(candidate => sectionKey(candidate) === key);
   const legacyTitleMatch = () =>
-    sections.findIndex(
-      candidate => candidate.id == null && sourceTitle(candidate) === title,
-    );
+    find(candidate => candidate.id == null && sourceTitle(candidate) === title);
   if (section.id != null) {
     const byId = byKey();
     return byId === -1 ? legacyTitleMatch() : byId;
   }
   const legacy = legacyTitleMatch();
   if (legacy !== -1) return legacy;
-  const sameTitle = sections.findIndex(
-    candidate => sourceTitle(candidate) === title,
-  );
+  const sameTitle = find(candidate => sourceTitle(candidate) === title);
   if (sameTitle !== -1) return sameTitle;
   // A base section retitled later keeps its old key as its `id`, so an
   // extension that still names it by the old title finds it by that id. A
   // title variant of a section with no id stays a separate section.
-  return sections.findIndex(candidate => candidate.id === key);
+  return find(candidate => candidate.id === key);
 }
 
 /**
@@ -944,8 +1056,8 @@ export class DocsCatalog {
   #contributions = null;
   /** @type {Promise<LinkableContributions> | null} */
   #contributionsLoaded = null;
-  /** @type {Map<string, string>} old topic name → the name that replaced it */
-  #aliases = new Map();
+  /** old topic names, each pointing at the topic that replaced it */
+  #aliases = new ReplacementAliases(name => name.toLowerCase());
   /** @type {Array<{namespaces: import('../doc-compiler/tree.mjs').TreeNamespaceInput[], guides: import('../doc-compiler/tree.mjs').TreeDocInput[]}>} */
   #treeInputs = [];
   /** @type {Array<{package: string, message: string}>} */
@@ -1166,11 +1278,7 @@ export class DocsCatalog {
         extensions: [...target.extensions],
       });
       if (replacementKey !== replacedKey) {
-        this.#aliases.set(replacedKey, replacementKey);
-        // A topic renamed twice keeps every name it has ever answered to.
-        for (const [from, to] of this.#aliases) {
-          if (to === replacedKey) this.#aliases.set(from, replacementKey);
-        }
+        this.#aliases.record(replacedKey, replacementKey);
       }
       return warning;
     }
@@ -1206,10 +1314,7 @@ export class DocsCatalog {
    * @returns {string[]}
    */
   aliasesOf(entry) {
-    const key = entry.name.toLowerCase();
-    return [...this.#aliases]
-      .filter(([, to]) => to === key)
-      .map(([from]) => from);
+    return this.#aliases.aliasesOf(entry.name);
   }
 
   /**
@@ -1220,17 +1325,8 @@ export class DocsCatalog {
    */
   resolve(name) {
     if (typeof name !== 'string') return undefined;
-    let key = name.toLowerCase();
-    // An alias chain is at most as long as the number of replacements, and a
-    // cycle can only come from a bug here; bound the walk either way.
-    for (let hops = 0; hops <= this.#aliases.size; hops++) {
-      const entry = this.#topics.get(key);
-      if (entry) return entry;
-      const next = this.#aliases.get(key);
-      if (next == null) return undefined;
-      key = next;
-    }
-    return undefined;
+    const key = this.#aliases.resolve(name, each => this.#topics.has(each));
+    return key == null ? undefined : this.#topics.get(key);
   }
 
   /** @returns {string[]} every topic name, in read order */

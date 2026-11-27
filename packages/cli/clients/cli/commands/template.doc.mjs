@@ -30,13 +30,14 @@ export const doc = {
       param: 'name',
       required: false,
       description: 'Template id (see --list). Omit it to list the templates.',
+      names: 'template',
     },
     {
       name: 'path',
       param: 'options.targetPath',
       required: false,
       description:
-        'Where to scaffold the template, inside the project root: a relative path, or an absolute path inside the project, which is written as its relative path. An absolute path in the system temp folder (such as /tmp/dashboard) takes a scratch copy, outside the project. Any other path outside the project is refused. A path that ends in .tsx, .ts, .jsx, .js, .mjs, .cjs, .css, .scss, .json, .md or .html is the file to write; ' +
+        'Where to scaffold the template, inside the project root: a relative path, or an absolute path inside the project, which is written as its relative path. An absolute path in the system temp folder (such as /tmp/dashboard) takes a scratch copy, outside the project. Any other path outside the project is refused. A path that starts with ~/ names the home folder, as a shell reads it, and follows the same rules. A path that ends in .tsx, .ts, .jsx, .js, .mjs, .cjs, .css, .scss, .json, .md or .html is the file to write; ' +
         "any other path is a directory, which receives page.tsx for a page template or the block's own file name for a block. " +
         'Omit it to print the source.',
     },
@@ -46,7 +47,11 @@ export const doc = {
       flag: '--list',
       param: 'options.list',
       description:
-        'List available templates (narrow with --type and --package) and do nothing else: <name>, <path>, --skeleton and --overwrite are refused',
+        'List available templates (narrow with --type and --package) and do nothing else: <name>, <path>',
+      pointers: [
+        {commands: ['template --skeleton'], text: ', --skeleton'},
+        ' and --overwrite are refused',
+      ],
     },
     {
       flag: '--type <type>',
@@ -57,11 +62,17 @@ export const doc = {
     {
       flag: '--package <pkg>',
       param: 'options.package',
-      description:
-        'Narrow to templates from a specific package. Use @astryxdesign/core to select an original hidden by an integration replacement.',
+      description: 'Narrow to templates from a specific package.',
+      pointers: [
+        {
+          commands: ['template shell-side-nav --package @astryxdesign/core'],
+          text: ' Use @astryxdesign/core to select an original hidden by an integration replacement.',
+        },
+      ],
     },
     {
       flag: '--skeleton',
+      requires: ['templates.skeleton'],
       param: 'options.skeleton',
       description:
         'Show layout skeleton with spatial annotations (padding, gap, nesting) instead of the source. Needs <name>. ' +
@@ -69,10 +80,11 @@ export const doc = {
     },
     {
       flag: '--cdn [path]',
+      requires: ['templates.standalonePage'],
       param: 'options.cdn',
       description:
         'Write the no-build-step CDN starter page and do nothing else: <name>, --list, --skeleton, --type and --package are refused. ' +
-        'The page goes to the --cdn value, else to <path>, else cdn.template.html, and that path is always the file itself. ' +
+        'The page goes to the --cdn value, else to <path>, else cdn.template.html, and that path is always the file itself; a path that starts with ~/ names the home folder. ' +
         'A value right after --cdn (anything not starting with -) is taken as that path',
     },
     {

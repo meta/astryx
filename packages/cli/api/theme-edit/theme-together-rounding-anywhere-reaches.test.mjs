@@ -12,8 +12,6 @@
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew} from './theme-edit.mjs';
-import {pillDrawnRadios} from './_check.mjs';
-import {context} from './_context.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -73,24 +71,43 @@ const T = 180_000;
 
 describe('answers that hold together', () => {
   it(
-    'no rounding anywhere squares the pills too, and names them',
+    'no rounding anywhere squares the pills and circles too, and names them',
     async test => {
       needsBases(test);
       const r = await answer('no rounding anywhere, badges and switches too');
-      // On a Core that draws a radio's circle with the pill token, the
-      // radio marks keep it at Core's value.
-      const radios = pillDrawnRadios((await context(cwd)).C);
-      expect(r.first).toEqual([
-        'set n corners square',
-        'set n --radius-full 0px',
-        ...radios.map(
-          m =>
-            `set n --radius-full 9999px --on ${m}${m === 'radio-indicator' ? ' --only' : ''}`,
-        ),
-      ]);
-      expect(r.text).toMatch(/badge/);
+      // (The dial, and the pill token for the parts drawn as pills and
+      // circles.)
+      expect(r.first[0]).toBe('set n corners square');
+      expect(r.first[1]).toMatch(/^set n --radius-full '?0px'?$/);
+      expect(r.text).toMatch(
+        /--radius-full 0px for the parts drawn as pills and circles \([^)]*badge/,
+      );
+      // (The parts said after it are answered, never named as not used.)
+      expect(r.text).not.toMatch(/not used/);
       expect((await answer('corners square')).first).toEqual([
         'set n corners square',
+      ]);
+    },
+    T,
+  );
+  it(
+    'square corners with another ask saying "too" or naming a pill keep the circles',
+    async test => {
+      needsBases(test);
+      // (The scope word belongs to the corner clause alone.)
+      for (const q of [
+        'square corners, and bigger text too',
+        'square corners and red badges',
+      ]) {
+        const r = await answer(q);
+        expect(r.first, q).toContain('set n corners square');
+        for (const line of r.first) {
+          expect(line, q).not.toMatch(/--radius-full/);
+          expect(line, q).not.toMatch(/corners square --on avatar/);
+        }
+      }
+      expect((await answer('square badge corners')).first).toEqual([
+        'set n corners square --on badge',
       ]);
     },
     T,

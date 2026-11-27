@@ -40,26 +40,23 @@ describe('per-user folders (spec AST-081 FR7)', () => {
     }
   });
 
-  it.skipIf(process.platform !== 'win32')(
-    'uses LOCALAPPDATA and APPDATA on Windows only when absolute',
-    () => {
-      const winHome = 'C:\\Users\\ada';
-      expect(
-        userCacheDir({
-          home: winHome,
-          platform: 'win32',
-          env: {LOCALAPPDATA: 'D:\\Local'},
-        }),
-      ).toBe('D:\\Local\\astryx\\Cache');
-      expect(
-        userConfigDir({
-          home: winHome,
-          platform: 'win32',
-          env: {APPDATA: 'Roaming'},
-        }),
-      ).toBe('C:\\Users\\ada\\AppData\\Roaming\\astryx');
-    },
-  );
+  it('uses LOCALAPPDATA and APPDATA on Windows only when absolute', () => {
+    const winHome = 'C:\\Users\\ada';
+    expect(
+      userCacheDir({
+        home: winHome,
+        platform: 'win32',
+        env: {LOCALAPPDATA: 'D:\\Local'},
+      }),
+    ).toBe('D:\\Local\\astryx\\Cache');
+    expect(
+      userConfigDir({
+        home: winHome,
+        platform: 'win32',
+        env: {APPDATA: 'Roaming'},
+      }),
+    ).toBe('C:\\Users\\ada\\AppData\\Roaming\\astryx');
+  });
 
   it('reads only absolute folder settings', () => {
     expect(absoluteDirSetting(undefined)).toBeNull();
@@ -68,5 +65,22 @@ describe('per-user folders (spec AST-081 FR7)', () => {
     expect(absoluteDirSetting(path.resolve('cache'))).toBe(
       path.resolve('cache'),
     );
+  });
+
+  it("reads a setting with the host's own rules unless the platform is Windows", () => {
+    // Unchanged on every real host: without a platform, or with the host's
+    // own, a setting is absolute exactly when this host's path rules say so.
+    for (const value of ['D:\\Local', '\\\\server\\share', '/abs', 'rel']) {
+      const expected = path.isAbsolute(value) ? value : null;
+      expect(absoluteDirSetting(value), value).toBe(expected);
+      expect(absoluteDirSetting(value, process.platform), value).toBe(expected);
+    }
+    // Windows rules on any host.
+    expect(absoluteDirSetting('D:\\Local', 'win32')).toBe('D:\\Local');
+    expect(absoluteDirSetting('\\\\server\\share', 'win32')).toBe(
+      '\\\\server\\share',
+    );
+    expect(absoluteDirSetting('Roaming', 'win32')).toBeNull();
+    expect(absoluteDirSetting('', 'win32')).toBeNull();
   });
 });

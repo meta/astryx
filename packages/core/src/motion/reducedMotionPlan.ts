@@ -266,6 +266,8 @@ export function planReducedMotion(
       },
       {at: ms / 2, value: 0},
     ];
+    // SYNC: a List drop committed after this landing lands at once
+    // (List/listReorderEngine.tsx).
     const landing = landsLater(ms / 2, {
       to: borrowed ?? opacityTo,
       ms: ms / 2,
