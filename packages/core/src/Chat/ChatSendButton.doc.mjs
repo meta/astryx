@@ -32,7 +32,7 @@ export const docs = {
     {
       name: 'sendIcon',
       type: 'ReactNode',
-      description: 'Custom icon for the send state. Defaults to the arrowUp icon (theme icons, else a registered or built-in drawing).',
+      description: 'Custom icon for the send state. Pass null to hide the glyph. Only undefined uses the chat-send-button-send slot, then arrowUp.',
       slotElements: [
         {
           __element: 'Icon',
@@ -69,6 +69,17 @@ export const docs = {
       description: 'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}.',
     },
   ],
+  theming: {
+    targets: [],
+    componentIcons: [
+      {
+        slot: 'chat-send-button-send',
+        description: 'Send-state glyph.',
+        fallback: '`arrowUp`',
+        whenNull: 'Hides only the glyph. Button behavior and size are unchanged.',
+      },
+    ],
+  },
   usage: {
     description: 'Use ChatSendButton as ChatComposer’s send control when the action should switch between sending and stopping. Inside ChatComposer it reads readiness, streaming state, and action callbacks from context; standalone usage supplies those values explicitly.',
     bestPractices: [
@@ -113,7 +124,7 @@ export const docsZh = {
     isDisabled: '发送按钮是否禁用。默认使用上下文的 !canSend。',
     onSend: '用户点击发送时调用。默认使用上下文的 onSubmit。',
     onStop: '流式响应期间用户点击停止时调用。默认使用上下文的 onStop。',
-    sendIcon: '发送状态的自定义图标。默认使用 arrowUp 图标（主题图标，否则为已注册或内置的图形）。',
+    sendIcon: '发送状态的自定义图标。传入 null 可隐藏图标。仅当值为 undefined 时才使用 chat-send-button-send 插槽，无映射时使用 arrowUp。',
     stopIcon: '停止状态的自定义图标。默认使用 stop 图标（主题图标，否则为已注册或内置的图形）。',
     size: '按钮大小。',
     xstyle: '额外的 StyleX 样式。',
@@ -130,7 +141,7 @@ export const docsDense = {
     isDisabled: 'disabled; defaults to !canSend from context',
     onSend: 'send click handler; defaults to context onSubmit',
     onStop: 'stop click handler; defaults to context onStop',
-    sendIcon: 'custom send icon; default: arrowUp icon (theme icons, else a registered or built-in drawing)',
+    sendIcon: 'custom send icon > chat-send-button-send > arrowUp; null hides glyph; only undefined falls through',
     stopIcon: 'custom stop icon; default: stop icon (theme icons, else a registered or built-in drawing)',
     size: 'btn size',
     xstyle: 'additional StyleX styles',

@@ -60,6 +60,8 @@ export type IconVariant = keyof IconVariantMap & string;
  * ```
  */
 export interface ComponentIconSlotMap {
+  /** ChatSendButton's send glyph. An explicit `sendIcon` overrides the slot; `null` hides the glyph. */
+  'chat-send-button-send': true;
   /** CodeBlock's copy button. `copied` is true while the copied feedback shows. */
   'code-block-copy': {readonly copied: boolean};
   /** A Timestamp hover card row's copy button. `copied` is true while the copied feedback shows. */
