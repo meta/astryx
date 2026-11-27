@@ -68,9 +68,10 @@ export function readSectionBlocks(blocks, openBlocks, where, skip) {
 }
 
 /**
- * Keeps the ledger's rows that are objects. A row that is not one, such as
- * `null`, is skipped, and `skip` records it. So is a `components` that is not
- * a list, which leaves no rows.
+ * Keeps the ledger's rows that are objects with a string `component`. Any
+ * other row, such as `null` or a row whose `component` is an object, is
+ * skipped, and `skip` records it. So is a `components` that is not a list,
+ * which leaves no rows.
  * @param {unknown} components the ledger's `components`
  * @param {(skipped: SkippedItem) => void} skip records a skipped item
  * @returns {object[]} the rows that the snapshot can read
@@ -85,11 +86,44 @@ export function readRows(components, skip) {
     return [];
   }
   return components.filter((row, index) => {
-    if (isObject(row)) return true;
+    if (!isObject(row)) {
+      skip({
+        where: `components[${index}]`,
+        item: JSON.stringify(row),
+        reason: 'not a ledger row',
+      });
+      return false;
+    }
+    // Every message names a row by its component, so a row without a string
+    // one would turn the message itself into a throw.
+    if (typeof row.component !== 'string') {
+      skip({
+        where: `components[${index}].component`,
+        item: String(JSON.stringify(row.component)),
+        reason: 'not a string',
+      });
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * A row's sections as `[id, section]` pairs. The id `__proto__` is skipped,
+ * and `skip` records it: assigning it sets an object's prototype instead of a
+ * key, and the generated file could not carry it as one either.
+ * @param {Record<string, unknown>} sections the row's `sections`
+ * @param {string} where the sections' place, for the record
+ * @param {(skipped: SkippedItem) => void} skip records a skipped item
+ * @returns {[string, unknown][]} the sections the snapshot can carry
+ */
+export function readSectionIds(sections, where, skip) {
+  return Object.entries(sections).filter(([id, section]) => {
+    if (id !== '__proto__') return true;
     skip({
-      where: `components[${index}]`,
-      item: JSON.stringify(row),
-      reason: 'not a ledger row',
+      where: `${where}.__proto__`,
+      item: String(JSON.stringify(section)),
+      reason: 'not a key the snapshot can carry',
     });
     return false;
   });

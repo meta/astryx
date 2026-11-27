@@ -44,7 +44,7 @@ import {
   isEvidenceItem,
   listComponents,
 } from '../../../scripts/score-ledger.mjs';
-import {readRows, readSectionBlocks} from './score-ledger-snapshot.mjs';
+import {readRows, readSectionBlocks, readSectionIds} from './score-ledger-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -134,7 +134,7 @@ function pruneSections(sections, openBlocks, component) {
     return sections;
   }
   const kept = {};
-  for (const [id, section] of Object.entries(sections)) {
+  for (const [id, section] of readSectionIds(sections, `${component}: sections`, skip)) {
     if (section == null || typeof section !== 'object' || Array.isArray(section)) {
       kept[id] = section;
       continue;

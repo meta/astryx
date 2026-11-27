@@ -9,7 +9,11 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {readRows, readSectionBlocks} from './score-ledger-snapshot.mjs';
+import {
+  readRows,
+  readSectionBlocks,
+  readSectionIds,
+} from './score-ledger-snapshot.mjs';
 
 const OPEN = [
   {id: 'B1', summary: 'The first finding', issue: null},
@@ -103,6 +107,66 @@ describe('readRows', () => {
         reason: 'not a list of rows',
       },
       {where: 'components', item: 'undefined', reason: 'not a list of rows'},
+    ]);
+  });
+
+  it('skips and records a row whose component is not a string, such as an object with a toString key', () => {
+    const skipped = [];
+    const rows = readRows(
+      [
+        {component: {toString: 1}},
+        {component: 42},
+        {score: 1},
+        {component: 'Button'},
+      ],
+      item => skipped.push(item),
+    );
+    expect(rows).toEqual([{component: 'Button'}]);
+    expect(skipped).toEqual([
+      {
+        where: 'components[0].component',
+        item: '{"toString":1}',
+        reason: 'not a string',
+      },
+      {where: 'components[1].component', item: '42', reason: 'not a string'},
+      {
+        where: 'components[2].component',
+        item: 'undefined',
+        reason: 'not a string',
+      },
+    ]);
+  });
+
+  it('keeps a row whose component is named like an Object member, as data', () => {
+    const skipped = [];
+    const names = ['toString', 'constructor', '__proto__', 'hasOwnProperty'];
+    const rows = readRows(
+      JSON.parse(JSON.stringify(names.map(component => ({component})))),
+      item => skipped.push(item),
+    );
+    expect(rows.map(row => row.component)).toEqual(names);
+    expect(skipped).toEqual([]);
+  });
+});
+
+describe('readSectionIds', () => {
+  it('keeps each section id as data, and skips and records `__proto__`', () => {
+    const skipped = [];
+    const sections = JSON.parse(
+      '{"__proto__":{"score":1},"toString":{"score":2},"a11y":{"score":3}}',
+    );
+    expect(
+      readSectionIds(sections, 'Button: sections', item => skipped.push(item)),
+    ).toEqual([
+      ['toString', {score: 2}],
+      ['a11y', {score: 3}],
+    ]);
+    expect(skipped).toEqual([
+      {
+        where: 'Button: sections.__proto__',
+        item: '{"score":1}',
+        reason: 'not a key the snapshot can carry',
+      },
     ]);
   });
 });
