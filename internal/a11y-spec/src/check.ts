@@ -77,6 +77,19 @@ export interface KnownFailure {
   readonly userImpact: string;
   /** Why this migration records the gap instead of fixing it. */
   readonly reason: string;
+  /**
+   * Limits the record to one harness from one engine build on, for a failure
+   * an engine change causes. On any other harness or an earlier build the
+   * expectation runs as an ordinary check, and the record is not counted.
+   */
+  readonly engine?: KnownFailureEngine;
+}
+
+export interface KnownFailureEngine {
+  /** The harness name, e.g. `chromium`. */
+  readonly harness: string;
+  /** The first engine build that fails, e.g. `151.0.7889.0`. */
+  readonly fromVersion: string;
 }
 
 export interface ExpectationResult {
@@ -105,6 +118,8 @@ export interface BindingResult {
   /** The representative state, e.g. `off` or `focusable-disabled`. */
   readonly state: string;
   readonly harness: string;
+  /** The engine build the harness drove, when it reports one. */
+  readonly harnessVersion?: string;
   readonly results: readonly ExpectationResult[];
 }
 
@@ -162,14 +177,54 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** Compares dotted numeric versions: negative, zero, or positive. */
+function compareVersions(left: string, right: string): number {
+  const a = left.split('.').map(Number);
+  const b = right.split('.').map(Number);
+  for (let index = 0; index < Math.max(a.length, b.length); index++) {
+    const difference = (a[index] ?? 0) - (b[index] ?? 0);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+  return 0;
+}
+
+/** Whether a run on this harness and engine build is in the engine's range. */
+export function engineMatches(
+  engine: KnownFailureEngine,
+  harness: string,
+  version: string | undefined,
+): boolean {
+  return (
+    engine.harness === harness &&
+    version != null &&
+    compareVersions(version, engine.fromVersion) >= 0
+  );
+}
+
+/** Whether a record applies to a run on this harness and engine build. */
+function knownFailureApplies(
+  record: KnownFailure,
+  harness: string,
+  version: string | undefined,
+): boolean {
+  return (
+    record.engine == null || engineMatches(record.engine, harness, version)
+  );
+}
+
 function findKnownFailure<Facts>(
   known: readonly KnownFailure[],
   expectation: Expectation<Facts>,
   binding: string,
   state: string,
+  harness: string,
+  version: string | undefined,
 ): KnownFailure | undefined {
   return known.find(
     record =>
+      knownFailureApplies(record, harness, version) &&
       record.expectation === expectation.id &&
       record.binding === binding &&
       record.state === state &&
@@ -182,6 +237,16 @@ export function unmatchedKnownFailures(
   bindings: readonly BindingResult[],
 ): readonly string[] {
   return knownFailures.flatMap(record => {
+    // An engine-scoped record that applies to no result of this run is not
+    // counted: the run's engine is outside its range.
+    if (
+      record.engine != null &&
+      !bindings.some(binding =>
+        knownFailureApplies(record, binding.harness, binding.harnessVersion),
+      )
+    ) {
+      return [];
+    }
     const matches = bindings.flatMap(binding =>
       binding.results.filter(result => result.knownFailure === record),
     ).length;
@@ -200,6 +265,7 @@ export async function checkAccessibilitySpec<Facts>(
   const knownFailures = options.knownFailures ?? [];
   const results: ExpectationResult[] = [];
   let harnessName = 'unmounted';
+  let harnessVersion: string | undefined;
 
   for (const expectation of spec.expectations) {
     if (options.only != null && !options.only.includes(expectation.id)) {
@@ -231,6 +297,7 @@ export async function checkAccessibilitySpec<Facts>(
       const mounted = await mount();
       harness = mounted;
       harnessName = mounted.name;
+      harnessVersion = mounted.version;
       const unobservable = requiredLayers(expectation).filter(
         layer => !mounted.observes.includes(layer),
       );
@@ -312,7 +379,14 @@ export async function checkAccessibilitySpec<Facts>(
       continue;
     }
 
-    const record = findKnownFailure(knownFailures, expectation, binding, state);
+    const record = findKnownFailure(
+      knownFailures,
+      expectation,
+      binding,
+      state,
+      harnessName,
+      harnessVersion,
+    );
 
     if (failure === undefined) {
       results.push(
@@ -355,6 +429,7 @@ export async function checkAccessibilitySpec<Facts>(
     binding,
     state,
     harness: harnessName,
+    ...(harnessVersion == null ? {} : {harnessVersion}),
     results,
   };
 }
