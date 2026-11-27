@@ -28,8 +28,8 @@ const WORKERS_FLAG = /^--max-?workers(=|$)/i;
  * `--no-watch`), any short-flag group with `w` anywhere in it (`-w`, `-uw1`,
  * `-w0`), and `--run` with a value or negated (`--run=false`, `--no-run`).
  * The match is broad on purpose: a command line with one is not read as a
- * single run, whatever the value says, so a spelling it does not know leaves
- * Vitest its own count.
+ * single run, whatever the value says. Spellings outside these forms are read
+ * as written, so `--run false` or `---w` still gets the cap.
  */
 const WATCH_WORD = /^(--(no-)?w|-[^-]*w|--(no-)?run[=.]|--no-run$)/i;
 
@@ -68,8 +68,8 @@ function usableMemory() {
  * - A CI runner is a machine the run has to itself, so it keeps Vitest's
  *   default (one less than the cores).
  * - A watch, or a command line that is not surely a single run, keeps
- *   Vitest's default too: a watch is interactive, and an unknown command
- *   line gets no count rather than a wrong one.
+ *   Vitest's default too: a watch is interactive, and a command line this
+ *   does not read as a single run gets no count.
  * - A single run on a shared machine is where a Node test file's own CLI
  *   processes load a many-core machine far past its cores under Vitest's
  *   default (one less than the cores): it starts one less than the cores,
