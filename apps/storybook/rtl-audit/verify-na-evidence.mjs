@@ -4,8 +4,9 @@
  * @file Report receipt drift in the RTL verified-N/A registry.
  * @input verified-not-applicable.json and the checkout; optional
  *   `--component <package/Name>` to check one declaration.
- * @output One line per drifted declaration and a total. It always exits 0: the
- *   report changes no coverage status.
+ * @output One line per drifted declaration, with the current receipt of each
+ *   changed file, and a total. Drift never changes the exit code; an unreadable
+ *   registry exits 1.
  * @position Author tool (`pnpm rtl:audit:verify-na`) for refreshing receipts
  *   after re-reviewing a component's source and stories.
  */
@@ -13,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {receiptDrift} from './verified-na-receipts.mjs';
+import {fileReceipt, receiptDrift} from './verified-na-receipts.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(HERE, '../../..');
@@ -32,7 +33,10 @@ const drift = receiptDrift({
 
 for (const entry of drift.drifted) {
   const parts = [
-    entry.changed.length > 0 && `changed: ${entry.changed.join(', ')}`,
+    entry.changed.length > 0 &&
+      `changed: ${entry.changed
+        .map(file => `${file} (now ${fileReceipt(PROJECT_ROOT, file)})`)
+        .join(', ')}`,
     entry.missing.length > 0 && `missing: ${entry.missing.join(', ')}`,
     entry.malformed.length > 0 && `malformed: ${entry.malformed.join(', ')}`,
   ].filter(Boolean);

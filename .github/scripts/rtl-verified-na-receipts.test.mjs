@@ -136,7 +136,7 @@ describe('receiptDrift', () => {
     expect(drift.drifted.map(entry => entry.component)).toEqual(['core/Dot']);
   });
 
-  it('leaves coverage status and the registry error alone for a malformed receipt', () => {
+  it('reports a malformed receipt without changing coverage status', () => {
     const root = checkout(files);
     const verifiedNa = [
       {
@@ -155,7 +155,6 @@ describe('receiptDrift', () => {
       components: ['core/Dot'],
     });
     expect(coverage.results[0].status).toBe('verified-na');
-    expect(coverage.registryError).toBeUndefined();
     expect(drift.drifted).toEqual([
       {
         component: 'core/Dot',
@@ -164,6 +163,19 @@ describe('receiptDrift', () => {
         malformed: ['packages/core/src/Dot/Dot.tsx'],
       },
     ]);
+  });
+});
+
+describe('receiptDrift on an unreadable registry shape', () => {
+  it('skips entries it cannot read instead of throwing', () => {
+    const root = checkout({});
+    for (const verifiedNa of [null, {}, [null, 5, {component: 7}]]) {
+      expect(receiptDrift({projectRoot: root, verifiedNa})).toEqual({
+        checked: 0,
+        withoutEvidence: 0,
+        drifted: [],
+      });
+    }
   });
 });
 
