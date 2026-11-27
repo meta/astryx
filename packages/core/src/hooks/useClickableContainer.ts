@@ -197,13 +197,18 @@ function markNestedPress(container: HTMLElement): void {
  * the container, so the container shows no press for it: for a mouse, a pen,
  * or a finger where the primary pointer is coarse. The press controller's paint on `container` ends. For a mouse or a pen, the
  * container's `:active` paint also stays off until the press ends. A press on
- * the container's surface or on `ownAction` is left alone. Not part of the
- * package's public API.
+ * the container's surface or on `ownAction` is left alone. `belongsToControl`
+ * is the container's own test for a press that is not its own, so the press
+ * decides as the click does. Not part of the package's public API.
  */
 export function cancelNestedPress(
   event: PointerEvent<HTMLElement>,
   container: HTMLElement | null,
   ownAction: Element | null,
+  belongsToControl: (
+    target: Element,
+    container: Element,
+  ) => boolean = hasInteractiveAncestor,
 ): void {
   const target = event.target;
   // A mark that outlived its press, such as one whose release the page never
@@ -216,7 +221,7 @@ export function cancelNestedPress(
     event.button !== 0 ||
     !(target instanceof Element) ||
     target === event.currentTarget ||
-    !hasInteractiveAncestor(target, container) ||
+    !belongsToControl(target, container) ||
     // The container's own action, such as the control it delegates to: a
     // press on it activates the container.
     ownAction?.contains(target) === true
@@ -438,8 +443,8 @@ export function useClickableContainerProxy({
     [containerRef, href, disabled],
   );
 
-  // The press-state counterpart of onClick's rule: a mouse or pen press that
-  // would not activate the container shows no press on it.
+  // The press-state counterpart of onClick's rule: a press that would not
+  // activate the container shows no press on it.
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       if (disabled) {

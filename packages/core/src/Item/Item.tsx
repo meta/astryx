@@ -723,6 +723,7 @@ export function Item({
       event,
       event.currentTarget,
       href != null ? actionLinkRef.current : actionButtonRef.current,
+      pressBelongsToControl,
     );
 
   // The bridge the swipe layer fills, on a row given `swipe` and on the
