@@ -118,10 +118,9 @@ const wrapperStyles = stylex.create({
     colorScheme: 'light dark',
   },
   // Core declares the focus color at the root, so a wrapper that applies a
-  // theme declares it again. Then the ring of a nested Theme takes the accent
-  // of its own theme, and of its own mode also where a CSS build lowers
-  // `light-dark()` (that build gives a custom property the color mode of the
-  // element that declares it).
+  // theme declares it again. Then a nested Theme's ring takes its own theme's
+  // accent. A build that lowers `light-dark()` resolves a custom property in
+  // the mode of the element that declares it.
   themedFocus: {
     [focusVars['--focus-outline-color']]: colorVars['--color-accent'],
   },
