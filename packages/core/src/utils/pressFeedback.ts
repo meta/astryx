@@ -673,6 +673,9 @@ function onPointerDown(event: PointerEvent): void {
   if (element == null || isTrackedByGroup(element, event.pointerType)) {
     return;
   }
+  // Read whether the press waits out a scroll before anything below writes,
+  // so the press's start forces one layout at most (the placement's).
+  const delayed = !braking && !presentsAtOnce && isInsideScrollView(element);
   // A braking finger presses nothing, but a box hold still follows it.
   const end = boxHold?.start(element, event.target) ?? null;
   const live: LiveGesture | null = braking
@@ -698,7 +701,7 @@ function onPointerDown(event: PointerEvent): void {
       kind: 'down',
       x: event.clientX,
       y: event.clientY,
-      delayed: !presentsAtOnce && isInsideScrollView(element),
+      delayed,
     }),
     msSinceInput(event.timeStamp, event),
   );

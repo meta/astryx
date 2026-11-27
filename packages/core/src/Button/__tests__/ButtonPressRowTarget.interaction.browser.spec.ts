@@ -15,7 +15,9 @@
  *   once, through the engine's own tap path (both engines). A held press
  *   there does too (Chromium, which also clicks from a raw touch sequence),
  *   and so does a mouse click (both engines). A press leaves the Button's
- *   children as they were at rest
+ *   children as they were at rest. In Chromium, a finger press in a scroll
+ *   view forces one layout at its start, and a press's release does no
+ *   Layout or Paint per frame
  * @position Interaction evidence for privateAttributes/press.stylex.ts
  *   (`control`, `rowTint`) and the press controller (utils/pressFeedback.ts)
  *   as Button uses them
@@ -28,9 +30,13 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  countBetween,
+  layoutSources,
   openStory,
   tap,
   touchDriver,
+  traceRendering,
+  watchAnimations,
   withStorybook,
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
@@ -66,14 +72,14 @@ interface HitState {
 /** The Button's children through a press, and each child the press added. */
 interface ProbeSeen {
   children: string[];
-  added: Array<{
+  added: {
     hidden: string | null;
     text: string;
     pointerEvents: string;
     visibility: string;
     tabIndex: number;
     connected: boolean;
-  }>;
+  }[];
   removed: number;
 }
 
@@ -471,6 +477,97 @@ test("a press leaves the Button's children as they were at rest, and its probe i
   ]);
   expect(seen.removed, log).toBe(1);
 });
+
+/**
+ * Moves the row into a scroll view that can scroll, so a press start reads
+ * the view's scroll size to learn whether it waits out a scroll.
+ */
+async function intoScrollView(button: Locator): Promise<void> {
+  await button.evaluate(el => {
+    const row = el.parentElement;
+    if (row == null) {
+      throw new Error('the Button has no row');
+    }
+    const view = document.createElement('div');
+    view.style.overflowY = 'auto';
+    view.style.height = `${Math.ceil(row.getBoundingClientRect().height) + 40}px`;
+    row.before(view);
+    view.append(row);
+    const filler = document.createElement('div');
+    filler.style.height = '600px';
+    view.append(filler);
+  });
+}
+
+for (const where of ['Button', 'row'] as const) {
+  test(`in a scroll view, a finger press on the ${where} forces one layout at its start, the placement's (Chromium)`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
+    const {driver, button, probes} = await openRow(page);
+    await intoScrollView(button);
+    const at = where === 'Button' ? await buttonCenter(button) : probes[0];
+    const trace = await traceRendering(
+      page,
+      async () => {
+        await driver.play(tap(at, {holdMs: HOLD_MS}));
+      },
+      {keepEvents: true},
+    );
+    // A layout inside the pointerdown's own dispatch is forced by a read in
+    // its handler.
+    const main = trace.mainThread ?? [];
+    const downs = main.filter(
+      event =>
+        event.name === 'EventDispatch' &&
+        event.ph === 'X' &&
+        (event.args?.data as {type?: string} | undefined)?.type ===
+          'pointerdown',
+    );
+    const forced = main.filter(
+      event =>
+        event.name === 'Layout' &&
+        downs.some(
+          down => event.ts >= down.ts && event.ts <= down.ts + (down.dur ?? 0),
+        ),
+    );
+    const record = JSON.stringify(
+      layoutSources(trace, trace.window.from, trace.window.to),
+    );
+    expect(downs.length, record).toBe(1);
+    expect(forced.length, record).toBe(1);
+  });
+
+  test(`the release of a finger press on the ${where} does no Layout or Paint per frame (Chromium)`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
+    const {driver, button, probes} = await openRow(page);
+    const at = where === 'Button' ? await buttonCenter(button) : probes[0];
+    const exitMs = await button.evaluate(el => {
+      const time = getComputedStyle(el)
+        .getPropertyValue('--duration-exit')
+        .trim();
+      return time.endsWith('ms') ? parseFloat(time) : parseFloat(time) * 1000;
+    });
+    let release = {from: 0, to: 0};
+    const trace = await traceRendering(page, async () => {
+      const watch = await watchAnimations(button);
+      await driver.play(tap(at, {holdMs: HOLD_MS}));
+      [release] = await watch.started();
+      await page.waitForTimeout(exitMs + 100);
+    });
+    // The steady part of the release: its first and last frames may commit.
+    const during = countBetween(trace, release.from + 30, release.to - 30);
+    expect(release.to - release.from, JSON.stringify(release)).toBeGreaterThan(
+      60,
+    );
+    expect(during.Layout ?? 0, JSON.stringify(during)).toBe(0);
+    expect(during.Paint ?? 0, JSON.stringify(during)).toBe(0);
+  });
+}
 
 test('a tap on the line under the Button activates the Button once', async ({
   page,
