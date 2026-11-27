@@ -59,8 +59,8 @@ import {
 } from '../MobileNav/MobileNavToggle';
 import {SideNavRenderContext} from '../SideNav/SideNavRenderContext';
 import {SideNavShellContext, type SideNavShell} from '../SideNav/railMotion';
-import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
 import {
+  createAnimatedLayout,
   holdLayoutSwap,
   landLayoutGlide,
   layoutMotionFor,
@@ -1018,7 +1018,12 @@ export function AppShell({
   // that, under `fill`, makes main a keyboard stop.
   const mainRefs = useMergedRefs(mainRef, setMainNode);
   const backdropRef = useRef<HTMLDivElement>(null);
-  const contentLayout = useAnimatedLayout({containerRef: shellRef});
+  // The shell's own handle, made without List's layout calls: no List gets
+  // it, so an AppShell page loads none of them.
+  const contentLayout = useMemo(
+    () => createAnimatedLayout(() => shellRef.current),
+    [],
+  );
   const pendingContentRef = useRef<{
     /** The column's glide, reported only for a spring motion. */
     change: LayoutChange | null;

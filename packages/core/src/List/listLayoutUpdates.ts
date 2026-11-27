@@ -4,8 +4,8 @@
 
 /**
  * @file listLayoutUpdates.ts
- * @input A List's element, its `animatedLayout` handle and the one
- *   size-change module (motion/animatedLayout.ts)
+ * @input A List's element and its `animatedLayout` handle, which carries the
+ *   size-change module's calls (motion/animatedLayout.ts)
  * @output `useListLayoutUpdates`, which reports each row inserted, removed or
  *   moved between two renders to the handle, and `keepPresentation`, for a
  *   row that leaves the list
@@ -29,14 +29,12 @@
 
 import {useCallback, useRef, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {
-  holdLayoutExit,
-  landLayoutGlideSideways,
-  playLayoutChange,
-  reportLayoutChange,
-  type AnimatedLayout,
-  type LayoutChange,
+import type {
+  AnimatedLayout,
+  LayoutChange,
+  ListLayoutCalls,
 } from '../motion/animatedLayout';
+import {LIST_LAYOUT} from '../motion/listLayoutKey';
 import {itemKeyOf} from '../privateAttributes/itemKey.stylex';
 import {isLeaving, markLeaving} from '../privateAttributes/leaving.stylex';
 import {markTravelling} from '../privateAttributes/travelling.stylex';
@@ -415,6 +413,13 @@ function markCrossings(
   });
 }
 
+/** The layout calls a handle carries, or null for a handle made without them. */
+function layoutCallsOf(handle: AnimatedLayout): ListLayoutCalls | null {
+  return (
+    (handle as {readonly [LIST_LAYOUT]?: ListLayoutCalls})[LIST_LAYOUT] ?? null
+  );
+}
+
 /**
  * Reports the list's row changes to `animatedLayout`. Returns the callback
  * that measures them, which LayoutChangeSnapshot calls before each commit.
@@ -428,9 +433,11 @@ export function useListLayoutUpdates(
   const measure = useCallback(() => {
     measuredRef.current = null;
     const list = listRef.current;
-    if (list == null || animatedLayout == null) {
+    const calls = animatedLayout == null ? null : layoutCallsOf(animatedLayout);
+    if (list == null || animatedLayout == null || calls == null) {
       return;
     }
+    const {reportLayoutChange} = calls;
     const rows = keyedRows(list);
     if (rows.size === 0) {
       // No keyed row yet: the list's last child, or the list while it is
@@ -516,9 +523,16 @@ export function useListLayoutUpdates(
     if (list != null) {
       reportedRows.delete(list);
     }
-    if (measured == null || list == null || animatedLayout == null) {
+    const calls = animatedLayout == null ? null : layoutCallsOf(animatedLayout);
+    if (
+      measured == null ||
+      list == null ||
+      animatedLayout == null ||
+      calls == null
+    ) {
       return;
     }
+    const {holdLayoutExit, landLayoutGlideSideways, playLayoutChange} = calls;
     const now = keyedRows(list);
     const order = [...now.keys()];
     if (

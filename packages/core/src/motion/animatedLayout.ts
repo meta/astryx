@@ -98,6 +98,7 @@ import {
   sharedWeakSet,
 } from '../utils/sharedRealm';
 import {paintedBackground} from './inertClone';
+import {LIST_LAYOUT} from './listLayoutKey';
 import {
   inertCopy,
   isCopyable,
@@ -1249,6 +1250,14 @@ export function glideOf(element: Element): Animation | null {
 // A registered key, so a swizzled copy of this module reads a package handle.
 const AREA = sharedKey('animated-layout/area', 1);
 
+/** @internal The layout calls a List reaches through its handle. */
+export interface ListLayoutCalls {
+  reportLayoutChange: typeof reportLayoutChange;
+  playLayoutChange: typeof playLayoutChange;
+  holdLayoutExit: typeof holdLayoutExit;
+  landLayoutGlideSideways: typeof landLayoutGlideSideways;
+}
+
 /**
  * The opaque handle `useAnimatedLayout` returns. A component that receives it
  * reports its size changes to the handle's container, the area the glide
@@ -1268,12 +1277,21 @@ function readArea(handle: AnimatedLayout): Element | null {
   return typeof read === 'function' ? (read as () => Element | null)() : null;
 }
 
-/** A handle over `area` (the container element, read when a change runs). */
+/**
+ * A handle over `area` (the container element, read when a change runs). A
+ * handle that a List may receive carries `listLayout`.
+ */
 export function createAnimatedLayout(
   area: () => Element | null,
+  listLayout?: ListLayoutCalls,
 ): AnimatedLayout {
   // Not enumerable and frozen: the handle shows no fields to a caller.
-  return Object.freeze(Object.defineProperty({}, AREA, {value: area}));
+  return Object.freeze(
+    Object.defineProperties(
+      {},
+      {[AREA]: {value: area}, [LIST_LAYOUT]: {value: listLayout}},
+    ),
+  );
 }
 
 function areaOf(handle: AnimatedLayout, element: Element): Element | null {
