@@ -316,7 +316,7 @@ announcement channel.
 - Comments (lab): its error banners and progress label mount live roles
   together with their text. Inside a live log they follow FR4; otherwise FR2.
 - Selector and MultiSelector show their empty-panel message as the content of
-  the empty popup, a group named by the field's label, and also announce it,
+  the empty popup, a group named as its listbox is, and also announce it,
   even at page load (FR11, `spec:AST-056` FR3). Typeahead and CommandPalette announce their empty state after page load and are otherwise unchanged.
 - `component:FieldStatus` AR1 is unchanged: a field message announces on first
   mount, because it reports the field's state when the field appears.
