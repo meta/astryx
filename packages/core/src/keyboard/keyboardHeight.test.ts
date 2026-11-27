@@ -1038,7 +1038,13 @@ describe('the tap route (FR4)', () => {
     const end = touchEvent('touchend', [], [{x: 12, y: 11}]);
     field.dispatchEvent(end);
     expect(end.defaultPrevented).toBe(true);
-    expect(deliver).toHaveBeenCalledWith(field, 12, 11, expect.anything());
+    expect(deliver).toHaveBeenCalledWith(
+      field,
+      12,
+      11,
+      expect.anything(),
+      field,
+    );
     stop();
     region.remove();
   });

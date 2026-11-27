@@ -730,12 +730,14 @@ export interface ClaimTapFocusOptions {
   /**
    * Focuses the claimed control for a tap that ended at (x, y) in the
    * viewport. `touch` is the tap's finger: its screen point and identifier.
+   * `touched` is the element the finger landed on.
    */
   deliver: (
     control: HTMLElement,
     x: number,
     y: number,
     touch: {screenX: number; screenY: number; identifier: number},
+    touched: Element,
   ) => void;
 }
 
@@ -762,7 +764,12 @@ export function claimTapFocus(
 ): () => void {
   // The touch the route follows, and the listeners that follow it: on the
   // region only, and only while that touch is down.
-  let start: {x: number; y: number; control: HTMLElement} | null = null;
+  let start: {
+    x: number;
+    y: number;
+    control: HTMLElement;
+    touched: Element;
+  } | null = null;
   // On the iOS simulator, a tap held about 250 ms still gets its mousedown and
   // click. They come a few ms after its touchend, though the route cancelled
   // that touchend. They go to whatever is under the finger by then, which can
@@ -802,7 +809,7 @@ export function claimTapFocus(
       return;
     }
     event.preventDefault();
-    deliver(tap.control, touch.clientX, touch.clientY, touch);
+    deliver(tap.control, touch.clientX, touch.clientY, touch, tap.touched);
     armClickGuard(region.ownerDocument, {takesLateMouse: true});
   }
   const onStart = (event: TouchEvent) => {
@@ -817,7 +824,12 @@ export function claimTapFocus(
     if (control == null || touch == null) {
       return;
     }
-    start = {x: touch.clientX, y: touch.clientY, control};
+    start = {
+      x: touch.clientX,
+      y: touch.clientY,
+      control,
+      touched: event.target instanceof Element ? event.target : control,
+    };
     region.addEventListener('touchmove', onMove, {passive: true});
     // Not passive: only the end of the touch can still cancel the browser's
     // focus and its reveal.

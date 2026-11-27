@@ -18,6 +18,8 @@ import {reducedMotionFade} from '../motion/reducedMotion';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {getTouches, subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {hasInteractiveAncestor} from '../hooks/useClickableContainer';
+import {isElement} from '../utils/nodeType';
 import {nearestScroller, scrollingAncestor} from '../utils/scrollingAncestor';
 import {sharedWeakMap, sharedWeakSet} from '../utils/sharedRealm';
 import {isIosWebKit} from '../utils/touchQueries';
@@ -495,6 +497,7 @@ export function deliverTap(
   x: number,
   y: number,
   touch: {screenX: number; screenY: number; identifier: number},
+  touched: Element = control,
 ): void {
   focusAtPoint(control, x, y);
   // The field's own window's constructors, as a click in a frame has.
@@ -519,7 +522,7 @@ export function deliverTap(
           pointerId: touch.identifier,
         })
       : new (view?.MouseEvent ?? MouseEvent)('click', init);
-  control.dispatchEvent(click);
+  touched.dispatchEvent(click);
 }
 
 /**
@@ -671,7 +674,7 @@ export function followKeyboard(
       const control = findTextEntryControl(touched, target);
       return control != null && control !== doc.activeElement ? control : null;
     },
-    deliver: deliverTap,
+    deliver: (control, x, y, touch) => deliverTap(control, x, y, touch),
   });
   const stopMoving: (isFinal?: boolean) => void =
     move === 'ride'
@@ -1042,6 +1045,39 @@ function rideWithKeyboard(
 export interface KeepFieldAboveKeyboardOptions {
   /** The gap kept between the field and the keyboard, CSS px. */
   offset?: number;
+  /**
+   * The field's own input container. A first tap on it, outside its other
+   * controls, focuses the field as a tap on the field does.
+   */
+  tapArea?: HTMLElement | null;
+  /**
+   * Whether the container takes a tap now, read when the tap arrives, as the
+   * container's own click rule reads its state. Defaults to always.
+   */
+  isTapAreaEnabled?: () => boolean;
+}
+
+function tapsField(
+  touched: EventTarget | null,
+  field: HTMLElement,
+  tapArea: HTMLElement | null,
+  isTapAreaEnabled: () => boolean,
+): boolean {
+  if (!isElement(touched)) {
+    return false;
+  }
+  if (field.contains(touched)) {
+    return true;
+  }
+  // The container's own rule (useInputContainer): a press on another control
+  // in it is that control's, and a field that takes no text takes no tap.
+  return (
+    tapArea != null &&
+    tapArea.contains(touched) &&
+    isTextEntryControl(field) &&
+    !hasInteractiveAncestor(touched, tapArea) &&
+    isTapAreaEnabled()
+  );
 }
 
 // Whether `scroller`, in a fixed container the app positions, can bring
@@ -1133,7 +1169,11 @@ function revealWithin(
  */
 export function keepFieldAboveKeyboard(
   field: HTMLElement,
-  {offset = FIELD_OFFSET}: KeepFieldAboveKeyboardOptions = {},
+  {
+    offset = FIELD_OFFSET,
+    tapArea = null,
+    isTapAreaEnabled = () => true,
+  }: KeepFieldAboveKeyboardOptions = {},
 ): () => void {
   const doc = field.ownerDocument;
   const win = doc.defaultView;
@@ -1147,13 +1187,25 @@ export function keepFieldAboveKeyboard(
         ? field
         : null,
   });
-  // A first tap moves focus from nothing, so no blur claims it.
-  const stopTaps = claimTapFocus(field, {
-    claim: () =>
-      doc.activeElement !== field && placementOf(field, offset, win) != null
+  // A first tap moves focus from nothing, so no blur claims it. A tap on the
+  // field's padding or border is a tap on its container, not on the field.
+  const stopTaps = claimTapFocus(tapArea ?? field, {
+    claim: touched =>
+      tapsField(touched, field, tapArea, isTapAreaEnabled) &&
+      doc.activeElement !== field &&
+      placementOf(field, offset, win) != null
         ? field
         : null,
-    deliver: deliverTap,
+    // A padding tap's click lands where the browser's own would: on the
+    // container under the finger.
+    deliver: (control, x, y, touch, touched) =>
+      deliverTap(
+        control,
+        x,
+        y,
+        touch,
+        control.contains(touched) ? control : touched,
+      ),
   });
   let stopSession: ((isFinal?: boolean) => void) | null = null;
   // A ride a blur stopped can still wait for the keyboard to go; a detach

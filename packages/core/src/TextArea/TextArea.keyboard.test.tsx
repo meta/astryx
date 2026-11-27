@@ -6,7 +6,9 @@
  * @output Proves the focused text area stays above the on-screen keyboard with
  *   no prop. Its scroller reveals it in the keyboard's report, and a fixed bar
  *   at the viewport's bottom rides with it. A scroll area that cannot bring it
- *   up leaves the browser's reveal. Nothing attaches under a mouse
+ *   up leaves the browser's reveal. A first tap on the container focuses the
+ *   field, except while busy, and a busy change keeps a focused field's
+ *   keyboard path. Nothing attaches under a mouse
  * @position Keyboard tests of TextArea.tsx
  */
 
@@ -197,4 +199,73 @@ it('attaches nothing under a mouse or a trackpad', () => {
   act(() => field.focus());
   keyboard.show(300);
   expect(scrollBy).not.toHaveBeenCalled();
+});
+
+it('takes a first tap on the container only while the text area is not busy', () => {
+  keyboard = installKeyboardTestDouble();
+  const {rerender} = render(
+    <TextArea label="Notes" value="" onChange={() => {}} />,
+  );
+  const field = screen.getByRole('textbox');
+  const container = field.closest<HTMLElement>('.astryx-text-area')!;
+  const tap = () => {
+    const touch = (type: string) => {
+      const event = new Event(type, {bubbles: true, cancelable: true});
+      const points =
+        type === 'touchend' ? [] : [{identifier: 0, clientX: 12, clientY: 4}];
+      Object.assign(event, {
+        touches: points,
+        changedTouches: [{identifier: 0, clientX: 12, clientY: 4}],
+      });
+      return event;
+    };
+    act(() => {
+      container.dispatchEvent(touch('touchstart'));
+    });
+    const end = touch('touchend');
+    act(() => {
+      container.dispatchEvent(end);
+    });
+    return end;
+  };
+  expect(tap().defaultPrevented).toBe(true);
+  expect(field).toHaveFocus();
+  act(() => field.blur());
+
+  // Busy: the container's own click skips focus, and so does its first tap.
+  rerender(<TextArea label="Notes" value="" onChange={() => {}} isLoading />);
+  const busyField = screen.getByRole('textbox');
+  expect(tap().defaultPrevented).toBe(false);
+  expect(busyField).not.toHaveFocus();
+});
+
+it("keeps a focused text area's keyboard path when it turns busy", () => {
+  keyboard = installKeyboardTestDouble();
+  const bottom = window.innerHeight;
+  const {rerender} = render(
+    <div data-bar="" style={{position: 'fixed'}}>
+      <TextArea label="Notes" value="" onChange={() => {}} />
+    </div>,
+  );
+  const bar = document.querySelector<HTMLElement>('[data-bar]')!;
+  boxAt(bar, bottom - 72, 72);
+  const field = screen.getByRole('textbox');
+  boxAt(field, bottom - 56, 40);
+  act(() => field.focus());
+  keyboard.show(300);
+  expect(animatorFor(bar).get('y')).toBe(-300);
+  // A send turns the field busy while it has focus. The bar stays lifted:
+  // nothing re-attaches, so nothing puts it at rest.
+  rerender(
+    <div data-bar="" style={{position: 'fixed'}}>
+      <TextArea label="Notes" value="" onChange={() => {}} isLoading />
+    </div>,
+  );
+  expect(animatorFor(bar).get('y')).toBe(-300);
+  rerender(
+    <div data-bar="" style={{position: 'fixed'}}>
+      <TextArea label="Notes" value="" onChange={() => {}} />
+    </div>,
+  );
+  expect(animatorFor(bar).get('y')).toBe(-300);
 });

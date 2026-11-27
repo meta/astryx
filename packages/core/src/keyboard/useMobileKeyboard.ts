@@ -15,7 +15,7 @@
 
 import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
 import {flushSync} from 'react-dom';
-import {useAttachment} from '../hooks/useAttachment';
+import {useAttachment, useAttachmentPair} from '../hooks/useAttachment';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {
@@ -87,6 +87,16 @@ export interface MobileKeyboardOptions {
   isOpen?: boolean;
   /** Whether the page's own scroll is locked under the target. */
   isPageScrollLocked?: boolean;
+  /**
+   * A field target's own input container. A first tap on it, outside its
+   * other controls, focuses the field as a tap on the field does.
+   */
+  tapAreaRef?: RefObject<HTMLElement | null>;
+  /**
+   * Whether the tap area takes a tap now. It is read when the tap arrives,
+   * so a change re-attaches nothing. Defaults to always.
+   */
+  isTapAreaEnabled?: () => boolean;
 }
 
 /** What useMobileKeyboard returns. */
@@ -174,6 +184,8 @@ export function useMobileKeyboard(
     isExpanded = true,
     isOpen = true,
     isPageScrollLocked = false,
+    tapAreaRef,
+    isTapAreaEnabled,
   }: MobileKeyboardOptions = {},
 ): MobileKeyboard {
   // The inset the keyboard takes at the end of the body's content, CSS px.
@@ -188,6 +200,7 @@ export function useMobileKeyboard(
   const isEnabledRef = useCommittedRef(isEnabled);
   const isExpandedRef = useCommittedRef(isExpanded);
   const isOpenRef = useCommittedRef(isOpen);
+  const isTapAreaEnabledRef = useCommittedRef(isTapAreaEnabled);
   // Touch-only work, the ride and the reveal-pan watch, attaches only under a
   // coarse primary pointer (the touch query). Under a fine one, the hook
   // registers no touch listener.
@@ -228,14 +241,22 @@ export function useMobileKeyboard(
   }, [dismiss, isEnabled, isOpen]);
 
   // A docked target, a scroller or a field, which moves no inset.
-  useAttachment(
+  // A field's tap area defaults to the field itself, so the pair is always
+  // whole and a replaced tap area re-attaches.
+  const tapRef = tapAreaRef ?? targetRef;
+  useAttachmentPair(
     targetRef,
-    target => {
+    tapRef,
+    (target, tapArea) => {
       if (!isEnabled || reservesInset || !isTouch) {
         return () => {};
       }
       return move == null
-        ? keepFieldAboveKeyboard(target, {offset})
+        ? keepFieldAboveKeyboard(target, {
+            offset,
+            tapArea: tapArea === target ? null : tapArea,
+            isTapAreaEnabled: () => isTapAreaEnabledRef.current?.() ?? true,
+          })
         : followKeyboard(target, {move, offset});
     },
     `${isEnabled}|${move}|${reservesInset}|${offset}|${isTouch}`,
