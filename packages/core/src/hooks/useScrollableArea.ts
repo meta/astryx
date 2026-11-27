@@ -557,7 +557,8 @@ export function useScrollableArea({
     // The effect runs in React's commit, where a read forces a style and
     // layout pass before the browser's own. So the first measurement waits
     // for the first resize notification, which comes after the browser lays
-    // the viewport or the content out.
+    // the viewport or the content out. A viewport that keeps its sticky
+    // containment measures in the commit instead (below).
     const onResize = splitFirstResizeDelivery(() => {
       isLaidOut = true;
       measureNow();
@@ -669,10 +670,14 @@ export function useScrollableArea({
     const hasRemapped = mapping !== previousMappingRef.current;
     previousOverflowRef.current = overflow;
     previousMappingRef.current = mapping;
-    if (hasGainedOverflow || hasRemapped) {
+    // A viewport that keeps its sticky containment scrolls before it is
+    // measured, so gaining overflow changes none of its geometry.
+    const isGainRemeasured =
+      hasGainedOverflow && stickyContainment !== 'always';
+    if (isGainRemeasured || hasRemapped) {
       measureRef.current?.();
     }
-  }, [overflow, mapping]);
+  }, [overflow, mapping, stickyContainment]);
 
   const state = useMemo<ScrollableAreaState>(
     () => ({

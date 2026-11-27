@@ -511,6 +511,72 @@ describe('useScrollableArea', () => {
     expect(geometry.some(read => read.mock.calls.length > 0)).toBe(true);
     expect(state().inline.isScrollable).toBe(true);
     expect(viewport).toHaveAttribute('tabindex', '0');
+    // One measurement pass: gaining overflow measures nothing again, because
+    // the viewport already scrolls. A later pass, started by a window resize,
+    // reads as much as the whole first commit did.
+    const styleReads = () =>
+      vi
+        .mocked(window.getComputedStyle)
+        .mock.calls.filter(([element]) => element === viewport).length;
+    const firstCommitReads = styleReads();
+    void act(() => window.dispatchEvent(new Event('resize')));
+    flushFrameCallbacks();
+    expect(firstCommitReads).toBeGreaterThan(0);
+    expect(styleReads() - firstCommitReads).toBe(firstCommitReads);
+  });
+
+  it('gains and loses its tab stop as its content changes after mount when it keeps its sticky containment', async () => {
+    mockOwnedComputedStyle();
+    let scrollWidth = 100;
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(100);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(100);
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(100);
+    vi.spyOn(HTMLElement.prototype, 'scrollLeft', 'get').mockReturnValue(0);
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(
+      function (this: HTMLElement) {
+        return this.dataset.testid === 'viewport' ? scrollWidth : 100;
+      },
+    );
+
+    render(<Fixture stickyContainment="always" />);
+    const viewport = screen.getByTestId('viewport');
+    expect(viewport).not.toHaveAttribute('tabindex');
+    await act(async () => notifyFirstLayout());
+
+    // The content grows: its resize is reported, and the next frame measures.
+    scrollWidth = 180;
+    const content = screen.getByTestId('content');
+    await act(async () => {
+      for (const callback of resizeObservers) {
+        callback(
+          [
+            {
+              target: content,
+            } as Partial<ResizeObserverEntry> as ResizeObserverEntry,
+          ],
+          {} as ResizeObserver,
+        );
+      }
+    });
+    flushFrameCallbacks();
+    expect(viewport).toHaveAttribute('tabindex', '0');
+
+    // It shrinks again.
+    scrollWidth = 100;
+    await act(async () => {
+      for (const callback of resizeObservers) {
+        callback(
+          [
+            {
+              target: content,
+            } as Partial<ResizeObserverEntry> as ResizeObserverEntry,
+          ],
+          {} as ResizeObserver,
+        );
+      }
+    });
+    flushFrameCallbacks();
+    expect(viewport).not.toHaveAttribute('tabindex', '0');
   });
 
   it('measures once more at the first resize notification when it keeps its sticky containment, and keeps its tab stop', () => {
