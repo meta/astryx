@@ -223,21 +223,22 @@ This record does not absorb adjacent facts:
   runtime template envelope.
 - `packages/cli/foundation/discovery/template-adapter.mjs` — current source loaders,
   normalization, projections, and shared template IO.
-- `replaceDemoMedia` in `template-adapter.mjs` — the INV8 replacement step that
-  copy and displayed code share. It replaces `/template-assets/` media URLs. In
-  motion and gesture examples, where a real Astryx component wraps docs-only
-  contents, such as `<Card><PlayingCardContents /></Card>`, it also replaces each
-  demo-content element with a generic placeholder and keeps the outer
+- `replaceTemplateDemos` in `template-adapter.mjs` — the INV8 replacement step a
+  copy runs: `replaceDemoContent` replaces each demo-content element with a
+  generic placeholder and drops that import, then `replaceDemoMedia` replaces
+  `/template-assets/` media URLs. Demo-content elements appear in motion and
+  gesture examples, where a real Astryx component wraps docs-only contents, such
+  as `<Card><PlayingCardContents /></Card>`; the element pass keeps the outer
   component. A demo-content element is an element imported from the one
-  repository-only demo-content module; the step drops that import. The module
-  and the import rule are internal mechanism, not a public contract
+  repository-only demo-content module. The module and the import rule are
+  internal mechanism, not a public contract
   (`architecture:knowledge-contracts/INV18`); `spec:AST-028` FR13 states the
   outcome. `template copy`, `template show`, and the docsite's shadcn Install
-  item run both passes; the copy receipt and the `template show` response
-  report the element count as `demoContentReplaced`. The docsite Code tab, Open
-  in Playground, the Sandbox code view, the docsite MCP server's `get()`, and
-  `astryx component <Name> --showcase` run only the element pass, so they keep
-  their fixture media (`spec:AST-033` FR23).
+  item run `replaceTemplateDemos`; the copy receipt and the `template show`
+  response report the element count as `demoContentReplaced`. The docsite Code
+  tab, Open in Playground, the Sandbox code view, the docsite MCP server's
+  `get()`, and `astryx component <Name> --showcase` run only
+  `replaceDemoContent`, so they keep their fixture media (`spec:AST-033` FR23).
 - `packages/cli/foundation/config/project.mjs` — project diagnostics and current
   integration-template re-collection.
 - `packages/cli/api/template/` — list, show, skeleton, and copy operations.
