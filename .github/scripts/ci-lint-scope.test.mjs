@@ -245,7 +245,7 @@ describe('required lint routing', () => {
       'internal/eslint-plugin-astryx/no-comment-provenance.js',
       'internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs',
       'internal/eslint-plugin-astryx/rule-baseline.mjs',
-      'eslint.config.js',
+      'eslint.config.mjs',
     ]) {
       expect(canSkipBaselineCheck([file], baseline), file).toBe(false);
     }

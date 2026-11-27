@@ -31,7 +31,7 @@
  * sibling it reads string and template literals, so a comment is invisible to
  * it (which is what keeps the ~90 `#1234` issue references in this repo's
  * comments out of the results), as is a `.css` file, which ESLint never parses.
- * Path exemptions live here rather than only in `eslint.config.js` so they are
+ * Path exemptions live here rather than only in `eslint.config.mjs` so they are
  * testable, and so a config edit cannot quietly turn the theme layer into a
  * violation.
  *

@@ -52,7 +52,7 @@ test('announces the words an element empty state renders', async ({page}) => {
   );
 });
 
-test('leaves the rendered message out of the accessibility tree itself', async ({
+test('shows the message as the empty popup group, not a live region', async ({
   page,
 }) => {
   await page.goto(
@@ -66,14 +66,18 @@ test('leaves the rendered message out of the accessibility tree itself', async (
 
   const message = page.locator('.astryx-selector-empty-state');
   await expect(message).toBeVisible();
-  // It stays presentational. Turning it into a live region would put a
-  // non-option child inside role="listbox", which is the reason it was
-  // marked this way in the first place.
-  await expect(message).toHaveAttribute('role', 'presentation');
+  // With no options, the popup is a group named by the label, not an empty
+  // listbox. The message is its content. It is not a live region: the polite
+  // region is its one announcement.
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await expect(page.getByRole('group', {name: 'Fruit'})).toContainText(
+    'Nothing like that here',
+  );
+  await expect(message).not.toHaveAttribute('role', /.*/);
   await expect(message).not.toHaveAttribute('aria-live', /.*/);
 
-  // And the listbox exposes no options to walk, rather than a fake one.
-  await expect(page.getByRole('listbox').getByRole('option')).toHaveCount(0);
+  // And the popup exposes no options to walk, rather than a fake one.
+  await expect(page.getByRole('option')).toHaveCount(0);
 });
 
 // Not covered here: the deferred case — a load landing with nothing matching
