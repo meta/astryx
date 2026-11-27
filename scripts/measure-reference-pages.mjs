@@ -437,7 +437,7 @@ export async function measurePage(distDir, components) {
 }
 
 /** Whether `id` is a package the app brings itself (`APP_EXTERNALS`). */
-function isAppExternal(id) {
+export function isAppExternal(id) {
   return APP_EXTERNALS.some(pattern =>
     pattern.endsWith('/*')
       ? id.startsWith(pattern.slice(0, -1))

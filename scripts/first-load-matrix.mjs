@@ -25,6 +25,8 @@ import {pathToFileURL} from 'node:url';
 import {
   buildCore,
   buildPageRolldown,
+  isAppExternal,
+  pageSource,
   parseReferencePages,
   rolldownOutputs,
   rolldownPageStats,
@@ -36,16 +38,6 @@ const {gzipBytes, importLevels} = req(
   '../.github/scripts/lib/component-size.js',
 );
 const RECORD = 'docs/architecture/component-import-boundaries.md';
-
-/** The app provides these, so no bundle counts them. */
-const EXTERNAL = [
-  'react',
-  'react-dom',
-  'react-dom/client',
-  'react/jsx-runtime',
-  'scheduler',
-  '@stylexjs/stylex',
-];
 
 /** INV10's reference pages from the record, plus two single-component pages. */
 export const PAGES = {
@@ -193,29 +185,6 @@ export function pageSpec(name) {
   return [name, PAGES[name]];
 }
 
-/** An app folder that installs `corePkg` and has one entry file per page. */
-export function writeFixture(dir, corePkg, pages) {
-  fs.mkdirSync(path.join(dir, 'node_modules/@astryxdesign'), {recursive: true});
-  fs.symlinkSync(corePkg, path.join(dir, 'node_modules/@astryxdesign/core'));
-  fs.writeFileSync(
-    path.join(dir, 'package.json'),
-    '{"private":true,"type":"module"}',
-  );
-  const entries = {};
-  for (const [name, comps] of pages) {
-    const lines = comps.map(c => {
-      const [comp, sub = c] = c.split('@');
-      return `import {${comp}} from '@astryxdesign/core/${sub}';`;
-    });
-    lines.push(
-      `globalThis.__page = [${comps.map(c => c.split('@')[0]).join(', ')}];`,
-    );
-    entries[name] = path.join(dir, `${name}.js`);
-    fs.writeFileSync(entries[name], lines.join('\n') + '\n');
-  }
-  return entries;
-}
-
 const B64 = Object.fromEntries(
   [...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'].map(
     (c, i) => [c, i],
@@ -361,22 +330,48 @@ const pageItem = c => {
 };
 
 /**
- * One page bundled by each bundler in production mode. The Vite row is
- * `size:pages`' own build of the page from `page.distDir`; the other rows
- * build the app entry `entry` in `fixture`.
+ * The page entry every row builds: `size:pages`' own `pageSource`, which
+ * imports each item from its built module, so a folder missing from Core's
+ * exports map still builds.
  */
-export async function bundleAll(fixture, entry, outRoot, defer, page) {
+export const pageEntrySource = (distDir, components) =>
+  pageSource(distDir, components.map(pageItem));
+
+/** The packages the app brings itself, by `size:pages`' own rule. */
+export const appExternal = isAppExternal;
+
+/**
+ * A module that uses every export of the page entry `entry`. webpack, and
+ * Rolldown with inline common chunks (which need
+ * `preserveEntrySignatures: false`), drop an entry's unused exports, so those
+ * builds start here to keep the page's exports in use.
+ */
+function keepExportsEntry(entry) {
+  const file = entry.replace(/\.mjs$/, '.keep-exports.mjs');
+  fs.writeFileSync(
+    file,
+    `import * as page from ${JSON.stringify(entry)};\nglobalThis.__page = page;\n`,
+  );
+  return file;
+}
+
+/**
+ * One page bundled by each bundler in production mode, from one entry:
+ * `size:pages`' Vite build writes it, and the other rows build the same file
+ * with the same externals.
+ */
+export async function bundleAll(page, outRoot, defer) {
   const results = {};
   const NODE_ENV = {'process.env.NODE_ENV': JSON.stringify('production')};
   const vite = await buildPageRolldown(
     page.distDir,
     page.components.map(pageItem),
   );
-  results['Vite 8 (Rolldown)'] = rolldownSummary(
-    vite.output,
-    vite.entryModule,
-    defer,
-  );
+  const entry = vite.entryModule;
+  const usedEntry = keepExportsEntry(entry);
+  // The side's root: its node_modules resolves Core's own dependencies.
+  const root = path.dirname(page.distDir);
+  results['Vite 8 (Rolldown)'] = rolldownSummary(vite.output, entry, defer);
   // Standalone Rolldown at the two inline-common-chunks settings that
   // `size:pages` does not build: off, and 64 KiB as some apps configure it.
   const {rolldown} = req('rolldown');
@@ -388,9 +383,9 @@ export async function bundleAll(fixture, entry, outRoot, defer, page) {
     ],
   ]) {
     const bundle = await rolldown({
-      input: entry,
-      cwd: fixture,
-      external: EXTERNAL,
+      input: maxSize > 0 ? usedEntry : entry,
+      cwd: root,
+      external: appExternal,
       platform: 'browser',
       tsconfig: false,
       transform: {define: NODE_ENV},
@@ -404,7 +399,11 @@ export async function bundleAll(fixture, entry, outRoot, defer, page) {
       codeSplitting: {experimentalInlineCommonChunks: {maxSize}},
     });
     await bundle.close();
-    results[label] = rolldownSummary(output, entry, defer);
+    results[label] = rolldownSummary(
+      output,
+      maxSize > 0 ? usedEntry : entry,
+      defer,
+    );
   }
   {
     const webpack = req('webpack');
@@ -413,17 +412,22 @@ export async function bundleAll(fixture, entry, outRoot, defer, page) {
       webpack(
         {
           mode: 'production',
-          context: fixture,
-          entry,
+          context: root,
+          entry: usedEntry,
           devtool: 'source-map',
-          output: {path: out, filename: 'main.js', clean: true},
-          resolve: {
-            modules: [path.join(fixture, 'node_modules'), 'node_modules'],
+          output: {
+            path: out,
+            filename: 'main.js',
+            clean: true,
+            // Absolute paths, so the source maps name Core's modules.
+            devtoolModuleFilenameTemplate: '[absolute-resource-path]',
           },
+          resolve: {modules: [path.join(root, 'node_modules'), 'node_modules']},
           module: {rules: [{test: /\.css$/, type: 'asset/resource'}]},
-          externals: Object.fromEntries(
-            EXTERNAL.map(n => [n, 'var X' + n.replace(/\W/g, '')]),
-          ),
+          externals: ({request}, done) =>
+            appExternal(request)
+              ? done(null, 'var X' + request.replace(/\W/g, ''))
+              : done(),
           performance: {hints: false},
         },
         (err, s) =>
@@ -518,20 +522,13 @@ async function main(argv) {
   try {
     const data = {};
     for (const side of ['base', 'head']) {
-      const {packageDir, distDir} = buildCorePackage(
-        refs[side],
-        path.join(work, side),
-      );
-      const fixture = path.join(work, side, 'app');
-      const entries = writeFixture(fixture, packageDir, pages);
+      const {distDir} = buildCorePackage(refs[side], path.join(work, side));
       data[side] = {};
       for (const [page, components] of pages)
         data[side][page] = await bundleAll(
-          fixture,
-          entries[page],
+          {distDir, components},
           path.join(work, side, 'out', page),
           a.defer,
-          {distDir, components},
         );
     }
     const report = a.json

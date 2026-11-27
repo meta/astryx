@@ -5,8 +5,9 @@
  * @input scripts/first-load-matrix.mjs and a small Core-shaped fixture package
  * @output Tests for the page arguments, and a smoke run of every bundler over
  *   the fixture: the statically imported module is in first load, the module
- *   behind `import()` is out, the Vite row equals `size:pages`' Rolldown
- *   figures, and the report names both modules
+ *   behind `import()` is out, a folder missing from Core's exports map builds,
+ *   the Vite row equals `size:pages`' Rolldown figures, externals and the page
+ *   entry follow `size:pages`' rules, and the report names both modules
  * @position Testing (node project)
  */
 
@@ -16,13 +17,18 @@ import path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {
   PAGES,
+  appExternal,
   bundleAll,
   markdown,
+  pageEntrySource,
   pageSpec,
   parseArgs,
-  writeFixture,
 } from './first-load-matrix.mjs';
-import {measurePageRolldown} from './measure-reference-pages.mjs';
+import {
+  isAppExternal,
+  measurePageRolldown,
+  pageSource,
+} from './measure-reference-pages.mjs';
 
 describe('pageSpec', () => {
   it("reads INV10's pages from the record and adds the single-component pages", () => {
@@ -118,14 +124,17 @@ describe('bundleAll on a fixture package', () => {
         'export const surface = () => label("surface").repeat(40);',
       ].join('\n'),
     );
-    const app = path.join(work, 'app');
-    const entries = writeFixture(app, core, [['widget', ['Widget']]]);
+    // A folder Core's exports map does not list: the page imports its built
+    // module directly, as size:pages does.
+    fs.mkdirSync(path.join(core, 'dist/Hidden'), {recursive: true});
+    fs.writeFileSync(
+      path.join(core, 'dist/Hidden/index.js'),
+      'export const Hidden = () => "hidden";\n',
+    );
     results = await bundleAll(
-      app,
-      entries.widget,
+      {distDir: path.join(core, 'dist'), components: ['Widget', 'Hidden']},
       path.join(work, 'out'),
       ['Widget/shared.js', 'Widget/surface.js', 'Widget/missing.js'],
-      {distDir: path.join(core, 'dist'), components: ['Widget']},
     );
   }, 120_000);
 
@@ -155,9 +164,34 @@ describe('bundleAll on a fixture package', () => {
   it("gives the page the same Vite figures as size:pages' Rolldown build", async () => {
     const pages = await measurePageRolldown(path.join(core, 'dist'), [
       'Widget',
+      'Hidden',
     ]);
     expect(results['Vite 8 (Rolldown)'].gzip).toBe(pages.gzip);
     expect(results['Vite 8 (Rolldown)'].chunks).toBe(pages.chunks);
+  });
+
+  it('builds a folder missing from the exports map in every row', () => {
+    for (const [bundler, result] of Object.entries(results)) {
+      expect(result.coreModules, bundler).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("resolves externals and the page entry by size:pages' own rules", () => {
+    for (const id of [
+      'react/jsx-dev-runtime',
+      'react-dom/server',
+      '@stylexjs/stylex',
+      'intl-messageformat',
+    ]) {
+      expect(appExternal(id), id).toBe(isAppExternal(id));
+    }
+    expect(appExternal('react-dom/server')).toBe(true);
+    expect(appExternal('intl-messageformat')).toBe(false);
+    const dist = path.join(core, 'dist');
+    expect(pageEntrySource(dist, ['Hidden'])).toBe(
+      pageSource(dist, ['Hidden']),
+    );
+    expect(pageEntrySource(dist, ['Hidden'])).toContain('dist/Hidden/index.js');
   });
 
   it('reports the page as a Markdown table', () => {
