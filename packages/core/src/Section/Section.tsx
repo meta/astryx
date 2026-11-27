@@ -183,7 +183,7 @@ export interface SectionProps extends BaseProps<HTMLElement> {
    * padding, then the nearest ancestor Section's explicit `padding` (not
    * across an overlay or a layout root such as AppShell), then the theme's
    * section padding, then step 4 (16px).
-   * @default theme or ancestor Section padding, else 4
+   * @default 4 (16px)
    */
   padding?: SpacingStep;
   /**

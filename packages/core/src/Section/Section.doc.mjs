@@ -65,7 +65,7 @@ export const docs = {
       name: 'padding',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
       description: "Internal padding using the spacing scale (0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10). Use padding={0} for edge-to-edge content. When omitted, each edge takes the theme's per-edge or per-axis section padding, then the nearest ancestor Section's explicit padding (not across an overlay or a layout root such as AppShell), then the theme's section padding, then 4.",
-      default: 'theme or ancestor Section padding, else 4',
+      default: '4',
     },
     {
       name: 'paddingInline',
@@ -193,7 +193,7 @@ export const docsZh = {
       name: 'padding',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
       description: '使用间距比例的内部内边距（0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10）。使用 padding={0} 实现全宽内容。省略时，每条边依次取主题的单边或单轴区域内边距、最近的上层 Section 显式设置的 padding（不跨越浮层或 AppShell 等布局根）、主题的区域内边距，最后为 4。',
-      default: '主题或上层 Section 的内边距，否则为 4',
+      default: '4',
     },
     {
       name: 'paddingInline',
