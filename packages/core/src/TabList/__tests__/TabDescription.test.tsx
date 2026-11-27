@@ -11,7 +11,7 @@
 
 import {useRef, useState} from 'react';
 import {afterEach, beforeEach, describe, it, expect, vi} from 'vitest';
-import {act, fireEvent, render, screen} from '@testing-library/react';
+import {render, screen} from '@testing-library/react';
 import {TabList} from '../TabList';
 import {Tab} from '../Tab';
 import {Tooltip} from '../../Tooltip/Tooltip';
@@ -66,15 +66,8 @@ describe('Tab description pattern', () => {
       .split(/\s+/)
       .filter(Boolean);
     expect(ids.length).toBeGreaterThan(0);
-
-    act(() => {
-      fireEvent.focus(tab);
-      fireEvent.pointerEnter(tab, {pointerType: 'mouse'});
-      fireEvent.mouseEnter(tab);
-    });
-    const described = await screen.findByText('What this tab controls.');
-    expect(ids.some(id => described.closest(`[id="${id}"]`) != null)).toBe(
-      true,
+    expect(tab).toHaveAccessibleDescription(
+      expect.stringContaining('What this tab controls.'),
     );
   });
 

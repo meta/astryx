@@ -8,10 +8,12 @@
  * @position Read by ci-review-pass.yml (spec:AST-030/DEC-32, FR20)
  *
  * A pull-request push runs only the fast checks in its run's first attempt
- * and defers the heavy suites (the `heavy-ci` job). They run at a head whose
- * review passes as DEC-11 reads it (`reviewPasses`): the review app (for a
- * write-access author) or an engineering owner approved that exact head, and
- * the review-required status shows success. Then the deferred run is run again
+ * and defers the heavy suites (the `heavy-ci` job). They run at a head that
+ * passes the heavy turn (`heavyReviewPasses`): the spec half of the review
+ * gate passes, and an engineering owner or the review app approved that exact
+ * head. The app's approval counts for a write-access author and for a fork a
+ * maintainer admitted with `ci:run`. The heavy turn clears no gate: merging
+ * reads `review-required` (DEC-11, unchanged). Then the deferred run is run again
  * in full, and a later attempt runs every suite. merge-guard's pre-merge
  * re-run is such a later attempt too.
  */
@@ -31,6 +33,14 @@ export const CI_WORKFLOW = 'ci.yml';
 
 /** The step every required check runs when its run deferred the heavy suites. */
 export const DEFERRED_STEP = 'Heavy CI deferred';
+
+/**
+ * The oldest deferred run the heavy turn starts again. A re-run replays the
+ * run's own merge commit, so an older run merges the head with a main that has
+ * moved on: it can fail on a contract main has since changed, and finish after
+ * a fresh run. The schedule's sweep looks back as far.
+ */
+export const RERUN_MAX_AGE_MS = 6 * 60 * 60_000;
 
 /**
  * Whether a run's jobs show that it deferred its heavy suites: a required
@@ -137,10 +147,145 @@ export async function reviewPasses({
   return reviewDecision.resolveReviewApprovals({
     reviews,
     headSha: sha,
+    headPushedAt: await reviewDecision.readHeadPushedAt({
+      github,
+      owner,
+      repo,
+      sha,
+    }),
     engOwners,
     designOwners: [],
     reviewApp: app,
     authorHasWrite,
+  }).codeApproved;
+}
+
+/** The label a maintainer adds before a fork's pull request runs CI. */
+export const CI_RUN_LABEL = 'ci:run';
+
+/**
+ * Whether a maintainer (write access or more) ever added `ci:run` to a pull
+ * request. The label may be gone since: a run it admitted stays admitted
+ * (spec:AST-030 FR29). A label from a bot or a reader does not count.
+ * @param {{github: any, owner: string, repo: string, number: number}} input
+ */
+export async function maintainerAdmitted({github, owner, repo, number}) {
+  const events = await github.paginate(github.rest.issues.listEvents, {
+    owner,
+    repo,
+    issue_number: number,
+    per_page: 100,
+  });
+  const actors = new Set(
+    events
+      .filter(
+        event =>
+          event.event === 'labeled' && event.label?.name === CI_RUN_LABEL,
+      )
+      .map(event => event.actor?.login)
+      .filter(Boolean),
+  );
+  for (const username of actors) {
+    try {
+      const {data} = await github.rest.repos.getCollaboratorPermissionLevel({
+        owner,
+        repo,
+        username,
+      });
+      if (reviewDecision.hasWritePermission(data)) return true;
+    } catch {
+      // An unreadable permission does not admit.
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a pull request's head may start its heavy suites (the heavy turn
+ * only, spec:AST-030 FR20 and DEC-32). It clears no gate: merging still reads
+ * `review-required`. The spec half of the review gate passes at the head, and a
+ * review of that exact head approves the code: an engineering owner, or the
+ * review app's latest verdict when the author has write access or the pull
+ * request comes from a fork a maintainer admitted with `ci:run`. The workflow
+ * token cannot see a reader's access (a private organization member shows as
+ * a contributor), so the maintainer's label is the access signal. The author's
+ * own review never counts.
+ * @param {{
+ *   github: any,
+ *   owner: string,
+ *   repo: string,
+ *   pull: {
+ *     number: number,
+ *     head: {sha: string, repo?: {full_name?: string} | null},
+ *     user?: {login?: string},
+ *   },
+ *   engOwners: string[],
+ *   reviewApp?: string,
+ * }} input
+ */
+export async function heavyReviewPasses({
+  github,
+  owner,
+  repo,
+  pull,
+  engOwners,
+  reviewApp = '',
+}) {
+  const sha = pull.head.sha;
+  const {data: statuses} = await github.rest.repos.listCommitStatusesForRef({
+    owner,
+    repo,
+    ref: sha,
+    per_page: 100,
+  });
+  if (!reviewDecision.readSpecGate(statuses).satisfied) return false;
+  const author = pull.user?.login?.toLowerCase() ?? '';
+  const reviews = (
+    await github.paginate(github.rest.pulls.listReviews, {
+      owner,
+      repo,
+      pull_number: pull.number,
+      per_page: 100,
+    })
+  ).filter(review => review.user?.login?.toLowerCase() !== author);
+  const app = reviewDecision.normalizeReviewApp(reviewApp);
+  let appCounts = false;
+  if (app && author) {
+    try {
+      const {data} = await github.rest.repos.getCollaboratorPermissionLevel({
+        owner,
+        repo,
+        username: pull.user.login,
+      });
+      appCounts = reviewDecision.hasWritePermission(data);
+    } catch {
+      // An unreadable permission leaves the app's verdict to the fork rule.
+    }
+    // A head with no repository (a deleted fork) is a fork too.
+    const fork =
+      pull.head.repo?.full_name?.toLowerCase() !==
+      `${owner}/${repo}`.toLowerCase();
+    if (!appCounts && fork)
+      appCounts = await maintainerAdmitted({
+        github,
+        owner,
+        repo,
+        number: pull.number,
+      });
+  }
+  return reviewDecision.resolveReviewApprovals({
+    reviews,
+    headSha: sha,
+    headPushedAt: await reviewDecision.readHeadPushedAt({
+      github,
+      owner,
+      repo,
+      sha,
+    }),
+    engOwners,
+    designOwners: [],
+    reviewApp: app,
+    authorHasWrite: appCounts,
   }).codeApproved;
 }
 
@@ -168,7 +313,16 @@ export async function startHeavy({
 }) {
   const sha = pull.head.sha;
   const at = `#${pull.number} at ${sha.slice(0, 8)}`;
-  if (!(await reviewPasses({github, owner, repo, pull, engOwners, reviewApp})))
+  if (
+    !(await heavyReviewPasses({
+      github,
+      owner,
+      repo,
+      pull,
+      engOwners,
+      reviewApp,
+    }))
+  )
     return `${at}: review has not passed`;
   const {data} = await github.rest.actions.listWorkflowRuns({
     owner,
@@ -184,6 +338,8 @@ export async function startHeavy({
   )[0];
   if (run == null) return `${at}: no CI run`;
   if (run.status !== 'completed') return `${at}: run ${run.id} still runs`;
+  if (Date.now() - Date.parse(run.created_at) > RERUN_MAX_AGE_MS)
+    return `${at}: run ${run.id} is from ${run.created_at}, more than ${RERUN_MAX_AGE_MS / 3_600_000} hours ago, so its merge with main is stale. Mark the pull request draft, then ready, to start a fresh run on today's main (no new head, so no new review; a fork head needs its ci:run label first); a push or a main merge also works.`;
   const {
     data: {jobs},
   } = await github.rest.actions.listJobsForWorkflowRun({

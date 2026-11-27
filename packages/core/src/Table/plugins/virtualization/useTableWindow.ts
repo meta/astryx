@@ -26,12 +26,15 @@ import {
   type ListWindowGeometry,
   type ListWindowGeometrySource,
 } from '../../../virtualization/useListWindow';
-import {
-  getTableVirtualizationConfig,
-  type TableVirtualizationCapability,
-  type UseTableRowsVirtualizationConfig,
+import type {
+  TableVirtualizationCapability,
+  UseTableRowsVirtualizationConfig,
 } from './useTableRowsVirtualization';
-import {getCellAtColumn, getCellColumnIndex} from '../../tableColumnWindowing';
+import {
+  getCellAtColumn,
+  getCellColumnIndex,
+  getTableVirtualizationConfig,
+} from '../../tableColumnWindowing';
 
 export type TableWindowGeometry = ListWindowGeometry;
 export type TableWindowGeometrySource = ListWindowGeometrySource;

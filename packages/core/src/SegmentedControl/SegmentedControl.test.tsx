@@ -31,6 +31,7 @@ import {
   getAllInjectedCss,
   getForcedColorsRules,
 } from '../__tests__/forcedColors';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // Mock showPopover/hidePopover (not implemented in jsdom) so the tooltip layer
 // reflects its open state via a `popover-open` attribute the tests can assert.
@@ -60,6 +61,22 @@ beforeEach(() => {
 });
 
 describe('SegmentedControl', () => {
+  it('gives a Latin label its own direction, so a cut label keeps its start, and gives a right-to-left label its own right-to-left direction', () => {
+    render(
+      <div dir="rtl">
+        <SegmentedControl value="month" onChange={() => {}} label="Range">
+          <SegmentedControlItem value="month" label="Monthly" />
+          <SegmentedControlItem value="week" label="שבועי" />
+          <SegmentedControlItem value="new" label="iPhone جديد" />
+        </SegmentedControl>
+      </div>,
+    );
+    expect(screen.getByText('Monthly')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('שבועי')).toHaveAttribute('dir', 'rtl');
+    expect(screen.getByText('iPhone جديد')).not.toHaveAttribute('dir');
+    expect(screen.getByRole('radio', {name: 'Monthly'})).toBeTruthy();
+  });
+
   it('calls onChange when an item is clicked', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
@@ -823,21 +840,24 @@ describe('SegmentedControl disabled state', () => {
 
     it('shows the reason tooltip on hover when the control is disabled with a reason', async () => {
       renderControl();
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('Choose a project to switch views');
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent('Choose a project to switch views');
       const group = screen.getByRole('radiogroup');
       fireEvent.mouseEnter(group);
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      fireEvent.pointerMove(group);
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(group);
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(tooltip()).not.toHaveAttribute('popover-open'),
+      );
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderControl();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       await user.tab();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -983,7 +1003,7 @@ describe('SegmentedControl disabled state', () => {
     it('opens the reason on a tap and selects nothing', async () => {
       const onChange = vi.fn();
       renderControl({onChange});
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       const list = screen.getByRole('radio', {name: 'List'});
       // A tap, in the order a browser dispatches it.
       fireEvent.pointerEnter(list, {pointerType: 'touch'});
@@ -991,7 +1011,7 @@ describe('SegmentedControl disabled state', () => {
       fireEvent.pointerUp(list, {pointerType: 'touch'});
       fireEvent.mouseEnter(list);
       fireEvent.click(list);
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       expect(onChange).not.toHaveBeenCalled();
     });
   });
@@ -1359,6 +1379,49 @@ describe('selection motion', () => {
     } finally {
       rects.mockRestore();
       spy.mockRestore();
+    }
+  });
+
+  it('starts no animation in the commit that mounts it; the first change holds the leaving surface', () => {
+    // jsdom has no Web Animations. This records each animation that starts.
+    const started: {element: HTMLElement; pseudoElement?: string | null}[] = [];
+    HTMLElement.prototype.animate = function (
+      this: HTMLElement,
+      _keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      started.push({
+        element: this,
+        pseudoElement:
+          typeof options === 'object' ? options.pseudoElement : undefined,
+      });
+      return {
+        finished: new Promise<void>(() => {}),
+        cancel: () => {},
+        startTime: null,
+      } as unknown as Animation;
+    };
+    try {
+      const ui = (value: string) => (
+        <SegmentedControl value={value} onChange={() => {}} label="View">
+          <SegmentedControlItem value="grid" label="Grid" />
+          <SegmentedControlItem value="list" label="List" />
+        </SegmentedControl>
+      );
+      const {rerender} = render(ui('grid'));
+      // A new animation resolves style, which the mount commit must not do.
+      expect(started).toEqual([]);
+
+      rerender(ui('list'));
+      const group = screen.getByRole('radiogroup');
+      expect(
+        started.filter(
+          ({element, pseudoElement}) =>
+            element === group && pseudoElement === '::after',
+        ),
+      ).toHaveLength(1);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'animate');
     }
   });
 });

@@ -29,7 +29,7 @@ const anatomy = [
     name: 'Icon-rendered item icon',
     required: false,
     description:
-      'Optional semantic or component icon rendered through Icon at the start of an action row.',
+      'Optional built-in meaning or icon component rendered through Icon at the start of an action row.',
   },
   {
     name: 'Caller-rendered item start content',
@@ -211,7 +211,7 @@ export const docs = {
       name: 'isMenuOpen',
       type: 'boolean',
       description:
-        'Controlled open state for the menu. Mounting with true renders the menu open without moving focus into it; focus moves to the first item only when the menu opens after mount.',
+        'Controlled open state for the menu. Mounting with true renders an anchored popover open without moving focus into it; focus moves to the first item only when the popover opens after mount. A menu presented as a bottom sheet is modal and manages its own initial focus, so focus moves inside it whenever it opens, on mount included.',
     },
     {
       name: 'onOpenChange',
@@ -290,6 +290,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Let the menu return focus on close: to its trigger, or to a stand-in when the trigger is gone (a BottomSheet presentation keeps the sheet return). There is no option to turn this off; to send focus elsewhere, focus that element in onOpenChange.',
+      },
+      {
+        guidance: true,
+        description:
           'Use sections and dividers to group related actions when the menu has many items.',
       },
       {
@@ -341,6 +346,11 @@ export const docsZh = {
         guidance: true,
         description:
           'Keep menu items concise and action-oriented so users can scan options quickly.',
+      },
+      {
+        guidance: true,
+        description:
+          '让菜单在关闭时自行归还焦点：焦点回到触发器，触发器不存在时回到替代元素（以底部面板呈现时使用面板自身的焦点返回）。此行为无法关闭；如需将焦点移到别处，请在 onOpenChange 中聚焦该元素。',
       },
       {
         guidance: true,
@@ -398,6 +408,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Keep menu items concise and action-oriented so users can scan options quickly.',
+      },
+      {
+        guidance: true,
+        description:
+          'Focus returns on close, to the trigger or a stand-in (a sheet uses its own return); no off switch. Focus elsewhere in onOpenChange to redirect it.',
       },
       {
         guidance: true,

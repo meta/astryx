@@ -4,8 +4,8 @@
 
 /**
  * @file DateRangeInput.tsx
- * @input Uses React, Field, Calendar (range mode), the resolved calendar,
- *   VisuallyHidden, usePopover
+ * @input Uses React, Field, Calendar (range mode, loaded on the trigger's
+ *   intent), the resolved calendar, VisuallyHidden, usePopover
  * @output Exports DateRangeInput component, DateRangeInputProps
  * @position Core implementation; consumed by index.ts, tested by DateRangeInput.test.tsx
  *
@@ -26,6 +26,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   plainDateFromISO,
@@ -43,7 +44,6 @@ import {
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {
   colorVars,
-  sizeVars,
   radiusVars,
   spacingVars,
   typographyVars,
@@ -62,15 +62,22 @@ import {
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {
-  Calendar,
-  type ISODateString,
-  type DateRange,
-  type DayOfWeek,
-  type DayOfWeekName,
+import type {
+  ISODateString,
+  DateRange,
+  DayOfWeek,
+  DayOfWeekName,
 } from '../Calendar';
 import {useCalendarConstraints} from '../Calendar/hooks';
 import {usePopover} from '../Popover';
+import {useOutsidePress} from '../Layer/outsidePress';
+import {isShadowRoot} from '../utils/nodeType';
+import {useCommittedRef} from '../hooks/useCommittedRef';
+import {
+  DateRangeCalendar,
+  isDateRangeCalendarLoaded,
+  loadDateRangeCalendar,
+} from './DateRangeCalendar';
 import {useTooltip} from '../Tooltip';
 import {mergeProps} from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
@@ -90,6 +97,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {useLocale} from '../i18n';
 import type {Locale} from '../i18n/types';
+import type {TranslatorFn} from '../i18n/useTranslator';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -262,15 +270,12 @@ const styles = stylex.create({
 
 const sizeStyles = stylex.create({
   sm: {
-    height: sizeVars['--size-element-sm'],
     minWidth: 180,
   },
   md: {
-    height: sizeVars['--size-element-md'],
     minWidth: 180,
   },
   lg: {
-    height: sizeVars['--size-element-lg'],
     minWidth: 180,
   },
 });
@@ -280,6 +285,7 @@ function formatRangeDisplay(
   locale: Locale,
   calendar: CalendarSystem,
   today: PlainDate | null,
+  t: TranslatorFn,
 ): string {
   if (!range) {
     return '';
@@ -295,7 +301,10 @@ function formatRangeDisplay(
     yearOf(start) === yearOf(today);
 
   const fmt = sameYear ? DATE_FORMAT_SHORT : DATE_FORMAT_SHORT_WITH_YEAR;
-  return `${formatCalendarDate(calendar, start, fmt, locale)} – ${formatCalendarDate(calendar, end, fmt, locale)}`;
+  return t('@astryx.dateRangeInput.rangeValue', {
+    start: formatCalendarDate(calendar, start, fmt, locale),
+    end: formatCalendarDate(calendar, end, fmt, locale),
+  });
 }
 
 function isRangeEqual(a: DateRange | null, b: DateRange | null): boolean {
@@ -685,8 +694,8 @@ export function DateRangeInput({
 
   const today = useToday();
   const displayValue = useMemo(
-    () => formatRangeDisplay(optimisticValue, locale, calendar, today),
-    [optimisticValue, locale, calendar, today],
+    () => formatRangeDisplay(optimisticValue, locale, calendar, today, t),
+    [optimisticValue, locale, calendar, today, t],
   );
 
   const popover = usePopover({
@@ -721,15 +730,97 @@ export function DateRangeInput({
     ],
   );
 
-  const handleToggle = useCallback(() => {
-    if (!isEffectivelyDisabled) {
-      if (popover.isOpen) {
-        popover.hide();
-      } else {
-        popover.show();
-      }
+  // An open asked for before Calendar loads opens once it loads, and a
+  // failed load drops it. The popover never shows without Calendar.
+  // While the open is held, the trigger still reads as closed, so another
+  // press is another open intent and keeps the hold. A press outside the
+  // field, focus moving to another element, or Escape drops the hold, as
+  // Selector's held sheet open does. No popover then appears later, over what
+  // the person turned to.
+  const isOpenHeldRef = useRef(false);
+  const heldPressWatch = useOutsidePress();
+  const fieldRef = useRef<HTMLDivElement | null>(null);
+  const showPopoverRef = useCommittedRef(popover.show);
+  const isDisabledRef = useCommittedRef(isEffectivelyDisabled);
+  const dropHeldOpen = useCallback(() => {
+    isOpenHeldRef.current = false;
+    heldPressWatch.stop();
+  }, [heldPressWatch]);
+  const holdOpenUntilLoaded = useCallback(() => {
+    if (isOpenHeldRef.current) {
+      return;
     }
-  }, [isEffectivelyDisabled, popover]);
+    isOpenHeldRef.current = true;
+    const field = fieldRef.current;
+    if (field != null) {
+      const root = field.getRootNode();
+      heldPressWatch.start(field, path => path.includes(field), dropHeldOpen, {
+        root: isShadowRoot(root) ? root : null,
+        // The drop closes no layer, so a backdrop press still closes its host.
+        isDismissal: false,
+      });
+    }
+    void loadDateRangeCalendar().then(isLoaded => {
+      if (!isOpenHeldRef.current) {
+        return;
+      }
+      dropHeldOpen();
+      // An unmounted or now disabled field opens nothing.
+      if (
+        isLoaded &&
+        !isDisabledRef.current &&
+        fieldRef.current?.isConnected === true
+      ) {
+        showPopoverRef.current();
+      }
+    });
+  }, [dropHeldOpen, heldPressWatch, isDisabledRef, showPopoverRef]);
+  const handleToggle = useCallback(() => {
+    if (isEffectivelyDisabled) {
+      return;
+    }
+    if (popover.isOpen) {
+      popover.hide();
+    } else if (isDateRangeCalendarLoaded()) {
+      popover.show();
+    } else {
+      holdOpenUntilLoaded();
+    }
+  }, [holdOpenUntilLoaded, isEffectivelyDisabled, popover]);
+  const handleFieldBlur = useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      const next = event.relatedTarget;
+      if (
+        isOpenHeldRef.current &&
+        next instanceof Node &&
+        !event.currentTarget.contains(next)
+      ) {
+        dropHeldOpen();
+      }
+    },
+    [dropHeldOpen],
+  );
+  const handleFieldKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Escape' && isOpenHeldRef.current) {
+        dropHeldOpen();
+      }
+    },
+    [dropHeldOpen],
+  );
+  // The trigger's intent (a mouse or pen entry, a focus or a press) starts
+  // loading Calendar, so an open that follows finds it loaded.
+  const preloadCalendar = useCallback(() => {
+    void loadDateRangeCalendar();
+  }, []);
+  const preloadCalendarOnPointerEnter = useCallback(
+    (event: React.PointerEvent) => {
+      if (event.pointerType !== 'touch') {
+        preloadCalendar();
+      }
+    },
+    [preloadCalendar],
+  );
 
   const handleRangeSelect = useCallback(
     (range: DateRange) => {
@@ -763,9 +854,10 @@ export function DateRangeInput({
     [fireChange],
   );
 
-  const triggerAriaLabel = optimisticValue
-    ? `${label}: ${displayValue}`
-    : `${label}: ${placeholder}`;
+  const triggerAriaLabel = t('@astryx.dateRangeInput.triggerLabel', {
+    label,
+    value: optimisticValue ? displayValue : placeholder,
+  });
 
   return (
     <Field
@@ -792,12 +884,18 @@ export function DateRangeInput({
       width={width}>
       <div
         ref={el => {
+          fieldRef.current = el;
           popover.triggerRef(el);
           // Anchor + hover/focus listeners for the disabled-message tooltip.
           // Handlers are gated internally by isEnabled, and anchor names
           // compose, so attaching unconditionally is safe.
           disabledMessageTooltip.ref(el);
         }}
+        onPointerEnter={preloadCalendarOnPointerEnter}
+        onPointerDown={preloadCalendar}
+        onFocus={preloadCalendar}
+        onBlur={handleFieldBlur}
+        onKeyDown={handleFieldKeyDown}
         {...mergeProps(
           themeProps('date-range-input', {
             size,
@@ -808,6 +906,7 @@ export function DateRangeInput({
             inputWrapperStyles.base,
             inputWrapperStyles.textField,
             sizeStyles[size],
+            inputRowSizeStyles[size],
             isEffectivelyDisabled && inputWrapperStyles.disabled,
             isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
             status && inputStatusBorderStyles[status.type],
@@ -933,9 +1032,9 @@ export function DateRangeInput({
                       // Focusable while disabled (AR3, spec:AST-085 FR1).
                       aria-disabled={isPresetDisabled || undefined}
                       aria-describedby={
-                        showsDisabledMessage
-                          ? disabledMessageTooltip.describedBy
-                          : undefined
+                        (showsDisabledMessage &&
+                          disabledMessageTooltip.describedBy) ||
+                        undefined
                       }
                       onClick={() => {
                         if (!isPresetDisabled) {
@@ -963,7 +1062,7 @@ export function DateRangeInput({
             {/* The layer renders its children open or closed, so mount the
               calendar only while it is open. */}
             {popover.isOpen && (
-              <Calendar
+              <DateRangeCalendar
                 calendar={calendar}
                 mode="range"
                 value={optimisticValue}

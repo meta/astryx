@@ -87,10 +87,8 @@ const styles = stylex.create({
           headers: ['Bundler', 'StyleX plugin'],
           rows: [
             ['Webpack', '@stylexjs/webpack-plugin'],
-            [
-              'Vite / Rollup',
-              '@stylexjs/rollup-plugin (or a community Vite plugin)',
-            ],
+            ['Vite', '@stylexjs/unplugin (`stylex.vite()` in `vite.config`)'],
+            ['Rollup', '@stylexjs/rollup-plugin'],
             [
               'Babel (any bundler)',
               '@stylexjs/babel-plugin + @stylexjs/postcss-plugin',

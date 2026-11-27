@@ -32,14 +32,14 @@ export const docs = {
           'Use the same series array for Chart and any directly composed ChartTooltip so labels, colors, and resolved points stay aligned.',
       },
       {
-        guidance: false,
+        guidance: true,
         description:
-          'Use color as the only way to distinguish series or communicate status. Pair color with labels, mark shapes, direct annotations, or another visible cue.',
+          "Keep the default straight segments of line() and area() for measured data, so each value reads as a point joined to the next one. A smoothed curve such as `curve: 'monotone'` draws values between the points and reads as decoration.",
       },
       {
         guidance: false,
         description:
-          "Pass `curve: 'monotone'` to line() or area() for measured data. Keep the default straight segments, so each value reads as a point joined to the next one; a smoothed curve reads as decoration.",
+          'Use color as the only way to distinguish series or communicate status. Pair color with labels, mark shapes, direct annotations, or another visible cue.',
       },
       {
         guidance: false,

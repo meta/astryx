@@ -12,7 +12,6 @@
 
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -24,8 +23,12 @@ import {
   renderedMarkupOf,
 } from '../foundation/render/source-block.mjs';
 import {template} from '../api/template/template.mjs';
-import {ensureBuiltOnce} from '../clients/cli/commands/ensure-core-built.mjs';
+import {
+  checkoutLockDir,
+  ensureBuiltOnce,
+} from '../clients/cli/commands/ensure-core-built.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from './linked-fixture.mjs';
+import {REPO_ROOT} from './repo-root.mjs';
 
 /** The preload that gives a page process a fixed clock. */
 const FIXED_CLOCK = fileURLToPath(
@@ -52,8 +55,10 @@ function buildThemeOnce(themeDir) {
         `${path.basename(themeDir)} build: ${built.stderr}`,
       ).toBe(0);
     },
-    lockDir: path.join(
-      os.tmpdir(),
+    // In the checkout, beside the Core build lock, so every run of the
+    // checkout waits on the same lock whatever temp folder it has.
+    lockDir: checkoutLockDir(
+      REPO_ROOT,
       `astryx-theme-build-${path.basename(themeDir)}.lock`,
     ),
   });

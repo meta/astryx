@@ -109,7 +109,11 @@ severity: [fail]
 code:     icon_builtin_definition_missing
 message:  <text>
 
-Summary: 27 errors, 0 warnings
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+Summary: 28 errors, 0 warnings
 
 <text>
 

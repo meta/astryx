@@ -4,120 +4,56 @@
 
 /**
  * @file SelectorBottomSheet.tsx
- * @input Uses BottomSheet, Section, and Heading
- * @output Shared mobile listbox sheet for Selector and MultiSelector
- * @position Internal presentation primitive for selection controls
+ * @input Uses SelectorBottomSheetFrame through the shared module loader
+ * @output Exports SelectorBottomSheet, the host of the Selector and
+ *   MultiSelector bottom sheet, and loadSelectorBottomSheet, which the
+ *   trigger's intent and the open call
+ * @position Internal presentation host for selection controls
+ *
+ * The host renders nothing until the frame (BottomSheet, Section and
+ * Heading) has loaded, so an open made before then shows the sheet once the
+ * frame arrives. It renders nothing on the server or while the page
+ * hydrates; the closed sheet has no visible markup.
  */
 
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  type ReactNode,
-  type RefObject,
-} from 'react';
-import * as stylex from '@stylexjs/stylex';
-import {Heading} from '../Heading';
-import {Section} from '../Section';
-import {spacingVars} from '../theme/tokens.stylex';
-import {isCoarsePointer} from '../utils/coarsePointer';
+import {useSyncExternalStore, type ReactElement} from 'react';
+import {warnOnce} from '../utils/devWarning';
+import {createModuleLoader} from '../utils/moduleLoader';
+import type * as FrameModule from './SelectorBottomSheetFrame';
+import type {SelectorBottomSheetProps} from './SelectorBottomSheetFrame';
 
-const LazyBottomSheet = lazy(async () =>
-  import('../BottomSheet/BottomSheet').then(module => ({
-    default: module.BottomSheet,
-  })),
+export type {SelectorBottomSheetProps};
+
+const frame = createModuleLoader<typeof FrameModule>(
+  async () => import('./SelectorBottomSheetFrame'),
+  {
+    onLoadFailure: () =>
+      warnOnce(
+        'selector:sheet-load-failed',
+        'Selector',
+        'The selection sheet could not load. The next open tries again.',
+      ),
+  },
 );
 
-const styles = stylex.create({
-  content: {
-    width: '100%',
-  },
-  heading: {
-    marginBlockEnd: spacingVars['--spacing-2'],
-    marginInline: spacingVars['--spacing-3'],
-  },
-});
+const readFrame = (): typeof FrameModule | null => frame.loaded();
+const readNoFrame = (): null => null;
 
-interface SelectorBottomSheetProps {
-  children: ReactNode;
-  finalFocusRef: RefObject<HTMLElement | null>;
-  initialFocusRef: RefObject<HTMLElement | null>;
-  isOpen: boolean;
-  isSearchRequested?: boolean;
-  label: string;
-  onOpenChange: (isOpen: boolean) => void;
+/**
+ * Loads the sheet frame and resolves whether it loaded. A failed load warns
+ * once and is not kept, so the next intent or open asks again.
+ */
+export async function loadSelectorBottomSheet(): Promise<boolean> {
+  return frame.tryLoad();
 }
 
-export function SelectorBottomSheet({
-  children,
-  finalFocusRef,
-  initialFocusRef,
-  isOpen,
-  isSearchRequested = false,
-  label,
-  onOpenChange,
-}: SelectorBottomSheetProps) {
-  const setPanelRef = useCallback(
-    (panel: HTMLDivElement | null) => {
-      if (!isOpen || panel == null) {
-        return;
-      }
-      const view = panel.ownerDocument.defaultView;
-      const hasTouchSearch =
-        initialFocusRef.current?.tagName === 'INPUT' &&
-        view != null &&
-        isCoarsePointer(view);
-      const defersSearch = hasTouchSearch && !isSearchRequested;
-      const focusAtOpen = panel.ownerDocument.activeElement;
-      if (hasTouchSearch) {
-        // The panel ref attaches before showModal runs. Native focusing must
-        // not reach search, even before a deferred focus move could correct it.
-        // A typed opener already seeds its key; native search focus would
-        // insert it twice.
-        panel.setAttribute('autofocus', '');
-      }
-      const frame = requestAnimationFrame(() => {
-        // A reopen during exit keeps the native dialog open, so its focusing
-        // steps do not run again. Keep any focus the person has already moved
-        // into the panel.
-        const active = panel.ownerDocument.activeElement;
-        if (defersSearch && active !== focusAtOpen && panel.contains(active)) {
-          return;
-        }
-        (defersSearch ? panel : initialFocusRef.current)?.focus({
-          preventScroll: true,
-        });
-      });
-      return () => {
-        cancelAnimationFrame(frame);
-        if (hasTouchSearch) {
-          panel.removeAttribute('autofocus');
-        }
-      };
-    },
-    [initialFocusRef, isOpen, isSearchRequested],
-  );
-  return (
-    <Suspense fallback={null}>
-      <LazyBottomSheet
-        ref={setPanelRef}
-        isOpen={isOpen}
-        onOpenChange={onOpenChange}
-        finalFocusRef={finalFocusRef}
-        label={label}
-        height="hug"
-        purpose="info">
-        <Section paddingBlockStart={4} paddingBlockEnd={0} paddingInline={1}>
-          <div {...stylex.props(styles.content)}>
-            <Heading level={3} xstyle={styles.heading}>
-              {label}
-            </Heading>
-            {children}
-          </div>
-        </Section>
-      </LazyBottomSheet>
-    </Suspense>
-  );
+export function SelectorBottomSheet(
+  props: SelectorBottomSheetProps,
+): ReactElement | null {
+  const loaded = useSyncExternalStore(frame.subscribe, readFrame, readNoFrame);
+  if (loaded == null) {
+    return null;
+  }
+  const {SelectorBottomSheetFrame} = loaded;
+  return <SelectorBottomSheetFrame {...props} />;
 }
-
-SelectorBottomSheet.displayName = 'SelectorBottomSheet';

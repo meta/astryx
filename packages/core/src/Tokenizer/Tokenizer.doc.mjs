@@ -92,7 +92,7 @@ export const docs = {
       name: 'isDisabled',
       type: 'boolean',
       description:
-        'Disables the input and all token interactions. The input keeps its tab stop: it is announced as disabled (aria-disabled), is read-only, and opens and picks nothing. With tokenOverflowBehavior="unfocusedLayer" and no disabledMessage, the input is natively disabled and out of the tab order.',
+        'Disables the input and all token interactions. The input keeps its tab stop: it is announced as disabled (aria-disabled), is read-only, and opens and picks nothing. With tokenOverflowBehavior="unfocusedLayer", the placeholder of the collapsed field keeps that tab stop.',
       default: 'false',
     },
     {
@@ -218,7 +218,7 @@ export const docs = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        'Icon to display at the start of the input, before any tokens; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+        'Icon to display at the start of the input, before any tokens; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
       slotElements: [{__element: 'Icon', props: {icon: 'search', size: 'sm'}}],
     },
     {
@@ -618,7 +618,7 @@ export const docsZh = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        '在输入框开头（token 之前）显示的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
+        '在输入框开头（token 之前）显示的图标；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'endContent',

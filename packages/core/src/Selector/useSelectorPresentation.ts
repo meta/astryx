@@ -40,6 +40,7 @@ import {
   createPresentationHold,
   usePresentationHold,
 } from '../Layer/presentationHold';
+import {loadSelectorBottomSheet} from './SelectorBottomSheet';
 
 interface UseSelectorPresentationOptions {
   presentation: AdaptivePresentation;
@@ -47,6 +48,8 @@ interface UseSelectorPresentationOptions {
   onShow: (presentation: ResolvedAdaptivePresentation) => void;
   popoverOptions: Omit<InternalPopoverOptions, 'onHide' | 'onShow'>;
   triggerRef: RefObject<HTMLElement | null>;
+  /** The listbox element, which the returned `attachListbox` keeps. */
+  listboxRef: RefObject<HTMLDivElement | null>;
   /**
    * The component's one modality tracking, its `ref` attached to the trigger,
    * so the returned trigger's ring follows the trigger's own document.
@@ -63,7 +66,22 @@ interface UseSelectorPresentationOptions {
 
 interface SelectorPresentationController {
   activePresentation: ResolvedAdaptivePresentation;
+  /** The listbox's `ref`: keeps `listboxRef` and `isListboxMounted`. */
+  attachListbox: (node: HTMLDivElement | null) => void;
   hide: () => void;
+  /** Whether the listbox is in the document. */
+  isListboxMounted: boolean;
+  /**
+   * Whether the trigger names the listbox (`aria-controls`). A closed sheet
+   * trigger names none, so its ARIA is the same before and after the frame
+   * loads. An open one names the listbox once the frame renders it.
+   */
+  isListboxNamed: boolean;
+  /**
+   * Whether the list is open and in the document (`aria-expanded`). An open
+   * the sheet's frame has not rendered yet is a held intent, not an open list.
+   */
+  isListShown: boolean;
   isOpen: boolean;
   isSheetOpen: boolean;
   isSheetPresented: boolean;
@@ -71,6 +89,10 @@ interface SelectorPresentationController {
   onSheetOpenChange: (isOpen: boolean) => void;
   onTriggerFocus: (event: FocusEvent<HTMLElement>) => void;
   popover: UsePopoverReturn;
+  /** Starts loading the bottom sheet when the sheet presents the list. */
+  preloadSheet: () => void;
+  /** The same, for a mouse or pen entering the trigger. */
+  preloadSheetOnPointerEnter: (event: {readonly pointerType: string}) => void;
   show: () => boolean;
 }
 
@@ -83,6 +105,7 @@ export function useSelectorPresentation({
   onShow,
   popoverOptions,
   triggerRef,
+  listboxRef,
   triggerModality,
   isFocusReturnAlways = false,
 }: UseSelectorPresentationOptions): SelectorPresentationController {
@@ -204,6 +227,54 @@ export function useSelectorPresentation({
   useCommittedRefInto(popoverContentRef, popover.contentRef);
   const {hide: hidePopover, show: showPopover} = popover;
 
+  // The open's failed sheet load closes the open through the latest hide.
+  const hideRef = useRef<() => void>(() => {});
+  // Stops the listeners that end a held sheet open: an open made before the
+  // sheet's frame has rendered its list.
+  const heldPressWatch = useOutsidePress();
+  const stopHeldFocusWatchRef = useRef<(() => void) | null>(null);
+  const stopHeldOpen = useCallback(() => {
+    heldPressWatch.stop();
+    stopHeldFocusWatchRef.current?.();
+    stopHeldFocusWatchRef.current = null;
+  }, [heldPressWatch]);
+  // A held open ends when the person moves on: a press outside the trigger,
+  // or focus moving to another element. No sheet then appears later, over
+  // what they turned to. Focus stays where they put it.
+  const holdOpenUntilShown = useCallback(() => {
+    stopHeldOpen();
+    const trigger = triggerRef.current;
+    if (trigger == null) {
+      return;
+    }
+    const drop = () => {
+      stopHeldOpen();
+      if (!isSheetOpenRef.current) {
+        return;
+      }
+      isSheetOpenRef.current = false;
+      setIsSheetOpen(false);
+      onHideRef.current();
+    };
+    const root = trigger.getRootNode();
+    heldPressWatch.start(trigger, path => path.includes(trigger), drop, {
+      root: isShadowRoot(root) ? root : null,
+      // The drop closes no layer, so a backdrop press still closes its host.
+      isDismissal: false,
+    });
+    const handleFocusOut = (event: {
+      readonly relatedTarget: EventTarget | null;
+    }) => {
+      const next = event.relatedTarget;
+      if (next instanceof Node && !trigger.contains(next)) {
+        drop();
+      }
+    };
+    trigger.addEventListener('focusout', handleFocusOut);
+    stopHeldFocusWatchRef.current = () => {
+      trigger.removeEventListener('focusout', handleFocusOut);
+    };
+  }, [heldPressWatch, onHideRef, stopHeldOpen, triggerRef]);
   const show = useCallback((): boolean => {
     activePresentationHold.take(resolvedPresentation);
     if (resolvedPresentation === 'bottom-sheet') {
@@ -211,6 +282,16 @@ export function useSelectorPresentation({
       onShowRef.current('bottom-sheet');
       isSheetOpenRef.current = true;
       setIsSheetOpen(true);
+      if (listboxRef.current == null) {
+        holdOpenUntilShown();
+      }
+      // A sheet that cannot load drops the open, so the trigger does not
+      // report a list that never shows.
+      void loadSelectorBottomSheet().then(isLoaded => {
+        if (!isLoaded && isSheetOpenRef.current) {
+          hideRef.current();
+        }
+      });
       return true;
     }
     releaseSheet();
@@ -219,6 +300,8 @@ export function useSelectorPresentation({
     return didShowPopoverRef.current;
   }, [
     activePresentationHold,
+    holdOpenUntilShown,
+    listboxRef,
     onShowRef,
     releaseSheet,
     resetFocusReturn,
@@ -227,6 +310,7 @@ export function useSelectorPresentation({
   ]);
 
   const hide = useCallback(() => {
+    stopHeldOpen();
     if (isSheetOpenRef.current) {
       prepareFocusReturn();
       isSheetOpenRef.current = false;
@@ -235,7 +319,8 @@ export function useSelectorPresentation({
     } else {
       hidePopover();
     }
-  }, [hidePopover, onHideRef, prepareFocusReturn]);
+  }, [hidePopover, onHideRef, prepareFocusReturn, stopHeldOpen]);
+  useCommittedRefInto(hideRef, hide);
 
   const handleTriggerFocus = useCallback(
     (_event: FocusEvent<HTMLElement>) => {
@@ -266,15 +351,51 @@ export function useSelectorPresentation({
     [hide, show],
   );
 
+  // The trigger's intent (a pointer down or focus) starts loading the sheet,
+  // so an open that follows finds it loaded.
+  const preloadSheet = useCallback(() => {
+    if (resolvedPresentation === 'bottom-sheet') {
+      void loadSelectorBottomSheet();
+    }
+  }, [resolvedPresentation]);
+  // A touch reports its own pointer down, which starts the load.
+  const preloadSheetOnPointerEnter = useCallback(
+    (event: {readonly pointerType: string}) => {
+      if (event.pointerType !== 'touch') {
+        preloadSheet();
+      }
+    },
+    [preloadSheet],
+  );
+
+  const [isListboxMounted, setIsListboxMounted] = useState(false);
+  const attachListbox = useCallback(
+    (node: HTMLDivElement | null) => {
+      // eslint-disable-next-line react-compiler/react-compiler -- the caller hands over its own ref so that this callback writes it
+      listboxRef.current = node;
+      setIsListboxMounted(node != null);
+      // The list is shown: the open is no longer held.
+      if (node != null) {
+        stopHeldOpen();
+      }
+    },
+    [listboxRef, stopHeldOpen],
+  );
+
   const isOpen = popover.isOpen || isSheetOpen;
   const activePresentation =
     isOpen || isSheetPresented
       ? (activePresentationHold.current() ?? resolvedPresentation)
       : resolvedPresentation;
+  const isSheet = activePresentation === 'bottom-sheet';
 
   return {
     activePresentation,
+    attachListbox,
     hide,
+    isListboxMounted,
+    isListboxNamed: !isSheet || (isOpen && isListboxMounted),
+    isListShown: isOpen && (!isSheet || isListboxMounted),
     isOpen,
     isSheetOpen,
     isSheetPresented,
@@ -282,6 +403,8 @@ export function useSelectorPresentation({
     onSheetOpenChange: handleSheetOpenChange,
     onTriggerFocus: handleTriggerFocus,
     popover,
+    preloadSheet,
+    preloadSheetOnPointerEnter,
     show,
   };
 }

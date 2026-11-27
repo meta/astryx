@@ -34,16 +34,15 @@ a reader never reads a whole guide to find one fact.
 The tree is the backbone of one docs graph. Every provider's docs are its nodes,
 each with one home in the tree; the links between docs (a command and its API
 function, a token reference, a replacement) are its other edges, named by doc
-identity. Phase 1 builds the backbone for the CLI's own docs and each
+identity. The tree holds the CLI's own docs and each
 integration's, and `spec:AST-047` turns the edges into moves a reader can
 follow.
 
 This record owns how a doc gets its one home in the tree, how a route is formed,
-how `astryx docs` reads the tree, and what `astryx doctor` checks. It rolls out
-in phases: phase 1 places the CLI's own docs and the namespace docs and guides
-each integration ships, and gives every other doc a home in a generated
-level named for its category, Guides or Foundations; later phases may move
-those docs into real sections.
+how `astryx docs` reads the tree, and what `astryx doctor` checks. It places the
+CLI's own docs and the namespace docs and guides each integration ships, and
+gives every other doc a home in a generated level named for its category,
+Guides or Foundations.
 
 A long flat topic can become a namespace of short guides, so a reader loads only
 the guide that answers. The split keeps the unambiguous reads a released
@@ -143,7 +142,12 @@ and references from other packages are an open question (OQ2).
   route MUST fail with `ERR_UNKNOWN_TOPIC` and suggest the children of the
   deepest namespace the route reaches, closest first by each child's route,
   title, and declared keywords; the child that its route words alone put first
-  stays first when the typed text holds every word of its route. Any other
+  stays first when the typed text holds every word of its route. When the rest
+  of the route after that namespace has the words of exactly one doc further
+  below it, by that doc's last route segment or title, that doc is suggested
+  too: right after the child that stays first, or first when no child does.
+  When that doc is the child that stays first, it is listed once, first. An
+  experimental doc is never suggested this way. Any other
   text that names no doc MUST fail with `ERR_UNKNOWN_TOPIC` too. It suggests
   the docs whose own name it is, or whose route it spells with hyphens, when
   any exist. Otherwise, when no other command's entry matches the text
@@ -176,7 +180,7 @@ and references from other packages are an open question (OQ2).
   route, and when a link between docs names no doc (`spec:AST-047` FR9). These
   checks warn, so a project that passed without them keeps passing. The progressive-disclosure check MUST hold each guide the tree
   places to the same size budget as every topic.
-- **FR9 — Phase 1 places the CLI's own docs.** The CLI MUST ship the `cli`
+- **FR9 — The CLI places its own docs.** The CLI MUST ship the `cli`
   namespace with the `commands` and `api` namespaces under it, and the
   `authoring` namespace, the one home for integration authors. Every command
   doc MUST have a route under `cli/commands`, and every function, schema, and
@@ -369,7 +373,7 @@ skill `<name>`: <description> Read it with `astryx docs skills/<name>`.``,
 
 ## Current-state impact
 
-Phase 1 changes these surfaces:
+This record changes these surfaces:
 
 - the CLI ships its namespace docs and the guides they place in
   `assets/docs/tree/`, each named after its doc; the flat topic list does not

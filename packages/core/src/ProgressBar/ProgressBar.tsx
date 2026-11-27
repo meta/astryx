@@ -4,7 +4,8 @@
 
 /**
  * @file ProgressBar.tsx
- * @input Uses React, useId, stylex, tokens, ProgressBarTouch and resolveMotion
+ * @input Uses React, useId, stylex, tokens, ProgressBarTouch, resolveMotion
+ *   and the shared percentage formatter
  * @output Exports ProgressBar component, ProgressBarProps, ProgressBarVariant types
  * @position Core implementation; consumed by index.ts
  *
@@ -38,8 +39,11 @@ import type {ProgressBarVariantMap} from './index';
 import {useProgressBarTouch} from './ProgressBarTouch';
 import {formatMotionRoleValue} from '../motion/roles';
 import {resolveMotion} from '../motion/resolveMotion';
+import {useLocale} from '../i18n/useLocale';
+import {formatPercent} from '../NumberInput/numberParser';
 import {progressBar} from '../motion/uikit/progressBar';
 import {timing} from '../motion/uikit/timing';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 // Every mark is wrapped in a Tooltip (marks always carry a label), so load it
 // lazily: a ProgressBar with no marks never bundles the Tooltip chunk. While it
@@ -109,7 +113,7 @@ export interface ProgressBarProps extends BaseProps<HTMLDivElement> {
   hasValueLabel?: boolean;
   /**
    * Custom formatter for the value label.
-   * @default (value, max) => `${Math.round((value / max) * 100)}%`
+   * @default the rounded percentage in the provider locale (`45%` in English)
    */
   formatValueLabel?: (value: number, max: number) => string;
   /**
@@ -165,7 +169,9 @@ const indeterminateSlide = stylex.keyframes({
 
 // RTL: mirror the slide so the indeterminate bar travels along the reading
 // flow (inline-start → inline-end, i.e. right → left) instead of always
-// physically left → right. The magnitudes mirror the LTR keyframe.
+// physically left → right. The magnitudes mirror the LTR keyframe. The mirror
+// follows the bar's own direction (`:dir(rtl)`), so a bar in an LTR region of
+// an RTL page slides like its label.
 const indeterminateSlideRtl = stylex.keyframes({
   '0%': {
     transform: 'translateX(100%)',
@@ -346,12 +352,11 @@ const styles = stylex.create({
     // queries, as the other transitions spell them. The coarse key comes after
     // the touch key, so it wins there.
     transitionDuration: {
-      default: durationVars['--duration-medium'],
+      default: `calc(${durationVars['--duration-medium']} * ${reducedMotionTransform.factor})`,
       // The touch layer's move (the `progress.fillTrackMs` role times the
       // share moved), scaled by the theme's tempo.
       '@media (pointer: coarse)': {
-        default:
-          'calc(var(--_progress-bar-move, 0ms) * var(--_astryx-motion-tempo, 1))',
+        default: `calc(var(--_progress-bar-move, 0ms) * var(--_astryx-motion-tempo, 1) * ${reducedMotionTransform.factor})`,
         // Under forced colors the fill is sized by `width` instead. Touch
         // motion never animates a layout property, so with a finger the new
         // size lands at once there.
@@ -395,7 +400,7 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-full'],
     animationName: {
       default: indeterminateSlide,
-      ':is([dir="rtl"] *)': {
+      ':dir(rtl)': {
         default: indeterminateSlideRtl,
         '@media (prefers-reduced-motion: reduce)': indeterminatePulse,
       },
@@ -419,7 +424,8 @@ const styles = stylex.create({
   // A mark is a vertical tick centered on the track via their shared positioning container.
   // It stays outside role="progressbar" so it remains independently focusable.
   // The centering translate keeps themed overhang symmetric;
-  // insetInlineStart and the mirrored translate preserve RTL.
+  // insetInlineStart and the mirrored translate preserve RTL. The translate
+  // follows the `dir` that the bar inherits.
   //
   // The dimensions read private vars rather than being plain declarations: a
   // theme writes `width`/`height` on the `progressbar-mark` target as usual and
@@ -440,7 +446,7 @@ const styles = stylex.create({
     height: 'var(--_progressbar-mark-height, 8px)',
     transform: {
       default: 'translate(-50%, -50%)',
-      ':is([dir="rtl"] *)': 'translate(50%, -50%)',
+      ':dir(rtl)': 'translate(50%, -50%)',
     },
   },
 });
@@ -558,11 +564,6 @@ function pulseStyle(element: Element | null): PulseStyle {
   };
 }
 
-function defaultFormatValueLabel(value: number, max: number): string {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-  return `${pct}%`;
-}
-
 /**
  * A progress bar for displaying determinate or indeterminate progress.
  *
@@ -611,7 +612,7 @@ export function ProgressBar({
   label,
   isLabelHidden = false,
   hasValueLabel = false,
-  formatValueLabel = defaultFormatValueLabel,
+  formatValueLabel,
   variant = 'accent',
   isIndeterminate = false,
   isDisabled = false,
@@ -632,11 +633,20 @@ export function ProgressBar({
   const safeMax = Number.isFinite(max) ? max : 0;
   const clampedValue = Math.min(Math.max(0, safeValue), safeMax);
   const percentage = safeMax > 0 ? (clampedValue / safeMax) * 100 : 0;
-  const valueText = formatValueLabel(clampedValue, safeMax);
+  const locale = useLocale();
+  const valueText = formatValueLabel
+    ? formatValueLabel(clampedValue, safeMax)
+    : formatPercent(Math.round(percentage), locale);
 
   const showValueLabel = hasValueLabel && !isIndeterminate;
 
   const fillVariant = isDisabled ? 'disabled' : variant;
+  // A variant a theme adds through ProgressBarVariantMap has no built-in
+  // style. It paints the default accent fill until the theme styles it, so
+  // the bar never loses its fill.
+  const fillStyleKey = Object.hasOwn(variantStyles, fillVariant)
+    ? fillVariant
+    : 'accent';
   // Under a finger the fill moves as UIProgressView's does and draws at least
   // 16px; what that needs from script is the touch layer's (ProgressBarTouch).
   const touch = useProgressBarTouch(
@@ -676,6 +686,7 @@ export function ProgressBar({
 
   return (
     <div
+      {...rest}
       ref={ref}
       {...mergeProps(
         themeProps('progress-bar', {variant}),
@@ -683,8 +694,7 @@ export function ProgressBar({
         className,
         style,
       )}
-      data-testid={dataTestId}
-      {...rest}>
+      data-testid={dataTestId}>
       {/* Label row */}
       {!isLabelHidden || showValueLabel ? (
         <div {...stylex.props(styles.header)}>
@@ -730,7 +740,7 @@ export function ProgressBar({
                 themeProps('progress-bar-fill', {variant: fillVariant}),
                 stylex.props(
                   styles.indeterminateFill,
-                  variantStyles[fillVariant],
+                  variantStyles[fillStyleKey],
                   isDisabled && styles.fillDisabled,
                 ),
               )}
@@ -743,7 +753,7 @@ export function ProgressBar({
                 stylex.props(
                   styles.fill,
                   percentage === 0 && styles.fillEmpty,
-                  variantStyles[fillVariant],
+                  variantStyles[fillStyleKey],
                   isDisabled && styles.fillDisabled,
                 ),
               )}
@@ -777,7 +787,7 @@ export function ProgressBar({
                   focusOutlineStyles.focusVisible,
                   styles.mark,
                   mark.isOnFill
-                    ? markOnFillStyles[fillVariant]
+                    ? markOnFillStyles[fillStyleKey]
                     : isDisabled
                       ? markOnTrackStyles.trackDisabled
                       : markOnTrackStyles.track,

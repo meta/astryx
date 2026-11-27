@@ -25,6 +25,10 @@ import React, {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {
+  notePopoverSource,
+  popoverSourceOptions,
+} from '../hooks/focusableSelector';
 import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
@@ -571,6 +575,31 @@ export interface FixedLayerReturn {
 }
 
 /**
+ * Context-mode render props a core component may pass through
+ * `useLayerInternal`; they are not part of `useLayer`'s public API.
+ */
+interface InternalContextRenderProps extends ContextRenderProps {
+  /**
+   * Rendered where the layer is written while no layer is mounted, and
+   * removed in the commit that mounts the layer: content that stands in for
+   * the layer until then, such as a tooltip's description before its first
+   * show.
+   */
+  whileUnmounted?: ReactNode;
+}
+
+/** What `useLayerInternal` returns in context mode. */
+interface InternalContextLayerReturn extends Omit<
+  ContextLayerReturn,
+  'render'
+> {
+  render: (
+    children: ReactNode,
+    props?: InternalContextRenderProps,
+  ) => ReactNode;
+}
+
+/**
  * Context-mode options a core component may pass through `useLayerInternal`;
  * not part of the public `useLayer` options.
  */
@@ -598,12 +627,16 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    */
   onCloseStart?: () => void;
   /**
-   * Watches the open layer for touches outside it that pan; returns the
-   * function that stops watching. A light-dismiss layer is given one by its
-   * owner (usePopover's `watchOutsidePans`). An anchored menu, which closes
-   * as such a pan begins, is given none.
+   * Watches the open layer for pointers outside it; returns the function
+   * that stops watching. The layer starts it as it opens and stops it as it
+   * closes. A light-dismiss layer is given a pan watch by its owner
+   * (usePopover's `watchOutsidePans`), and a `'pageOrder'` popover its
+   * outside-press watch. An anchored menu, which closes as a pan begins, is
+   * given none. `dismiss` closes the layer for a press outside it and
+   * absorbs a `show()` from that same press, as the browser's light dismiss
+   * does.
    */
-  watchesOutsidePans?: (layer: HTMLElement) => () => void;
+  watchesOutside?: (layer: HTMLElement, dismiss: () => void) => () => void;
   /**
    * Called with true when a `show()` that the layer accepted starts to wait
    * for a valid anchor, and with false when that wait ends. The owner reads
@@ -633,7 +666,20 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    * again here.
    */
   onPlacedAfresh?: () => void;
+  /**
+   * The element whose place in the sequential focus order the open layer
+   * takes, passed to `showPopover({source})`. Defaults to the trigger. Return
+   * null for a layer that takes its own DOM place.
+   */
+  getInvoker?: () => HTMLElement | null;
 }
+
+/**
+ * `getInvoker` for a layer that holds nothing to focus, such as a tooltip or
+ * a hint. When a popover that names an invoker hides, the browser also drops
+ * the focus-order place of another open popover that names the same invoker.
+ */
+export const noInvoker = (): null => null;
 
 function toCssLength(value: number | string): string {
   return typeof value === 'number' ? `${value}px` : value;
@@ -1153,10 +1199,12 @@ function ContextLayerSlot({
   mountStore,
   renderLayer,
   sentinelRef,
+  whileUnmounted,
 }: {
   readonly mountStore: ContextLayerMountStore;
   readonly renderLayer: (mount: ContextLayerMount) => ReactNode;
   readonly sentinelRef: RefCallback<HTMLTemplateElement>;
+  readonly whileUnmounted?: ReactNode;
 }) {
   const mount = useSyncExternalStore(
     mountStore.subscribe,
@@ -1167,14 +1215,17 @@ function ContextLayerSlot({
   // us the real JSX parent on first show, this lets its ref report when a
   // persistent hook's render call moves to a different host.
   const sentinel = <template ref={sentinelRef} />;
-  if (mount === null) {
-    return <>{sentinel}</>;
-  }
-  const layer = renderLayer(mount);
+  // The stand-in and the layer share this render, so the commit that mounts
+  // the layer also removes the stand-in, and the reverse. Each child keeps
+  // its own position, so the marker never remounts.
+  const layer = mount === null ? null : renderLayer(mount);
   return (
     <>
+      {mount === null ? whileUnmounted : null}
       {sentinel}
-      {mount.portalTarget ? createPortal(layer, mount.portalTarget) : layer}
+      {mount !== null && mount.portalTarget
+        ? createPortal(layer, mount.portalTarget)
+        : layer}
     </>
   );
 }
@@ -1205,6 +1256,22 @@ function readPortalWritingContext(
         sourceStyle.writingMode as React.CSSProperties['writingMode'],
     }),
   };
+}
+
+/**
+ * The `dir` for a portalled layer whose writing context copies a direction the
+ * host lacks. A direction set in the caller's own `style` wins. The layer then
+ * gets no `dir`.
+ */
+function portalDir(
+  portalStyle: React.CSSProperties | null,
+  callerStyle: React.CSSProperties | undefined,
+): 'ltr' | 'rtl' | undefined {
+  const direction = portalStyle?.direction;
+  if (callerStyle?.direction != null) {
+    return undefined;
+  }
+  return direction === 'ltr' || direction === 'rtl' ? direction : undefined;
 }
 
 /**
@@ -1372,8 +1439,8 @@ function useLayerImplementation(
       : false;
   const keepsAnchorClear =
     mode === 'context' ? (options.keepsAnchorClear ?? false) : false;
-  const watchesOutsidePans =
-    mode === 'context' ? options.watchesOutsidePans : undefined;
+  const watchesOutside =
+    mode === 'context' ? options.watchesOutside : undefined;
   const writesEntranceSide =
     mode === 'context' ? (options.writesEntranceSide ?? false) : false;
   const onPlacedAfreshRef = useCommittedRef(
@@ -1386,6 +1453,9 @@ function useLayerImplementation(
     mode === 'context' && options.waitsForAnchor === true,
   );
   const onCloseStartRef = useCommittedRef(onCloseStart);
+  const getInvokerRef = useCommittedRef(
+    mode === 'context' ? options.getInvoker : undefined,
+  );
   const id = useId();
   const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
 
@@ -1402,6 +1472,46 @@ function useLayerImplementation(
       setIsAnchorInView(inView);
     }
   }, []);
+  // Anchor visibility (FR5). The first read is synchronous, against the
+  // visual viewport, so the frame that shows the layer is already right
+  // (FR8). IntersectionObserver then tracks changes; with no root it reports
+  // against the viewport and through every ancestor clip, so an anchor
+  // scrolled out of a panel reads as out of view too. `null` stops the watch.
+  const inViewObserverRef = useRef<IntersectionObserver | null>(null);
+  const watchAnchorInView = useCallback(
+    (anchor: Element | null) => {
+      inViewObserverRef.current?.disconnect();
+      inViewObserverRef.current = null;
+      if (anchor == null) {
+        return;
+      }
+      const view = anchor.ownerDocument.defaultView;
+      if (view) {
+        // Edge-adjacent counts as in view, as IntersectionObserver reports
+        // it; an engine with no layout (a zero rect) therefore reads as in
+        // view too.
+        const rect = anchor.getBoundingClientRect();
+        updateAnchorInView(
+          rect.bottom >= 0 &&
+            rect.right >= 0 &&
+            rect.top <= view.innerHeight &&
+            rect.left <= view.innerWidth,
+        );
+      }
+      if (typeof IntersectionObserver === 'undefined') {
+        return;
+      }
+      const observer = new IntersectionObserver(entries => {
+        const latest = entries[entries.length - 1];
+        if (latest) {
+          updateAnchorInView(latest.isIntersecting);
+        }
+      });
+      observer.observe(anchor);
+      inViewObserverRef.current = observer;
+    },
+    [updateAnchorInView],
+  );
   // The inset the app declared on LayerProvider (FR6). Read through context
   // and written inline on the layer, so a corrective portal cannot escape it
   // and no measurement is needed to apply it.
@@ -1502,12 +1612,20 @@ function useLayerImplementation(
   } | null>(null);
   const forgetDismissalRef = useRef<(() => void) | null>(null);
 
-  // Stops the watch for pans outside the open layer (`watchesOutsidePans`).
-  const stopOutsidePanWatchRef = useRef<(() => void) | null>(null);
-  const stopOutsidePanWatch = useCallback(() => {
-    stopOutsidePanWatchRef.current?.();
-    stopOutsidePanWatchRef.current = null;
+  // Stops the owner's watch for pointers outside the open layer
+  // (`watchesOutside`).
+  const stopOutsideWatchRef = useRef<(() => void) | null>(null);
+  const stopOutsideWatch = useCallback(() => {
+    stopOutsideWatchRef.current?.();
+    stopOutsideWatchRef.current = null;
   }, []);
+  // The owner's watch closes the layer through this. It is filled in once
+  // `hide` and the dismissal memory exist.
+  const dismissFromOutsideRef = useRef<() => void>(() => {});
+  const dismissFromOutside = useCallback(
+    () => dismissFromOutsideRef.current(),
+    [],
+  );
 
   const wasJustDismissed = useCallback(() => {
     const gesture = currentGesture();
@@ -1522,54 +1640,63 @@ function useLayerImplementation(
    * refusal outside such a hide, reaches the caller: a replay runs outside
    * the hide, so one that fails is not caught here.
    */
-  const showPopoverElement = useCallback((popover: HTMLElement): boolean => {
-    // Finding infra-4: the Popover API is unsupported on Safari <17 and
-    // Firefox <125. On those browsers `showPopover` does not exist, so fall
-    // back to plain visibility instead of throwing.
-    if (typeof popover.showPopover === 'function') {
-      const doc = popover.ownerDocument;
-      const duringBrowserHide = isBrowserHideInFlight(doc);
-      try {
-        runPopoverOperation(doc, () => {
-          // The trigger is passed as the popover's invoker `source`: a layer
-          // hosted away from its trigger then still takes its sequential
-          // focus order (and its popover nesting) from the trigger rather
-          // than from its own DOM position. Browsers without the option
-          // ignore it. `source` is declared as an `HTMLElement`. A
-          // caller-rendered icon trigger is an `SVGElement`, whose dictionary
-          // conversion throws before the popover opens. Omitting the option
-          // for it still anchors the layer, because positioning reads the
-          // anchor-name pair, and only gives up the invoker's focus order.
-          // The check asks the trigger's own window: an HTML trigger rendered
-          // into another document (an iframe, a Picture-in-Picture window) is
-          // not an instance of this window's `HTMLElement`, and keeps its
-          // source.
-          const trigger = triggerRef.current;
-          const triggerView = trigger?.ownerDocument.defaultView;
-          popover.showPopover({
-            source:
-              triggerView != null && trigger instanceof triggerView.HTMLElement
-                ? trigger
-                : undefined,
+  const showPopoverElement = useCallback(
+    (popover: HTMLElement): boolean => {
+      // Finding infra-4: the Popover API is unsupported on Safari <17 and
+      // Firefox <125. On those browsers `showPopover` does not exist, so fall
+      // back to plain visibility instead of throwing.
+      if (typeof popover.showPopover === 'function') {
+        const doc = popover.ownerDocument;
+        const duringBrowserHide = isBrowserHideInFlight(doc);
+        try {
+          runPopoverOperation(doc, () => {
+            // The invoker is passed as `source`. A layer hosted away from it
+            // still takes its focus order and popover nesting from it.
+            // Browsers without the option ignore it. `source` is declared as
+            // an `HTMLElement`. A caller-rendered icon trigger is an
+            // `SVGElement`, whose dictionary conversion throws before the
+            // popover opens. Omitting the option for it still anchors the
+            // layer, because positioning reads the anchor-name pair, and only
+            // gives up the invoker's focus order. The check asks the
+            // invoker's own window: an HTML element rendered into another
+            // document (an iframe, a Picture-in-Picture window) is not an
+            // instance of this window's `HTMLElement`, and keeps its source.
+            const invoker =
+              getInvokerRef.current != null
+                ? getInvokerRef.current()
+                : triggerRef.current;
+            const invokerView = invoker?.ownerDocument.defaultView;
+            const source =
+              invokerView != null && invoker instanceof invokerView.HTMLElement
+                ? invoker
+                : null;
+            // A browser that orders the popover after its source reads the
+            // option. A focus region then finds its first and last control
+            // in that order.
+            const {options, wasRead} = popoverSourceOptions(source);
+            popover.showPopover(options);
+            notePopoverSource(popover, wasRead() ? source : null);
           });
-        });
-      } catch (error) {
-        // The name, not the constructor: a popover in another document throws
-        // that document's `DOMException`.
-        if (
-          duringBrowserHide &&
-          (error as {name?: unknown} | null)?.name === 'InvalidStateError'
-        ) {
-          return false;
+        } catch (error) {
+          // The name, not the constructor: a popover in another document throws
+          // that document's `DOMException`.
+          if (
+            duringBrowserHide &&
+            (error as {name?: unknown} | null)?.name === 'InvalidStateError'
+          ) {
+            return false;
+          }
+          throw error;
         }
-        throw error;
+      } else {
+        popover.style.display = 'block';
+        notePopoverSource(popover, null);
       }
-    } else {
-      popover.style.display = 'block';
-    }
-    openedPopoverRef.current = popover;
-    return true;
-  }, []);
+      openedPopoverRef.current = popover;
+      return true;
+    },
+    [getInvokerRef],
+  );
 
   const isCurrentContextPopover = useCallback(
     (popover: HTMLElement): boolean => {
@@ -1648,6 +1775,7 @@ function useLayerImplementation(
       );
       if (portalStyle.direction != null && popover.style.direction === '') {
         popover.style.direction = portalStyle.direction;
+        popover.setAttribute('dir', portalStyle.direction);
       }
       if (portalStyle.writingMode != null && popover.style.writingMode === '') {
         popover.style.writingMode = portalStyle.writingMode;
@@ -1707,7 +1835,7 @@ function useLayerImplementation(
       browserHide.moved = true;
       openedPopoverRef.current = null;
       isOpenRef.current = false;
-      stopOutsidePanWatch();
+      stopOutsideWatch();
     }
     // A context popover left over until React commits a previous hide must not
     // be reopened. The synchronous mount ref is the source of truth.
@@ -1771,10 +1899,13 @@ function useLayerImplementation(
       closeKeepsShownRef.current = closeTransitionHolds || closeStartsAnimation;
       if (lightDismiss) {
         claimContextMenuPress(popover);
-        if (watchesOutsidePans != null) {
-          stopOutsidePanWatch();
-          stopOutsidePanWatchRef.current = watchesOutsidePans(popover);
-        }
+      }
+      if (watchesOutside != null) {
+        stopOutsideWatch();
+        stopOutsideWatchRef.current = watchesOutside(
+          popover,
+          dismissFromOutside,
+        );
       }
       const anchorBoxes = keepsAnchorClear
         ? keepAnchorClear(popover, triggerRef.current)
@@ -1792,8 +1923,9 @@ function useLayerImplementation(
     keepsAnchorClear,
     writesEntranceSide,
     lightDismiss,
-    watchesOutsidePans,
-    stopOutsidePanWatch,
+    watchesOutside,
+    stopOutsideWatch,
+    dismissFromOutside,
     requestContextMount,
     applyDeferredWritingContext,
     showPopoverElement,
@@ -2050,7 +2182,7 @@ function useLayerImplementation(
       // dismissals from ours.
       openedPopoverRef.current = null;
       isOpenRef.current = false;
-      stopOutsidePanWatch();
+      stopOutsideWatch();
       // See finding infra-4 note in `show`: mirror the same guard on hide so
       // unsupported browsers degrade gracefully instead of throwing.
       if (el) {
@@ -2076,7 +2208,7 @@ function useLayerImplementation(
     clearContextMount,
     releaseAnchor,
     cancelPendingAnchorWait,
-    stopOutsidePanWatch,
+    stopOutsideWatch,
     onCloseStartRef,
   ]);
 
@@ -2155,6 +2287,11 @@ function useLayerImplementation(
 
       const previous = triggerRef.current;
       triggerRef.current = el;
+      // The in-view watch follows a trigger replaced while the layer is
+      // open.
+      if (mode === 'context' && isOpenRef.current && el !== previous) {
+        watchAnchorInView(el);
+      }
       // A trigger in another document (a frame, a pop-out window) has its
       // presses counted there too, before its first press.
       listenForGestures(el.ownerDocument);
@@ -2202,8 +2339,10 @@ function useLayerImplementation(
       anchorId,
       cancelPendingAnchorWait,
       keepsAnchorClear,
+      mode,
       onPlacedAfreshRef,
       waitsForAnchorRef,
+      watchAnchorInView,
     ],
   );
 
@@ -2247,10 +2386,16 @@ function useLayerImplementation(
     doc.addEventListener('click', scheduleForget, true);
     forgetDismissalRef.current = forget;
   }, []);
+  // A press outside is absorbed as the browser's own light dismiss is: the
+  // click of that press must not reopen the layer it closed.
+  useCommittedRefInto(dismissFromOutsideRef, () => {
+    rememberDismissal(popoverRef.current?.ownerDocument ?? document);
+    hide();
+  });
 
   // Syncs the document's capture-phase gesture tracking with this mount.
   // Unmount forgets the layer's dismissal, releases a pending anchor wait and
-  // a show waiting for a release, and stops the outside-pan watch.
+  // a show waiting for a release, and stops the owner's outside watch.
   useEffect(() => {
     // Install capture-phase gesture tracking before the first interaction.
     currentGesture();
@@ -2259,9 +2404,9 @@ function useLayerImplementation(
       pendingAnchorWaitRef.current?.();
       cancelAfterReleaseRef.current?.();
       cancelAfterReleaseRef.current = null;
-      stopOutsidePanWatch();
+      stopOutsideWatch();
     };
-  }, [stopOutsidePanWatch]);
+  }, [stopOutsideWatch]);
 
   // Reconcile browser-initiated closes (light-dismiss, popover="auto" stack
   // eviction). These are the only cases where the DOM mutates without going
@@ -2331,7 +2476,7 @@ function useLayerImplementation(
       if (toggleEvent.newState === 'closed' && isOpenRef.current) {
         openedPopoverRef.current = null;
         isOpenRef.current = false;
-        stopOutsidePanWatch();
+        stopOutsideWatch();
         rememberDismissal(
           (e.currentTarget as HTMLElement | null)?.ownerDocument ?? document,
         );
@@ -2346,7 +2491,7 @@ function useLayerImplementation(
       clearContextMount,
       rememberDismissal,
       releaseAnchor,
-      stopOutsidePanWatch,
+      stopOutsideWatch,
     ],
   );
 
@@ -2414,11 +2559,20 @@ function useLayerImplementation(
         // that hide has ended, for the element still mounted then. The
         // keyboard cap follows the replacement element too.
         followLayerElement();
-        if (showPopoverElement(el)) {
+        const followShownReplacement = () => {
           const anchorBoxes = keepsAnchorClear
             ? keepAnchorClear(el, triggerRef.current)
             : null;
           writeEntranceSide(el, triggerRef.current, anchorBoxes);
+          // The owner's watch judges presses against the layer element.
+          if (stopOutsideWatchRef.current != null) {
+            stopOutsideWatch();
+            stopOutsideWatchRef.current =
+              watchesOutside?.(el, dismissFromOutside) ?? null;
+          }
+        };
+        if (showPopoverElement(el)) {
+          followShownReplacement();
         } else {
           afterPopoverOperations(el.ownerDocument, () => {
             const current = popoverRef.current;
@@ -2428,10 +2582,7 @@ function useLayerImplementation(
               openedPopoverRef.current !== el &&
               showPopoverElement(el)
             ) {
-              const anchorBoxes = keepsAnchorClear
-                ? keepAnchorClear(el, triggerRef.current)
-                : null;
-              writeEntranceSide(el, triggerRef.current, anchorBoxes);
+              followShownReplacement();
             }
           });
         }
@@ -2445,6 +2596,9 @@ function useLayerImplementation(
       isCurrentContextPopover,
       keepsAnchorClear,
       followLayerElement,
+      stopOutsideWatch,
+      watchesOutside,
+      dismissFromOutside,
     ],
   );
 
@@ -2490,44 +2644,16 @@ function useLayerImplementation(
     };
   }, [handleToggle, bindToggleListener, handleBeforeToggle]);
 
-  // Anchor visibility (FR5). The first frame must already be right (FR8), so
-  // the opening read is synchronous — a layout effect runs before paint, and a
-  // state change inside it re-renders before paint — against the visual
-  // viewport. IntersectionObserver then tracks changes while open; with no
-  // root it reports against the viewport and through every ancestor clip, so
-  // an anchor scrolled out of a panel reads as out of view too.
+  // Syncs the in-view watch (IntersectionObserver) with the open layer's
+  // anchor. A layout effect runs before paint, and a state change inside it
+  // re-renders before paint, so the opening read reaches the first frame.
   useIsomorphicLayoutEffect(() => {
     if (!isOpen || mode !== 'context') {
       return;
     }
-    const anchor = triggerRef.current;
-    if (!anchor) {
-      return;
-    }
-    const view = anchor.ownerDocument.defaultView;
-    if (view) {
-      // Edge-adjacent counts as in view, as IntersectionObserver reports it;
-      // an engine with no layout (a zero rect) therefore reads as in view too.
-      const rect = anchor.getBoundingClientRect();
-      const inView =
-        rect.bottom >= 0 &&
-        rect.right >= 0 &&
-        rect.top <= view.innerHeight &&
-        rect.left <= view.innerWidth;
-      updateAnchorInView(inView);
-    }
-    if (typeof IntersectionObserver === 'undefined') {
-      return;
-    }
-    const observer = new IntersectionObserver(entries => {
-      const latest = entries[entries.length - 1];
-      if (latest) {
-        updateAnchorInView(latest.isIntersecting);
-      }
-    });
-    observer.observe(anchor);
-    return () => observer.disconnect();
-  }, [isOpen, mode, updateAnchorInView]);
+    watchAnchorInView(triggerRef.current);
+    return () => watchAnchorInView(null);
+  }, [isOpen, mode, watchAnchorInView]);
 
   // A layer that keeps its anchor clear re-reads its geometry while it
   // is open: content that grows, an anchor that resizes or moves (in layout or
@@ -2599,7 +2725,7 @@ function useLayerImplementation(
 
   // Render function for context mode
   const renderContext = useCallback(
-    (children: ReactNode, props?: ContextRenderProps) => {
+    (children: ReactNode, props?: InternalContextRenderProps) => {
       const {
         placement = 'above',
         alignment = 'center',
@@ -2613,6 +2739,7 @@ function useLayerImplementation(
         as: Container = 'div',
         onMouseEnter,
         onMouseLeave,
+        whileUnmounted,
       } = props || {};
 
       // CSS anchor positioning (dynamic, not in StyleX)
@@ -2704,6 +2831,9 @@ function useLayerImplementation(
             : {})}
           role={role}
           aria-label={ariaLabel}
+          // A copied direction also goes on `dir`, so `:dir()` inside the
+          // layer agrees with the direction its layout uses.
+          dir={portalDir(mount.portalStyle, extraStyle)}
           popover={lightDismiss ? 'auto' : 'manual'}
           className={combinedClassName}
           style={{
@@ -2735,6 +2865,7 @@ function useLayerImplementation(
           mountStore={mountStore}
           renderLayer={renderLayer}
           sentinelRef={sentinelRefCallback}
+          whileUnmounted={whileUnmounted}
         />
       );
     },
@@ -2844,10 +2975,10 @@ export function useLayer(
  */
 export function useLayerInternal(
   options: InternalContextLayerOptions,
-): ContextLayerReturn;
+): InternalContextLayerReturn;
 export function useLayerInternal(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayerInternal(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): ContextLayerReturn | FixedLayerReturn {
+): InternalContextLayerReturn | FixedLayerReturn {
   return useLayerImplementation(options);
 }

@@ -4,9 +4,10 @@
  * @file useSegmentedSelectionMotion.test.ts
  * @input vitest, jsdom, SegmentedSelectionMotion with an animator on a
  *   scripted clock, stubbed segment geometry and a recording `animate`
- * @output The touch layer's selection motion as a state machine: the slide,
- *   the hand-back, a change mid-flight, resize, Reduced Motion, the press, the
- *   chase, the commit at the lift and the face that follows a drag
+ * @output The touch layer's selection motion as a state machine: when its
+ *   animators attach, the slide, the hand-back, a change mid-flight, resize,
+ *   Reduced Motion, the press, the chase, the commit at the lift and the face
+ *   that follows a drag
  * @position Unit tests for useSegmentedSelectionMotion.ts; the browser proofs
  *   are __tests__/SegmentedControl.interaction.browser.spec.ts
  */
@@ -249,6 +250,96 @@ describe('the motion roles (spec:AST-094 FR4)', () => {
     expect(motionRoleOf(segmentedControl.selectionSpring)?.id).toBe(
       'segmented.selectionSpring',
     );
+  });
+});
+
+describe('when the animators attach', () => {
+  interface Started {
+    element: HTMLElement;
+    keyframes: Keyframe[];
+    options: KeyframeAnimationOptions;
+  }
+  let started: Started[] = [];
+  const realAnimate = HTMLElement.prototype.animate;
+
+  // jsdom has no Web Animations. This records each animation that starts.
+  beforeEach(() => {
+    started = [];
+    HTMLElement.prototype.animate = function (
+      this: HTMLElement,
+      keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      started.push({
+        element: this,
+        keyframes: keyframes as Keyframe[],
+        options: options as KeyframeAnimationOptions,
+      });
+      return {
+        finished: new Promise<void>(() => {}),
+        cancel: vi.fn(),
+        startTime: null,
+      } as unknown as Animation;
+    };
+  });
+
+  afterEach(() => {
+    HTMLElement.prototype.animate = realAnimate;
+  });
+
+  /** The static animation that holds the ::after's resting opacity. */
+  const leavingHolds = (track: HTMLElement) =>
+    started.filter(
+      ({element, keyframes, options}) =>
+        element === track &&
+        options.pseudoElement === '::after' &&
+        keyframes.every(keyframe => keyframe.opacity === '0'),
+    );
+
+  it('starts no animation when the track attaches, as in the commit that mounts the control', () => {
+    const ctx = setup('grid');
+    expect(started).toEqual([]);
+    expect(ctx.animator.element).toBeNull();
+    expect(ctx.leavingAnimator.element).toBeNull();
+  });
+
+  it('attaches the animators at the first selection change', () => {
+    const ctx = setup('grid');
+    select(ctx, 'grid', 'table');
+    expect(ctx.animator.element).toBe(ctx.track);
+    expect(ctx.leavingAnimator.element).toBe(ctx.track);
+    expect(leavingHolds(ctx.track)).toHaveLength(1);
+    expect(ctx.motion.isSliding).toBe(true);
+  });
+
+  it('attaches the animators at the first press', () => {
+    const ctx = setup('grid');
+    begin(ctx, 60);
+    expect(ctx.animator.element).toBe(ctx.track);
+    expect(ctx.leavingAnimator.element).toBe(ctx.track);
+    expect(leavingHolds(ctx.track)).toHaveLength(1);
+  });
+
+  it('attaches them once: a later change or press starts no second hold', () => {
+    const ctx = setup('grid');
+    select(ctx, 'grid', 'table');
+    select(ctx, 'table', 'list');
+    begin(ctx, 60);
+    expect(leavingHolds(ctx.track)).toHaveLength(1);
+  });
+
+  it('detaches the animators with the track, and attaches them again at the next change', () => {
+    const ctx = setup('grid');
+    select(ctx, 'grid', 'table');
+    ctx.motion.attachTrack(null);
+    expect(ctx.animator.element).toBeNull();
+    expect(ctx.leavingAnimator.element).toBeNull();
+
+    ctx.motion.attachTrack(ctx.track);
+    expect(ctx.animator.element).toBeNull();
+    select(ctx, 'table', 'list');
+    expect(ctx.animator.element).toBe(ctx.track);
+    expect(ctx.leavingAnimator.element).toBe(ctx.track);
   });
 });
 

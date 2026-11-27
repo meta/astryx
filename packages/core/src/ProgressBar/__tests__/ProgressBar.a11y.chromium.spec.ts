@@ -143,7 +143,11 @@ test('ProgressBar marks keep their names when tabbed to or hovered', async ({
 
   for (const [index, label] of labels.entries()) {
     const mark = marks.nth(index);
-    await expect(mark).toHaveAttribute('aria-describedby', /.+/);
+    // The mark's Tooltip loads lazily. Once it has attached, its hidden text
+    // copy is in the document.
+    await expect(
+      page.locator('[hidden]').filter({hasText: label}).first(),
+    ).toBeAttached();
     const subject = await createChromiumHarness({
       page,
       cdp,
@@ -157,9 +161,13 @@ test('ProgressBar marks keep their names when tabbed to or hovered', async ({
     await expect(mark).toBeFocused();
     const tooltip = page.getByRole('tooltip').filter({hasText: label});
     await expect(tooltip).toBeVisible();
+    // The tooltip repeats the mark's name, so it adds no description and the
+    // label is read once.
+    await expect(mark).not.toHaveAttribute('aria-describedby');
     expect(await subject.computed()).toMatchObject({
       role: 'image',
       name: label,
+      description: '',
     });
     await page.keyboard.press('Escape');
     await expect(tooltip).not.toBeVisible();

@@ -16,7 +16,12 @@ import DurationShardSequencer, {
   durationsFile,
 } from './vitest-shard-sequencer.mjs';
 import {splitByDuration} from './lib/duration-split.mjs';
-import {PER_FILE_SECONDS, nodeFileCost} from './vitest-node-legs.mjs';
+import {
+  PER_FILE_SECONDS,
+  drawsInRealChrome,
+  nodeFileCost,
+  takesOwnNodeLeg,
+} from './vitest-node-legs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const recorded = readDurations();
@@ -80,17 +85,36 @@ describe('duration-balanced Node legs', () => {
   );
 
   it.each([4, 6])(
-    'never puts two of the %i slowest files in one leg, and keeps legs within a slow file of each other',
+    'never puts two of the slowest files in one leg, and keeps legs within a slow file of each other (%i legs)',
     count => {
       const legs = partitionByDuration(files, count, recorded);
       const legOf = file => legs.findIndex(leg => leg.includes(file));
-      const top = slowest.slice(0, count).map(legOf);
-      expect(new Set(top).size).toBe(count);
-      // Greedy slowest-first: legs differ by at most the slowest file's time.
+      // The last leg holds the real-Chrome files and light files only, and
+      // a marked real-Chrome file takes a leg of its own the same way
+      // (nodeLegsApart), so the heavy files spread over the other legs.
+      const apartLegs = new Set([
+        count - 1,
+        ...files.filter(file => takesOwnNodeLeg(file)).map(legOf),
+      ]);
+      const open = count - apartLegs.size;
+      const top = slowest
+        .filter(file => !drawsInRealChrome(file))
+        .slice(0, open)
+        .map(legOf);
+      expect(new Set(top).size).toBe(open);
+      for (const leg of apartLegs) expect(top).not.toContain(leg);
+      // Greedy slowest-first: the other legs differ by at most the slowest
+      // file's time. The real-Chrome legs take light files only; with few
+      // legs those run out, so those legs may end shorter, never longer.
       const totals = legs.map(total);
-      expect(Math.max(...totals) - Math.min(...totals)).toBeLessThanOrEqual(
-        recorded[slowest[0]],
-      );
+      const openTotals = totals.filter((_, i) => !apartLegs.has(i));
+      expect(
+        Math.max(...openTotals) - Math.min(...openTotals),
+      ).toBeLessThanOrEqual(recorded[slowest[0]]);
+      for (const leg of apartLegs)
+        expect(totals[leg]).toBeLessThanOrEqual(
+          Math.max(...openTotals) + recorded[slowest[0]],
+        );
     },
   );
 
@@ -102,7 +126,11 @@ describe('duration-balanced Node legs', () => {
       const zeros = files.filter(zero).length;
       expect(zeros).toBeGreaterThan(100);
       const mean = files.length / count;
-      for (const leg of legs) {
+      for (const [index, leg] of legs.entries()) {
+        // The real-Chrome files' legs top up with light files only, so they
+        // hold more of them.
+        if (index === count - 1 || leg.some(file => takesOwnNodeLeg(file)))
+          continue;
         expect(leg.length).toBeLessThanOrEqual(mean * 1.15);
         expect(leg.filter(zero).length).toBeLessThanOrEqual(
           (zeros / count) * 1.5,
@@ -223,6 +251,32 @@ describe('duration-balanced Node legs', () => {
     expect(nodeOrder.slice(0, 3)).toEqual(slowest.slice(0, 3));
     expect(order).toContain('packages/core/src/A/A.test.tsx');
     expect(order).toHaveLength(7);
+  });
+
+  it('starts a file with a leg of its own last in its leg, after the light files', async () => {
+    const spec = file => ({
+      project: {
+        name: 'node',
+        config: {sequence: {groupOrder: 0}, isolate: true},
+      },
+      moduleId: path.join(ROOT, file),
+    });
+    const own =
+      'packages/cli/api/theme-edit/theme-edit-border-added-size.test.mjs';
+    expect(takesOwnNodeLeg(own)).toBe(true);
+    const light = slowest.filter(file => !drawsInRealChrome(file)).slice(-4);
+    const sequencer = new DurationShardSequencer({
+      config: {root: ROOT, shard: {index: 1, count: 1}},
+      cache: {
+        getFileTestResults: () => undefined,
+        getFileStats: () => undefined,
+      },
+    });
+    const order = (await sequencer.sort([own, ...light].map(spec))).map(item =>
+      path.relative(ROOT, item.moduleId),
+    );
+    expect(order).toHaveLength(5);
+    expect(order[order.length - 1]).toBe(own);
   });
 
   it('is the sequencer every Vitest run uses', () => {

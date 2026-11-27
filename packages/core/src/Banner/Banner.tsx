@@ -56,6 +56,7 @@ import {useId, useRef, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {Button} from '../Button';
+import {ButtonTooltipInNameContext} from '../Button/Button';
 import {Icon} from '../Icon';
 import type {IconName, IconColor} from '../Icon';
 import {
@@ -81,6 +82,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Banner/Banner.generated';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 
@@ -362,7 +364,7 @@ const styles = stylex.create({
   chevron: {
     transitionProperty: 'transform',
     transitionDuration: {
-      default: durationVars['--duration-fast'],
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
@@ -800,23 +802,25 @@ export function Banner({
               />
             )}
             {isDismissable && (
-              <Button
-                variant="ghost"
-                size="sm"
-                label={dismissName}
-                tooltip={dismissTooltip}
-                icon={<Icon icon="close" size="sm" color="inherit" />}
-                onClick={handleDismiss}
-                className={
-                  mergeProps(
-                    themeProps('banner-close'),
-                    hasStatusStyle(status)
-                      ? stylex.props(statusControlStyles[status])
-                      : {},
-                  ).className
-                }
-                isIconOnly
-              />
+              <ButtonTooltipInNameContext value>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  label={dismissName}
+                  tooltip={dismissTooltip}
+                  icon={<Icon icon="close" size="sm" color="inherit" />}
+                  onClick={handleDismiss}
+                  className={
+                    mergeProps(
+                      themeProps('banner-close'),
+                      hasStatusStyle(status)
+                        ? stylex.props(statusControlStyles[status])
+                        : {},
+                    ).className
+                  }
+                  isIconOnly
+                />
+              </ButtonTooltipInNameContext>
             )}
           </div>
         )}

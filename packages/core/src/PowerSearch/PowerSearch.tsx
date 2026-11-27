@@ -77,12 +77,9 @@ import {isFocusDetached} from '../utils/isFocusDetached';
 import {isRenderable} from '../utils/isRenderable';
 import {useInternalConfig} from './useInternalConfig';
 import {usePowerSearchSource} from './usePowerSearchSource';
-import {formatFilterValue} from './formatFilterValue';
+import {formatDateRange, formatFilterValueForRender} from './formatFilterValue';
 import {NestedEditor, PowerSearchEditPopover} from './PowerSearchEditPopover';
-import {
-  buildRelativeDateOptions,
-  PowerSearchValueEditor,
-} from './PowerSearchValueEditor';
+import {PowerSearchValueEditor} from './PowerSearchValueEditor';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n/useLocale';
@@ -306,7 +303,6 @@ const LazyPowerSearchBottomSheet = lazy(async () =>
 const SHEET_EDITORS: PowerSearchSheetEditors = {
   NestedEditor,
   PowerSearchValueEditor,
-  buildRelativeDateOptions,
 };
 
 /**
@@ -396,7 +392,10 @@ export interface PowerSearchProps extends Omit<
    * @default 'attached'
    */
   statusVariant?: FieldStatusPlacement;
-  /** Max width for dropdown menu. */
+  /**
+   * Width in pixels of the main field/search menu. It never shrinks below the
+   * input width. It does not affect the field value editors.
+   */
   menuWidth?: number;
   /** Max display length for filter token values. @default 40 */
   maxTokenLength?: number;
@@ -741,6 +740,10 @@ export function PowerSearch({
     type: 'idle',
   });
 
+  // The server and the hydrating render write a range's days only when no
+  // clock reading is needed, so the markup matches.
+  const isHydrating = useIsHydrating();
+
   // A default filter token's visible text: its label (field and operator)
   // and its value. The token's remove button and editor dialog are named by
   // the same text.
@@ -763,9 +766,9 @@ export function PowerSearch({
             ),
             locale,
             calendar,
-            undefined,
-            undefined,
+            t,
             timezoneID,
+            !isHydrating,
           )
         : null;
       return {
@@ -774,7 +777,7 @@ export function PowerSearch({
         full: value != null ? formatTokenText(t, label, value) : label,
       };
     },
-    [config, maxTokenLength, t, locale, timezoneID, calendar],
+    [config, maxTokenLength, t, locale, timezoneID, calendar, isHydrating],
   );
   // The built-in token being edited. A token from a `components` override
   // names itself, so its editor keeps the plain popover.
@@ -912,6 +915,23 @@ export function PowerSearch({
     },
   }));
 
+  // A `NOW` or `RELATIVE` part of a date range can read other days at each
+  // render. The days every range reads now key the items' labels, so the
+  // removal announcement names the days the token shows.
+  const dateRangeDays = filters
+    .map(filter =>
+      filter.value.type === 'date_range'
+        ? formatDateRange(
+            filter.value.value,
+            locale,
+            timezoneID,
+            calendar,
+            !isHydrating,
+          )
+        : '',
+    )
+    .join('|');
+
   // Convert filters to tokenizer items
   const tokenizerValue: PowerSearchItem[] = useMemo(() => {
     return filters.map((filter, index) => {
@@ -924,7 +944,7 @@ export function PowerSearch({
         resolvedOp,
       );
       const valueStr = operator
-        ? formatFilterValue(
+        ? formatFilterValueForRender(
             config,
             operator.value,
             filter.value,
@@ -933,6 +953,7 @@ export function PowerSearch({
             locale,
             timezoneID,
             calendar,
+            !isHydrating,
           )
         : '';
 
@@ -951,7 +972,18 @@ export function PowerSearch({
         },
       };
     });
-  }, [filters, config, maxTokenLength, timezoneID, t, locale, calendar]);
+    // eslint-disable-next-line @eslint-react/exhaustive-deps -- `dateRangeDays` re-reads a NOW or RELATIVE date range when its days change
+  }, [
+    filters,
+    config,
+    maxTokenLength,
+    timezoneID,
+    t,
+    locale,
+    calendar,
+    isHydrating,
+    dateRangeDays,
+  ]);
 
   // Handle tokenizer onChange (field selected from typeahead)
   const handleTokenizerChange = useCallback(

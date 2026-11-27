@@ -81,6 +81,8 @@ import {
   useSheetGestures,
   type SheetDragExit,
 } from './useSheetGestures';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 const HEIGHT_BUDGETS = {
   hug: '92dvh',
@@ -325,8 +327,6 @@ const pastGrabBarStyles = stylex.create({
  */
 const REDUCED_MOTION_COARSE =
   '@media (prefers-reduced-motion: reduce) and (pointer: coarse)';
-export const REDUCED_MOTION_COARSE_QUERY =
-  '(prefers-reduced-motion: reduce) and (pointer: coarse)';
 const CROSS_FADE_MS = 200;
 
 const styles = stylex.create({
@@ -385,7 +385,10 @@ const styles = stylex.create({
     },
     transitionProperty: 'transform, opacity',
     transitionDuration: {
-      default: durationVars['--duration-medium'],
+      // Under a theme that reduces motion for everyone, the sheet lands on the
+      // next frame. waitForTransition ends at once on a zero duration, so the
+      // sheet needs no settle time.
+      default: `calc(${durationVars['--duration-medium']} * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce)': {
         default: '0.01s',
         '@media (pointer: coarse)': `0.01s, ${CROSS_FADE_MS}ms`,
@@ -844,7 +847,7 @@ export function BottomSheetPanel({
   const isFading = isRetained && state.motion === 'fading';
   // Under reduced motion a retained sheet does not align down to a shorter
   // entering sheet, because that is travel. It fades where it is.
-  const isReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const isReducedMotion = useReducesMotion();
   const alignmentOffset =
     isRetained && !isReducedMotion ? state.alignmentOffset : 0;
 
@@ -998,7 +1001,9 @@ export function BottomSheetPanel({
   // The cross-fade applies on a coarse pointer, and to a transition that a
   // touch drag's release started: a finger's swipe dismissal fades in place on
   // every pointer. A mouse or pen drag is not a touch drag.
-  const isCoarseCrossFade = useMediaQuery(REDUCED_MOTION_COARSE_QUERY);
+  // A theme's reducedMotion: 'always' cross-fades on a coarse pointer too.
+  const isCoarsePointer = useMediaQuery('(pointer: coarse)');
+  const isCoarseCrossFade = isReducedMotion && isCoarsePointer;
   const isCrossFade =
     isCoarseCrossFade || (isReducedMotion && isDismissedByTouchDrag);
   // Without Web Animations the animator jumps the sheet to its end, so the

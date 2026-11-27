@@ -529,23 +529,24 @@ describe('AlertDialog', () => {
  * cover AlertDialog's wiring of it.
  */
 describe('AlertDialog action tracking', () => {
-  let touchClock = 10_000;
   let touchId = 500;
 
+  // Stamp each event on the page clock, as a browser does. jsdom stamps an
+  // event with whole milliseconds of `Date.now()`, which can date a touch
+  // that comes just after the entrance hold inside that hold.
   function touch(
     type: 'touchstart' | 'touchmove' | 'touchend',
     target: Element,
     point: {x: number; y: number},
     id: number,
   ): void {
-    touchClock += 16;
     const event = new Event(type, {bubbles: true, cancelable: true});
+    Object.defineProperty(event, 'timeStamp', {value: performance.now()});
     const entry = {identifier: id, clientX: point.x, clientY: point.y, target};
     Object.defineProperty(event, 'changedTouches', {value: [entry]});
     Object.defineProperty(event, 'touches', {
       value: type === 'touchend' ? [] : [entry],
     });
-    Object.defineProperty(event, 'timeStamp', {value: touchClock});
     target.dispatchEvent(event);
   }
 
@@ -560,7 +561,6 @@ describe('AlertDialog action tracking', () => {
     point: {x: number; y: number},
     pointerType: 'mouse' | 'pen' = 'mouse',
   ): void {
-    touchClock += 16;
     const event = new PointerEvent(type, {
       bubbles: true,
       cancelable: true,
@@ -572,7 +572,6 @@ describe('AlertDialog action tracking', () => {
       clientX: point.x,
       clientY: point.y,
     });
-    Object.defineProperty(event, 'timeStamp', {value: touchClock});
     target.dispatchEvent(event);
   }
 
@@ -755,23 +754,24 @@ describe('AlertDialog action tracking', () => {
 });
 
 describe('AlertDialog touch motion', () => {
-  let touchClock = 20_000;
   let touchId = 900;
 
+  // Stamp each event on the page clock, as a browser does. jsdom stamps an
+  // event with whole milliseconds of `Date.now()`, which can date a touch
+  // that comes just after the entrance hold inside that hold.
   function touch(
     type: 'touchstart' | 'touchend',
     target: Element,
     point: {x: number; y: number},
     id: number,
   ): void {
-    touchClock += 16;
     const event = new Event(type, {bubbles: true, cancelable: true});
+    Object.defineProperty(event, 'timeStamp', {value: performance.now()});
     const entry = {identifier: id, clientX: point.x, clientY: point.y, target};
     Object.defineProperty(event, 'changedTouches', {value: [entry]});
     Object.defineProperty(event, 'touches', {
       value: type === 'touchend' ? [] : [entry],
     });
-    Object.defineProperty(event, 'timeStamp', {value: touchClock});
     target.dispatchEvent(event);
   }
 

@@ -2,6 +2,7 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
+import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import userEvent from '@testing-library/user-event';
 import {Thumbnail} from './Thumbnail';
 import {
@@ -108,6 +109,19 @@ describe('Thumbnail', () => {
     ).toBeInTheDocument();
   });
 
+  it('joins the label and alt through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="ja"
+        overrides={{ja: {'@astryx.thumbnail.nameWithAlt': '{alt}（{label}）'}}}>
+        <Thumbnail src="/img.jpg" alt="表紙" label="file.png" />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByRole('group', {name: '表紙（file.png）'}),
+    ).toBeInTheDocument();
+  });
+
   it('marks the image as explicitly decorative when no alt is provided', () => {
     render(
       <Thumbnail src="/photo.jpg" label="photo.png" data-testid="thumb" />,
@@ -141,6 +155,19 @@ describe('Thumbnail', () => {
     render(<Thumbnail src="/b.jpg" alt="Photo b" />);
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+
+  it('describes a label-only thumbnail with nothing, since the label is its whole name', () => {
+    render(<Thumbnail src="/img.jpg" label="file.png" />);
+    const group = screen.getByRole('group', {name: 'file.png'});
+    expect(group).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('describes a thumbnail with a label and alt with its label', () => {
+    render(<Thumbnail src="/img.jpg" alt="Cover" label="file.png" />);
+    expect(
+      screen.getByRole('group', {name: 'file.png — Cover'}),
+    ).toHaveAccessibleDescription('file.png');
   });
 
   it('label is shown via tooltip, not as inline text', () => {

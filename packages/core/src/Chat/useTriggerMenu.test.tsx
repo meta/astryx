@@ -10,7 +10,7 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {renderHook, act} from '@testing-library/react';
+import {renderHook, act, render, screen} from '@testing-library/react';
 import {useTriggerMenu} from './useTriggerMenu';
 import type {ChatComposerTrigger} from './ChatComposerInput';
 import {createStaticSource} from '../Typeahead/createStaticSource';
@@ -119,6 +119,25 @@ describe('useTriggerMenu', () => {
       }),
     );
   }
+
+  it('gives a Latin default item label its own direction, so a cut label keeps its start, and gives a right-to-left label its own right-to-left direction', async () => {
+    const {result} = renderTriggerHook([
+      createCommandTrigger({
+        searchSource: createStaticSource([
+          {id: 'sum', label: 'Summarize thread'},
+          {id: 'he', label: 'סכם שיחה'},
+        ]),
+      }),
+    ]);
+    await act(async () => {
+      setCursor('/');
+      result.current.handleInput();
+      await Promise.resolve();
+    });
+    render(<div dir="rtl">{result.current.renderMenu()}</div>);
+    expect(screen.getByText('Summarize thread')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('סכם שיחה')).toHaveAttribute('dir', 'rtl');
+  });
 
   // 1. Single-token / behavior unchanged
   it('1. single-token / command behavior is unchanged and terminates on space', async () => {

@@ -161,6 +161,11 @@ export type Key =
 export interface Harness {
   /** Short runtime name, e.g. `jsdom` or `chromium`. Appears in every report row. */
   readonly name: string;
+  /**
+   * The engine build this harness drives, e.g. `151.0.7889.0`, when it drives
+   * one. An engine-scoped known failure (`KnownFailure.engine`) reads it.
+   */
+  readonly version?: string;
   /** The layers this harness can observe. Anything else is reported `unrun`. */
   readonly observes: readonly EvidenceLayer[];
   /** The element the binding designates as the pattern's control. */

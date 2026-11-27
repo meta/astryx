@@ -9,7 +9,8 @@
 
 import {describe, it, expect, beforeAll, vi} from 'vitest';
 import {render, screen, waitFor} from '@testing-library/react';
-import {ProgressBar} from './ProgressBar';
+import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
+import {ProgressBar, type ProgressBarVariant} from './ProgressBar';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -54,6 +55,19 @@ describe('ProgressBar', () => {
     expect(screen.getByText('75%')).toBeInTheDocument();
   });
 
+  it('writes the default value text as the provider locale writes a percentage', () => {
+    render(
+      <InternationalizationProvider locale="tr">
+        <ProgressBar value={45} label="Upload" hasValueLabel />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('%45')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuetext',
+      '%45',
+    );
+  });
+
   it('uses custom formatValueLabel', () => {
     render(
       <ProgressBar
@@ -89,8 +103,47 @@ describe('ProgressBar', () => {
 
   it('forwards ref to outer container', () => {
     const ref = {current: null as HTMLDivElement | null};
-    render(<ProgressBar ref={ref} value={50} label="Test" />);
+    const {container} = render(
+      <ProgressBar ref={ref} value={50} label="Test" />,
+    );
     expect(ref.current).toBeInstanceOf(HTMLDivElement);
+    expect(ref.current).toBe(container.firstElementChild);
+  });
+
+  it('puts className, style, and DOM props on the root beside its own classes', () => {
+    const onClick = vi.fn();
+    const {container} = render(
+      <ProgressBar
+        value={50}
+        label="Test"
+        className="caller-class"
+        style={{marginBlockStart: '12px'}}
+        id="upload-progress"
+        onClick={onClick}
+      />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(root).toHaveClass('astryx-progress-bar', 'caller-class');
+    expect(root.style.marginBlockStart).toBe('12px');
+    expect(root).toHaveAttribute('id', 'upload-progress');
+    root.click();
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps its reflected variant when a caller passes its own data-variant', () => {
+    const {container} = render(
+      <ProgressBar
+        value={40}
+        label="Upload"
+        variant="success"
+        data-variant="error"
+        data-section="uploads"
+      />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(root).toHaveClass('astryx-progress-bar');
+    expect(root).toHaveAttribute('data-variant', 'success');
+    expect(root).toHaveAttribute('data-section', 'uploads');
   });
 
   it('passes data-testid', () => {
@@ -117,7 +170,9 @@ describe('ProgressBar', () => {
 
   it('renders at fixed 8px track height', () => {
     render(<ProgressBar value={50} label="Progress" />);
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(getComputedStyle(screen.getByRole('progressbar')).height).toBe(
+      '8px',
+    );
   });
 
   it('shows value label with hidden label', () => {
@@ -274,8 +329,24 @@ describe('ProgressBar', () => {
       // reading flow (inline-start → inline-end, i.e. right → left).
       expect(css).toMatch(/translateX\(100%\)/);
       expect(css).toMatch(/translateX\(-250%\)/);
-      // The animation-name is swapped specifically under `[dir="rtl"]`.
-      expect(css).toMatch(/:is\(\[dir="rtl"\][^)]*\)[^{]*\{\s*animation-name:/);
+      // The RTL keyframe follows the bar's own direction (`:dir(rtl)`), so a
+      // bar in a left-to-right region of a right-to-left page slides with its
+      // label.
+      const rtlKeyframe =
+        /@keyframes ([\w-]+) \{\s*0% \{ transform: translateX\(100%\); \}\s*100% \{ transform: translateX\(-250%\); \}/.exec(
+          css,
+        )?.[1];
+      expect(rtlKeyframe).toBeDefined();
+      const selectors = [
+        ...css.matchAll(/([^{}]+)\{\s*animation-name: ([\w-]+);/g),
+      ]
+        .filter(match => match[2].toLowerCase() === rtlKeyframe?.toLowerCase())
+        .map(match => match[1]);
+      expect(selectors.length).toBeGreaterThan(0);
+      for (const selector of selectors) {
+        expect(selector).toContain(':dir(rtl)');
+        expect(selector).not.toContain('[dir="rtl"]');
+      }
     });
   });
 
@@ -598,7 +669,7 @@ describe('ProgressBar', () => {
       expect(mark).toHaveAttribute('aria-label', 'Goal');
     });
 
-    it('reveals a labeled mark via a focusable Tooltip trigger', async () => {
+    it('reveals a labeled mark via a focusable Tooltip trigger that reads its label once', async () => {
       const {container} = render(
         <ProgressBar
           value={50}
@@ -607,22 +678,22 @@ describe('ProgressBar', () => {
         />,
       );
       // Focusable so keyboard users can reveal the label visually; the tick
-      // itself owns its name independently of the Tooltip's description.
-      // The Tooltip loads lazily (Suspense), so re-query the live element and
-      // wait for it to attach aria-describedby.
+      // owns its name, and the Tooltip shows the same text.
       const mark0 = container.querySelector<HTMLElement>(MARK)!;
       expect(mark0).toHaveAttribute('tabindex', '0');
       expect(mark0).not.toHaveAttribute('aria-hidden');
+      // The Tooltip loads lazily (Suspense). Once it has attached, its text
+      // copy is in the document.
       await waitFor(() =>
-        expect(container.querySelector(MARK)).toHaveAttribute(
-          'aria-describedby',
-        ),
+        expect(
+          screen.getAllByText('Goal', {selector: '[hidden]', ignore: false}),
+        ).not.toHaveLength(0),
       );
       const mark = container.querySelector<HTMLElement>(MARK)!;
-      const tip = document.getElementById(
-        mark.getAttribute('aria-describedby')!,
-      );
-      expect(tip).toHaveTextContent('Goal');
+      expect(mark).toHaveAccessibleName('Goal');
+      // The tooltip text repeats the name, so it adds no description and the
+      // label is read once.
+      expect(mark).not.toHaveAttribute('aria-describedby');
     });
 
     it('keeps the progressbar element free of role="img"/aria-label children', () => {
@@ -896,6 +967,11 @@ describe('ProgressBar', () => {
         .join('\n');
       // Centered so any themed overhang stays symmetric.
       expect(css).toMatch(/translate\(-50%,\s*-50%\)/);
+      // The centering mirrors with the bar's own direction, not any
+      // right-to-left ancestor.
+      expect(css).toMatch(
+        /:dir\(rtl\)[^{]*\{\s*transform:\s*translate\(50%,\s*-50%\)/,
+      );
       expect(container.querySelectorAll(MARK)).toHaveLength(1);
     });
   });
@@ -1162,7 +1238,7 @@ describe('ProgressBar under a finger: UIProgressView', () => {
     const touch = {coarse: true, reduce: false};
     // CSS scales the move by the theme's tempo.
     expect(valueUnder(fillOf(), 'transition-duration', touch)).toMatch(
-      /^calc\(var\(--_progress-bar-move,\s*0m?s\)\s*\*\s*var\(--_astryx-motion-tempo,\s*1\)\)$/,
+      /^calc\(var\(--_progress-bar-move,\s*0m?s\)\s*\*\s*var\(--_astryx-motion-tempo,\s*1\)\s*\*\s*\(1\s*-\s*var\(--_astryx-reduced-motion,\s*0\)\)\)$/,
     );
     expect(valueUnder(fillOf(), 'transition-timing-function', touch)).toMatch(
       /^var\(--_progress-bar-curve,\s*linear\)$/,
@@ -1174,7 +1250,11 @@ describe('ProgressBar under a finger: UIProgressView', () => {
     expect(css).not.toContain('-webkit-touch-callout');
     // With a mouse or trackpad the theme's tokens still time it.
     const fine = rulesOf(fillOf(), null);
-    expect(valueOf(fine, 'transition-duration')[0]).toMatch(/^var\(--/);
+    // It also reads the reduced-motion factor, so the fill lands at once
+    // under a theme that reduces motion for everyone.
+    expect(valueOf(fine, 'transition-duration')[0]).toMatch(
+      /^calc\(var\(--duration-medium\) \* \(1 - var\(--_astryx-reduced-motion, 0\)\)\)$/,
+    );
     expect(valueOf(fine, 'transition-timing-function')[0]).toMatch(/^var\(--/);
   });
 
@@ -1215,7 +1295,7 @@ describe('ProgressBar under a finger: UIProgressView', () => {
       fill.indexOf('transitionTimingFunction:'),
     );
     expect(duration).toMatch(
-      /'@media\(pointer:coarse\)':\{default:[^}]*'@media\(forced-colors:active\)':'0s'/,
+      /'@media\(pointer:coarse\)':\{default:[\s\S]*?'@media\(forced-colors:active\)':'0s'/,
     );
     // At zero the fill paints nothing under a finger (UIKit's alpha 0)…
     expect(view.emptyFillAlpha).toBe(0);
@@ -1400,6 +1480,27 @@ describe('ProgressBar fill colors', () => {
     [{isDisabled: true} as const, '--color-text-secondary'],
   ])('fills %o with %s', (props, token) => {
     expect(fillColor(props)).toContain(token);
+  });
+
+  it('fills a theme-added variant with the default accent fill until a theme styles it', () => {
+    const added = 'brand' as unknown as ProgressBarVariant;
+    expect(fillColor({variant: added})).toContain('--color-accent');
+  });
+
+  it('gives a mark on a theme-added variant fill the default on-accent color', () => {
+    render(
+      <ProgressBar
+        value={60}
+        label="Progress"
+        variant={'brand' as unknown as ProgressBarVariant}
+        marks={[{value: 20, label: 'Start'}]}
+      />,
+    );
+    const mark = screen.getByRole('img', {name: 'Start'});
+    expect(mark).toHaveAttribute('data-placement', 'fill');
+    expect(getComputedStyle(mark).backgroundColor).toContain(
+      '--color-on-accent',
+    );
   });
 });
 
