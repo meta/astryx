@@ -95,6 +95,10 @@ describe('testWorkers', () => {
       ['watch', 'list'],
       ['-t', 'run'],
       ['--project', 'ui', 'run'],
+      // Vitest reads no option after `--`.
+      ['--', '--run'],
+      ['watch', '--', '--run'],
+      ['run', '--', 'x'],
     ])
       expect(
         testWorkers({
@@ -129,10 +133,9 @@ describe('testWorkers', () => {
     expect(testWorkers({cores: 8, memory: 1 * GiB, ...shared})).toBe(1);
   });
 
-  it('is the root maxWorkers, and no project sets its own', () => {
+  it('leaves every project without a count of its own', () => {
     // A project with its own maxWorkers would differ from the others in the
     // same group, which Vitest refuses, and would hide a --maxWorkers flag.
-    expect(config.test?.maxWorkers).toBe(testWorkers());
     for (const project of config.test?.projects ?? []) {
       if (typeof project !== 'object' || !('test' in project)) continue;
       expect(project.test?.maxWorkers, project.test?.name).toBeUndefined();

@@ -33,12 +33,14 @@ const WATCH_WORD = /^(--(no-)?watch(=.*)?|-[a-zA-Z]*w[a-zA-Z]*(=.*)?)$/;
 /**
  * Whether the command line is surely a single run: `run` or `list` as the
  * first word after the Vitest binary, or `--run` anywhere, and no word that
- * may ask for watch mode. Anything else, a watch or a command line this
- * cannot read, leaves Vitest its own count.
+ * may ask for watch mode and no `--` (Vitest reads no option after it).
+ * Anything else, a watch or a command line this cannot read, leaves Vitest
+ * its own count.
  * @param {string[]} argv
  * @returns {boolean}
  */
 function surelySingleRun(argv) {
+  if (argv.includes('--')) return false;
   if (argv.some(arg => WATCH_WORD.test(arg))) return false;
   return argv[2] === 'run' || argv[2] === 'list' || argv.includes('--run');
 }
