@@ -555,9 +555,14 @@ Known verification gaps:
   by adding its factory; a shipped hook's signature changes only when a real
   need arises (INV21a).
 - `require-baseprops-passthrough` fails strict lint in `packages/core/src`
-  (outside `theme/`) and `packages/richtext/src`; a component that takes
-  `props` whole, such as ChatSendButton, or types its props with a `type` alias
-  instead of an `interface`, such as Calendar, is not checked.
+  (outside `theme/`) and `packages/richtext/src`. It checks only a function
+  that carries the `displayName` itself, destructures its props, and annotates
+  them with one interface declared in the same file that reaches `BaseProps`
+  through interfaces in that file. It does not check ChatSendButton (`props`
+  whole), Calendar (a `type` alias), IconButton, HStack, VStack,
+  TableSelectionToolbar, or the Indicator components (`BaseProps` through an
+  interface from another file). It also does not check Table or BaseTable,
+  whose `displayName` is set on a cast of another function.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
 - INV24: the delta covers declarations, CSS custom properties, theme targets,
