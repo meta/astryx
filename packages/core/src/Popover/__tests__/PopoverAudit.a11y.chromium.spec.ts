@@ -230,6 +230,7 @@ async function readPopover(page: Page, triggerName: string) {
             overflowY: style?.overflowY,
             scrollable: surface.scrollHeight > surface.clientHeight + 1,
             border: `${style?.borderTopStyle} ${style?.borderTopWidth} ${style?.borderTopColor}`,
+            outline: `${style?.outlineStyle} ${style?.outlineWidth} ${style?.outlineColor}`,
             color: style?.color ?? null,
             themeTextColor: (() => {
               const root = document.querySelector(
@@ -411,6 +412,17 @@ for (const mode of ['light', 'dark'] as const) {
           );
           order.push(read.active?.name?.trim());
         }
+        check(
+          JSON.stringify(order) ===
+            JSON.stringify([
+              'Dark mode',
+              'Sounds',
+              'Close popover',
+              'Notifications',
+              'Dark mode',
+            ]),
+          `Tab order ${JSON.stringify(order)}`,
+        );
         await settle(page);
         await frame('tab-cycle', {order});
 
@@ -536,15 +548,13 @@ for (const mode of ['light', 'dark'] as const) {
       await waitClosed(page);
       const after = await readPopover(page, name);
       // The story opens the popover from code while focus is on the page.
-      // The receipt records where focus lands after Escape, and the finding
-      // it shows, and does not fail on it.
-      await frame('escaped', {
-        after,
-        finding:
-          after.active == null
-            ? 'Escape returned focus to the body; the trigger is still mounted'
-            : null,
-      });
+      // Escape returns focus to the trigger, which is still mounted
+      // (`spec:AST-116` FR20).
+      check(
+        after.active?.isTrigger === true,
+        `Escape after a code open: focus ${JSON.stringify(after.active)}`,
+      );
+      await frame('escaped', {after});
     },
   });
 }
@@ -613,9 +623,11 @@ cases.push({
     await page.keyboard.press('Enter');
     await waitOpen(page);
     const open = await readPopover(page, 'Settings');
+    // Forced colors drop the surface's shadow; a 1 px outline inside the box
+    // is its edge.
     check(
-      open.surface != null && /^solid [1-9]/.test(open.surface.border),
-      `forced colors: surface edge ${open.surface?.border}`,
+      open.surface != null && /^solid [1-9]/.test(open.surface.outline),
+      `forced colors: surface edge ${open.surface?.outline}`,
     );
     check(
       open.active?.focusVisible === true &&
