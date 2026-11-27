@@ -28,10 +28,18 @@ interface MenuPosition {
   // Set when the panel opens below the Actions button: its distance from the
   // surface's inline-start edge. Such a panel never moves up over the button.
   inlineStart: number | null;
+  // The height that cuts the last visible action of a below-button panel
+  // through its middle, read once when the panel renders. Null when the
+  // actions fit; not set before the read.
+  panelCap?: number | null;
 }
 
 const MENU_GAP = 8;
 const MENU_WIDTH = 180;
+// The share of the last visible action that shows when a below-button panel
+// does not fit: a partly visible row is the cue that the list scrolls, with
+// every scrollbar style.
+const CUT_ROW_SHOWN = 0.6;
 // Room for the panel's note and its three actions in every theme (the tallest
 // theme's panel is about 202px), so the panel stays inside the surface.
 const SURFACE_MIN_HEIGHT = 216;
@@ -72,6 +80,25 @@ const styles = stylex.create({
     maxHeight: `${maxHeight}px`,
   }),
 });
+
+// The tallest panel height that shows the last visible action at
+// CUT_ROW_SHOWN, within the room below the button. Null when the actions fit.
+function capAtPartRow(panel: HTMLElement, room: number): number | null {
+  if (panel.scrollHeight <= room) {
+    return null;
+  }
+  const contentTop = panel.getBoundingClientRect().top - panel.scrollTop;
+  let cap: number | null = null;
+  for (const row of panel.querySelectorAll('button')) {
+    const rect = row.getBoundingClientRect();
+    const cut = rect.top - contentTop + rect.height * CUT_ROW_SHOWN;
+    if (cut > room) {
+      break;
+    }
+    cap = Math.floor(cut);
+  }
+  return cap;
+}
 
 export default function UseLongPressHookUsage() {
   const surfaceRef = useRef<HTMLElement>(null);
@@ -192,6 +219,20 @@ export default function UseLongPressHookUsage() {
     );
   };
 
+  // A below-button panel reads its rows once when it renders, then caps its
+  // height so the last visible action is cut through its middle.
+  const measurePanel = (panel: HTMLDivElement | null) => {
+    if (
+      panel == null ||
+      menu?.inlineStart == null ||
+      menu.panelCap !== undefined
+    ) {
+      return;
+    }
+    const panelCap = capAtPartRow(panel, menu.surfaceHeight - menu.y);
+    setMenu({...menu, panelCap});
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key === 'Escape' && menu) {
       closeMenu();
@@ -250,6 +291,7 @@ export default function UseLongPressHookUsage() {
 
         {menu && (
           <Card
+            ref={measurePanel}
             role="group"
             aria-label="Document actions"
             padding={2}
@@ -260,7 +302,7 @@ export default function UseLongPressHookUsage() {
               menu.inlineStart != null &&
                 styles.panelBelowButtonBox(
                   menu.inlineStart,
-                  menu.surfaceHeight - menu.y,
+                  menu.panelCap ?? menu.surfaceHeight - menu.y,
                 ),
             ]}>
             <VStack gap={1}>

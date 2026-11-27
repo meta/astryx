@@ -34,16 +34,18 @@ vi.mock('@astryxdesign/core/Card', () => ({
     xstyle,
     children,
     role,
+    ref,
     'aria-label': ariaLabel,
   }: {
     xstyle?: unknown;
     children: ReactNode;
     role?: string;
+    ref?: unknown;
     'aria-label'?: string;
   }) =>
     createElement(
       'div',
-      {role, 'aria-label': ariaLabel, ...style.attribute(xstyle)},
+      {role, ref, 'aria-label': ariaLabel, ...style.attribute(xstyle)},
       children,
     ),
 }));
@@ -127,6 +129,8 @@ afterEach(() => {
   act(() => {
     root?.unmount();
   });
+  // Cases mock geometry on element prototypes; none may leak into the next.
+  vi.restoreAllMocks();
   root = null;
   container?.remove();
   vi.useRealTimers();
@@ -402,6 +406,65 @@ describe('useLongPressHookUsage example', () => {
       maxHeight: '104px',
     });
     expect(openSurfaceStyle).not.toHaveProperty('overflowY');
+  });
+
+  it('cuts the last visible action of a below-button panel through its middle', () => {
+    // Rows of the panel, from its top: three 40px actions after a 38px note.
+    const rowTops: Record<string, number> = {
+      'Copy link': 38,
+      'Pin draft': 78,
+      Dismiss: 118,
+    };
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(
+      function (this: HTMLElement) {
+        return this.getAttribute('role') === 'group' ? 166 : 0;
+      },
+    );
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        const label = this.textContent ?? '';
+        if (this.tagName === 'BUTTON' && label in rowTops) {
+          return DOMRect.fromRect({
+            x: 16,
+            y: 112 + rowTops[label],
+            width: 160,
+            height: 40,
+          });
+        }
+        return DOMRect.fromRect({
+          x: 0,
+          y: this.getAttribute('role') === 'group' ? 112 : 0,
+          width: 0,
+          height: 0,
+        });
+      },
+    );
+    renderExample();
+    const surface = getSurface();
+    const actionsButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-expanded]',
+    );
+    if (!actionsButton) {
+      throw new Error('Expected the Actions button');
+    }
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 0, y: 0, width: 260, height: 216}),
+    );
+    vi.spyOn(actionsButton, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 16, y: 64, width: 88, height: 40}),
+    );
+    act(() => {
+      actionsButton.click();
+    });
+    const menu = container.querySelector<HTMLElement>('[role="group"]');
+    // The room below the button is 104px. "Pin draft" shows 60% at 102px;
+    // "Dismiss" would need 142px. So the panel stops at 102px, through the
+    // middle of "Pin draft", and the cut row shows that the list scrolls.
+    expect(panelPosition(menu)).toMatchObject({
+      top: '112px',
+      overflowY: 'auto',
+      maxHeight: '102px',
+    });
   });
 
   it('provides an explicit Actions button fallback and returns focus when closed', () => {
