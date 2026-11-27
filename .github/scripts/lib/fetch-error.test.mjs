@@ -104,6 +104,56 @@ describe('safeFetchError', () => {
     expect(safe.message).toContain('503');
   });
 
+  it('reports the last hop of a redirected request that gets no answer', async () => {
+    const error = await failedRequest((incoming, response) => {
+      if (incoming.url.startsWith('/guide/page')) {
+        response.writeHead(302, {
+          location: '/guide/next?token=FAKE-QUERY',
+          'set-cookie': 'session=FAKE-SET-COOKIE',
+        });
+        response.end();
+        return;
+      }
+      incoming.socket.destroy();
+    });
+    // Playwright's own error lists both hops.
+    expect(error.message).toContain('302');
+    expect(error.message).toContain('/guide/next');
+
+    const safe = safeFetchError(error);
+    for (const secret of SECRETS) {
+      expect(textOf(safe)).not.toContain(secret);
+    }
+    expect(safe.message).toContain('GET http://docs.example.com/guide/next');
+    expect(safe.message).not.toContain('/guide/page');
+    expect(safe.message).not.toMatch(/status \d{3}/);
+  });
+
+  it('reports the last hop and its status of a redirected request that is refused', async () => {
+    const error = await failedRequest(
+      (incoming, response) => {
+        if (incoming.url.startsWith('/guide/page')) {
+          response.writeHead(302, {location: '/guide/next?token=FAKE-QUERY'});
+          response.end();
+          return;
+        }
+        response.writeHead(503, {'set-cookie': 'session=FAKE-SET-COOKIE'});
+        response.end('FAKE-BODY');
+      },
+      {failOnStatusCode: true},
+    );
+    expect(error.message).toContain('302');
+    expect(error.message).toContain('/guide/next');
+
+    const safe = safeFetchError(error);
+    for (const secret of SECRETS) {
+      expect(textOf(safe)).not.toContain(secret);
+    }
+    expect(safe.message).toContain('GET http://docs.example.com/guide/next');
+    expect(safe.message).toContain('status 503');
+    expect(safe.message).not.toContain('302');
+  });
+
   it('drops the query of an address in the first line', () => {
     const safe = safeFetchError(
       new Error(
