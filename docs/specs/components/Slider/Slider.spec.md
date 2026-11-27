@@ -250,9 +250,11 @@ separately listed value tooltip retains Tooltip's target.
 ## Family and system relationships
 
 - `family:input-fields` FR10 and DEC-7 bind Slider because it composes Field:
-  base props reach its primary control, `container*` reaches the Field box, and
-  `control*` reaches the control box. Slider is not a member of that family, so
-  the family's geometry rules do not apply to it.
+  base props reach its primary control, `container*` reaches the Field box where
+  one renders (none renders inside an InputGroup or a `horizontal-labels`
+  FormLayout, where `container*` has no effect), and `control*` reaches the
+  control box. Slider is not a member of that family, so the family's geometry
+  rules do not apply to it.
 - `architecture:component-theming-surface` owns anatomy qualification, factual
   `none` dispositions, and composition-preserving target ownership.
 - Field, FieldStatus, and Tooltip retain their existing public target contracts
