@@ -1089,10 +1089,10 @@ export function deriveCodeColors({
   });
   // A token carries both modes. A mode the caller does not draw takes the
   // drawn mode's stop, as each() does in deriveLookColors.
-  const shown = (m: Mode): Mode => (modes.includes(m) ? m : modes[0]);
+  const drawn = (m: Mode): Mode => (modes.includes(m) ? m : modes[0]);
   const both = (v: Partial<Record<Mode, Stop>>): Record<Mode, Stop> | null => {
-    const light = v[shown('light')];
-    const dark = v[shown('dark')];
+    const light = v[drawn('light')];
+    const dark = v[drawn('dark')];
     return light && dark ? {light, dark} : null;
   };
   const ground: Partial<Record<Mode, Stop>> = {};

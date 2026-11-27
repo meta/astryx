@@ -1264,7 +1264,7 @@ export function deriveCodeColors({
     });
   // A token carries both modes. A mode the caller does not draw takes the
   // drawn mode's stop, as each() does in deriveLookColors.
-  const shown =
+  const drawn =
     /**
      * @param {Mode} m
      * @returns {Mode}
@@ -1276,8 +1276,8 @@ export function deriveCodeColors({
      * @returns {Record<Mode, Stop> | null}
      */
     v => {
-      const light = v[shown('light')];
-      const dark = v[shown('dark')];
+      const light = v[drawn('light')];
+      const dark = v[drawn('dark')];
       return light && dark ? {light, dark} : null;
     };
   /**
