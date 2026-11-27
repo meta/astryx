@@ -25,6 +25,7 @@ const style = vi.hoisted(() => ({
 }));
 vi.mock('@stylexjs/stylex', () => ({
   create: <T,>(styles: T) => styles,
+  defineVars: <T,>(vars: T) => vars,
   props: style.attribute,
 }));
 // Card renders through its own compiled styles, which the stub above does not
@@ -431,6 +432,14 @@ describe('useLongPressHookUsage example', () => {
             height: 40,
           });
         }
+        // One spy answers for every element: a spy on one element would
+        // replace this prototype spy for all of them.
+        if (this.dataset.testid === 'long-press-surface') {
+          return DOMRect.fromRect({x: 0, y: 0, width: 260, height: 216});
+        }
+        if (this.hasAttribute('aria-expanded')) {
+          return DOMRect.fromRect({x: 16, y: 64, width: 88, height: 40});
+        }
         return DOMRect.fromRect({
           x: 0,
           y: this.getAttribute('role') === 'group' ? 112 : 0,
@@ -440,19 +449,12 @@ describe('useLongPressHookUsage example', () => {
       },
     );
     renderExample();
-    const surface = getSurface();
     const actionsButton = container.querySelector<HTMLButtonElement>(
       'button[aria-expanded]',
     );
     if (!actionsButton) {
       throw new Error('Expected the Actions button');
     }
-    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(
-      DOMRect.fromRect({x: 0, y: 0, width: 260, height: 216}),
-    );
-    vi.spyOn(actionsButton, 'getBoundingClientRect').mockReturnValue(
-      DOMRect.fromRect({x: 16, y: 64, width: 88, height: 40}),
-    );
     act(() => {
       actionsButton.click();
     });

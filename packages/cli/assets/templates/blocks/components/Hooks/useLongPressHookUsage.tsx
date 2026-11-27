@@ -16,6 +16,7 @@ import {Card} from '@astryxdesign/core/Card';
 import {useLongPress} from '@astryxdesign/core/hooks';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Heading, Text} from '@astryxdesign/core/Text';
+import {focusVars} from '@astryxdesign/core/theme/tokens.stylex';
 
 type TriggerSource = 'long press' | 'right-click' | 'button';
 
@@ -70,11 +71,16 @@ const styles = stylex.create({
   }),
   // Below the button, the panel keeps to the room between the button and the
   // surface's bottom and scrolls its own actions. So the surface and the card
-  // keep their size, and the layout around them does not move. The panel's
-  // own scrollbar shows that there is more. The inline-start edge alone
-  // places the panel; the physical left edge is removed, because it applies
-  // after a logical edge.
-  panelBelowButton: {left: null, transform: 'none', overflowY: 'auto'},
+  // keep their size, and the layout around them does not move. The inline-
+  // start edge alone places the panel; the physical left edge is removed,
+  // because it applies after a logical edge. The scroll padding is the focus
+  // ring's outer reach, so Tab scrolls each action and its ring into view.
+  panelBelowButton: {
+    left: null,
+    transform: 'none',
+    overflowY: 'auto',
+    scrollPaddingBlock: `calc(${focusVars['--focus-outline-offset']} + ${focusVars['--focus-outline-width']})`,
+  },
   panelBelowButtonBox: (inlineStart: number, maxHeight: number) => ({
     insetInlineStart: `${inlineStart}px`,
     maxHeight: `${maxHeight}px`,
