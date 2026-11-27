@@ -31,18 +31,20 @@ import {Theme} from '@astryxdesign/core';
 import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {neutralTheme} from '@astryxdesign/theme-neutral';
 import {ListInput, type ListInputColumn} from '@astryxdesign/lab';
+// Each canvas takes the frame's width up to its own. The padded layout gives
+// the frame a definite width, so on a phone the canvas narrows to the screen.
 const storyStyles = stylex.create({
   canvas: {
-    width: 680,
-    maxWidth: '100%',
+    width: '100%',
+    maxWidth: 680,
   },
   responsiveCanvas: {
-    width: 600,
-    maxWidth: '100%',
+    width: '100%',
+    maxWidth: 600,
   },
   narrowCanvas: {
-    width: 360,
-    maxWidth: '100%',
+    width: '100%',
+    maxWidth: 360,
   },
   stack: {
     display: 'flex',
@@ -67,7 +69,7 @@ const meta: Meta<typeof ListInput> = {
   component: ListInput,
   tags: ['autodocs'],
   parameters: {
-    layout: 'centered',
+    layout: 'padded',
   },
   decorators: [
     Story => (
