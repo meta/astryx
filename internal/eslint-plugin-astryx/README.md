@@ -417,9 +417,12 @@ and nothing else. `@astryx/no-raw-color` covers the rest.
 ### `@astryx/no-style-only-wrapper`
 
 Flags a `<div>`/`<span>` that exists only to style a single Astryx component.
-Every component extends `BaseProps`, so it takes `xstyle` — the wrapper adds a
-DOM node that takes the component out of its parent's flex/grid child
+A component that extends `BaseProps` takes `xstyle`, so the wrapper adds a DOM
+node that takes the component out of its parent's flex/grid child
 relationship (this is what knocked the pagination carets off-center in #4752).
+With type information, a wrapper around a child whose props omit root
+`xstyle`, such as a Field-composed input, is not reported. Without type
+information, only a `family:input-fields` member is skipped.
 
 **Bad:**
 
@@ -438,13 +441,14 @@ relationship (this is what knocked the pagination carets off-center in #4752).
 The rule only fires when dropping the wrapper preserves behavior, so it stays
 quiet on wrappers that do real work:
 
-| Wrapper                                                               | Reported? |
-| --------------------------------------------------------------------- | --------- |
-| Only style attributes (`stylex.props`, `className`)                   | ✅ yes    |
-| `role`, `aria-*`, `data-*`, `ref`, a handler, `{...rest}`             | ❌ no     |
-| More than one child, or a non-Astryx / host child                     | ❌ no     |
-| Styles include `display`, flex/grid container props, `gap`, `padding` | ❌ no     |
-| Child renders no root element (`Tooltip`, providers)                  | ❌ no     |
+| Wrapper                                                                                           | Reported? |
+| ------------------------------------------------------------------------------------------------- | --------- |
+| Only style attributes (`stylex.props`, `className`)                                               | ✅ yes    |
+| `role`, `aria-*`, `data-*`, `ref`, a handler, `{...rest}`                                         | ❌ no     |
+| More than one child, or a non-Astryx / host child                                                 | ❌ no     |
+| Styles include `display`, flex/grid container props, `gap`, `padding`                             | ❌ no     |
+| Child renders no root element (`Tooltip`, providers)                                              | ❌ no     |
+| Child's props take no root `xstyle` (with types), or a family:input-fields member (without types) | ❌ no     |
 
 Style objects imported from another module are read from that module, so
 `import {rtlStyles} from '../utils'` is classified as accurately as a local
@@ -520,8 +524,8 @@ Scoped to public components (those with a `.displayName`). Opt out by omitting t
 the type, e.g. `Omit<BaseProps, 'className' | 'style'>` (as `VisuallyHidden` does),
 or mark an intentionally-unused binding with a leading underscore (`className: _className`).
 
-Currently `warn` in both tiers because known violations remain on main. Promote it
-deliberately only once the repository is clean.
+An error in strict mode and a warning in the recommended tier: the repository is
+clean, and strict lint keeps it that way.
 
 ## Usage
 

@@ -402,12 +402,11 @@ plugin.configs.strict = {
     '@astryx/presentational-component': 'error',
     '@astryx/docblock-example-format': 'error',
     '@astryx/no-stylex-null-override': 'error',
-    // Migration in progress: ~25 wrappers in packages/core predate this rule
-    // (Carousel, Lightbox, MobileNav, Pagination, PowerSearch, Switch, TopNav,
-    // Table/rowExpansion). Warn in both tiers until they move to xstyle, then
-    // flip to 'error' here to prevent regressions — the same path
-    // no-physical-properties took.
-    '@astryx/no-style-only-wrapper': 'warn',
+    // With type information, a wrapper around a child whose props have no
+    // root xstyle is not reported. Without type information, only a
+    // family:input-fields member is skipped, so a wrapper around another
+    // Field-composed control still reports.
+    '@astryx/no-style-only-wrapper': 'error',
     '@astryx/no-wrapper-transform': 'error',
     '@astryx/no-react-introspection': 'error',
     // Widened to catch two spreads that each carry a className, which is how
@@ -454,10 +453,7 @@ plugin.configs.strict = {
     '@astryx/no-unstable-merged-refs': 'error',
     '@astryx/require-base-props': 'error',
     '@astryx/require-ref-prop': 'error',
-    // Warn, not error, in strict too: known violations remain on main, so
-    // erroring here would land main red. Promote deliberately once the
-    // repository is clean.
-    '@astryx/require-baseprops-passthrough': 'warn',
+    '@astryx/require-baseprops-passthrough': 'error',
     '@astryx/copyright-header': 'error',
     '@astryx/no-hardcoded-i18n-string': 'error',
     '@astryx/i18n-key-format': 'error',
