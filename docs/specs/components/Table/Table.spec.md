@@ -93,9 +93,10 @@ public behavior and evidence, without privately replacing the Table renderer.
 - Controlled/uncontrolled behavior: caller data, ordering, selection, activation,
   expansion and loading remain caller-owned. Dataset/order changes use new data
   references in the opt-in identity/windowing path; mutable-compatible `T[]` types
-  do not freeze caller data. Adding/removing identity-dependent capability mode
-  is an explicit Table remount boundary; changing `activeKey`, eligibility or
-  geometry inside that mounted mode is not a remount boundary.
+  do not freeze caller data. Adding/removing identity-dependent capability mode,
+  including row windowing from `useTableRowsVirtualization`, is an explicit
+  Table remount boundary; changing `activeKey`, eligibility or geometry inside
+  that mounted mode is not a remount boundary.
 - Retained width compatibility (DEC-2): the compact floor for an explicit column
   with omitted width is 60px rather than a zero-width flexible share. Per-column
   `proportional(value, {minWidth})` overrides that floor; explicit widths remain

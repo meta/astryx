@@ -90,9 +90,10 @@ contract a surface folder keeps for base imports (`Tooltip`,
 capability's own import (a Table plugin's folder index and the modules it
 re-exports, and `SnapPaging/SnapPaging`). INV7's wiring lives in base code:
 the component's own modules or the capability's own import. A wiring module
-such as the Table's `useTableRowsVirtualization` stays base code while it
-imports no engine code; its first static import of engine code is a
-crossing.
+such as the Table's `tableColumnWindowing` stays base code while it imports
+no engine code; its first static import of engine code is a crossing. A
+virtualization hook carries its window in the capability value, so only the
+hook's own import reaches the engine.
 
 The shared module loader (`utils/moduleLoader.ts`, `createModuleLoader`) holds
 one pending load per module, caches a success, and resets after a failure.
@@ -244,16 +245,17 @@ one pending load per module, caches a success, and resets after a failure.
 
 ### Allowlist
 
-| Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip                                                                | Invariant  | Row leaves when                                                                                        |
-| ----------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
-| `Text/TruncationTooltip` → `Layer/gestureCounter`                 | Text, Heading, Button, IconButton, Link, Table | 1.2 KB (Text, Heading); 1.1 KB (Button, IconButton, Link); 0.0 KB (Table) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer; the row moves with the recognizer |
-| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 88.5 KB                                                                   | INV1       | cells without actions reach no menu module                                                             |
-| `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.6 KB                                                                    | INV7       | a Table that never windows reaches neither the controller nor its engine                               |
+| Crossing (base module → module it imports statically) | Entries that reach it                          | Cost, gzip                                                                | Invariant  | Row leaves when                                                                                        |
+| ----------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
+| `Text/TruncationTooltip` → `Layer/gestureCounter`     | Text, Heading, Button, IconButton, Link, Table | 1.2 KB (Text, Link); 1.1 KB (Heading, Button, IconButton); 0.0 KB (Table) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer; the row moves with the recognizer |
+| `Table/tableContextMenu` → `ContextMenu`              | Table                                          | 88.5 KB                                                                   | INV1       | cells without actions reach no menu module                                                             |
 
 Costs are the check's own printout in CI: each crossing's removal from the
 entry with every other crossing kept, in the entry build above. A local run
 on another platform or Node version can print gzip sizes a few tenths of a KB
-apart. Rows share modules, so they do not add up. Table carries 134.5 KB eager.
+apart. Rows share modules, so they do not add up. The truncation tooltip's touch code costs Table
+nothing on its own, because another of its crossings brings the same
+module. Table carries 121.3 KB eager.
 
 ### Must not reach
 
@@ -276,7 +278,7 @@ an allowlist row does.
 ## Current-state impact
 
 - INV1, INV8 gap: Text's and Heading's imports reach the touch tap recognizer
-  through the truncation tooltip, 1.2 KB gzip each, on pages whose text never
+  through the truncation tooltip, 1.2 and 1.1 KB gzip, on pages whose text never
   truncates. Button, IconButton, Link, and Table reach it the same way
   through Text.
 - INV1 gap: the `HoverCard`, `Popover`, `DropdownMenu`, and `ContextMenu`
@@ -295,8 +297,6 @@ an allowlist row does.
 - INV1 gap: Table's import reaches the cell context menu, 88.5 KB gzip, for
   cells with no actions, while `component:TableCell` PR1 loads a menu only
   when actions are given.
-- INV7 gap: Table's import reaches the window controller and the shared
-  windowing module, 3.6 KB gzip, for a Table that never windows.
 - INV6 gap: a menu holding an essential action has no path to that action
   when its module fails to load (`architecture:interaction-modality` INV7).
 - INV9 gap: the check does not measure INV7's wiring allowance. An entry's

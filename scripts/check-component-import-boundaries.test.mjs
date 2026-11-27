@@ -422,11 +422,6 @@ describe('the allowlist', () => {
         entries: ['Text', 'Heading', 'Button', 'IconButton', 'Link', 'Table'],
       },
       {from: 'Table/tableContextMenu', to: 'ContextMenu', entries: ['Table']},
-      {
-        from: 'Table/BaseTable',
-        to: 'Table/plugins/virtualization/useTableWindow',
-        entries: ['Table'],
-      },
     ]);
   });
 

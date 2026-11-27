@@ -1381,6 +1381,49 @@ describe('selection motion', () => {
       spy.mockRestore();
     }
   });
+
+  it('starts no animation in the commit that mounts it; the first change holds the leaving surface', () => {
+    // jsdom has no Web Animations. This records each animation that starts.
+    const started: {element: HTMLElement; pseudoElement?: string | null}[] = [];
+    HTMLElement.prototype.animate = function (
+      this: HTMLElement,
+      _keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      started.push({
+        element: this,
+        pseudoElement:
+          typeof options === 'object' ? options.pseudoElement : undefined,
+      });
+      return {
+        finished: new Promise<void>(() => {}),
+        cancel: () => {},
+        startTime: null,
+      } as unknown as Animation;
+    };
+    try {
+      const ui = (value: string) => (
+        <SegmentedControl value={value} onChange={() => {}} label="View">
+          <SegmentedControlItem value="grid" label="Grid" />
+          <SegmentedControlItem value="list" label="List" />
+        </SegmentedControl>
+      );
+      const {rerender} = render(ui('grid'));
+      // A new animation resolves style, which the mount commit must not do.
+      expect(started).toEqual([]);
+
+      rerender(ui('list'));
+      const group = screen.getByRole('radiogroup');
+      expect(
+        started.filter(
+          ({element, pseudoElement}) =>
+            element === group && pseudoElement === '::after',
+        ),
+      ).toHaveLength(1);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'animate');
+    }
+  });
 });
 
 describe("SegmentedControl keeps a caller's aria-describedby", () => {

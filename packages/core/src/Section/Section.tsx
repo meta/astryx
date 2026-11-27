@@ -36,7 +36,7 @@ import {
   spacingStepToToken,
 } from '../Layout/padding.stylex';
 import type {SizeValue, SpacingStep} from '../utils/types';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import type {SectionVariantMap} from './index';
 

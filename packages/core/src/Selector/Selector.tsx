@@ -50,7 +50,10 @@ import {
 } from '../Field';
 import {Divider} from '../Divider';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
-import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {
+  reducedMotionFadeConsts,
+  reducedMotionTransform,
+} from '../motion/reducedMotion.stylex';
 import {useKeepLayerOpenProps, type LayerPlacement} from '../Layer/useLayer';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
@@ -75,7 +78,7 @@ import {
 import type {SelectorOptionType, SelectorOptionData} from './types';
 import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
 import {getSelectableOptionEntries} from './selectableOptionEntries';
-import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
+import {useComboboxInternal, useSelectedItemOverlayMargin} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
@@ -268,7 +271,10 @@ const styles = stylex.create({
   // picks these up and needs no transition opt-out.
   triggerIconRotation: {
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
     transformOrigin: 'center',
   },
@@ -296,15 +302,20 @@ const styles = stylex.create({
       // The press scale goes at once as the list opens.
       [LAYER_OPEN]: 'background-image, background-color, color, opacity',
     },
+    // An open layer that names this trigger as an anchor apart from its
+    // own trigger sets the factor to 1 on the box (Popover/usePopover.tsx).
+    // `initial` here keeps the factor of a control around the box out.
+    '--_astryx-press-scale': 'initial',
     transform: {
       default: 'scale(1)',
       // A mouse press; under a coarse pointer the touch press model writes
       // `data-astryx-press` instead (see interactionOverlay.stylex.ts).
       [`:active:not(${LAYER_OPEN})`]: {
-        default: 'scale(0.98)',
+        default: 'scale(var(--_astryx-press-scale, 0.98))',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]:
+        'scale(var(--_astryx-press-scale, 0.98))',
     },
   },
   // Secondary is ghost's chrome with the resting fill of a secondary
@@ -332,13 +343,15 @@ const styles = stylex.create({
       // The press scale goes at once as the list opens.
       [LAYER_OPEN]: 'background-image, background-color, color, opacity',
     },
+    '--_astryx-press-scale': 'initial',
     transform: {
       default: 'scale(1)',
       [`:active:not(${LAYER_OPEN})`]: {
-        default: 'scale(0.98)',
+        default: 'scale(var(--_astryx-press-scale, 0.98))',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]:
+        'scale(var(--_astryx-press-scale, 0.98))',
     },
   },
   triggerGhostDisabled: {
@@ -1275,6 +1288,8 @@ export function Selector<T extends SelectorOptionType>(
       ? 'detached'
       : statusVariant;
   const isEffectivelyReadOnly = isReadOnly && !isDisabled;
+  // Only a selector that can open its list loads the bottom sheet on intent.
+  const canOpenSurface = !isDisabled && !isEffectivelyReadOnly;
 
   // Normalize null to undefined for internal use (null is the clear sentinel)
   const normalizedValue = value === null ? undefined : value;
@@ -1408,14 +1423,6 @@ export function Selector<T extends SelectorOptionType>(
 
   // Ref for listbox to measure selected item position
   const listboxRef = useRef<HTMLDivElement>(null);
-  // The trigger may name the active option only once the listbox holding it
-  // is in the document. The bottom sheet loads its surface on first open, so
-  // the trigger expands a moment before its options exist.
-  const [isListboxMounted, setIsListboxMounted] = useState(false);
-  const attachListbox = useCallback((node: HTMLDivElement | null) => {
-    listboxRef.current = node;
-    setIsListboxMounted(node != null);
-  }, []);
 
   // Typeahead is defined below (it needs the popover), but closing and clearing
   // must drop its pending buffer — otherwise a stale prefix survives the reset
@@ -1456,6 +1463,7 @@ export function Selector<T extends SelectorOptionType>(
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    listboxRef,
     triggerModality,
     popoverOptions: {
       hasLightDismiss: true,
@@ -1652,7 +1660,7 @@ export function Selector<T extends SelectorOptionType>(
     onKeyDown: comboboxKeyDown,
     onItemSelect,
     onItemMouseEnter: comboboxItemMouseEnter,
-  } = useCombobox({
+  } = useComboboxInternal({
     selectableItems: filteredItems,
     // The optimistic value, not the raw prop: with a pending changeAction the
     // prop still holds the old selection, so the popup would open with the
@@ -1661,6 +1669,7 @@ export function Selector<T extends SelectorOptionType>(
     value: optimisticValue,
     isDisabled: isDisabled || isEffectivelyReadOnly,
     isOpen: surface.isOpen,
+    isListShown: surface.isListShown,
     hasSearch,
     onOpen: useCallback(() => surface.show(), [surface]),
     onClose: surface.hide,
@@ -2198,7 +2207,7 @@ export function Selector<T extends SelectorOptionType>(
       {renderSearch()}
       <Divider />
       <div
-        ref={attachListbox}
+        ref={surface.attachListbox}
         id={listboxId}
         role="listbox"
         aria-label={label}
@@ -2217,7 +2226,7 @@ export function Selector<T extends SelectorOptionType>(
     </div>
   ) : (
     <div
-      ref={attachListbox}
+      ref={surface.attachListbox}
       id={listboxId}
       role="listbox"
       {...listboxPress.menuProps}
@@ -2249,6 +2258,9 @@ export function Selector<T extends SelectorOptionType>(
       {renderOptions()}
     </div>
   );
+
+  const isListboxReferable = !isEffectivelyReadOnly && surface.isListboxNamed;
+  const isExpanded = !isEffectivelyReadOnly && surface.isListShown;
 
   let selectionSurface: ReactNode = null;
   if (surface.activePresentation === 'bottom-sheet') {
@@ -2317,6 +2329,9 @@ export function Selector<T extends SelectorOptionType>(
     onFocus: event => {
       onFocus?.(event);
       surface.onTriggerFocus(event);
+      if (canOpenSurface) {
+        surface.preloadSheet();
+      }
     },
     tabIndex: 0,
     ...stylex.props(
@@ -2338,6 +2353,10 @@ export function Selector<T extends SelectorOptionType>(
           disabledMessageTooltip.ref(el);
         }}
         onClick={onTriggerClick}
+        onPointerDownCapture={canOpenSurface ? surface.preloadSheet : undefined}
+        onPointerEnter={
+          canOpenSurface ? surface.preloadSheetOnPointerEnter : undefined
+        }
         {...pressable}
         {...(inputGroup ? inputGroupItemProps : undefined)}
         {...mergeProps(
@@ -2421,14 +2440,14 @@ export function Selector<T extends SelectorOptionType>(
                 ? 'dialog'
                 : 'listbox'
           }
-          aria-expanded={isEffectivelyReadOnly ? false : surface.isOpen}
-          aria-controls={isEffectivelyReadOnly ? undefined : listboxId}
+          aria-expanded={isExpanded}
+          aria-controls={isListboxReferable ? listboxId : undefined}
           aria-readonly={isEffectivelyReadOnly || undefined}
           aria-activedescendant={
             !isEffectivelyReadOnly &&
             !hasSearch &&
             surface.isOpen &&
-            isListboxMounted &&
+            surface.isListboxMounted &&
             highlightedIndex >= 0
               ? getItemId(highlightedIndex)
               : undefined
@@ -2496,7 +2515,7 @@ export function Selector<T extends SelectorOptionType>(
             xstyle={[
               styles.triggerIcon,
               styles.triggerIconRotation,
-              surface.isOpen && styles.triggerIconOpen,
+              isExpanded && styles.triggerIconOpen,
             ]}
             // Stable theme target on the chevron glyph itself, so a theme can
             // restyle just this icon (color, size, hover) — and its
@@ -2504,7 +2523,7 @@ export function Selector<T extends SelectorOptionType>(
             // @layer astryx-theme win over the icon's own base color/size,
             // which a button-level target could not reach.
             {...themeProps('selector-indicator-icon', {
-              state: surface.isOpen ? 'expanded' : 'collapsed',
+              state: isExpanded ? 'expanded' : 'collapsed',
             })}
           />
         ) : null}

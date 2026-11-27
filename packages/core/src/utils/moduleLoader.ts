@@ -3,8 +3,9 @@
 /**
  * @file moduleLoader.ts
  * @input A function that imports a module on demand
- * @output Exports `createModuleLoader`: one shared load of that module, and
- *   the module once it has loaded; and `afterNextPaint`, the wait an
+ * @output Exports `createModuleLoader`: one shared load of that module, the
+ *   module once it has loaded, a subscription to its load, and a load that
+ *   reports a failure instead of throwing; and `afterNextPaint`, the wait an
  *   after-paint load starts with
  * @position Internal utility. A component that loads a module before it is
  *   needed renders the loaded module directly, with no suspended render, so
@@ -35,27 +36,64 @@ export interface ModuleLoader<T> {
   load(): Promise<T>;
   /** The module once it has loaded, else null. */
   loaded(): T | null;
+  /**
+   * Calls `listener` each time a load completes, until the returned function
+   * removes it. A host that renders the loaded module subscribes with this.
+   */
+  subscribe(listener: () => void): () => void;
+  /**
+   * Loads the module and resolves whether it loaded. A failure calls the
+   * loader's `onLoadFailure` and resolves false; it is not kept, as `load`
+   * says.
+   */
+  tryLoad(): Promise<boolean>;
+}
+
+interface ModuleLoaderOptions {
+  /** Called when a `tryLoad` fails, for example to warn once. */
+  onLoadFailure?: () => void;
 }
 
 export function createModuleLoader<T>(
   importModule: () => Promise<T>,
+  {onLoadFailure}: ModuleLoaderOptions = {},
 ): ModuleLoader<T> {
   let module: T | null = null;
   let pending: Promise<T> | null = null;
+  const listeners = new Set<() => void>();
+  const load = async (): Promise<T> => {
+    pending ??= importModule().then(
+      loadedModule => {
+        module = loadedModule;
+        return loadedModule;
+      },
+      (error: unknown) => {
+        pending = null;
+        throw error;
+      },
+    );
+    return pending;
+  };
   return {
-    async load() {
-      pending ??= importModule().then(
-        loadedModule => {
-          module = loadedModule;
-          return loadedModule;
-        },
-        (error: unknown) => {
-          pending = null;
-          throw error;
-        },
-      );
-      return pending;
-    },
+    load,
     loaded: () => module,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    async tryLoad() {
+      try {
+        await load();
+      } catch {
+        onLoadFailure?.();
+        return false;
+      }
+      for (const listener of listeners) {
+        listener();
+      }
+      return true;
+    },
   };
 }

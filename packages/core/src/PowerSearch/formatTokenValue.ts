@@ -19,7 +19,11 @@ import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {Locale, TranslatorFn} from '../i18n';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {truncateCharacters} from '../utils/characters';
-import {formatDateAbsolute, formatSharedNumber} from './formatFilterValue';
+import {
+  formatDateAbsolute,
+  formatDateRange,
+  formatSharedNumber,
+} from './formatFilterValue';
 import {createListFormatter} from '../i18n/listFormat';
 import {relativeDateLabel} from './relativeDateOptions';
 import {registerEnglishFallback} from '../i18n/englishFallback';
@@ -142,9 +146,10 @@ function formatListText(
  * use the same words and the same zone handling. `maxLength` is the token's
  * width budget; pass `Number.MAX_SAFE_INTEGER` for the untruncated text.
  * A `date_absolute` value is written in `calendar`, the calendar that the
- * provider resolves.
- * The list, date-range and nested summaries and a relative date resolve
- * through the catalog; several labels join as a list in the locale.
+ * provider resolves, and a `date_range` as its two days in the same zone.
+ * Pass `canReadClock` false on the server and in the hydrating render.
+ * The list and nested summaries and a relative date resolve through the
+ * catalog; several labels join as a list in the locale.
  */
 export function formatTokenValueText(
   operatorValue: OperatorValue,
@@ -154,6 +159,7 @@ export function formatTokenValueText(
   calendar: CalendarSystem,
   t: TranslatorFn,
   timezoneID?: string,
+  canReadClock = true,
 ): string | null {
   switch (filterValue.type) {
     case 'empty':
@@ -230,8 +236,18 @@ export function formatTokenValueText(
         maxLength,
       );
 
-    case 'date_range':
-      return t('@astryx.powersearch.valueEditor.dateRange');
+    case 'date_range': {
+      const days = formatDateRange(
+        filterValue.value,
+        locale,
+        timezoneID,
+        calendar,
+        canReadClock,
+      );
+      return days == null
+        ? t('@astryx.powersearch.valueEditor.dateRange')
+        : truncateString(days, maxLength);
+    }
 
     case 'custom':
       if (operatorValue.type === 'custom') {

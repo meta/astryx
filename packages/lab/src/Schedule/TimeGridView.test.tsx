@@ -196,6 +196,70 @@ describe('time grid initial position', () => {
     expect(viewport().scrollTop).toBe(852);
   });
 
+  it('opens in the commit that mounts it, from one measurement, before the scroll state is measured', () => {
+    // A browser's ResizeObserver notifies after the first frame's layout.
+    // This one never does, so the measured scroll state never arrives.
+    vi.stubGlobal(
+      'ResizeObserver',
+      vi.fn(function () {
+        return {observe: () => {}, unobserve: () => {}, disconnect: () => {}};
+      }),
+    );
+    const reads = {scrollHeight: 0, clientHeight: 0};
+    for (const key of ['scrollHeight', 'clientHeight'] as const) {
+      const mocked = Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        key,
+      )?.get;
+      Object.defineProperty(HTMLElement.prototype, key, {
+        configurable: true,
+        get(this: HTMLElement) {
+          if (isViewport(this)) {
+            reads[key] += 1;
+          }
+          return mocked?.call(this);
+        },
+      });
+    }
+    try {
+      vi.setSystemTime(Date.UTC(2026, 4, 13, 14, 0));
+      const {unmount} = render(
+        <Harness initialDate={Date.UTC(2026, 4, 13, 14, 0) as Instant} />,
+      );
+      const grid = viewport();
+      // The viewport scrolls from its first frame, and it is already open.
+      expect(grid.getAttribute('style')).toContain('--x-overflowY: auto');
+      expect(grid.scrollTop).toBe(1302);
+      // The tab stop arrives with the measured scroll state.
+      expect(grid).not.toHaveAttribute('tabindex');
+      expect(reads).toEqual({scrollHeight: 1, clientHeight: 1});
+      unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('waits for the measured scroll state while the viewport has no box', () => {
+    // A hidden viewport reports no size, and its observer never notifies.
+    restoreViewportGeometry();
+    vi.stubGlobal(
+      'ResizeObserver',
+      vi.fn(function () {
+        return {observe: () => {}, unobserve: () => {}, disconnect: () => {}};
+      }),
+    );
+    try {
+      vi.setSystemTime(Date.UTC(2026, 4, 13, 14, 0));
+      const {unmount} = render(
+        <Harness initialDate={Date.UTC(2026, 4, 13, 14, 0) as Instant} />,
+      );
+      expect(viewport().scrollTop).toBe(0);
+      unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('opens a range without today at its configured start', () => {
     vi.setSystemTime(Date.UTC(2026, 6, 1, 14, 0));
     render(<Harness initialDate={Date.UTC(2026, 4, 13, 14, 0) as Instant} />);

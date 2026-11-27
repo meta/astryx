@@ -2148,16 +2148,7 @@
     "#5386",
     "https://github.com/meta/astryx/issues/1148"
   ],
-  "packages/core/src/theme/themeAdaptations.ts": [
-    "FR5",
-    "FR9",
-    "FR9",
-    "FR9",
-    "spec:AST-012",
-    "spec:AST-012",
-    "spec:AST-012",
-    "spec:AST-108"
-  ],
+  "packages/core/src/theme/themeAdaptations.ts": ["FR5", "spec:AST-108"],
   "packages/core/src/theme/themeMotion.ts": [
     "FR1",
     "FR15",

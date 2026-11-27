@@ -321,6 +321,32 @@ describe('native contracts', () => {
     );
   });
 
+  it('builds every shipped contract with no warnings', async () => {
+    const {warnings} = await buildContracts(loadCoreDoc);
+    expect(warnings.map(issue => issue.message)).toEqual([]);
+  });
+
+  it('accepts one prop name with different values on two platforms', () => {
+    const contract: ComponentContract = {
+      name: 'Picker',
+      baseTarget: 'root',
+      types: {},
+      core: {},
+      platforms: {
+        ios: {
+          menuStyle: {type: {kind: 'enum', values: ['popUp', 'pullDown']}},
+        },
+        android: {
+          menuStyle: {
+            type: {kind: 'enum', values: ['dropdown', 'bottomSheet']},
+          },
+        },
+      },
+      webOnly: [],
+    };
+    expect(checkContract(contract)).toEqual([]);
+  });
+
   it('keeps the committed Swift binding in sync with the contracts', async () => {
     const {contracts} = await buildContracts(loadCoreDoc);
     for (const [name, contents] of Object.entries(generateSwift(contracts))) {

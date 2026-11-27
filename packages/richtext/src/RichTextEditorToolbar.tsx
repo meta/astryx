@@ -31,10 +31,9 @@
  * Behavior mirrors the Lexical playground toolbar (selection sync + format
  * commands); the UI is built from Astryx primitives so it matches the theme.
  *
- * ICONS: Each control resolves its glyph through the core icon registry under a
- * stable `richtext:*` key (see {@link RICHTEXT_ICON_KEYS}) for the active
- * theme, falling back to the bundled inline SVGs below — the library seam
- * `getExtendedIcon` documents. A theme restyles any glyph by naming its key:
+ * ICONS: Each control resolves its glyph by a `richtext:*` key (see
+ * {@link RICHTEXT_ICON_KEYS}). The theme's icons win, then `registerIcons()`,
+ * then the bundled SVGs below. A theme restyles any glyph by naming its key:
  *   defineTheme({icons: {'richtext:bold': <MyBoldIcon />}});
  * Undo and redo point backward and forward in time, so they mirror under RTL
  * whichever glyph draws them.
@@ -106,6 +105,12 @@ import {
   useToolbarLink,
 } from './internal/ToolbarLinkPopover';
 import {$selectedExtensionNodesOnly} from './markdownExtensionNode';
+
+const DEFAULT_HEADING_LEVELS: ReadonlyArray<'h1' | 'h2' | 'h3'> = [
+  'h1',
+  'h2',
+  'h3',
+];
 
 /** Block types exposed by the toolbar's format selector. */
 type BlockType =
@@ -576,7 +581,7 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
  */
 export function RichTextEditorToolbar({
   label: labelFromProps,
-  headingLevels = ['h1', 'h2', 'h3'],
+  headingLevels = DEFAULT_HEADING_LEVELS,
   size = 'sm',
   hasLink = true,
   promptForUrl,
@@ -852,7 +857,10 @@ export function RichTextEditorToolbar({
             )}
             {isRenderable(endContent) && (
               <>
-                <Divider orientation="vertical" />
+                <Divider
+                  orientation="vertical"
+                  xstyle={toolbarDividerStyles.vertical}
+                />
                 {endContent}
               </>
             )}

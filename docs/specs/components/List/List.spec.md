@@ -54,15 +54,15 @@ system_specs:
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Public contract         | Optional `edge?: 'padded' \| 'flush' \| 'outset' \| 'bleed'`, default `'padded'`. Deprecated `edgeCompensation?: 'inline'` resolves to `'outset'`. Optional `reorderable` takes the object `createReorderable` returns, and ListItem's `itemKey` identifies each row (`spec:AST-103`). Optional `animatedLayout` takes the handle `useAnimatedLayout` returns (`spec:AST-105`).                                                                                                                                                                                                      |
-| Behavior                | One edge treatment applies to every ListItem row and decides where row content and row paint sit relative to the list's edges and the host's padding. With `reorderable`, rows reorder by dragging a handle or through reorder mode (`spec:AST-103` FR3, FR4). Under a coarse pointer a row's press follows the cell profile (`spec:AST-094` FR11); with `animatedLayout`, row updates animate (`spec:AST-105`). A row menu opens from the row's own `<li>` on the context request (FR13).                                                                                           |
-| End-user impact         | Row text can share the line of the list header and a heading above, with row paint stopping at the text, reaching into the host padding, or reaching the host edges. Touch users get a 44 px row target (FR10) and the cell press (FR11), and every pointer keeps a highlighted row's dividers visible (FR11); with `animatedLayout`, row updates animate for every pointer (FR12). A row with a menu opens it by a long press, a right click, or Shift+F10, or through its More actions button (FR13).                                                                              |
-| Builder impact          | One `edge` choice per list. `flush` works anywhere; `outset` and `bleed` act only inside a host that publishes container padding. Passing an `animatedLayout` handle is one new choice, and a row menu is the other: the caller passes a ListItem's ref to `useContextMenu` (FR13), and who draws a plain row's More actions button is open (OQ2); and rows animate only with an `itemKey`; the touch target and press need none.                                                                                                                                                    |
-| Compatibility/readiness | Additive; omission keeps current geometry; `edgeCompensation` keeps working with a codemod to `edge`. `reorderable` is stable and built, but for its `labels` and `positions`. `itemKey` and `animatedLayout`'s row updates (FR12) are implemented; its start and end content motion is not. The touch target (FR10) and the press's compositor release (FR11) are implemented under coarse primary pointers. Neither changes anything under a fine pointer. FR11's divider rule is implemented for every pointer. Row menus (FR13) are additive and specified, not implemented yet. |
-| Review checks           | Reject header movement, row paint past the host's padding edge, duplicated padding values, physical-edge logic, automatic opt-in, a ListItem-level edge prop, or a second prop that can contradict `edge`.                                                                                                                                                                                                                                                                                                                                                                           |
-| Governing rules         | `architecture:container-padding/INV3`, `INV9–INV11`; `spec:AST-002/DEC-1–DEC-2`; `spec:AST-017/FR4`; `spec:AST-057/FR9`. `spec:AST-103`. `spec:AST-094` FR4, FR5, FR11, FR13; `spec:AST-105` FR1–FR5, FR8. `spec:AST-107` FR8 (row menus).                                                                                                                                                                                                                                                                                                                                           |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Public contract         | Optional `edge?: 'padded' \| 'flush' \| 'outset' \| 'bleed'`, default `'padded'`. Deprecated `edgeCompensation?: 'inline'` resolves to `'outset'`. Optional `reorderable` takes the object `createReorderable` returns, and ListItem's `itemKey` identifies each row (`spec:AST-103`). Optional `animatedLayout` takes the handle `useAnimatedLayout` returns (`spec:AST-105`).                                                                                                                                                                                                                  |
+| Behavior                | One edge treatment applies to every ListItem row and decides where row content and row paint sit relative to the list's edges and the host's padding. With `reorderable`, rows reorder by dragging a handle or through reorder mode (`spec:AST-103` FR3, FR4). Under a coarse pointer a row's press follows the cell profile (`spec:AST-094` FR11); with `animatedLayout`, row updates animate (`spec:AST-105`). A row menu opens from the row's own `<li>` on the context request (FR13).                                                                                                       |
+| End-user impact         | Row text can share the line of the list header and a heading above, with row paint stopping at the text, reaching into the host padding, or reaching the host edges. Touch users get a 44 px row target (FR10) and the cell press (FR11), and every pointer keeps a highlighted row's dividers visible (FR11); with `animatedLayout`, row updates animate for every pointer (FR12). A row with a menu opens it by a long press, a right click, or Shift+F10, or through its More actions button (FR13).                                                                                          |
+| Builder impact          | One `edge` choice per list. `flush` works anywhere; `outset` and `bleed` act only inside a host that publishes container padding. Passing an `animatedLayout` handle is one new choice, and a row menu is the other: the caller passes a ListItem's ref to `useContextMenu` (FR13), and who draws a plain row's More actions button is open (OQ2); and rows animate only with an `itemKey`; the touch target and press need none.                                                                                                                                                                |
+| Compatibility/readiness | Additive; omission keeps current geometry; `edgeCompensation` keeps working with a codemod to `edge`. `reorderable` is stable and built, but for its `labels` and `positions`. `itemKey` and `animatedLayout`'s row updates (FR12) are implemented; its start and end content motion is not. The touch target (FR10) and the press's compositor release (FR11) are implemented under coarse primary pointers. Neither changes anything under a fine pointer. FR11's divider rule is implemented for every pointer. Row menus (FR13) are additive; FR13 gap: the package has no `useContextMenu`. |
+| Review checks           | Reject header movement, row paint past the host's padding edge, duplicated padding values, physical-edge logic, automatic opt-in, a ListItem-level edge prop, or a second prop that can contradict `edge`.                                                                                                                                                                                                                                                                                                                                                                                       |
+| Governing rules         | `architecture:container-padding/INV3`, `INV9–INV11`; `spec:AST-002/DEC-1–DEC-2`; `spec:AST-017/FR4`; `spec:AST-057/FR9`. `spec:AST-103`. `spec:AST-094` FR4, FR5, FR11, FR13; `spec:AST-105` FR1–FR5, FR8. `spec:AST-107` FR8 (row menus).                                                                                                                                                                                                                                                                                                                                                       |
 
 This table is a review projection; the body below is authoritative.
 
@@ -112,6 +112,15 @@ Consumer migration instructions belong in consumer docs and release notes.
   and crossing (FR12).
 - Its rows' menus attaching to the row's own `<li>` (FR13); the More actions
   button, focus return, and a plain row's press paint are open (OQ2).
+- The reorder handle test, `isReorderHandle`, internal to Core and reached
+  through `@astryxdesign/core/internal/reorder`. It tells whether an element
+  is a reorder handle, so a Lab collection that puts the handle beside its
+  own controls tells them apart: ListInput's field focus skips the handle.
+- `@astryxdesign/core/internal/reorderHandle.stylex` holds the reorder
+  handle's grip and reach sizes (`grip`, `targetReach`, `touchReach`), which
+  List, ListInput and TransferList share. It is internal, like the other
+  `internal/*.stylex` entries; `touchReach` derives from `MIN_TOUCH_TARGET`,
+  and a unit test ties them.
 
 **Does not own / non-goals**
 
@@ -212,6 +221,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 | ListItem row paint | Stops at the content (`flush`), reaches past it by the row inset (`padded`, `outset`), or reaches the host edge (`bleed`).                                                              | `component:List/DEC-3`   | Supporting surface | FR3–FR6            |
 | Row content        | The row's first content (its marker, start content, or label) sits inside the row inset (`padded`) or on the host content line when the host inset allows (`flush`, `outset`, `bleed`). | `component:List/DEC-3`   | Prominent          | FR2–FR5            |
 
+### Design decisions
+
+<!-- design-decisions:v1 -->
+
+| ID  | Decision                                                                                                                                                                                                                                                                                                                                                                                                                          | Intent or reason                                                                                                               | Applies to                                                   | Allowed variation                                                                                                                                        |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DD1 | The reorder handle is its grip alone: the `list-reorder-handle` icon, `drag` at the `sm` size by default, in the secondary icon color, with no hover fill. An invisible square target of at least 24 px surrounds the grip; the focus ring's outer edge is the target's edge, and reorder mode fills the target with rounded corners. The handle's box is 1rem, and a theme's icon size never changes it, its target or its ring. | The handle reads as a quiet grip beside the row's content, not as a button, and its target still meets the WCAG 2.5.8 minimum. | The reorder handle of a reorderable row (`spec:AST-103` FR5) | A theme replaces the grip and its icon size through its icon slot, and its color through the icon color tokens. A coarse pointer keeps its 44 px target. |
+
 ## Family and system relationships
 
 - `architecture:container-padding` owns host publication, eligibility,
@@ -231,11 +248,29 @@ Consumer migration instructions belong in consumer docs and release notes.
   model to list rows, and FR12's motion plays an FR4 role.
 - `spec:AST-105` owns the animated layout handle and its shared motion; List
   adopts it for row updates (FR12).
-- `spec:AST-103` owns reordering. List is its first adopter: it
+- Additive theme surface: a theme maps the reorder handle's grip through
+  `componentIcons['list-reorder-handle']`; with no entry, the grip is the
+  `drag` icon at the `sm` size (`spec:AST-103` DEC-8). The slot's size
+  changes only the icon.
+- `spec:AST-103` owns reordering. List adopts it: it
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the
-  handle is the one element reordering adds to a row, at its trailing edge
-  (`spec:AST-103` FR5). The reorder controller finds a collection's rows
+  handle is the one element reordering adds to a row (`spec:AST-103` FR5),
+  at its trailing edge, or at its leading edge when the reorderable's
+  `handle.placement` is `'start'`. The handle always shows and takes its
+  place in the row, unless `handle.revealBehavior` is `'adaptive'`. Then, where
+  the primary pointer is fine, it shows while its row is hovered or holds the
+  focus, and hangs outside the row's content with no width, so the content
+  keeps its place; it sits so that its target stops at the row's content. A reorderable list pads that room on that edge and
+  reaches into its host's padding by as much of it as the padding holds, so
+  the FR9 clip and a clipping host keep the handles; the rows move in only
+  by the room the padding lacks. Under a coarse pointer the handle takes its
+  place in the row, as it does after a list marker at the leading edge and
+  under `outset` and `bleed`, whose rows reach the host's padding edge.
+  Hidden, it keeps its tab stop. At the leading edge, a row that stays put
+  keeps the place its neighbours' handles take, so the labels line up. The
+  layout ships with the reorderable object (`spec:AST-103` FR2). The reorder
+  controller finds a collection's rows
   through a rows reader, which lists them in order and tells whether an
   element is one; List's rows are its element children.
 
@@ -253,6 +288,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Documentation             | `List.doc.mjs`, Storybook, and `scripts/check-knowledge.mjs`                                 | public prop, values, default, deprecation, and representative composition                                                                                                                                                                                                                                                            | Missing or stale contract, docs, or example fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `audit:List/docs`   |
 | FR13                      | List tests and real-browser tests of a row menu with a mouse, a finger, and the keyboard     | a plain row, a row with `onClick`, a row with `href`; a right click, a long press, Shift+F10, the context-menu key; close by Escape and by choice; a finger's hold, a mouse's right click, the keyboard, and `presentation: 'popover'`                                                                                               | A wrapper element around the `<li>`, a row a context request does not open, focus left in a closed menu or not returned to the row or its button, a plain row without a named "More actions" button, or a focusable row that ignores Shift+F10 fails. A lift or press paint under a mouse, the keyboard, or `presentation: 'popover'`, or a finger's hold on a focusable row without them, fails.                                                                                                                                                                                                                         | `audit:List/layout` |
 | FR13 reorder              | Real-browser tests with a finger and a mouse on a reorderable row with a menu                | a hold on the handle and on the row body of a reorderable row with a menu                                                                                                                                                                                                                                                            | A handle hold that opens the menu, or a body hold that picks the row up, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `audit:List/layout` |
+| Reorder handle sizes      | `internal/reorderHandle.stylex.test.ts`                                                      | the finger's reach                                                                                                                                                                                                                                                                                                                   | A `touchReach` that no longer derives from `MIN_TOUCH_TARGET` fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |                     |
 | FR9, DEC-5                | Real-browser whole-counter ink, unordered-parent renderer parity and read-only task geometry | Static Markdown ordered lists nested in unordered and read-only task lists, LTR/RTL; general and swipe-capable Lists                                                                                                                                                                                                                 | Reinstating a Markdown ancestor clip cuts leading counter ink. Under unordered parents, mismatched Markdown/RichText text starts or nested insets fail. Under read-only task parents, checkbox occlusion of counters, changed checked states or incorrect Markdown parent-text anchors fail; this row does not claim task-parent cross-renderer parity coverage. Removing general List clipping lets moving rows paint outside their group.                                                                                                                                                                               | `audit:List/visual` |
 
 ## Decision log
@@ -344,6 +380,22 @@ where it is free. An interactive ListItem row's `::after` is its touch hit area
 
 Rejected: leaving a caller's `::before` intact through a press, because the
 row then needs a second element or a main-thread paint for its press.
+
+### DEC-7 — A reorder handle's grip adds its icon's elements to the row
+
+**Reference:** `component:List/DEC-7`
+
+**Decider:** `cixzhang`, `2026-11-13 18:40 PT`
+
+A reorderable row's handle draws its grip as the theme's icon
+(`spec:AST-103` DEC-8). That icon's own elements join the row, inside the
+handle: the default `drag` adds eight, a wrapper and an SVG of six dots.
+This is the list-row exception to the surface budget of
+`architecture:component-style-authoring` INV7. The handle's `::before` holds
+its target, so no pseudo-element is free for the grip, and a theme cannot
+replace a pseudo-element's drawing. The Reorderable story's six handles add
+48 elements: 177 at rest, against 129 with three lines drawn as a
+pseudo-element, under a fine and a coarse pointer alike.
 
 ## Open questions
 

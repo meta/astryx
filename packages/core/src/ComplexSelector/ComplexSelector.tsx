@@ -73,6 +73,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/ComplexSelector/ComplexSelector.generated';
 import {devPropError} from '../utils/devWarning';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -177,15 +178,20 @@ const styles = stylex.create({
       // The press scale goes at once as the list opens.
       [LAYER_OPEN]: 'background-image, background-color, color, opacity',
     },
+    // An open layer that names this trigger as an anchor apart from its
+    // own trigger sets the factor to 1 on the box (Popover/usePopover.tsx).
+    // `initial` here keeps the factor of a control around the box out.
+    '--_astryx-press-scale': 'initial',
     transform: {
       default: 'scale(1)',
       // A mouse press; under a coarse pointer the touch press model writes
       // `data-astryx-press` instead (see interactionOverlay.stylex.ts).
       [`:active:not(${LAYER_OPEN})`]: {
-        default: 'scale(0.98)',
+        default: 'scale(var(--_astryx-press-scale, 0.98))',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]:
+        'scale(var(--_astryx-press-scale, 0.98))',
     },
   },
   // Keep the input-family width contract while reusing ghost's borderless paint
@@ -207,13 +213,15 @@ const styles = stylex.create({
       // The press scale goes at once as the list opens.
       [LAYER_OPEN]: 'background-image, background-color, color, opacity',
     },
+    '--_astryx-press-scale': 'initial',
     transform: {
       default: 'scale(1)',
       [`:active:not(${LAYER_OPEN})`]: {
-        default: 'scale(0.98)',
+        default: 'scale(var(--_astryx-press-scale, 0.98))',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]:
+        'scale(var(--_astryx-press-scale, 0.98))',
     },
   },
   triggerGhostDisabled: {
@@ -240,7 +248,7 @@ const styles = stylex.create({
     // Under reduced motion the chevron turns at once: an in-place state
     // change moves nothing (design:reduced-motion DR1–DR3).
     transitionDuration: {
-      default: durationVars['--duration-fast'],
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],

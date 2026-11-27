@@ -4,7 +4,8 @@
 
 /**
  * @file menuRegionStops.ts
- * @input The focus trap's own reachability test (getFocusableElements)
+ * @input The focus trap's own reachability test (getFocusableElements) and
+ *   the shared Tab-stop test (isTabStop)
  * @output `tabbablesIn`, `focusRegionControl`, `moveRegionsTab`: the Tab stops
  *   of a header or footer region and the walk through a menu with regions,
  *   with a named radio group as one stop
@@ -16,6 +17,7 @@
  * wrap at either end.
  */
 import type React from 'react';
+import {isTabStop} from '../hooks/focusableSelector';
 import {collapseRadioGroups, getFocusableElements} from '../hooks/useFocusTrap';
 
 /**
@@ -29,7 +31,7 @@ export function tabbablesIn(region: HTMLElement | null): HTMLElement[] {
     return [];
   }
   return getFocusableElements(region).filter(
-    element => element.tabIndex >= 0 && !isInsideHiddenWrapper(element, region),
+    element => isTabStop(element) && !isInsideHiddenWrapper(element, region),
   );
 }
 

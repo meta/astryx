@@ -11,9 +11,8 @@
  * follows the nearest `dir`. `rtlStyles.mirror` matches any RTL ancestor, so
  * it flips the icon in an LTR menu inside an RTL page.
  *
- * This holds for a menu that renders inside its `dir` region. A layer that
- * portals out of an unsafe ancestor copies only the CSS direction, not `dir`.
- * This style does not follow that copy.
+ * A layer that portals out of an unsafe ancestor copies the direction it would
+ * lose, on `dir` as well as in CSS, so this style follows it there too.
  */
 
 import * as stylex from '@stylexjs/stylex';

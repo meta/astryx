@@ -669,7 +669,7 @@ describe('ProgressBar', () => {
       expect(mark).toHaveAttribute('aria-label', 'Goal');
     });
 
-    it('reveals a labeled mark via a focusable Tooltip trigger', async () => {
+    it('reveals a labeled mark via a focusable Tooltip trigger that reads its label once', async () => {
       const {container} = render(
         <ProgressBar
           value={50}
@@ -678,22 +678,22 @@ describe('ProgressBar', () => {
         />,
       );
       // Focusable so keyboard users can reveal the label visually; the tick
-      // itself owns its name independently of the Tooltip's description.
-      // The Tooltip loads lazily (Suspense), so re-query the live element and
-      // wait for it to attach aria-describedby.
+      // owns its name, and the Tooltip shows the same text.
       const mark0 = container.querySelector<HTMLElement>(MARK)!;
       expect(mark0).toHaveAttribute('tabindex', '0');
       expect(mark0).not.toHaveAttribute('aria-hidden');
+      // The Tooltip loads lazily (Suspense). Once it has attached, its text
+      // copy is in the document.
       await waitFor(() =>
-        expect(container.querySelector(MARK)).toHaveAttribute(
-          'aria-describedby',
-        ),
+        expect(
+          screen.getAllByText('Goal', {selector: '[hidden]', ignore: false}),
+        ).not.toHaveLength(0),
       );
       const mark = container.querySelector<HTMLElement>(MARK)!;
-      const tip = document.getElementById(
-        mark.getAttribute('aria-describedby')!,
-      );
-      expect(tip).toHaveTextContent('Goal');
+      expect(mark).toHaveAccessibleName('Goal');
+      // The tooltip text repeats the name, so it adds no description and the
+      // label is read once.
+      expect(mark).not.toHaveAttribute('aria-describedby');
     });
 
     it('keeps the progressbar element free of role="img"/aria-label children', () => {
@@ -1238,7 +1238,7 @@ describe('ProgressBar under a finger: UIProgressView', () => {
     const touch = {coarse: true, reduce: false};
     // CSS scales the move by the theme's tempo.
     expect(valueUnder(fillOf(), 'transition-duration', touch)).toMatch(
-      /^calc\(var\(--_progress-bar-move,\s*0m?s\)\s*\*\s*var\(--_astryx-motion-tempo,\s*1\)\)$/,
+      /^calc\(var\(--_progress-bar-move,\s*0m?s\)\s*\*\s*var\(--_astryx-motion-tempo,\s*1\)\s*\*\s*\(1\s*-\s*var\(--_astryx-reduced-motion,\s*0\)\)\)$/,
     );
     expect(valueUnder(fillOf(), 'transition-timing-function', touch)).toMatch(
       /^var\(--_progress-bar-curve,\s*linear\)$/,
@@ -1250,7 +1250,11 @@ describe('ProgressBar under a finger: UIProgressView', () => {
     expect(css).not.toContain('-webkit-touch-callout');
     // With a mouse or trackpad the theme's tokens still time it.
     const fine = rulesOf(fillOf(), null);
-    expect(valueOf(fine, 'transition-duration')[0]).toMatch(/^var\(--/);
+    // It also reads the reduced-motion factor, so the fill lands at once
+    // under a theme that reduces motion for everyone.
+    expect(valueOf(fine, 'transition-duration')[0]).toMatch(
+      /^calc\(var\(--duration-medium\) \* \(1 - var\(--_astryx-reduced-motion, 0\)\)\)$/,
+    );
     expect(valueOf(fine, 'transition-timing-function')[0]).toMatch(/^var\(--/);
   });
 
@@ -1291,7 +1295,7 @@ describe('ProgressBar under a finger: UIProgressView', () => {
       fill.indexOf('transitionTimingFunction:'),
     );
     expect(duration).toMatch(
-      /'@media\(pointer:coarse\)':\{default:[^}]*'@media\(forced-colors:active\)':'0s'/,
+      /'@media\(pointer:coarse\)':\{default:[\s\S]*?'@media\(forced-colors:active\)':'0s'/,
     );
     // At zero the fill paints nothing under a finger (UIKit's alpha 0)…
     expect(view.emptyFillAlpha).toBe(0);
