@@ -26,8 +26,8 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-// lightningcss is the CSS transformer Vite uses. @astryxdesign/build depends
-// on it, so it resolves from that package.
+// lightningcss is the CSS transformer Vite uses. Core does not depend on it;
+// @astryxdesign/build does, so it resolves from that package.
 interface LightningCss {
   transform(options: {
     filename: string;
@@ -93,7 +93,11 @@ interface Ring {
 
 async function openStory(
   page: Page,
-  {lowered, themeOverride}: {lowered: boolean; themeOverride: boolean},
+  {
+    lowered,
+    themeOverride,
+    outerTheme = 'neutral',
+  }: {lowered: boolean; themeOverride: boolean; outerTheme?: string},
 ): Promise<void> {
   if (lowered) {
     await page.route('**/*.css', async route => {
@@ -102,7 +106,7 @@ async function openStory(
     });
   }
   await page.goto(
-    `${storybook.origin}/iframe.html?id=${storyId}&viewMode=story&globals=colorMode:light;astryxTheme:neutral`,
+    `${storybook.origin}/iframe.html?id=${storyId}&viewMode=story&globals=colorMode:light;astryxTheme:${outerTheme}`,
   );
   await page.locator('[data-theme="dark"] button').first().waitFor();
   if (lowered) {
@@ -288,4 +292,22 @@ test('a focus color set on the page root reaches a region with no theme, not a t
   expect(await ringColor('none')).toEqual(['rgb(4, 5, 6)']);
   const themed = await ringColor('neutral');
   expect(themed).not.toContain('rgb(4, 5, 6)');
+});
+
+test('a Theme nested in a Theme of another theme draws its ring in its own accent', async ({
+  page,
+}) => {
+  // The page root applies butter; the story's panes apply neutral.
+  await openStory(page, {
+    lowered: false,
+    themeOverride: false,
+    outerTheme: 'butter',
+  });
+  const panes = byPane(await rings(page));
+  expect(Object.keys(panes).sort()).toEqual([...PANES].sort());
+  for (const pane of PANES) {
+    const row = panes[pane];
+    expect(row.outline, pane).toEqual(row.accent);
+    expect(row.contrast, pane).toBeGreaterThanOrEqual(3);
+  }
 });
