@@ -10,8 +10,7 @@ const anatomy = [
   {
     name: 'Consumer content',
     required: false,
-    description:
-      'Caller-provided content rendered inside the section container.',
+    description: 'Caller-provided content rendered inside the section container.',
   },
 ];
 
@@ -22,15 +21,7 @@ export const docs = {
   displayName: 'Section',
   group: 'Layout',
   category: 'Layout',
-  keywords: [
-    'section',
-    'panel',
-    'container',
-    'group',
-    'fieldset',
-    'region',
-    'block',
-  ],
+  keywords: ["section","panel","container","group","fieldset","region","block"],
   props: [
     {
       name: 'variant',
@@ -73,93 +64,65 @@ export const docs = {
     {
       name: 'padding',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        'Internal padding using the spacing scale (0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10). Use padding={0} for edge-to-edge content.',
+      description: 'Internal padding using the spacing scale (0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10). Use padding={0} for edge-to-edge content.',
       default: "the theme's section padding, else 4",
     },
     {
       name: 'paddingInline',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        'Inline (horizontal) padding override. Overrides only the inline-axis padding while preserving block padding from `padding` or the container theme default. Accepts the spacing scale (0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10).',
+      description: 'Inline (horizontal) padding override. Overrides only the inline-axis padding while preserving block padding from `padding` or the container theme default. Accepts the spacing scale (0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10).',
     },
     {
       name: 'paddingInlineStart',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        'Inline-start padding override (left in LTR, right in RTL). Overrides paddingInline and padding on that edge only.',
+      description: 'Inline-start padding override (left in LTR, right in RTL). Overrides paddingInline and padding on that edge only.',
     },
     {
       name: 'paddingInlineEnd',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        'Inline-end padding override (right in LTR, left in RTL). Overrides paddingInline and padding on that edge only.',
+      description: 'Inline-end padding override (right in LTR, left in RTL). Overrides paddingInline and padding on that edge only.',
     },
     {
       name: 'paddingBlock',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        'Block (vertical) padding override. Overrides only the block-axis padding while preserving inline padding from `padding` or the container theme default. Accepts the spacing scale (0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10).',
+      description: 'Block (vertical) padding override. Overrides only the block-axis padding while preserving inline padding from `padding` or the container theme default. Accepts the spacing scale (0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10).',
     },
     {
       name: 'paddingBlockStart',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        'Block-start (top) padding, using the spacing scale. Overrides paddingBlock and padding on that edge only.',
+      description: 'Block-start (top) padding, using the spacing scale. Overrides paddingBlock and padding on that edge only.',
     },
     {
       name: 'paddingBlockEnd',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        'Block-end (bottom) padding, using the spacing scale. Overrides paddingBlock and padding on that edge only.',
+      description: 'Block-end (bottom) padding, using the spacing scale. Overrides paddingBlock and padding on that edge only.',
     },
     {
       name: 'xstyle',
       type: 'StyleXStyles',
-      description:
-        'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object.',
+      description: 'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object.',
     },
   ],
   theming: {
     container: true,
-    targets: [{className: 'astryx-section', visualProps: ['variant']}],
-    derived: [{property: 'padding', expand: 'container'}],
+    targets: [
+      {className: 'astryx-section', visualProps: ['variant']},
+    ],
+    derived: [
+      {property: 'padding', expand: 'container'},
+    ],
   },
   usage: {
     anatomy,
     description:
       'Section is the correct way to create page regions and group related content on a page. Use it for settings groups, form sections, sidebar areas, or any time you need visual separation between parts of a page. If you are tempted to use a Card for a page section, use Section instead.',
     bestPractices: [
-      {
-        guidance: true,
-        description:
-          'Use Section for page-level grouping: settings panels, form groups, sidebar regions. These are sections of a page, not discrete items.',
-      },
-      {
-        guidance: true,
-        description:
-          'Start with the default variant. Use muted only to call attention to a specific region.',
-      },
-      {
-        guidance: true,
-        description:
-          'Add dividers between same-background sections that need separation.',
-      },
-      {
-        guidance: true,
-        description:
-          'Combine with a heading + Stack for a typical page section pattern.',
-      },
-      {
-        guidance: false,
-        description:
-          'Use Card when you mean Section. Cards are for discrete items (one notification, one profile). Sections are for page regions.',
-      },
-      {
-        guidance: true,
-        description:
-          "To center a Section, set marginInlineStart and marginInlineEnd to 'auto' in xstyle. If Astryx source is compiled in your app's own StyleX pass, the marginInline shorthand loses to Section's own inline margins.",
-      },
+      { guidance: true, description: 'Use Section for page-level grouping: settings panels, form groups, sidebar regions. These are sections of a page, not discrete items.' },
+      { guidance: true, description: 'Start with the default variant. Use muted only to call attention to a specific region.' },
+      { guidance: true, description: 'Add dividers between same-background sections that need separation.' },
+      { guidance: true, description: 'Combine with a heading + Stack for a typical page section pattern.' },
+      { guidance: false, description: 'Use Card when you mean Section. Cards are for discrete items (one notification, one profile). Sections are for page regions.' },
+      { guidance: true, description: "To center a Section, set marginInlineStart and marginInlineEnd to 'auto' in xstyle. If Astryx source is compiled in your app's own StyleX pass, the marginInline shorthand loses to Section's own inline margins." },
     ],
   },
   examples: [
@@ -229,93 +192,65 @@ export const docsZh = {
     {
       name: 'padding',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        '使用间距比例的内部内边距（0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10）。使用 padding={0} 实现全宽内容。',
+      description: '使用间距比例的内部内边距（0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10）。使用 padding={0} 实现全宽内容。',
       default: "the theme's section padding, else 4",
     },
     {
       name: 'paddingInline',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        '行内（水平）方向内边距覆盖。仅覆盖行内轴内边距，同时保留来自 padding 或容器主题默认值的块内边距。使用间距比例（0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10）。',
+      description: '行内（水平）方向内边距覆盖。仅覆盖行内轴内边距，同时保留来自 padding 或容器主题默认值的块内边距。使用间距比例（0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10）。',
     },
     {
       name: 'paddingInlineStart',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        '行内起始内边距覆盖（LTR 中为左侧，RTL 中为右侧）。仅在该边上覆盖 paddingInline 和 padding。',
+      description: '行内起始内边距覆盖（LTR 中为左侧，RTL 中为右侧）。仅在该边上覆盖 paddingInline 和 padding。',
     },
     {
       name: 'paddingInlineEnd',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        '行内结束内边距覆盖（LTR 中为右侧，RTL 中为左侧）。仅在该边上覆盖 paddingInline 和 padding。',
+      description: '行内结束内边距覆盖（LTR 中为右侧，RTL 中为左侧）。仅在该边上覆盖 paddingInline 和 padding。',
     },
     {
       name: 'paddingBlock',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        '块（垂直）方向内边距覆盖。仅覆盖块轴内边距，同时保留来自 padding 或容器主题默认值的行内内边距。使用间距比例（0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10）。',
+      description: '块（垂直）方向内边距覆盖。仅覆盖块轴内边距，同时保留来自 padding 或容器主题默认值的行内内边距。使用间距比例（0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10）。',
     },
     {
       name: 'paddingBlockStart',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        '块起始（顶部）内边距，使用间距刻度。仅在该边上覆盖 paddingBlock 和 padding。',
+      description: '块起始（顶部）内边距，使用间距刻度。仅在该边上覆盖 paddingBlock 和 padding。',
     },
     {
       name: 'paddingBlockEnd',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
-      description:
-        '块结束（底部）内边距，使用间距刻度。仅在该边上覆盖 paddingBlock 和 padding。',
+      description: '块结束（底部）内边距，使用间距刻度。仅在该边上覆盖 paddingBlock 和 padding。',
     },
     {
       name: 'xstyle',
       type: 'StyleXStyles',
-      description:
-        '用于布局自定义的 StyleX 样式（外边距、定位、尺寸）。必须是 stylex.create() 的值，不能是内联样式对象。',
+      description: '用于布局自定义的 StyleX 样式（外边距、定位、尺寸）。必须是 stylex.create() 的值，不能是内联样式对象。',
     },
   ],
   theming: {
     container: true,
-    targets: [{className: 'astryx-section', visualProps: ['variant']}],
-    derived: [{property: 'padding', expand: 'container'}],
+    targets: [
+      {className: 'astryx-section', visualProps: ['variant']},
+    ],
+    derived: [
+      {property: 'padding', expand: 'container'},
+    ],
   },
   usage: {
     anatomy,
     description:
       'Section is the correct way to create page regions and group related content on a page. Use it for settings groups, form sections, sidebar areas, or any time you need visual separation between parts of a page. If you are tempted to use a Card for a page section, use Section instead.',
     bestPractices: [
-      {
-        guidance: true,
-        description:
-          'Use Section for page-level grouping: settings panels, form groups, sidebar regions. These are sections of a page, not discrete items.',
-      },
-      {
-        guidance: true,
-        description:
-          'Start with the default variant. Use muted only to call attention to a specific region.',
-      },
-      {
-        guidance: true,
-        description:
-          'Add dividers between same-background sections that need separation.',
-      },
-      {
-        guidance: true,
-        description:
-          'Combine with a heading + Stack for a typical page section pattern.',
-      },
-      {
-        guidance: false,
-        description:
-          'Use Card when you mean Section. Cards are for discrete items (one notification, one profile). Sections are for page regions.',
-      },
-      {
-        guidance: true,
-        description:
-          "要让 Section 居中，在 xstyle 中把 marginInlineStart 和 marginInlineEnd 设为 'auto'。如果 Astryx 源码在你的应用自己的 StyleX 编译中处理，marginInline 简写会输给 Section 自身的行内外边距。",
-      },
+      { guidance: true, description: 'Use Section for page-level grouping: settings panels, form groups, sidebar regions. These are sections of a page, not discrete items.' },
+      { guidance: true, description: 'Start with the default variant. Use muted only to call attention to a specific region.' },
+      { guidance: true, description: 'Add dividers between same-background sections that need separation.' },
+      { guidance: true, description: 'Combine with a heading + Stack for a typical page section pattern.' },
+      { guidance: false, description: 'Use Card when you mean Section. Cards are for discrete items (one notification, one profile). Sections are for page regions.' },
+      { guidance: true, description: '要让 Section 居中，在 xstyle 中把 marginInlineStart 和 marginInlineEnd 设为 \'auto\'。如果 Astryx 源码在你的应用自己的 StyleX 编译中处理，marginInline 简写会输给 Section 自身的行内外边距。' },
     ],
   },
 };
@@ -329,36 +264,12 @@ export const docsDense = {
     description:
       'Section creates page regions. Use for settings groups, form sections, sidebar areas. If you want to visually separate a part of a page, use Section, not Card. Cards are for discrete items (one profile, one notification).',
     bestPractices: [
-      {
-        guidance: true,
-        description:
-          'Use Section for page-level grouping: settings panels, form groups, sidebar regions. Page sections, not discrete items.',
-      },
-      {
-        guidance: true,
-        description:
-          'Start w/ default variant. Use muted only to call attention to a specific region.',
-      },
-      {
-        guidance: true,
-        description:
-          'Add dividers between same-background sections that need separation.',
-      },
-      {
-        guidance: true,
-        description:
-          'Combine w/ heading + Stack for typical page section pattern.',
-      },
-      {
-        guidance: false,
-        description:
-          'Use Card when you mean Section. Cards = discrete items (one notification, one profile). Sections = page regions.',
-      },
-      {
-        guidance: true,
-        description:
-          "Center: xstyle marginInlineStart + marginInlineEnd 'auto'. If Astryx source goes through your app's StyleX pass, marginInline shorthand loses to Section's inline margins.",
-      },
+      { guidance: true, description: 'Use Section for page-level grouping: settings panels, form groups, sidebar regions. Page sections, not discrete items.' },
+      { guidance: true, description: 'Start w/ default variant. Use muted only to call attention to a specific region.' },
+      { guidance: true, description: 'Add dividers between same-background sections that need separation.' },
+      { guidance: true, description: 'Combine w/ heading + Stack for typical page section pattern.' },
+      { guidance: false, description: 'Use Card when you mean Section. Cards = discrete items (one notification, one profile). Sections = page regions.' },
+      { guidance: true, description: "Center: xstyle marginInlineStart + marginInlineEnd 'auto'. If Astryx source goes through your app's StyleX pass, marginInline shorthand loses to Section's inline margins." },
     ],
   },
   propDescriptions: {
@@ -370,19 +281,12 @@ export const docsDense = {
     children: 'Content rendered inside section.',
     dividers: 'Which sides of section have divider borders.',
     padding: 'Internal padding via spacing scale; 0 for edge-to-edge content.',
-    paddingInline:
-      'Inline-axis padding override; preserves block padding from padding/theme.',
-    paddingInlineStart:
-      'Inline-start (left in LTR) padding override; wins over paddingInline/padding on that edge.',
-    paddingInlineEnd:
-      'Inline-end (right in LTR) padding override; wins over paddingInline/padding on that edge.',
-    paddingBlock:
-      'Block-axis padding override; preserves inline padding from padding/theme.',
-    paddingBlockStart:
-      'Block-start (top) padding override; wins over paddingBlock/padding on that edge.',
-    paddingBlockEnd:
-      'Block-end (bottom) padding override; wins over paddingBlock/padding on that edge.',
-    xstyle:
-      'StyleX styles for layout customization; must be stylex.create() value.',
+    paddingInline: 'Inline-axis padding override; preserves block padding from padding/theme.',
+    paddingInlineStart: 'Inline-start (left in LTR) padding override; wins over paddingInline/padding on that edge.',
+    paddingInlineEnd: 'Inline-end (right in LTR) padding override; wins over paddingInline/padding on that edge.',
+    paddingBlock: 'Block-axis padding override; preserves inline padding from padding/theme.',
+    paddingBlockStart: 'Block-start (top) padding override; wins over paddingBlock/padding on that edge.',
+    paddingBlockEnd: 'Block-end (bottom) padding override; wins over paddingBlock/padding on that edge.',
+    xstyle: 'StyleX styles for layout customization; must be stylex.create() value.',
   },
 };

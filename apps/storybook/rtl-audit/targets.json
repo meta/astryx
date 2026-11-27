@@ -464,7 +464,11 @@
     },
     "selectors": {"overlay": "[popover]:popover-open", "overlayRoot": "body"}
   },
-  {"component": "LayerProvider", "storyId": "core-layer--provider", "dims": []},
+  {
+    "component": "LayerProvider",
+    "storyId": "core-layer--provider",
+    "dims": []
+  },
   {
     "component": "Layout",
     "storyId": "core-layout--content-width-with-start-panel",
@@ -546,7 +550,10 @@
     "storyId": "core-mobilenav--default",
     "dims": ["D4"],
     "setup": {"click": "button[aria-label=\"Open Navigation\"]"},
-    "selectors": {"overlay": ".astryx-mobile-nav-drawer", "overlayRoot": "body"}
+    "selectors": {
+      "overlay": ".astryx-mobile-nav-drawer",
+      "overlayRoot": "body"
+    }
   },
   {
     "component": "MobileNavToggle",
