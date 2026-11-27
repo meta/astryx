@@ -23,7 +23,7 @@ const geometry = {
   headerHeight: 36,
 };
 
-function Fixture({direction = 'ltr'}: {direction?: 'rtl' | 'ltr'}) {
+function Fixture({direction}: {direction?: 'rtl' | 'ltr'}) {
   const infinity = useTableInfinityVirtualization({
     ...geometry,
     direction,
@@ -92,6 +92,25 @@ describe('Table Infinity window', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('inherits the document direction unless an explicit direction is supplied', () => {
+    const {rerender} = render(
+      <div dir="rtl" aria-label="RTL host">
+        <Fixture />
+      </div>,
+    );
+    const host = screen.getByLabelText('RTL host');
+    const viewport = screen.getByRole('group', {name: 'Table viewport'});
+    expect(viewport.closest('[dir]')).toBe(host);
+
+    rerender(
+      <div dir="rtl" aria-label="RTL host">
+        <Fixture direction="ltr" />
+      </div>,
+    );
+    expect(viewport.closest('[dir]')).not.toBe(host);
+    expect(viewport.closest('[dir]')).toHaveAttribute('dir', 'ltr');
   });
 
   it('moves the inline scrollbar logically in RTL and keeps axes independent', () => {

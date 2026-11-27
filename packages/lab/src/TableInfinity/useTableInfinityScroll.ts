@@ -10,6 +10,7 @@
  */
 import {useCallback, useRef, useState} from 'react';
 import {flushSync} from 'react-dom';
+import {isRtlElement} from '@astryxdesign/core/internal/touch';
 import {
   coversViewport,
   INITIAL_POSITION,
@@ -48,7 +49,7 @@ function equal(a: ScrollPosition, b: ScrollPosition) {
 
 export function useTableInfinityScroll(
   axes: Axes<ScrollGeometry>,
-  direction: 'ltr' | 'rtl',
+  direction: 'ltr' | 'rtl' | undefined,
   paint: (position: Axes<ScrollPosition>, range: Ranges) => void,
 ) {
   const [range, setRange] = useState<Ranges>(() => ({
@@ -136,7 +137,10 @@ export function useTableInfinityScroll(
           column: advance(
             axes.column,
             current.column,
-            direction === 'rtl' ? -deltaX : deltaX,
+            deltaX !== 0 &&
+              (direction == null ? isRtlElement(node) : direction === 'rtl')
+              ? -deltaX
+              : deltaX,
             event.deltaMode,
           ),
         });

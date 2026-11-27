@@ -17,6 +17,7 @@ import {
   type TableProps,
 } from '@astryxdesign/core/Table';
 import {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
+import {isRtlElement} from '@astryxdesign/core/internal/touch';
 import {mergeProps} from '@astryxdesign/core/utils';
 import {InfinityScrollbar} from './InfinityScrollbar';
 import {
@@ -126,7 +127,7 @@ export function useTableInfinityVirtualization<
   viewportWidth,
   viewportHeight,
   headerHeight,
-  direction = 'ltr',
+  direction,
   viewportLabel,
   rowScrollbarLabel,
   columnScrollbarLabel,
@@ -177,7 +178,6 @@ export function useTableInfinityVirtualization<
   const columnThumb = useRef<HTMLDivElement>(null);
   const rowSize = thumbSize(axes.row);
   const columnSize = thumbSize(axes.column);
-  const sign = direction === 'rtl' ? -1 : 1;
   const paint: Parameters<typeof useTableInfinityScroll>[2] = useCallback(
     (position, range) => {
       const node = table.current;
@@ -185,6 +185,11 @@ export function useTableInfinityVirtualization<
       if (!node || !body) {
         return;
       }
+      const sign = (
+        direction == null ? isRtlElement(node) : direction === 'rtl'
+      )
+        ? -1
+        : 1;
       const dx =
         (position.column.index - range.column.start) * columnWidth +
         position.column.offset;
@@ -213,7 +218,7 @@ export function useTableInfinityVirtualization<
         }
       }
     },
-    [axes, columnSize, columnWidth, rowHeight, rowSize, sign],
+    [axes, columnSize, columnWidth, direction, rowHeight, rowSize],
   );
 
   const {range, attach, navigate, navigateAxis, moveAxis, readPosition} =

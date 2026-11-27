@@ -12,7 +12,7 @@ export default {
       name: 'options',
       type: 'TableInfinityOptions<T>',
       description:
-        'Supply positive row and column counts, fixed rowHeight, columnWidth and headerHeight, and body viewportWidth and viewportHeight in whole CSS pixels. Provide synchronous getRow and getColumn functions indexed from zero, plus viewportLabel, rowScrollbarLabel and columnScrollbarLabel in the language of your application. Keep the geometry fixed for a mount.',
+        'Supply positive row and column counts, fixed rowHeight, columnWidth and headerHeight, and body viewportWidth and viewportHeight in whole CSS pixels. Provide synchronous getRow and getColumn functions indexed from zero, plus viewportLabel, rowScrollbarLabel and columnScrollbarLabel in the language of your application. Leave direction unspecified to inherit the page direction, or pass ltr or rtl to override it. Keep the geometry fixed for a mount.',
     },
   ],
   returns: [
