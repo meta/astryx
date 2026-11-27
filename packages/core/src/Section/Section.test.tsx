@@ -204,6 +204,21 @@ describe('Section', () => {
     expect(handledBy).toBe(outer);
   });
 
+  it('gives the sizing props to the outer wrapper, not the painted container', () => {
+    const {container} = render(
+      <Section width={400} height={300} maxWidth={500} minHeight={200}>
+        Content
+      </Section>,
+    );
+    const outer = container.firstElementChild as HTMLElement;
+    const inner = outer.firstElementChild as HTMLElement;
+    const outerStyle = outer.getAttribute('style') ?? '';
+    for (const size of ['400px', '300px', '500px', '200px']) {
+      expect(outerStyle).toContain(size);
+    }
+    expect(inner.getAttribute('style') ?? '').not.toMatch(/\d+px/);
+  });
+
   it('adds no role, name, or tab stop of its own', () => {
     const {container} = render(<Section>Content</Section>);
     const outer = container.firstElementChild as HTMLElement;

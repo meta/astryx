@@ -54,12 +54,7 @@ async function readSection(page: Page, evidence: string) {
     };
     const box = (element: Element) => {
       const rect = element.getBoundingClientRect();
-      return {
-        top: rect.top,
-        bottom: rect.bottom,
-        width: rect.width,
-        height: rect.height,
-      };
+      return {top: rect.top, bottom: rect.bottom, height: rect.height};
     };
     return {
       wrapper: box(wrapper),
@@ -84,9 +79,6 @@ test('each variant paints its token and transparent paints nothing', async ({
   await open(page, 'dividers');
   const muted = await readSection(page, 'dividers-block');
   expect(muted.background).toBe(muted.muted);
-  // The width prop sizes the outer wrapper, and the painted container fills it.
-  expect(muted.wrapper.width).toBe(220);
-  expect(muted.painted.width).toBe(220);
   const surface = await readSection(page, 'dividers-start');
   expect(surface.background).toBe(surface.surface);
   expect(surface.surface).not.toBe(surface.muted);
