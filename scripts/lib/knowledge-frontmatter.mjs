@@ -6,9 +6,11 @@
  * @output `parseKnowledgeFrontmatter`: the record's front matter as a Map of
  *   field name to value (a string, a number, null, or an array for a list),
  *   plus any problems found
- * @position The one front-matter reader for knowledge records. Used by
- *   `check-knowledge.mjs`, and through it by `specs:for`. A tool that must
- *   not load the whole checker imports this module.
+ * @position The front-matter reader behind `parseKnowledgeDocument`.
+ *   `check-knowledge.mjs`, `specs:for` and the motion-role generator read
+ *   records through it. The trusted-base helpers in `.github/scripts/` read
+ *   `authority` and `kind` with their own parser. A tool that must not load
+ *   the whole checker imports this module.
  */
 
 function parseScalar(raw) {
