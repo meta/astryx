@@ -96,8 +96,7 @@ describe('no rounding anywhere', () => {
 
   it('on a Core that draws the radio with the pill token, finds its radio marks to keep round, and no pill among them', async () => {
     const C = (await context(cwd)).C;
-    // The installed Core draws each radio mark at 50%. The census of a Core
-    // that draws it with the pill token differs only in that radius.
+    // The installed Core draws each radio mark at 50%.
     const marks = Object.keys(C.MAP).filter(
       part =>
         radioMark(C, part) &&
@@ -107,6 +106,12 @@ describe('no rounding anywhere', () => {
       expect.arrayContaining(['radio-indicator', 'dropdown-menu-radio']),
     );
     expect(pillDrawnRadios(C)).toEqual([]);
+    // A pill-token Core draws each mark, and the dot inside it, with
+    // `var(--radius-full)`: its census records that radius in the part map
+    // and a `--radius-full` read in each part's corners.
+    const drawnWithPill = new Set(
+      marks.flatMap(mark => [mark, ...(C.MAP[mark]?.contains ?? [])]),
+    );
     const pillToken = Object.assign(Object.create(C), {
       MAP: Object.fromEntries(
         Object.entries(C.MAP).map(([part, entry]) => {
@@ -120,12 +125,27 @@ describe('no rounding anywhere', () => {
           return [part, {...entry, at: {...entry.at, 'border-radius': radius}}];
         }),
       ),
+      /** @param {string} part @param {string | null} group */
+      partReads: (part, group) => {
+        const reads = C.partReads(part, group) ?? [];
+        if (!drawnWithPill.has(part) || (group != null && group !== 'corners'))
+          return reads;
+        return [
+          ...reads,
+          {
+            token: '--radius-full',
+            props: new Set(['border-radius']),
+            when: new Set(),
+          },
+        ];
+      },
     });
     expect(pillDrawnRadios(pillToken)).toEqual(
       expect.arrayContaining(['radio-indicator', 'dropdown-menu-radio']),
     );
-    for (const mark of pillDrawnRadios(pillToken))
-      expect(pillParts(pillToken)).not.toContain(mark);
+    // The marks and their dots read the pill token, yet none is a pill.
+    const pills = pillParts(pillToken);
+    for (const part of drawnWithPill) expect(pills, part).not.toContain(part);
   }, 240_000);
 
   it('on a Core that draws the radio at 50%, squares every pill and circle, with no radio pin', async ({
