@@ -22,6 +22,12 @@ import type {
   PowerSearchFilter,
   PowerSearchTokenProps,
 } from './types';
+import {loadDateRangeCalendar} from '../DateRangeInput/DateRangeCalendar';
+// DateRangeInput loads its Calendar on the first intent. Loading it up front
+// lets these cases find the calendar's days right after the open.
+beforeAll(async () => {
+  await loadDateRangeCalendar();
+});
 
 const originalMatches = HTMLElement.prototype.matches;
 const popoverOpenState = new WeakMap<HTMLElement, boolean>();
@@ -475,6 +481,7 @@ describe('PowerSearch date zone', () => {
         },
         'America/Los_Angeles',
       );
+      expect(tokenText('Win')).toBe('Win: inMar 9 – 10, 2024');
       act(() => {
         fireEvent.click(tokenFor('Win'));
       });
@@ -546,6 +553,7 @@ describe('PowerSearch date zone', () => {
         },
         undefined,
       );
+      expect(tokenText('Win')).toBe('Win: inMar 9 – 10, 2024');
       act(() => {
         fireEvent.click(tokenFor('Win'));
       });
@@ -555,6 +563,132 @@ describe('PowerSearch date zone', () => {
         .map(b => b.textContent ?? '')
         .find(text => /Mar \d+, 2024/.test(text));
       expect(rangeText).toBe('Mar 9, 2024 – Mar 10, 2024');
+    });
+
+    it("names a relative range by its new days after the zone's midnight", async () => {
+      process.env.TZ = 'UTC';
+      const onChange = vi.fn();
+      const filters: PowerSearchFilter[] = [
+        {
+          field: 'win',
+          operator: 'in',
+          value: {
+            type: 'date_range',
+            value: {
+              start: {type: 'RELATIVE', backValue: 7, unit: 'day'},
+              end: {type: 'NOW'},
+            },
+          },
+        },
+      ];
+      const element = () => (
+        <PowerSearch
+          config={config}
+          filters={filters}
+          onChange={onChange}
+          label="Search"
+        />
+      );
+      // Only the render reads the moved clock; the announcer's own clock
+      // stays real.
+      const renderAt = (iso: string, draw: () => void) => {
+        const now = vi.spyOn(Date, 'now').mockReturnValue(Date.parse(iso));
+        try {
+          draw();
+        } finally {
+          now.mockRestore();
+        }
+      };
+      let rerender: (ui: React.ReactElement) => void = () => {};
+      renderAt('2024-03-10T23:30:00Z', () => {
+        rerender = render(element()).rerender;
+      });
+      expect(tokenText('Win').replace(/\s/g, ' ')).toBe(
+        'Win: inMar 3 – 10, 2024',
+      );
+      // Past UTC midnight, a render with the same filters reads the new days
+      // on the token and in the label its removal announces.
+      renderAt('2024-03-11T00:30:00Z', () => {
+        rerender(element());
+      });
+      expect(tokenText('Win').replace(/\s/g, ' ')).toBe(
+        'Win: inMar 4 – 11, 2024',
+      );
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: /^Remove /}));
+      });
+      await waitFor(
+        () => {
+          const announced = Array.from(document.querySelectorAll('[aria-live]'))
+            .map(region => region.textContent ?? '')
+            .join(' ')
+            .replace(/\s+/g, ' ');
+          expect(announced).toContain('Removed Win: in Mar 4 – 11, 2024');
+        },
+        {timeout: 4000},
+      );
+    });
+
+    it('names an hour range by its new days when its start crosses into the next day', async () => {
+      process.env.TZ = 'UTC';
+      const onChange = vi.fn();
+      const filters: PowerSearchFilter[] = [
+        {
+          field: 'win',
+          operator: 'in',
+          value: {
+            type: 'date_range',
+            value: {
+              start: {type: 'RELATIVE', backValue: 12, unit: 'hour'},
+              end: {type: 'NOW'},
+            },
+          },
+        },
+      ];
+      const element = () => (
+        <PowerSearch
+          config={config}
+          filters={filters}
+          onChange={onChange}
+          label="Search"
+        />
+      );
+      // Only the render reads the moved clock; the announcer's own clock
+      // stays real.
+      const renderAt = (iso: string, draw: () => void) => {
+        const now = vi.spyOn(Date, 'now').mockReturnValue(Date.parse(iso));
+        try {
+          draw();
+        } finally {
+          now.mockRestore();
+        }
+      };
+      let rerender: (ui: React.ReactElement) => void = () => {};
+      renderAt('2024-03-10T11:30:00Z', () => {
+        rerender = render(element()).rerender;
+      });
+      expect(tokenText('Win').replace(/\s/g, ' ')).toBe(
+        'Win: inMar 9 – 10, 2024',
+      );
+      // At noon UTC the start moves into March 10, with no midnight between
+      // the renders; the label its removal announces reads the new day too.
+      renderAt('2024-03-10T12:30:00Z', () => {
+        rerender(element());
+      });
+      expect(tokenText('Win').replace(/\s/g, ' ')).toBe('Win: inMar 10, 2024');
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: /^Remove /}));
+      });
+      await waitFor(
+        () => {
+          const announced = Array.from(document.querySelectorAll('[aria-live]'))
+            .map(region => region.textContent ?? '')
+            .join(' ')
+            .replace(/\s+/g, ' ');
+          expect(announced).toContain('Removed Win: in Mar 10, 2024');
+        },
+        {timeout: 4000},
+      );
     });
   });
 });

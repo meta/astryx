@@ -10,7 +10,15 @@
  */
 
 import {useState} from 'react';
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  beforeAll,
+} from 'vitest';
 import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -32,6 +40,13 @@ import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {InternationalizationProvider} from '../i18n';
 import {getTooltip} from '../__tests__/tooltipDescription';
+import {loadDateRangeCalendar} from './DateRangeCalendar';
+// Calendar loads on the trigger's first intent. Loading it up front lets these
+// cases open the popover synchronously; DateRangeInput.calendarLoad*.test.tsx
+// covers the load itself.
+beforeAll(async () => {
+  await loadDateRangeCalendar();
+});
 
 describe('DateRangeInput', () => {
   it('renders with label', () => {

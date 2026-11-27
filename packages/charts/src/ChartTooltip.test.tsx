@@ -450,6 +450,25 @@ describe('ChartTooltip series without a value key', () => {
   const salesBar = () => bar('sales', {label: 'Sales', color: '#ff0000'});
   const salesLine = () => line('sales', {label: 'Sales', color: '#ff0000'});
 
+  function renderAlone(makeKeyless: () => SeriesDef, renderFn?: Mock) {
+    const keyless = makeKeyless();
+    keyless._uid = `0:${keyless.key}`;
+    // Inject hover points directly to test row derivation; streamGL.resolve() returns [].
+    const harness = makeHarness({
+      resolved: new Map([[keyless._uid, SALES_POINTS]]),
+    });
+    renderTooltip(harness, {
+      series: [keyless],
+      ...(renderFn ? {render: renderFn} : {}),
+    });
+    harness.dispatch({
+      x: SALES_POINTS[1].px,
+      y: 100,
+      nearest: {...SALES_POINTS[1], seriesKey: keyless._uid},
+      active: false,
+    });
+  }
+
   function renderBeside(
     makeValued: () => SeriesDef,
     makeKeyless: () => SeriesDef,
@@ -472,6 +491,30 @@ describe('ChartTooltip series without a value key', () => {
     });
     harness.dispatch(hoverAt(1));
   }
+
+  it.each([
+    ['heatmapGL', heatmap],
+    ['streamGL', stream],
+  ])('adds no value row for a %s-only chart', (_name, makeKeyless) => {
+    renderAlone(makeKeyless);
+    expect(card().textContent).toBe('Feb');
+    expect(card()).toHaveAccessibleName('Feb');
+  });
+
+  it.each([
+    ['heatmapGL', heatmap],
+    ['streamGL', stream],
+  ])(
+    'passes an empty row list to a custom render for a %s-only chart',
+    (_name, makeKeyless) => {
+      const renderFn = vi.fn(() => <span>custom body</span>);
+      renderAlone(makeKeyless, renderFn);
+      expect(renderFn).toHaveBeenCalled();
+      for (const call of renderFn.mock.calls) {
+        expect(call).toEqual(['Feb', []]);
+      }
+    },
+  );
 
   it.each([
     ['heatmapGL', heatmap],
@@ -500,6 +543,7 @@ describe('ChartTooltip series without a value key', () => {
   );
 
   it.each([
+    ['a bar beside heatmapGL', salesBar, heatmap],
     ['a line beside heatmapGL', salesLine, heatmap],
     ['a bar beside streamGL', salesBar, stream],
   ])(
@@ -507,6 +551,7 @@ describe('ChartTooltip series without a value key', () => {
     (_name, makeValued, makeKeyless) => {
       renderBeside(makeValued, makeKeyless);
       expect(card().textContent).toBe('FebSales7');
+      expect(card()).toHaveAccessibleName('Feb Sales7');
       const row = within(card()).getByText('Sales').parentElement;
       expect(row?.textContent).toBe('Sales7');
     },
@@ -519,6 +564,7 @@ describe('ChartTooltip default layout', () => {
     renderTooltip(harness);
     harness.dispatch(hoverAt(1));
     expect(card().textContent).toBe('Feb7');
+    expect(card()).toHaveAccessibleName('Feb7');
   });
 
   it('shows the bare value for one series beside a utility mark', () => {
@@ -535,32 +581,47 @@ describe('ChartTooltip default layout', () => {
     renderTooltip(harness, {series: [salesBar, target]});
     harness.dispatch(hoverAt(1));
     expect(card().textContent).toBe('Feb7');
+    expect(card()).toHaveAccessibleName('Feb7');
   });
 
   it.each([
-    ['sales first', ['sales', 'profit'], 'FebSales7Profit2'],
-    ['profit first', ['profit', 'sales'], 'FebProfit2Sales7'],
-  ])('labels each row in series order (%s)', (_name, order, expectedText) => {
-    const profitPoints = SALES_POINTS.map(p => ({...p, py: p.py + 30}));
-    const defs: Record<string, SeriesDef> = {
-      sales: makeSeries(),
-      profit: makeSeries({
-        key: 'profit',
-        dataKeys: ['profit'],
-        label: 'Profit',
-        _uid: '1:profit',
-      }),
-    };
-    const harness = makeHarness({
-      resolved: new Map([
-        ['0:sales', SALES_POINTS],
-        ['1:profit', profitPoints],
-      ]),
-    });
-    renderTooltip(harness, {series: order.map(key => defs[key])});
-    harness.dispatch(hoverAt(1));
-    expect(card().textContent).toBe(expectedText);
-  });
+    [
+      'sales first',
+      ['sales', 'profit'],
+      'FebSales7Profit2',
+      'Feb Sales7 Profit2',
+    ],
+    [
+      'profit first',
+      ['profit', 'sales'],
+      'FebProfit2Sales7',
+      'Feb Profit2 Sales7',
+    ],
+  ])(
+    'labels each row in series order (%s)',
+    (_name, order, expectedText, expectedName) => {
+      const profitPoints = SALES_POINTS.map(p => ({...p, py: p.py + 30}));
+      const defs: Record<string, SeriesDef> = {
+        sales: makeSeries(),
+        profit: makeSeries({
+          key: 'profit',
+          dataKeys: ['profit'],
+          label: 'Profit',
+          _uid: '1:profit',
+        }),
+      };
+      const harness = makeHarness({
+        resolved: new Map([
+          ['0:sales', SALES_POINTS],
+          ['1:profit', profitPoints],
+        ]),
+      });
+      renderTooltip(harness, {series: order.map(key => defs[key])});
+      harness.dispatch(hoverAt(1));
+      expect(card().textContent).toBe(expectedText);
+      expect(card()).toHaveAccessibleName(expectedName);
+    },
+  );
 });
 
 describe('ChartTooltip hover indicators', () => {

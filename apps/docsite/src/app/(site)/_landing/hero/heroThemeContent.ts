@@ -359,44 +359,48 @@ const DEFAULT_AURORA: HeroAuroraPalette = {
   right: 'var(--color-background-pink)',
 };
 
-// The custom (web) font families each reel theme paints with — body, heading,
-// and the marketing-scale display family. Listed here so the hero can warm them
-// before the first auto-advance (the @font-face rules ship in the docsite's
-// Google Fonts <link>, but the browser only fetches a family's woff2 once a
-// glyph using it first paints — i.e. when the reel swaps to that slide, which
-// is the visible FOUT first-time visitors hit). System/fallback stacks
-// (-apple-system, Georgia, …) are intentionally omitted: they need no fetch.
-//
-// Keep in sync with the typography.{body,heading} families + display overrides
-// in each theme package (packages/themes/<name>/src/<name>Theme.ts).
-const REEL_FONT_FAMILIES: ReadonlyArray<string> = [
-  // Astryx (docsite brand)
-  'Figtree',
-  // Matcha (DM Sans body + Playwrite US Trad heading)
-  'DM Sans',
-  'Playwrite US Trad',
-  // Butter (Outfit body/heading + Sarina display)
-  'Outfit',
-  'Sarina',
-  // Gothic (Fustat body/heading + Manufacturing Consent display)
-  'Fustat',
-  'Manufacturing Consent',
-  // Y2K (Poppins body/heading + Crimson Text display)
-  'Poppins',
-  'Crimson Text',
-];
+// The web fonts that the hero cards of each reel theme draw, with the font
+// weights that their text asks for. The hero loads them before the reel
+// shows the theme's slide, so that the slide does not show a fallback font
+// first. Poppins has one file for each weight, so the list has each weight
+// that a card draws. A theme's display family (Sarina, Manufacturing Consent,
+// Crimson Text) is not in the list, because no card has display text. The
+// headings of Matcha ask Playwrite US Trad for weight 600. The family has
+// no file for that weight, and the browser loads the file for weight 400.
+// SYNC: hero-theme-content.test.ts pins this list, and
+// e2e/font-loading.spec.ts compares it with the fonts that the cards of the
+// built page ask for.
+const REEL_FONTS: Record<
+  string,
+  ReadonlyArray<{family: string; weights: ReadonlyArray<number>}>
+> = {
+  [ASTRYX]: [{family: 'Figtree', weights: [400, 500, 600]}],
+  '@astryxdesign/theme-matcha': [
+    {family: 'DM Sans', weights: [400, 500, 600]},
+    {family: 'Playwrite US Trad', weights: [600]},
+  ],
+  '@astryxdesign/theme-butter': [
+    {family: 'Outfit', weights: [400, 500, 600, 700]},
+  ],
+  '@astryxdesign/theme-gothic': [
+    {family: 'Fustat', weights: [400, 500, 600, 700]},
+  ],
+  '@astryxdesign/theme-y2k': [{family: 'Poppins', weights: [400, 500, 600]}],
+};
 
 /**
- * `document.fonts.load()` specifiers for the reel's custom families. A short
- * representative string is enough to pull the right woff2 — the API loads the
- * whole face that would render those glyphs. We warm a normal and a bold-ish
- * weight since the cards mix body and heading weights.
+ * `document.fonts.load()` specifiers for the fonts of a theme's cards. The
+ * API loads the font file that draws text of that family and weight.
  */
+function fontSpecifiers(themeName: string): string[] {
+  return (REEL_FONTS[themeName] ?? []).flatMap(({family, weights}) =>
+    weights.map(weight => `${weight} 1rem "${family}"`),
+  );
+}
+
+/** The specifiers for every theme of the reel, in slide order. */
 export const REEL_FONT_SPECIFIERS: ReadonlyArray<string> =
-  REEL_FONT_FAMILIES.flatMap(family => [
-    `400 1rem "${family}"`,
-    `600 1rem "${family}"`,
-  ]);
+  REEL_THEMES.flatMap(fontSpecifiers);
 
 // Ordered slides from REEL_THEMES; unresolved (uninstalled) themes are skipped.
 export const HERO_THEME_SLIDES: ReadonlyArray<HeroThemeSlide> = REEL_THEMES.map(
@@ -451,12 +455,23 @@ export function reelThumbSources(image: string): ReelImageSources {
 /**
  * The three photos of each slide, in slide order, with the sources that the
  * slide's cards give their <img>. A card loads a photo only when its slide
- * shows. The hero loads this list after the page loads, so that the browser
- * has each file before the reel advances to its slide.
+ * shows. On a wide screen the hero loads this list after the page loads, so
+ * that the browser has each file before the reel advances to its slide.
  */
 export const REEL_IMAGES: ReadonlyArray<ReelImageSources> =
-  HERO_THEME_SLIDES.flatMap(slide => [
-    reelPhotoSources(slide.content.product.image),
-    reelPhotoSources(slide.content.feature.image),
-    reelThumbSources(slide.content.mini.image),
-  ]);
+  HERO_THEME_SLIDES.flatMap(slide => slideAssets(slide).images);
+
+/** The fonts and the photos that one slide loads when it shows. */
+export function slideAssets(slide: HeroThemeSlide): {
+  fonts: ReadonlyArray<string>;
+  images: ReadonlyArray<ReelImageSources>;
+} {
+  return {
+    fonts: fontSpecifiers(slide.name),
+    images: [
+      reelPhotoSources(slide.content.product.image),
+      reelPhotoSources(slide.content.feature.image),
+      reelThumbSources(slide.content.mini.image),
+    ],
+  };
+}

@@ -117,7 +117,10 @@ describe('the docs-only lane', () => {
     const lane =
       "steps.scope.outputs.docsite_only != 'true' && (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.docs_only == 'true')";
     const steps = lint.jobs.lint.steps;
-    expect(steps.find(each => each.id === 'setup').if).toBe(lane);
+    // Setup also runs for the docsite lane, which lints its changed files.
+    expect(steps.find(each => each.id === 'setup').if).toBe(
+      "steps.scope.outputs.spec_only != 'true' || (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.docs_only == 'true')",
+    );
     expect(step(lint.jobs.lint, 'Check repository guardrails').if).toBe(lane);
     // ESLint itself still skips: no code changed.
     expect(step(lint.jobs.lint, 'Run ESLint').if).toBe(

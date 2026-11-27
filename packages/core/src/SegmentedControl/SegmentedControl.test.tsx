@@ -13,7 +13,7 @@
  */
 
 import {StrictMode, useState} from 'react';
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {
   act,
   cleanup,
@@ -27,6 +27,7 @@ import {hasPressedArm} from '../__tests__/pressState';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {SegmentedControl} from './SegmentedControl';
 import {SegmentedControlItem} from './SegmentedControlItem';
+import {SizeProvider} from '../SizeContext/SizeContext';
 import {
   getAllInjectedCss,
   getForcedColorsRules,
@@ -1381,6 +1382,49 @@ describe('selection motion', () => {
       spy.mockRestore();
     }
   });
+
+  it('starts no animation in the commit that mounts it; the first change holds the leaving surface', () => {
+    // jsdom has no Web Animations. This records each animation that starts.
+    const started: {element: HTMLElement; pseudoElement?: string | null}[] = [];
+    HTMLElement.prototype.animate = function (
+      this: HTMLElement,
+      _keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      started.push({
+        element: this,
+        pseudoElement:
+          typeof options === 'object' ? options.pseudoElement : undefined,
+      });
+      return {
+        finished: new Promise<void>(() => {}),
+        cancel: () => {},
+        startTime: null,
+      } as unknown as Animation;
+    };
+    try {
+      const ui = (value: string) => (
+        <SegmentedControl value={value} onChange={() => {}} label="View">
+          <SegmentedControlItem value="grid" label="Grid" />
+          <SegmentedControlItem value="list" label="List" />
+        </SegmentedControl>
+      );
+      const {rerender} = render(ui('grid'));
+      // A new animation resolves style, which the mount commit must not do.
+      expect(started).toEqual([]);
+
+      rerender(ui('list'));
+      const group = screen.getByRole('radiogroup');
+      expect(
+        started.filter(
+          ({element, pseudoElement}) =>
+            element === group && pseudoElement === '::after',
+        ),
+      ).toHaveLength(1);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'animate');
+    }
+  });
 });
 
 describe("SegmentedControl keeps a caller's aria-describedby", () => {
@@ -1426,5 +1470,186 @@ describe("SegmentedControl keeps a caller's aria-describedby", () => {
     expect(document.getElementById(ids?.[1] ?? '')).toHaveTextContent(
       'Choose a project to switch views',
     );
+  });
+});
+
+describe('SegmentedControl target, size and ref (FR1, FR6, FR8)', () => {
+  function Control(props: {size?: 'sm' | 'md' | 'lg'}) {
+    return (
+      <SegmentedControl
+        value="grid"
+        onChange={() => {}}
+        label="View mode"
+        {...props}>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>
+    );
+  }
+
+  function sizes() {
+    return [
+      screen.getByRole('radiogroup').getAttribute('data-size'),
+      ...screen
+        .getAllByRole('radio')
+        .map(segment => segment.getAttribute('data-size')),
+    ];
+  }
+
+  it('puts the segmented-control target and data-size on the radiogroup', () => {
+    render(<Control />);
+    const group = screen.getByRole('radiogroup', {name: 'View mode'});
+    expect(group.className).toContain('astryx-segmented-control');
+    expect(group).toHaveAttribute('data-size', 'md');
+  });
+
+  it('resolves size from the prop, then the nearest provider, then md, and gives it to every segment', () => {
+    const {rerender} = render(<Control />);
+    expect(sizes()).toEqual(['md', 'md', 'md']);
+    rerender(
+      <SizeProvider value="lg">
+        <Control />
+      </SizeProvider>,
+    );
+    expect(sizes()).toEqual(['lg', 'lg', 'lg']);
+    rerender(
+      <SizeProvider value="lg">
+        <Control size="sm" />
+      </SizeProvider>,
+    );
+    expect(sizes()).toEqual(['sm', 'sm', 'sm']);
+  });
+
+  it('connects ref to the radiogroup', () => {
+    const ref = {current: null as HTMLDivElement | null};
+    render(
+      <SegmentedControl
+        ref={ref}
+        value="grid"
+        onChange={() => {}}
+        label="View mode">
+        <SegmentedControlItem value="grid" label="Grid" />
+      </SegmentedControl>,
+    );
+    expect(ref.current).toBe(screen.getByRole('radiogroup'));
+  });
+});
+
+describe('SegmentedControl focus handlers cannot cancel built-in focus behavior (FR4)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function treatFocusAsKeyboardFocus() {
+    const matches = HTMLElement.prototype.matches;
+    vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
+      this: HTMLElement,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : matches.call(this, selector);
+    });
+  }
+
+  function hintIsOpen() {
+    return document.querySelector('[popover="manual"][popover-open]') != null;
+  }
+
+  it('runs a caller onFocus before selection follows focus', async () => {
+    const user = userEvent.setup();
+    const calls: string[] = [];
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={value => calls.push(`change ${value}`)}
+        label="View mode"
+        onFocus={() => calls.push('focus')}>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>,
+    );
+    screen.getByRole('radio', {name: 'Grid'}).focus();
+    calls.length = 0;
+    await user.keyboard('{ArrowRight}');
+    expect(calls).toEqual(['focus', 'change list']);
+  });
+
+  it('keeps selection following focus when a caller onFocus calls preventDefault', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={onChange}
+        label="View mode"
+        onFocus={e => e.preventDefault()}>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>,
+    );
+    screen.getByRole('radio', {name: 'Grid'}).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onChange).toHaveBeenCalledWith('list');
+  });
+
+  it('keeps selection following focus when a segment onFocus calls preventDefault', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl value="grid" onChange={onChange} label="View mode">
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem
+          value="list"
+          label="List"
+          onFocus={e => e.preventDefault()}
+        />
+      </SegmentedControl>,
+    );
+    screen.getByRole('radio', {name: 'Grid'}).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onChange).toHaveBeenCalledWith('list');
+  });
+
+  it('still shows the keyboard hint when a caller onFocus calls preventDefault', () => {
+    treatFocusAsKeyboardFocus();
+    render(
+      <>
+        <button type="button">before</button>
+        <SegmentedControl
+          value="grid"
+          onChange={() => {}}
+          label="View mode"
+          onFocus={e => e.preventDefault()}>
+          <SegmentedControlItem value="grid" label="Grid" />
+          <SegmentedControlItem value="list" label="List" />
+        </SegmentedControl>
+      </>,
+    );
+    screen.getByText('before').focus();
+    act(() => screen.getByRole('radio', {name: 'Grid'}).focus());
+    expect(hintIsOpen()).toBe(true);
+  });
+
+  it('still closes the keyboard hint on blur when a caller onBlur calls preventDefault', () => {
+    treatFocusAsKeyboardFocus();
+    render(
+      <>
+        <button type="button">before</button>
+        <SegmentedControl
+          value="grid"
+          onChange={() => {}}
+          label="View mode"
+          onBlur={e => e.preventDefault()}>
+          <SegmentedControlItem value="grid" label="Grid" />
+          <SegmentedControlItem value="list" label="List" />
+        </SegmentedControl>
+      </>,
+    );
+    screen.getByText('before').focus();
+    act(() => screen.getByRole('radio', {name: 'Grid'}).focus());
+    expect(hintIsOpen()).toBe(true);
+    act(() => screen.getByText('before').focus());
+    expect(hintIsOpen()).toBe(false);
   });
 });

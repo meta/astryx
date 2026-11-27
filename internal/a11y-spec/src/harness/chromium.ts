@@ -1120,6 +1120,7 @@ export function createChromiumHarness(
 
   return {
     name: 'chromium',
+    version: page.context().browser()?.version(),
     observes: CHROMIUM_OBSERVES,
     subject: async () => subject,
     related: async name => relatedSubject(name),

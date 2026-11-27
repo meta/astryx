@@ -262,6 +262,16 @@ const styles = stylex.create({
     opacity: 0,
     pointerEvents: 'none' as const,
   },
+  // The first measurement sets the edges before any frame shows them. A pill
+  // takes them at once: a fade would paint the first frame without it.
+  buttonPillUnfaded: {
+    transitionProperty: 'none',
+  },
+  // Its button leaves the disabled state at once too. A hover and a press
+  // keep their transitions.
+  buttonUnfaded: {
+    transitionProperty: 'background-image, background-color, color, transform',
+  },
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/consistent-type-assertions -- CSS custom property requires type widening for StyleX
   buttonRadiusOverride: {
     '--_button-radius': radiusVars['--radius-full'],
@@ -421,8 +431,14 @@ export function Carousel({
   // transition it is allowed to act on.
   const focusedNavRef = useRef<'start' | 'end' | null>(null);
   const prevCanScrollRef = useRef<{start: boolean; end: boolean} | null>(null);
-  const {scrollRef, followShown, overflowStart, overflowEnd, hasOverflow} =
-    useShownScrollOverflow();
+  const {
+    scrollRef,
+    followShown,
+    overflowStart,
+    overflowEnd,
+    hasOverflow,
+    isFirstMeasurement,
+  } = useShownScrollOverflow();
 
   // Children.toArray drops null/undefined/boolean children and assigns
   // stable keys, so slide numbering ("Slide N of M") matches what actually
@@ -801,6 +817,7 @@ export function Carousel({
               {...stylex.props(
                 styles.buttonPill,
                 styles.buttonPillStart,
+                isFirstMeasurement && styles.buttonPillUnfaded,
                 !canScrollStart && styles.buttonHidden,
               )}>
               <Button
@@ -833,7 +850,10 @@ export function Carousel({
                   }
                 }}
                 onClick={() => scrollBy(-1)}
-                xstyle={styles.buttonRadiusOverride}
+                xstyle={[
+                  styles.buttonRadiusOverride,
+                  isFirstMeasurement && styles.buttonUnfaded,
+                ]}
               />
             </div>
             <div
@@ -843,6 +863,7 @@ export function Carousel({
               {...stylex.props(
                 styles.buttonPill,
                 styles.buttonPillEnd,
+                isFirstMeasurement && styles.buttonPillUnfaded,
                 !canScrollEnd && styles.buttonHidden,
               )}>
               <Button
@@ -873,7 +894,10 @@ export function Carousel({
                   }
                 }}
                 onClick={() => scrollBy(1)}
-                xstyle={styles.buttonRadiusOverride}
+                xstyle={[
+                  styles.buttonRadiusOverride,
+                  isFirstMeasurement && styles.buttonUnfaded,
+                ]}
               />
             </div>
           </>,

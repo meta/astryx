@@ -251,11 +251,12 @@ jobs:
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true'
         run: echo "Lightweight documentation PR — skipping full lint"
 
+      # The docs lane installs too: it lints the docsite files that it changes.
       # A docs-only change (no package or docsite code) keeps the repository
       # guardrails, which read documents too, and skips the rest of full lint.
       - uses: ./.github/actions/setup
         id: setup
-        if: steps.scope.outputs.docsite_only != 'true' && (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.docs_only == 'true')
+        if: steps.scope.outputs.spec_only != 'true' || (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.docs_only == 'true')
 
       - name: Clear ESLint cache
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
@@ -391,7 +392,32 @@ jobs:
           LINT_HEAP_PEAK_FILE: ${{ runner.temp }}/lint-heap-peaks.jsonl
         run: pnpm lint
 
-      # Each Node process of the two type-aware steps recorded its live heap.
+      # The root ESLint config lints the docsite, and the docsite has no lint
+      # step of its own. The docs lane skips the full pass, so it lints the
+      # docsite files that the pull request adds, changes or renames. It uses
+      # the same config, strict tier and heap as the full pass. A file that the
+      # config ignores stays ignored, as in the full pass.
+      - name: Run ESLint on changed docsite files
+        if: steps.scope.outputs.docsite_only == 'true'
+        env:
+          MERGE_SHA: ${{ github.sha }}
+          NODE_OPTIONS: '--max-old-space-size=6144 --import=${{ github.workspace }}/.github/scripts/lint-heap-peak.mjs'
+          LINT_HEAP_PEAK_FILE: ${{ runner.temp }}/lint-heap-peaks.jsonl
+        run: |
+          set -eu
+          git diff --name-only --diff-filter=ACMR -z "$MERGE_SHA^1" "$MERGE_SHA" -- \
+            'apps/docsite/*.ts' 'apps/docsite/*.tsx' 'apps/docsite/*.mts' 'apps/docsite/*.cts' \
+            'apps/docsite/*.js' 'apps/docsite/*.jsx' 'apps/docsite/*.mjs' 'apps/docsite/*.cjs' \
+            > "$RUNNER_TEMP/changed-docsite-files"
+          if [ ! -s "$RUNNER_TEMP/changed-docsite-files" ]; then
+            echo 'No changed docsite file that ESLint lints.'
+            exit 0
+          fi
+          xargs -0 -r pnpm exec eslint --max-warnings=-1 --no-warn-ignored \
+            < "$RUNNER_TEMP/changed-docsite-files"
+
+      # Each Node process of the two type-aware steps, or of the docs lane's
+      # ESLint step, recorded its live heap.
       # The report names the one nearest its limit, or one that did not
       # finish, and warns at 80%, before core's TypeScript program outgrows
       # the heap. It runs after a failed lint wherever setup ran, and it

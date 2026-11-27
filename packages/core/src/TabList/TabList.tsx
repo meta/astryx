@@ -50,11 +50,13 @@ import {mergeProps, rtlStyles} from '../utils';
 import {useListFocus} from '../hooks/useListFocus';
 import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {useScrollOverflow} from '../hooks/useScrollOverflow';
+import {useCommittedRef} from '../hooks/useCommittedRef';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {Icon} from '../Icon';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
-import {observeResize} from '../utils/sharedResizeObserver';
+import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import {createDevWarnings} from '../utils/devWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 
@@ -521,11 +523,9 @@ export function TabList({
 
   // Both reveals below reach the callback through a ref instead of depending
   // on it: its identity also changes with `overflow`, and that is not a reason
-  // to scroll anything.
-  const revealSelectedTabRef = useRef(revealSelectedTab);
-  useEffect(() => {
-    revealSelectedTabRef.current = revealSelectedTab;
-  }, [revealSelectedTab]);
+  // to scroll anything. The ref is current before the layout effects run:
+  // the resize registration below is one, and can call it at once.
+  const revealSelectedTabRef = useCommittedRef(revealSelectedTab);
 
   // The tab whose focus revealed it (see `handleRootFocus`), while it keeps
   // focus.
@@ -535,7 +535,9 @@ export function TabList({
   // on mount, or when the host sets `value` itself — and neither scrolls the
   // strip the way clicking or arrowing to a tab does. The check is what makes
   // a selection change the trigger, rather than the effect happening to run.
-  const revealedValueRef = useRef<string | null>(null);
+  // The mount is not a change here: the observation below reveals the tab
+  // then, after the browser's layout.
+  const revealedValueRef = useRef<string | null>(value);
   useEffect(() => {
     if (revealedValueRef.current === value) {
       return;
@@ -550,7 +552,7 @@ export function TabList({
       return () => cancelAnimationFrame(frame);
     }
     revealSelectedTabRef.current();
-  }, [value]);
+  }, [value, revealSelectedTabRef]);
 
   // ...and it has to stay visible when the strip is what moved. A strip that
   // fitted at one width can hide the selected tab at a narrower one, and no
@@ -561,14 +563,29 @@ export function TabList({
   // The wrapper is observed rather than the strip because the shared observer
   // keeps one callback per element and `useScrollOverflow` already holds the
   // strip's.
-  useEffect(() => {
+  //
+  // The first report also reveals the tab on mount. It comes after the
+  // browser lays the wrapper out and before the frame paints, so the reveal's
+  // reads force no style or layout pass. Where no ResizeObserver exists, the
+  // tab is revealed at once.
+  //
+  // A layout effect registers the wrapper in the commit that attaches the
+  // strip. Both first reports then come in one delivery, and the strip's
+  // edges are measured after the reveal. A passive effect can run after that
+  // delivery.
+  useIsomorphicLayoutEffect(() => {
     const root = listRef.current;
     if (!hasScroll || !root) {
       return;
     }
     const onResize = () => revealSelectedTabRef.current();
-    return observeResize(root, onResize);
-  }, [hasScroll, listRef]);
+    const stop = observeResizeAfterLayout(root, onResize);
+    if (stop == null) {
+      onResize();
+      return undefined;
+    }
+    return stop;
+  }, [hasScroll, listRef, revealSelectedTabRef]);
 
   const scrollByPage = useCallback((direction: -1 | 1) => {
     const strip = stripRef.current;

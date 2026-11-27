@@ -54,6 +54,28 @@ interface UseMultiComboboxOptions {
   onActivateAction?: (index: number) => void;
 }
 
+// The options MultiSelector's own trigger passes: those of the public hook,
+// and whether the open list is in the document.
+interface UseMultiComboboxInternalOptions extends UseMultiComboboxOptions {
+  /**
+   * Whether the open list is in the document. False while an open waits for
+   * its surface to load. A second press, Enter, Space and the highlight keys
+   * then leave that open as it is.
+   * Defaults to `isOpen`.
+   */
+  isListShown?: boolean;
+}
+
+/** The keys that move the highlight across the options of an open list. */
+const HIGHLIGHT_KEYS: ReadonlySet<string> = new Set([
+  'ArrowDown',
+  'ArrowUp',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+]);
+
 /** Which cell of the highlighted row the highlight is on. */
 export type MultiComboboxCell = 'option' | 'action';
 
@@ -83,9 +105,20 @@ interface UseMultiComboboxResult {
  * The caller must ensure selectableItems is in the same order as the rendered DOM.
  */
 export function useMultiCombobox({
+  ...options
+}: UseMultiComboboxOptions): UseMultiComboboxResult {
+  return useMultiComboboxInternal(options);
+}
+
+/**
+ * `useMultiCombobox` with MultiSelector's held open: an open whose list is not
+ * in the document yet. Internal; not exported from the package.
+ */
+export function useMultiComboboxInternal({
   selectableItems,
   isDisabled = false,
   isOpen,
+  isListShown = isOpen,
   hasSearch = false,
   onOpen,
   onClose,
@@ -96,7 +129,7 @@ export function useMultiCombobox({
   isGrid = false,
   rowHasAction,
   onActivateAction,
-}: UseMultiComboboxOptions): UseMultiComboboxResult {
+}: UseMultiComboboxInternalOptions): UseMultiComboboxResult {
   const [highlightedIndex, setHighlightedIndexState] = useState<number>(-1);
   const [highlightedCell, setHighlightedCell] =
     useState<MultiComboboxCell>('option');
@@ -157,6 +190,10 @@ export function useMultiCombobox({
     if (isDisabled) {
       return;
     }
+    if (isOpen && !isListShown) {
+      // The held open stays: a second press repeats it.
+      return;
+    }
     if (isOpen) {
       closeAndReset();
     } else {
@@ -168,6 +205,7 @@ export function useMultiCombobox({
   }, [
     isDisabled,
     isOpen,
+    isListShown,
     onOpen,
     closeAndReset,
     hasSearch,
@@ -213,6 +251,18 @@ export function useMultiCombobox({
       // Space stays the toggle: after a letter jumps to an option, Space picks
       // it, so Space never extends the typed prefix here.
       if (!hasSearch && e.key !== ' ' && typeahead.onKeyDown(e)) {
+        e.preventDefault();
+        return;
+      }
+
+      // While an open waits for its list, no option shows. The open keeps its
+      // opening option, and in a grid the inline arrows cannot reach an action.
+      if (
+        isOpen &&
+        !isListShown &&
+        (HIGHLIGHT_KEYS.has(e.key) ||
+          (isGrid && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')))
+      ) {
         e.preventDefault();
         return;
       }
@@ -283,6 +333,10 @@ export function useMultiCombobox({
             break;
           }
           e.preventDefault();
+          if (isOpen && !isListShown) {
+            // The held open stays, and nothing unseen is toggled.
+            break;
+          }
           if (isOpen && highlightedIndex >= 0) {
             if (isGrid && highlightedCell === 'action') {
               // The highlight is on the caller's control: fire it, and only
@@ -362,6 +416,7 @@ export function useMultiCombobox({
     [
       isDisabled,
       isOpen,
+      isListShown,
       onOpen,
       closeAndReset,
       selectableItems,

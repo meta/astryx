@@ -703,7 +703,7 @@ describe('shared infrastructure only the Vitest module graph reaches (spec:AST-0
     for (const file of [
       'internal/a11y-spec/src/index.ts',
       'internal/test-utils/src/setup.ts',
-      'eslint.config.js',
+      'eslint.config.mjs',
       'package.json',
       'vitest.config.ts',
       '.github/workflows/ci.yml',
