@@ -55,6 +55,7 @@ function panelPosition(menu: HTMLElement | null): {
   left?: string;
   top?: string;
   transform?: string;
+  insetInlineStart?: string;
 } {
   return JSON.parse(menu?.getAttribute('data-style') ?? '{}');
 }
@@ -339,7 +340,8 @@ describe('useLongPressHookUsage example', () => {
     );
     expect(belowLtr?.textContent).toContain('Opened by button at (16, 112)');
     expect(panelPosition(belowLtr)).toMatchObject({
-      left: 'clamp(0px, 16px, calc(100% - 180px))',
+      left: 'auto',
+      insetInlineStart: '16px',
       top: '112px',
       transform: 'none',
     });
@@ -348,12 +350,14 @@ describe('useLongPressHookUsage example', () => {
       overflowY: 'auto',
     });
 
-    const belowRtl = openFrom(
+    // A button too near the end edge: the panel's end edge meets the button's.
+    const belowEnd = openFrom(
       DOMRect.fromRect({x: 156, y: 64, width: 88, height: 40}),
     );
-    expect(belowRtl?.textContent).toContain('Opened by button at (64, 112)');
-    expect(panelPosition(belowRtl)).toMatchObject({
-      left: 'clamp(0px, 64px, calc(100% - 180px))',
+    expect(belowEnd?.textContent).toContain('Opened by button at (64, 112)');
+    expect(panelPosition(belowEnd)).toMatchObject({
+      left: 'auto',
+      insetInlineStart: '64px',
       top: '112px',
       transform: 'none',
     });
@@ -361,6 +365,60 @@ describe('useLongPressHookUsage example', () => {
       minHeight: 216,
       overflowY: 'auto',
     });
+
+    // Right to left: the button starts the row at the right edge, and the
+    // panel's start edge meets the button's start edge, measured from the
+    // right, so a scrollbar on the left cannot move it.
+    surface.style.direction = 'rtl';
+    const belowRtl = openFrom(
+      DOMRect.fromRect({x: 156, y: 64, width: 88, height: 40}),
+    );
+    expect(belowRtl?.textContent).toContain('Opened by button at (64, 112)');
+    expect(panelPosition(belowRtl)).toMatchObject({
+      left: 'auto',
+      insetInlineStart: '16px',
+      top: '112px',
+      transform: 'none',
+    });
+    expect(openSurfaceStyle).toMatchObject({
+      minHeight: 216,
+      overflowY: 'auto',
+    });
+  });
+
+  it('keeps a panel below the button when Actions is pressed again after the card scrolls', () => {
+    renderExample();
+    const surface = getSurface();
+    const actionsButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-expanded]',
+    );
+    if (!actionsButton) {
+      throw new Error('Expected the Actions button');
+    }
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 0, y: 0, width: 260, height: 216}),
+    );
+    vi.spyOn(actionsButton, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 16, y: 64, width: 88, height: 40}),
+    );
+    act(() => {
+      actionsButton.click();
+    });
+    // The card scrolls 30px to reach the panel's lower actions. The button
+    // moves up in the viewport by as much.
+    Object.defineProperty(surface, 'scrollTop', {
+      configurable: true,
+      value: 30,
+    });
+    vi.spyOn(actionsButton, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 16, y: 34, width: 88, height: 40}),
+    );
+    act(() => {
+      actionsButton.click();
+    });
+    const menu = container.querySelector<HTMLElement>('[role="group"]');
+    expect(menu?.textContent).toContain('Opened by button at (16, 112)');
+    expect(panelPosition(menu)).toMatchObject({top: '112px'});
   });
 
   it('provides an explicit Actions button fallback and returns focus when closed', () => {

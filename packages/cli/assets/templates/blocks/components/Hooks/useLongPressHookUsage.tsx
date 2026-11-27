@@ -25,8 +25,9 @@ interface MenuPosition {
   // The surface's height when the panel opened, so CSS can keep the panel in it.
   surfaceHeight: number;
   source: TriggerSource;
-  // The panel opens below the Actions button, so it never moves up over it.
-  isBelowButton: boolean;
+  // Set when the panel opens below the Actions button: its distance from the
+  // surface's inline-start edge. Such a panel never moves up over the button.
+  inlineStart: number | null;
 }
 
 const MENU_GAP = 8;
@@ -62,7 +63,13 @@ const styles = stylex.create({
     transform: `translateY(min(0px, max(-${y}px, calc(${surfaceHeight - y}px - 100%))))`,
     zIndex: 1,
   }),
-  panelBelowButton: {transform: 'none'},
+  // The inline-start edge places the panel, so a scrollbar on either side of
+  // the scrolling surface cannot move it away from the button.
+  panelBelowButton: (inlineStart: number) => ({
+    left: 'auto',
+    insetInlineStart: `${inlineStart}px`,
+    transform: 'none',
+  }),
 });
 
 export default function UseLongPressHookUsage() {
@@ -78,7 +85,7 @@ export default function UseLongPressHookUsage() {
   const openMenuAt = (
     point: {x: number; y: number},
     source: TriggerSource,
-    isBelowButton = false,
+    inlineStart: number | null = null,
   ) => {
     const surface = surfaceRef.current;
     if (!surface) {
@@ -92,7 +99,7 @@ export default function UseLongPressHookUsage() {
       y,
       surfaceHeight: Math.round(rect.height),
       source,
-      isBelowButton,
+      inlineStart,
     });
   };
 
@@ -157,11 +164,29 @@ export default function UseLongPressHookUsage() {
       openMenuAt({x: buttonRect.right + MENU_GAP, y: buttonRect.top}, 'button');
       return;
     }
+    const surface = surfaceRef.current;
+    const isRtl =
+      surface != null && getComputedStyle(surface).direction === 'rtl';
+    // Distances from the surface's inline-start edge.
+    const surfaceWidth = surfaceRight - surfaceLeft;
+    const buttonStart = isRtl
+      ? surfaceRight - buttonRect.right
+      : buttonRect.left - surfaceLeft;
+    const buttonEnd = isRtl
+      ? surfaceRight - buttonRect.left
+      : buttonRect.right - surfaceLeft;
+    const inlineStart = Math.max(
+      0,
+      buttonStart + MENU_WIDTH <= surfaceWidth
+        ? buttonStart
+        : buttonEnd - MENU_WIDTH,
+    );
     const x =
-      buttonRect.left + MENU_WIDTH <= surfaceRight
-        ? buttonRect.left
-        : buttonRect.right - MENU_WIDTH;
-    openMenuAt({x, y: buttonRect.bottom + MENU_GAP}, 'button', true);
+      surfaceLeft +
+      (isRtl ? surfaceWidth - inlineStart - MENU_WIDTH : inlineStart);
+    // The surface can already be scrolled to reach an open panel.
+    const y = buttonRect.bottom + MENU_GAP + (surface?.scrollTop ?? 0);
+    openMenuAt({x, y}, 'button', Math.round(inlineStart));
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
@@ -193,7 +218,7 @@ export default function UseLongPressHookUsage() {
         data-testid="long-press-surface"
         xstyle={[
           styles.surface,
-          menu?.isBelowButton && styles.surfaceScrollsPanel,
+          menu?.inlineStart != null && styles.surfaceScrollsPanel,
         ]}
         onTouchStart={handleTouchStart}
         onTouchMove={onTouchMove}
@@ -231,7 +256,8 @@ export default function UseLongPressHookUsage() {
             width={MENU_WIDTH}
             xstyle={[
               styles.panel(menu.x, menu.y, menu.surfaceHeight),
-              menu.isBelowButton && styles.panelBelowButton,
+              menu.inlineStart != null &&
+                styles.panelBelowButton(menu.inlineStart),
             ]}>
             <VStack gap={1}>
               <Text type="supporting" color="secondary">
