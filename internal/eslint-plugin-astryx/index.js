@@ -454,10 +454,7 @@ plugin.configs.strict = {
     '@astryx/no-unstable-merged-refs': 'error',
     '@astryx/require-base-props': 'error',
     '@astryx/require-ref-prop': 'error',
-    // Warn, not error, in strict too: known violations remain on main, so
-    // erroring here would land main red. Promote deliberately once the
-    // repository is clean.
-    '@astryx/require-baseprops-passthrough': 'warn',
+    '@astryx/require-baseprops-passthrough': 'error',
     '@astryx/copyright-header': 'error',
     '@astryx/no-hardcoded-i18n-string': 'error',
     '@astryx/i18n-key-format': 'error',

@@ -520,8 +520,8 @@ Scoped to public components (those with a `.displayName`). Opt out by omitting t
 the type, e.g. `Omit<BaseProps, 'className' | 'style'>` (as `VisuallyHidden` does),
 or mark an intentionally-unused binding with a leading underscore (`className: _className`).
 
-Currently `warn` in both tiers because known violations remain on main. Promote it
-deliberately only once the repository is clean.
+An error in strict mode and a warning in the recommended tier: the repository is
+clean, and strict lint keeps it that way.
 
 ## Usage
 
