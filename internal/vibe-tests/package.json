@@ -11,6 +11,7 @@
     "harness": "tsx src/cli.ts",
     "eval": "node eval/run.mjs",
     "eval:self-test": "node eval/run.mjs --self-test",
+    "eval:playwright-pins": "node eval/lib/grade-playwright-pins.mjs",
     "interactive": "tsx src/interactive.ts",
     "interactive:sample": "tsx src/interactive.ts --sample 5",
     "aggregate": "tsx src/universal-aggregate.ts",

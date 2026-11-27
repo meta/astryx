@@ -3,7 +3,8 @@
 /**
  * @file Grades one workspace: type check, build, then the task probe in Chromium.
  * @input a workspace, its arm, its task, and a shared browser
- * @output a pass or fail with the reason, probe steps, screenshots, axe counts
+ * @output a pass or fail with the reason, probe steps, screenshots, axe counts,
+ *   and the font requests whose abort Playwright refused as already answered
  * @position Called by run.mjs after each agent run, and by its self-test
  */
 
@@ -122,8 +123,48 @@ async function axeCounts(page) {
 /** A font host that accepts a connection but never answers must not stall the page load. */
 const FONT_TIMEOUT_MS = 3000;
 
-/** Blocks every request and socket except the local server and the allowed font hosts. */
-async function localOnly(context, origin) {
+/**
+ * Playwright refuses to abort a route that another handler already answered.
+ * That refusal is expected. Aborting a route whose page, context or browser has
+ * closed resolves without an error. grade-playwright-pins.mjs checks both in Chromium.
+ */
+export const ALREADY_HANDLED = 'Route is already handled';
+
+/** Whether `error` is Playwright's refusal to abort a route that is already answered. */
+export function isAlreadyHandled(error) {
+  return String(error?.message ?? error).replace(/^route\.abort: /, '').startsWith(ALREADY_HANDLED);
+}
+
+/** The first line of an error, at most 300 characters: a Playwright error can carry a call log with request headers. */
+export function firstLine(error) {
+  return String(error?.message ?? error).split('\n', 1)[0].slice(0, 300);
+}
+
+/** The address without its query: the grade keeps only where a request went. */
+function originAndPath(url) {
+  try {
+    const {origin, pathname} = new URL(url);
+    return `${origin}${pathname}`;
+  } catch {
+    return url.split(/[?#]/)[0];
+  }
+}
+
+/** One error that names every font request whose abort failed, with the first line of each error. */
+function abortFailure(failures) {
+  const noun = failures.length === 1 ? 'request' : 'requests';
+  const list = failures.map(({url, message}) => `${url}: ${message}`).join('; ');
+  return new Error(`Playwright could not abort ${failures.length} failed font ${noun}: ${list}`);
+}
+
+/**
+ * Blocks every request and socket except the local server and the allowed font
+ * hosts. A font request that fails is aborted. When Playwright refuses that
+ * abort because the route is already answered, `routeLog` records the address
+ * in `alreadyHandledAborts`. Any other refusal goes to `abortFailures`, which
+ * the probe then throws.
+ */
+async function localOnly(context, origin, routeLog) {
   await context.route('**/*', async route => {
     const url = route.request().url();
     if (url.startsWith(origin)) return route.continue();
@@ -131,7 +172,10 @@ async function localOnly(context, origin) {
     try {
       await route.fulfill({response: await route.fetch({timeout: FONT_TIMEOUT_MS})});
     } catch {
-      await route.abort().catch(() => {});
+      await route.abort().catch(error => {
+        if (isAlreadyHandled(error)) routeLog.alreadyHandledAborts.push(originAndPath(url));
+        else routeLog.abortFailures.push({url: originAndPath(url), message: firstLine(error)});
+      });
     }
   });
   const socketOrigin = origin.replace(/^http/, 'ws');
@@ -142,10 +186,10 @@ async function localOnly(context, origin) {
 }
 
 /** A context that reaches only allowed hosts and fails fast like the probe steps. */
-async function openContext(browser, options, origin) {
+async function openContext(browser, options, origin, routeLog) {
   const context = await browser.newContext(options);
   context.setDefaultTimeout(ACTION_TIMEOUT_MS);
-  await localOnly(context, origin);
+  await localOnly(context, origin, routeLog);
   return context;
 }
 
@@ -165,10 +209,11 @@ async function probeInBrowser({browser, url, task, outDir}) {
   const screenshots = {};
   const pageErrors = [];
   const consoleErrors = [];
+  const routeLog = {alreadyHandledAborts: [], abortFailures: []};
   let axe;
   let probe;
 
-  const desktop = await openContext(browser, VIEWPORTS.desktop, url);
+  const desktop = await openContext(browser, VIEWPORTS.desktop, url, routeLog);
   try {
     const page = await desktop.newPage();
     watchErrors(page, url, pageErrors, consoleErrors);
@@ -185,7 +230,7 @@ async function probeInBrowser({browser, url, task, outDir}) {
     await desktop.close();
   }
 
-  const mobile = await openContext(browser, VIEWPORTS.mobile, url);
+  const mobile = await openContext(browser, VIEWPORTS.mobile, url, routeLog);
   try {
     const phone = await mobile.newPage();
     watchErrors(phone, url, pageErrors, consoleErrors);
@@ -198,7 +243,9 @@ async function probeInBrowser({browser, url, task, outDir}) {
     await mobile.close();
   }
 
-  return {probe, axe, pageErrors, consoleErrors, screenshots};
+  // A route handler's error reaches no caller, so the probe throws one error for all of them here.
+  if (routeLog.abortFailures.length > 0) throw abortFailure(routeLog.abortFailures);
+  return {probe, axe, pageErrors, consoleErrors, screenshots, alreadyHandledAborts: routeLog.alreadyHandledAborts};
 }
 
 /**
