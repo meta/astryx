@@ -17,12 +17,12 @@ import {
   type TableProps,
 } from '@astryxdesign/core/Table';
 import {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
-import {isRtlElement} from '@astryxdesign/core/internal/touch';
 import {mergeProps} from '@astryxdesign/core/utils';
 import {InfinityScrollbar} from './InfinityScrollbar';
 import {
   endPosition,
   jumpToItem,
+  logicalPosition,
   scrollFraction,
   type ScrollGeometry,
 } from './scrollWindow';
@@ -179,17 +179,12 @@ export function useTableInfinityVirtualization<
   const rowSize = thumbSize(axes.row);
   const columnSize = thumbSize(axes.column);
   const paint: Parameters<typeof useTableInfinityScroll>[2] = useCallback(
-    (position, range) => {
+    (position, range, sign) => {
       const node = table.current;
       const body = node?.tBodies[0];
       if (!node || !body) {
         return;
       }
-      const sign = (
-        direction == null ? isRtlElement(node) : direction === 'rtl'
-      )
-        ? -1
-        : 1;
       const dx =
         (position.column.index - range.column.start) * columnWidth +
         position.column.offset;
@@ -211,18 +206,25 @@ export function useTableInfinityVirtualization<
             '--infinity-thumb-offset',
             `${axis === 'column' ? sign * offset : offset}px`,
           );
-          const value = String(position[axis].index);
+          const value = String(logicalPosition(geometry, position[axis]));
           if (thumb.getAttribute('aria-valuenow') !== value) {
             thumb.setAttribute('aria-valuenow', value);
           }
         }
       }
     },
-    [axes, columnSize, columnWidth, direction, rowHeight, rowSize],
+    [axes, columnSize, columnWidth, rowHeight, rowSize],
   );
 
-  const {range, attach, navigate, navigateAxis, moveAxis, readPosition} =
-    useTableInfinityScroll(axes, direction, paint);
+  const {
+    range,
+    attach,
+    navigate,
+    navigateAxis,
+    moveAxis,
+    readPosition,
+    readInlineSign,
+  } = useTableInfinityScroll(axes, direction, paint);
   const data = useMemo(
     () =>
       Array.from({length: range.row.end - range.row.start}, (_, i) =>
@@ -304,7 +306,7 @@ export function useTableInfinityVirtualization<
               <InfinityScrollbar
                 key={axis}
                 orientation={vertical ? 'vertical' : 'horizontal'}
-                direction={direction}
+                readInlineSign={readInlineSign}
                 geometry={axes[axis]}
                 controls={id}
                 label={vertical ? rowScrollbarLabel : columnScrollbarLabel}
@@ -336,6 +338,7 @@ export function useTableInfinityVirtualization<
       navigateAxis,
       range.column.start,
       readPosition,
+      readInlineSign,
       rowHeight,
       rowScrollbarLabel,
       rowSize,

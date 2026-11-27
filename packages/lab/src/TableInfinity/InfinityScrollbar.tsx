@@ -15,11 +15,11 @@ import {
   radiusVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {isRtlElement} from '@astryxdesign/core/internal/touch';
 import {focusOutlineStyles} from '@astryxdesign/core/utils';
 import {
   endPosition,
   INITIAL_POSITION,
+  logicalPosition,
   positionAtFraction,
   type ScrollGeometry,
   type ScrollPosition,
@@ -71,7 +71,7 @@ interface InfinityScrollbarProps {
   thumbHeight: number;
   thumbRef: RefObject<HTMLDivElement | null>;
   orientation?: 'vertical' | 'horizontal';
-  direction?: 'ltr' | 'rtl';
+  readInlineSign: () => number;
   navigate: (position: ScrollPosition) => boolean;
   move: (delta: number) => boolean;
   readFraction: () => number;
@@ -84,7 +84,7 @@ export function InfinityScrollbar({
   thumbHeight,
   thumbRef,
   orientation = 'vertical',
-  direction,
+  readInlineSign,
   navigate,
   move,
   readFraction,
@@ -97,10 +97,7 @@ export function InfinityScrollbar({
   } | null>(null);
   const {viewportHeight: extent, itemHeight: pitch} = geometry;
   const vertical = orientation === 'vertical';
-  const inlineSign = (node: HTMLDivElement) =>
-    !vertical && (direction == null ? isRtlElement(node) : direction === 'rtl')
-      ? -1
-      : 1;
+  const axisSign = () => (vertical ? 1 : readInlineSign());
   const travel = extent - thumbHeight;
   return (
     <div
@@ -115,7 +112,7 @@ export function InfinityScrollbar({
         const rect = event.currentTarget.getBoundingClientRect();
         const local = vertical
           ? event.clientY - rect.top
-          : inlineSign(event.currentTarget) === 1
+          : axisSign() === 1
             ? event.clientX - rect.left
             : rect.right - event.clientX;
         navigate(positionAtFraction(geometry, local / extent));
@@ -135,7 +132,7 @@ export function InfinityScrollbar({
         aria-label={label}
         aria-controls={controls}
         aria-valuemin={0}
-        aria-valuemax={endPosition(geometry).index}
+        aria-valuemax={logicalPosition(geometry, endPosition(geometry))}
         aria-valuenow={0}
         onKeyDown={event => {
           if (
@@ -160,10 +157,10 @@ export function InfinityScrollbar({
               move(-extent);
               break;
             case vertical ? 'ArrowDown' : 'ArrowRight':
-              move(pitch * inlineSign(event.currentTarget));
+              move(pitch * axisSign());
               break;
             case vertical ? 'ArrowUp' : 'ArrowLeft':
-              move(-pitch * inlineSign(event.currentTarget));
+              move(-pitch * axisSign());
               break;
             default:
               return;
@@ -181,7 +178,7 @@ export function InfinityScrollbar({
             pointer: event.pointerId,
             start: vertical ? event.clientY : event.clientX,
             fraction: readFraction(),
-            sign: inlineSign(event.currentTarget),
+            sign: axisSign(),
           };
         }}
         onPointerMove={event => {
