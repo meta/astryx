@@ -871,7 +871,6 @@
     "packages/cli/clients/cli/commands/build.exit-codes-doc.test.mjs": 0.7,
     "packages/cli/clients/cli/commands/build.playbook.test.mjs": 0.1,
     "packages/cli/clients/cli/commands/build.text-fields.test.mjs": 11.8,
-    "packages/cli/clients/cli/commands/cli-postinstall.test.mjs": 0.1,
     "packages/cli/clients/cli/commands/command-tokens.text.test.mjs": 3.3,
     "packages/cli/clients/cli/commands/component-batch.test.mjs": 6,
     "packages/cli/clients/cli/commands/component-ownership.test.mjs": 0.7,

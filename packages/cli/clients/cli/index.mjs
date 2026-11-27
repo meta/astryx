@@ -925,7 +925,7 @@ export async function createProgram({argv} = {}) {
   );
 
   /**
-   * Enforcement layer 3 — setup nudge. If this project hasn't run `astryx init`
+   * Setup nudge. If this project hasn't run `astryx init`
    * yet (no Astryx marker in any agent-doc file between the project and its
    * repository root — see isAstryxPromptInReach), remind the user/agent that
    * setup is missing.
@@ -941,8 +941,7 @@ export async function createProgram({argv} = {}) {
    * Suppressed in --json: that is machine output with a strict clean stdout+stderr
    * contract (json-shim.test: "error envelopes have empty stderr"), and --json
    * consumers parse stdout, not stderr — a stderr nudge would not reach them anyway.
-   * The core/cli postinstall layers already nudge at install time regardless of
-   * --json; a machine-readable nudge could later be an envelope field. Also skipped
+   * A machine-readable nudge could later be an envelope field. Also skipped
    * for the installer commands themselves, outside a project (no package.json,
    * or one that neither installs nor declares Astryx), and inside the CLI's own
    * source checkout when it runs from there.
@@ -985,7 +984,7 @@ export async function createProgram({argv} = {}) {
       } catch {
         return;
       }
-      // Same wording as the core/cli postinstall nudges. getCliInvocation()
+      // One wording, from setupNudge. getCliInvocation()
       // renders the correct form for THIS project — an integration's cliCommand,
       // scoped `npx @astryxdesign/cli` one-off, or `<pm> astryx` when installed —
       // never npx with the unscoped name, which fetches an unrelated package.

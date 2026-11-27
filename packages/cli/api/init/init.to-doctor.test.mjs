@@ -14,7 +14,6 @@ import {afterEach, beforeEach, expect, it, vi} from 'vitest';
 import {init} from './init.mjs';
 import {runChecks} from '../doctor/doctor.mjs';
 import {isAstryxInitialized} from '../../foundation/agent-docs/agent-doc-state.mjs';
-import * as coreLeaf from '../../../core/scripts/agent-doc-state.mjs';
 
 let home = '';
 let project = '';
@@ -79,11 +78,10 @@ it('the setup check counts the project skill', async () => {
 });
 
 it.each(['./team-skills', '.', './'])(
-  'the setup check counts the project skill in the saved project folder %s, and Core\'s copy agrees',
+  'the setup check counts the project skill in the saved project folder %s',
   async to => {
     await init({to}, {cwd: project});
     expect(isAstryxInitialized(project)).toBe(true);
-    expect(coreLeaf.isAstryxInitialized(project)).toBe(true);
   },
 );
 

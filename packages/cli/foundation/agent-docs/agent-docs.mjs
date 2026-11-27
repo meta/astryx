@@ -78,10 +78,10 @@ import {
 // The agent-doc locations, markers, and the setup-state predicates
 // (discoverAgentDocs, isAstryxInitialized, isAstryxPromptInReach) are the ONE
 // canonical contract. They live in the dependency-free leaf
-// ./agent-doc-state.mjs so the postinstall nudge (enforcement layer 2) can load
-// them safely at install time. Re-exported here so existing importers
-// (init/upgrade commands, the layer-3 nudge in clients/cli/index.mjs, tests)
-// keep their `from './agent-docs.mjs'` paths.
+// ./agent-doc-state.mjs, which loads without the rest of the CLI's module
+// graph. Re-exported here so existing importers (init/upgrade commands, the
+// setup nudge in clients/cli/index.mjs, tests) keep their
+// `from './agent-docs.mjs'` paths.
 export {discoverAgentDocs, isAstryxInitialized, isAstryxPromptInReach};
 
 // The folder the docs go to lives in ./agent-docs-target.mjs, with node

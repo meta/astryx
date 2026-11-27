@@ -165,9 +165,9 @@ validate` does not check `base`.
   | `icons.appModule`          | the source that registers the project's icon sets with the base    |
   | `setup.guide`              | the steps that make an app use the base: imports, root wrapper     |
 
-  FR4 gap: Core's `setup.guide` is written into `init`, `build`,
-  `postinstall`, and the agent text instead of coming from one step, so in a
-  run on another base they write Core's web setup.
+  FR4 gap: Core's `setup.guide` is written into `init`, `build`, the hidden
+  `postinstall` command, and the agent text instead of coming from one step, so
+  in a run on another base they write Core's web setup.
 
 - **FR5 — A command works on any base unless it declares a step.** A command,
   option, or argument value that declares nothing works on every base. One

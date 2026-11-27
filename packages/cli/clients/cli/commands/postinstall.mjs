@@ -1,10 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file postinstall command — the hidden `astryx postinstall` hook.
+ * @file postinstall command — the hidden `astryx postinstall` command.
  *
- * Prints the welcome box (lib/welcome-box.mjs). Hidden from help and the
- * manifest; it looks nothing up and does not support --json.
+ * Prints the setup steps (lib/welcome-box.mjs) on demand; no package runs it
+ * at install. Hidden from help and the manifest; it looks nothing up and does
+ * not support --json.
  *
  * The command surface comes from the colocated CommandDoc via `defineCommand`.
  */
