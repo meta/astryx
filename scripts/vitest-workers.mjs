@@ -23,25 +23,24 @@ export const MEMORY_PER_WORKER = 2 * 1024 ** 3;
 const WORKERS_FLAG = /^--max-?workers(=|$)/i;
 
 /**
- * A watch flag, which keeps `vitest run` watching: `--watch` with any value
- * but `false`, or a short-flag group with `w` in it (Vitest reads `-uw` as
- * `-u -w`).
+ * A word that may ask for watch mode, in any spelling: `--watch` or
+ * `--no-watch` with or without a value, or a short-flag group with `w` in it
+ * (`-w`, `-uw`, `-w=true`). A command line with one is not read as a single
+ * run, whatever the value says.
  */
-const WATCH_FLAG = /^(--watch(=(?!false$).*)?|-[a-zA-Z]*w[a-zA-Z]*)$/;
+const WATCH_WORD = /^(--(no-)?watch(=.*)?|-[a-zA-Z]*w[a-zA-Z]*(=.*)?)$/;
 
 /**
- * Whether the command line makes a single run: `--run` anywhere, `list` as
- * the first word after the Vitest binary, or `run` there without a watch
- * flag (Vitest keeps `vitest run --watch` watching). The same words as a
- * file filter or a test-name pattern, or after an option, do not count.
- * Reading a single run as a watch only lowers the count.
+ * Whether the command line is surely a single run: `run` or `list` as the
+ * first word after the Vitest binary, or `--run` anywhere, and no word that
+ * may ask for watch mode. Anything else, a watch or a command line this
+ * cannot read, leaves Vitest its own count.
  * @param {string[]} argv
  * @returns {boolean}
  */
-function singleRun(argv) {
-  if (argv.includes('--run')) return true;
-  if (argv[2] === 'list') return true;
-  return argv[2] === 'run' && !argv.some(arg => WATCH_FLAG.test(arg));
+function surelySingleRun(argv) {
+  if (argv.some(arg => WATCH_WORD.test(arg))) return false;
+  return argv[2] === 'run' || argv[2] === 'list' || argv.includes('--run');
 }
 
 /**
@@ -62,11 +61,13 @@ function usableMemory() {
  *   carry this value instead.
  * - A CI runner is a machine the run has to itself, so it keeps Vitest's
  *   default (one less than the cores).
- * - Elsewhere the machine is shared, and a Node test file can start CLI
- *   processes of its own, so Vitest's default loads a many-core machine far
- *   past its cores: the run starts Vitest's default (one less than the
- *   cores, or half of them in watch mode), but at most 8 and at most one per
- *   2 GiB of memory, and at least one.
+ * - A watch, or a command line that is not surely a single run, keeps
+ *   Vitest's default too: a watch is interactive, and an unknown command
+ *   line gets no count rather than a wrong one.
+ * - A single run on a shared machine is where a Node test file's own CLI
+ *   processes load a many-core machine far past its cores under Vitest's
+ *   default (one less than the cores): it starts one less than the cores,
+ *   but at most 8 and at most one per 2 GiB of memory, and at least one.
  * @param {{cores?: number, memory?: number, env?: Record<string, string | undefined>, argv?: string[]}} [machine]
  * @returns {number | undefined}
  */
@@ -78,8 +79,8 @@ export function testWorkers({
 } = {}) {
   if (argv.some(arg => WORKERS_FLAG.test(arg))) return undefined;
   if (isCi(env)) return undefined;
-  const watch = !singleRun(argv);
-  const byCores = watch ? Math.floor(cores / 2) : cores - 1;
+  if (!surelySingleRun(argv)) return undefined;
+  const byCores = cores - 1;
   const byMemory = Math.floor(memory / MEMORY_PER_WORKER);
   return Math.max(1, Math.min(byCores, MOST_WORKERS, byMemory));
 }

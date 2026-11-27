@@ -2,9 +2,9 @@
 
 /**
  * @file The Vitest worker count on a machine (testWorkers): a command-line
- *   count and a CI runner keep Vitest's own count, a shared many-core machine
- *   runs at most 8, and a shared machine with little memory runs one worker
- *   per 2 GiB.
+ *   count, a CI runner, a watch and a command line it cannot read keep
+ *   Vitest's own count; a single run on a shared many-core machine runs at
+ *   most 8, and one worker per 2 GiB when memory is short.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -57,57 +57,54 @@ describe('testWorkers', () => {
       ).toBeUndefined();
   });
 
-  it("keeps a watch run at or below Vitest's watch default, half the cores", () => {
-    const watch = (/** @type {string[]} */ ...words) => ({
-      env: {},
-      argv: ['node', 'vitest', ...words],
-    });
-    expect(testWorkers({cores: 10, memory: 64 * GiB, ...watch()})).toBe(5);
-    expect(testWorkers({cores: 10, memory: 64 * GiB, ...watch('watch')})).toBe(
-      5,
-    );
-    expect(
-      testWorkers({cores: 8, memory: 64 * GiB, ...watch('--coverage')}),
-    ).toBe(4);
-    expect(testWorkers({cores: 40, memory: 256 * GiB, ...watch()})).toBe(
-      MOST_WORKERS,
-    );
-    // `vitest run --watch` keeps watching.
-    expect(
-      testWorkers({cores: 10, memory: 64 * GiB, ...watch('run', '--watch')}),
-    ).toBe(5);
-    expect(
-      testWorkers({cores: 10, memory: 64 * GiB, ...watch('run', '-w')}),
-    ).toBe(5);
-    expect(
-      testWorkers({cores: 10, memory: 64 * GiB, ...watch('run', '-uw')}),
-    ).toBe(5);
-    expect(
-      testWorkers({cores: 10, memory: 64 * GiB, ...watch('run', '--watch=1')}),
-    ).toBe(5);
-    expect(
-      testWorkers({
-        cores: 10,
-        memory: 64 * GiB,
-        ...watch('run', '--watch=false'),
-      }),
-    ).toBe(MOST_WORKERS);
-    expect(
-      testWorkers({cores: 10, memory: 64 * GiB, ...watch('run', '-u')}),
-    ).toBe(MOST_WORKERS);
-    // `run` or `list` as a file filter or a test-name pattern is still a watch.
-    expect(
-      testWorkers({cores: 10, memory: 64 * GiB, ...watch('watch', 'list')}),
-    ).toBe(5);
-    expect(
-      testWorkers({cores: 10, memory: 64 * GiB, ...watch('-t', 'run')}),
-    ).toBe(5);
-    expect(testWorkers({cores: 10, memory: 64 * GiB, ...watch('list')})).toBe(
-      MOST_WORKERS,
-    );
-    expect(testWorkers({cores: 10, memory: 64 * GiB, ...watch('--run')})).toBe(
-      MOST_WORKERS,
-    );
+  it('caps a run that is surely a single run', () => {
+    for (const words of [
+      ['run'],
+      ['list'],
+      ['--run'],
+      ['run', '-u'],
+      ['run', 'packages/cli'],
+      ['run', '--project', 'node'],
+    ])
+      expect(
+        testWorkers({
+          cores: 10,
+          memory: 64 * GiB,
+          env: {},
+          argv: ['node', 'vitest', ...words],
+        }),
+        words.join(' '),
+      ).toBe(MOST_WORKERS);
+  });
+
+  it('leaves a watch, or a command line it cannot read, to Vitest', () => {
+    for (const words of [
+      [],
+      ['watch'],
+      ['--coverage'],
+      ['run', '--watch'],
+      ['run', '-w'],
+      ['run', '-uw'],
+      ['run', '-w=true'],
+      ['run', '--watch=1'],
+      ['run', '--watch', '--run'],
+      // A value that turns watch off still leaves the run to Vitest.
+      ['run', '--watch=false'],
+      ['run', '--no-watch'],
+      // `run` or `list` as a filter or pattern, or after an option.
+      ['watch', 'list'],
+      ['-t', 'run'],
+      ['--project', 'ui', 'run'],
+    ])
+      expect(
+        testWorkers({
+          cores: 10,
+          memory: 64 * GiB,
+          env: {},
+          argv: ['node', 'vitest', ...words],
+        }),
+        words.join(' ') || '(no words)',
+      ).toBeUndefined();
   });
 
   it('keeps 3 workers on a shared 4-core machine', () => {
