@@ -350,9 +350,9 @@
     "component": "core/CommandPaletteItem",
     "reason": "CommandPaletteItem owns one inline flex option row with logical inline padding, logical start text alignment, and direction-neutral highlight, selection, disabled, and press paint. Its supported content is non-interactive text, icons, descriptions, and shortcut hints; it owns no directional glyph, side placement, reordering, horizontal scroll, drag, overlay, or horizontal keyboard behavior. The dedicated state fixture exercises every component-owned visual state without adding an RTL-specific dimension.",
     "evidence": {
-      "apps/storybook/stories/CommandPaletteItem.stories.tsx": "sha256:9d5c2229f89da3ac53347078560b9ad57cfff7b20a3c71ad3fab2c338161dbf1",
-      "packages/core/src/CommandPalette/CommandPaletteItem.tsx": "sha256:aee0fcaa7b9829e04317f1cab9708c045a1da0d9180e490d64c6a576c39d8f42",
-      "packages/core/src/CommandPalette/index.ts": "sha256:ba38845bbde6d73172df2c0791ca513c9f2b7baab17440e066e783ff6cfc7558"
+      "apps/storybook/stories/CommandPaletteItem.stories.tsx": "sha256:497bf985e545eb7350b1100d9d527fedeb96a35d4370195a52d44bea91135163",
+      "packages/core/src/CommandPalette/CommandPaletteItem.tsx": "sha256:20b679b944f8440b05fe052b44a1ae359e4ec1ac9a5321e5a7697c5c011b1609",
+      "packages/core/src/CommandPalette/index.ts": "sha256:aa71a575a47d1480a28f7943176aad5d8c3b2ac88a121e756a7de1b17918309e"
     }
   },
   {
@@ -361,7 +361,7 @@
     "evidence": {
       "apps/storybook/stories/CommandPaletteGroup.stories.tsx": "sha256:82d4d68c5cfd0b4f2d027fb62f2b381a9ff9669b72ccf195c1613e9a63e2cb6c",
       "packages/core/src/CommandPalette/CommandPaletteGroup.tsx": "sha256:7c9a33733d68a42ea57a928a4d6ed20caa2562f53cb2340fe8122071bcc95924",
-      "packages/core/src/CommandPalette/index.ts": "sha256:ba38845bbde6d73172df2c0791ca513c9f2b7baab17440e066e783ff6cfc7558"
+      "packages/core/src/CommandPalette/index.ts": "sha256:aa71a575a47d1480a28f7943176aad5d8c3b2ac88a121e756a7de1b17918309e"
     }
   },
   {
@@ -369,8 +369,8 @@
     "reason": "CommandPaletteEmpty owns one message container that centers caller content on both axes with symmetric logical inline padding, block padding, and centered text, and wraps an unbroken token inside the host. It renders no directional glyph, physical inline positioning, reordered controls, horizontal scrolling or dragging, side-placed overlay, or horizontal keyboard behavior; caller text follows the document direction. The content fixture and the CommandPalette audit matrix exercise translated, long, standalone, and in-palette content in RTL without adding a component-owned RTL dimension.",
     "evidence": {
       "apps/storybook/stories/CommandPaletteEmpty.stories.tsx": "sha256:35e5e5da27d4440fec7f45d62c9db503210f37c042afd01fd17365ca59c6b2e7",
-      "packages/core/src/CommandPalette/CommandPaletteEmpty.tsx": "sha256:721c495b144ca2e0ccc1f869a44d8be1350d880d17f9a08eb025e7941421bc0e",
-      "packages/core/src/CommandPalette/index.ts": "sha256:ba38845bbde6d73172df2c0791ca513c9f2b7baab17440e066e783ff6cfc7558"
+      "packages/core/src/CommandPalette/CommandPaletteEmpty.tsx": "sha256:312b85a8aae14b1273e61c1d366601a197dac04b7d5759f5bf2e1d49b61d5afb",
+      "packages/core/src/CommandPalette/index.ts": "sha256:aa71a575a47d1480a28f7943176aad5d8c3b2ac88a121e756a7de1b17918309e"
     }
   },
   {
@@ -378,8 +378,8 @@
     "reason": "CommandPaletteList owns one vertically stacked results container that scrolls on the block axis, with symmetric padding and block-axis gaps. It renders no directional glyph, physical inline positioning, reordered controls, horizontal scrolling or dragging, side-placed overlay, or horizontal keyboard behavior; item and group content follow normal document direction, and CommandPalette owns arrow-key navigation. The dedicated fixtures exercise the standalone listbox and the scrolling palette composition without adding a component-owned RTL dimension.",
     "evidence": {
       "apps/storybook/stories/CommandPaletteList.stories.tsx": "sha256:5311530b408d5888acd198e24672c351b6249f1eb950c33de3922c45457f68fc",
-      "packages/core/src/CommandPalette/CommandPaletteList.tsx": "sha256:bf8c2633c96f30f50863aec083dcaea689c00c4107c55ab58aa793d87a1ba65d",
-      "packages/core/src/CommandPalette/index.ts": "sha256:ba38845bbde6d73172df2c0791ca513c9f2b7baab17440e066e783ff6cfc7558"
+      "packages/core/src/CommandPalette/CommandPaletteList.tsx": "sha256:45eaa561ab73c87779511931421101d5fe707c1e34f9e0790c12140e12778297",
+      "packages/core/src/CommandPalette/index.ts": "sha256:aa71a575a47d1480a28f7943176aad5d8c3b2ac88a121e756a7de1b17918309e"
     }
   },
   {
