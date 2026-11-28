@@ -380,67 +380,98 @@ const componentsOnlyTheme = defineTheme({
   components: {card: {base: {padding: '4px'}}},
 });
 
+// A nested Theme draws no box of its own, so each block sits on its theme's
+// surface, as content in an app's themed region does.
+function Pane({children}: {children: React.ReactNode}) {
+  return (
+    <div
+      style={{
+        background: 'var(--color-background-surface)',
+        padding: 12,
+        borderRadius: 8,
+      }}>
+      {children}
+    </div>
+  );
+}
+
 const nestedCode = 'const greeting = "hello";\nreturn greeting;';
 
 export const NestedThemes: StoryObj = {
   render: () => (
     <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
-      <CodeBlock code={nestedCode} language="typescript" title="Page theme" />
+      <Pane>
+        <CodeBlock code={nestedCode} language="typescript" title="Page theme" />
+      </Pane>
       <Theme theme={accentPairTheme} mode="dark">
-        <CodeBlock
-          code={nestedCode}
-          language="typescript"
-          title="Nested dark theme with its own accent pair"
-        />
-      </Theme>
-      <Theme theme={accentTheme}>
-        <CodeBlock
-          code={nestedCode}
-          language="typescript"
-          title="Nested theme with its own accent"
-        />
-      </Theme>
-      <Theme theme={darkDevTheme} mode="dark">
-        <CodeBlock
-          code={nestedCode}
-          language="typescript"
-          title="Nested theme with its own syntax palette"
-        />
-      </Theme>
-      <Theme theme={darkDevTheme} mode="dark">
-        <Theme theme={accentTheme}>
+        <Pane>
           <CodeBlock
             code={nestedCode}
             language="typescript"
-            title="Color-setting theme inside dark-dev"
+            title="Nested dark theme with its own accent pair"
           />
+        </Pane>
+      </Theme>
+      <Theme theme={accentTheme}>
+        <Pane>
+          <CodeBlock
+            code={nestedCode}
+            language="typescript"
+            title="Nested theme with its own accent"
+          />
+        </Pane>
+      </Theme>
+      <Theme theme={darkDevTheme} mode="dark">
+        <Pane>
+          <CodeBlock
+            code={nestedCode}
+            language="typescript"
+            title="Nested theme with its own syntax palette"
+          />
+        </Pane>
+      </Theme>
+      <Theme theme={darkDevTheme} mode="dark">
+        <Theme theme={accentTheme}>
+          <Pane>
+            <CodeBlock
+              code={nestedCode}
+              language="typescript"
+              title="Color-setting theme inside dark-dev"
+            />
+          </Pane>
         </Theme>
       </Theme>
       <Theme theme={darkDevTheme} mode="dark">
         <Theme theme={componentsOnlyTheme}>
-          <CodeBlock
-            code={nestedCode}
-            language="typescript"
-            title="Components-only theme inside dark-dev"
-          />
+          <Pane>
+            <CodeBlock
+              code={nestedCode}
+              language="typescript"
+              title="Components-only theme inside dark-dev"
+            />
+          </Pane>
         </Theme>
       </Theme>
       <Theme theme={accentTheme}>
         <SyntaxThemeProvider theme={nord}>
-          <CodeBlock
-            code={nestedCode}
-            language="typescript"
-            title="SyntaxTheme inside a theme"
-          />
+          <Pane>
+            <CodeBlock
+              code={nestedCode}
+              language="typescript"
+              title="SyntaxTheme inside a theme"
+            />
+          </Pane>
         </SyntaxThemeProvider>
       </Theme>
       <SyntaxThemeProvider theme={nord}>
         <Theme theme={accentTheme}>
-          <CodeBlock
-            code={nestedCode}
-            language="typescript"
-            title="Theme inside a SyntaxTheme"
-          />
+          <Pane>
+            <CodeBlock
+              code={nestedCode}
+              language="typescript"
+              title="Theme inside a SyntaxTheme"
+            />
+          </Pane>
         </Theme>
       </SyntaxThemeProvider>
     </div>

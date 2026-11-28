@@ -139,6 +139,60 @@ async function colorIn(
   );
 }
 
+/**
+ * The contrast of the code's plain text (the syntax variable color) on the
+ * block's background, with each translucent layer painted over the one below.
+ */
+async function codeTextContrast(page: Page, title: string): Promise<number> {
+  return page.evaluate(found => {
+    const block = Array.from(
+      document.querySelectorAll('.astryx-code-block'),
+    ).find(element => element.textContent?.includes(found));
+    const code = block?.querySelector('code');
+    if (code == null) {
+      throw new Error(`No code block titled ${found}`);
+    }
+    const rgba = (value: string) => {
+      const [r, g, b, a = 1] = (value.match(/[\d.]+/g) ?? []).map(Number);
+      return {r, g, b, a};
+    };
+    const layers = [];
+    for (let node: Element | null = code; node; node = node.parentElement) {
+      const layer = rgba(getComputedStyle(node).backgroundColor);
+      if (layer.a > 0) {
+        layers.push(layer);
+        if (layer.a === 1) {
+          break;
+        }
+      }
+    }
+    let base = {r: 255, g: 255, b: 255};
+    for (const layer of layers.reverse()) {
+      base = {
+        r: layer.r * layer.a + base.r * (1 - layer.a),
+        g: layer.g * layer.a + base.g * (1 - layer.a),
+        b: layer.b * layer.a + base.b * (1 - layer.a),
+      };
+    }
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--color-syntax-variable)';
+    code.append(probe);
+    const text = rgba(getComputedStyle(probe).color);
+    probe.remove();
+    const luminance = ({r, g, b}: {r: number; g: number; b: number}) => {
+      const channel = (value: number) => {
+        const c = value / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+    };
+    const [light, dark] = [luminance(text), luminance(base)].sort(
+      (x, y) => y - x,
+    );
+    return (light + 0.05) / (dark + 0.05);
+  }, title);
+}
+
 const KEYWORD = '--color-syntax-keyword';
 const DRACULA_KEYWORD = 'rgb(255, 121, 198)';
 const NORD_KEYWORD = 'rgb(129, 161, 193)';
@@ -186,6 +240,18 @@ for (const lowered of [false, true]) {
     expect(
       await colorIn(page, 'Color-setting theme inside dark-dev', KEYWORD),
     ).toBe('rgb(200, 0, 100)');
+  });
+
+  test(`in ${build}, code in a nested dark theme keeps its plain text at 4.5:1 on a light page`, async ({
+    page,
+  }) => {
+    await openStory(page, lowered);
+    expect(
+      await codeTextContrast(
+        page,
+        'Nested dark theme with its own accent pair',
+      ),
+    ).toBeGreaterThanOrEqual(4.5);
   });
 
   test(`in ${build}, a components-only theme keeps the syntax colors of the theme around it`, async ({
