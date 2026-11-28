@@ -85,17 +85,21 @@ function isDistinct(a: Rgb, b: Rgb): boolean {
 }
 
 /**
- * How many pixels in the row's leading edge band are not the row's own
- * background. The background is sampled at the row's bottom-right corner,
- * which holds neither text nor the panel.
+ * How many pixels in the row's leading edge band are neither the row's own
+ * background nor its surface. The background is sampled at the row's
+ * bottom-right corner, which holds neither text nor the panel. The surface is
+ * sampled at the middle of the row's trailing edge. A drag keeps the row's
+ * pressed tint, and the tint's rounded corners leave the corner sample bare.
  */
 function paintedAtEdge(buffer: Buffer): number {
   const shot = decode(buffer);
   const ground = pixel(shot, shot.width - 2, shot.height - 2);
+  const surface = pixel(shot, shot.width - 2, Math.floor(shot.height / 2));
   let count = 0;
   for (let y = 0; y < shot.height; y += 1) {
     for (let x = 0; x < Math.min(EDGE_BAND_PX, shot.width); x += 1) {
-      if (isDistinct(pixel(shot, x, y), ground)) {
+      const sample = pixel(shot, x, y);
+      if (isDistinct(sample, ground) && isDistinct(sample, surface)) {
         count += 1;
       }
     }
