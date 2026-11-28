@@ -24,7 +24,7 @@ export const docs = {
     {name: 'label', type: 'string', description: 'Accessibility label.', required: true},
     {name: 'onClick', type: '(event: MouseEvent) => void', description: 'Click handler: fires on card surface only.'},
     {name: 'href', type: 'string', description: 'Navigation URL. Plain, new-tab, Cmd/Ctrl-click, and middle-click activation all follow the shared navigation rule described on the Link `href` prop.'},
-    {name: 'target', type: 'string', description: 'Link target.', default: "'_self'"},
+    {name: 'target', type: 'string', description: 'Link target. "_blank" also drops the referrer and the opener.', default: "'_self'"},
     {name: 'isDisabled', type: 'boolean', description: 'Disables the card and removes a link destination; the card keeps its tab stop and is announced as disabled.', default: 'false'},
     {name: 'children', type: 'ReactNode', description: 'Card content.'},
     {name: 'padding', type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10', description: 'Inner padding.', default: '4'},
