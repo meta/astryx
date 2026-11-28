@@ -61,8 +61,8 @@ const brokenNotes = r =>
 /**
  * Skip a case that needs pictures when this machine's browser could not
  * take one (no browser, or one that cannot start here), and say why. Where
- * a picture was taken, the case runs. On CI it never skips: a picture CI
- * cannot take fails the case.
+ * a picture was taken, the case runs. On CI it never skips: when a case's
+ * first picture command takes no picture there, the case fails.
  * @param {any} r a result asked for with `png`
  * @param {import('vitest').TestContext} ctx
  */
