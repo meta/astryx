@@ -45,7 +45,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Put file-level actions such as a "Viewed" checkbox in headerEnd, and drive isCollapsed from the same state if viewed files should fold away.',
+          'Put file-level actions such as a "Viewed" checkbox in headerEnd, and drive collapsible={{isOpen, onOpenChange}} from the same state if viewed files should fold away.',
       },
       {
         guidance: false,
@@ -157,28 +157,11 @@ export const docs = {
       default: 'true',
     },
     {
-      name: 'isCollapsible',
-      type: 'boolean',
+      name: 'collapsible',
+      type: 'boolean | {defaultIsOpen?: boolean; isOpen?: boolean; onOpenChange?: (isOpen: boolean) => void}',
       description:
-        'Make the file header a disclosure that hides and shows the hunks. Applies when the file has a path to name the control.',
+        'Whether the file header is a disclosure that hides and shows the hunks. Applies when the file has a path to name the control. On by default, starting open. `false` opts out: the hunks always show and the path is plain text. `{defaultIsOpen: false}` starts collapsed; `{isOpen, onOpenChange}` is controlled. Takes the same CollapsibleConfig as Collapsible.',
       default: 'true',
-    },
-    {
-      name: 'isCollapsed',
-      type: 'boolean',
-      description: 'Controlled collapsed state. Pair with onCollapsedChange.',
-    },
-    {
-      name: 'defaultIsCollapsed',
-      type: 'boolean',
-      description: 'Initial collapsed state when uncontrolled.',
-      default: 'false',
-    },
-    {
-      name: 'onCollapsedChange',
-      type: '(isCollapsed: boolean) => void',
-      description:
-        'Called with the next collapsed state when the header is toggled.',
     },
     {
       name: 'headerEnd',

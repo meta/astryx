@@ -4,7 +4,8 @@
  * @file DiffViewer.tsx
  * @input Uses React, StyleX, theme tokens, the shared CodeBlock tokenizer and
  *   syntax-theme slots (incl. the diff row slots), useScrollableArea,
- *   Token, Icon, Button, VisuallyHidden, and the i18n translator
+ *   useCollapsible, Token, Icon, Button, VisuallyHidden, and the i18n
+ *   translator
  * @output Exports DiffViewer component, DiffViewerProps, DiffViewerViewMode,
  *   DiffViewerChangeIndicator, DiffViewerInlineHighlight
  * @position Lab implementation; read-only, syntax-highlighted file diff for
@@ -61,6 +62,10 @@ import {
   type SyntaxToken,
   type TokenLine,
 } from '@astryxdesign/core/CodeBlock';
+import {
+  useCollapsible,
+  type CollapsibleConfig,
+} from '@astryxdesign/core/Collapsible';
 import {
   useScrollableArea,
   type ScrollableElementProps,
@@ -185,20 +190,21 @@ export interface DiffViewerProps extends BaseProps<HTMLDivElement> {
    */
   hasChangeBackground?: boolean;
   /**
-   * Make the file header a disclosure that hides and shows the hunks. Needs a
-   * file path to name the control.
+   * Whether the file header is a disclosure that hides and shows the hunks.
+   * Needs a file path to name the control.
+   *
+   * - omitted / `true` — collapsible, starts open
+   * - `{defaultIsOpen: false}` — collapsible, starts collapsed
+   * - `{isOpen, onOpenChange}` — controlled by the caller
+   * - `false` — not collapsible: the hunks always show, and the path is
+   *   plain text
+   *
+   * Takes the shared `CollapsibleConfig`, so the disclosure is configured
+   * exactly like `Collapsible`'s and Banner's.
+   *
    * @default true
    */
-  isCollapsible?: boolean;
-  /** Controlled collapsed state. Pair with `onCollapsedChange`. */
-  isCollapsed?: boolean;
-  /**
-   * Initial collapsed state when uncontrolled.
-   * @default false
-   */
-  defaultIsCollapsed?: boolean;
-  /** Called with the next collapsed state when the header is toggled. */
-  onCollapsedChange?: (isCollapsed: boolean) => void;
+  collapsible?: boolean | CollapsibleConfig;
   /**
    * Content at the end of the file header, e.g. a "Viewed" checkbox or a menu
    * of file actions.
@@ -1302,10 +1308,7 @@ export function DiffViewer({
   changeIndicator = 'classic',
   inlineHighlight = 'word',
   hasChangeBackground = true,
-  isCollapsible = true,
-  isCollapsed: isCollapsedProp,
-  defaultIsCollapsed = false,
-  onCollapsedChange,
+  collapsible = true,
   headerEnd,
   renderLineAnnotation,
   onLineNumberClick,
@@ -1333,17 +1336,13 @@ export function DiffViewer({
         })
       : path;
 
-  const [uncontrolledCollapsed, setUncontrolledCollapsed] =
-    useState(defaultIsCollapsed);
+  const {
+    isEnabled: isCollapsible,
+    isOpen,
+    toggle: toggleOpen,
+  } = useCollapsible({isCollapsible: collapsible});
   const canCollapse = isCollapsible && displayPath != null;
-  const isCollapsed = canCollapse && (isCollapsedProp ?? uncontrolledCollapsed);
-  const toggleCollapsed = () => {
-    const next = !isCollapsed;
-    if (isCollapsedProp === undefined) {
-      setUncontrolledCollapsed(next);
-    }
-    onCollapsedChange?.(next);
-  };
+  const isCollapsed = canCollapse && !isOpen;
 
   let unfoldedChangedLines = 0;
   let hasReplacedBlock = false;
@@ -2073,7 +2072,7 @@ export function DiffViewer({
             type="button"
             aria-expanded={!isCollapsed}
             aria-controls={bodyId}
-            onClick={toggleCollapsed}
+            onClick={toggleOpen}
             {...focusOutlineProps.focusVisible(styles.toggle)}>
             {/* The collapsed chevron points toward the inline end, so it
                 mirrors in RTL. The glyph's own transform holds the rotation,

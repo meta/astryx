@@ -285,19 +285,18 @@ export const LargeChange: Story = {
 export const ViewedToggle: Story = {
   render: args => {
     const [isViewed, setIsViewed] = useState(false);
-    const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isOpen, setIsOpen] = useState(true);
     return (
       <DiffViewer
         {...args}
-        isCollapsed={isCollapsed}
-        onCollapsedChange={setIsCollapsed}
+        collapsible={{isOpen, onOpenChange: setIsOpen}}
         headerEnd={
           <CheckboxInput
             label="Viewed"
             value={isViewed}
             onChange={checked => {
               setIsViewed(checked);
-              setIsCollapsed(checked);
+              setIsOpen(!checked);
             }}
           />
         }
