@@ -542,6 +542,20 @@ describe('effectFindings', () => {
     ).toEqual([]);
   });
 
+  it('reads a closing brace inside a template literal as text', () => {
+    expect(
+      findingsFor(
+        [
+          '// Keeps the committed label, then syncs the listener.',
+          'useEffect(() => {',
+          '  labelRef.current = `}`;',
+          '  sync();',
+          '});',
+        ].join('\n'),
+      ),
+    ).toEqual([]);
+  });
+
   it('ends a template interpolation at its own closing brace', () => {
     expect(
       findingsFor(
