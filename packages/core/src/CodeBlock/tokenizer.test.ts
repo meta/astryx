@@ -93,6 +93,26 @@ describe('tokenize', () => {
     expect(prop).toBeDefined();
   });
 
+  it.each([
+    ['bash', 'curl https://example.com/#top # fetch', 30],
+    ['bash', 'make build;# then deploy', 11],
+    ['bash', 'sleep 10 &# in the background', 10],
+    ['yaml', 'url: https://example.com/#top # docs', 30],
+  ])(
+    'starts a %s comment only at a # that begins a word',
+    (language, code, commentStart) => {
+      const comments = tokenize(code, language)[0].filter(
+        t => t.type === 'comment',
+      );
+      expect(comments).toEqual([
+        {type: 'comment', start: commentStart, end: code.length},
+      ]);
+      expect(tokenize('# note', language)[0]).toEqual([
+        {type: 'comment', start: 0, end: 6},
+      ]);
+    },
+  );
+
   it('handles trailing newline', () => {
     const code = 'const x = 1;\n';
     const result = tokenize(code, 'typescript');
