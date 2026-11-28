@@ -20,12 +20,14 @@
 
 import React, {type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Button} from '../Button';
-import {useIcon} from '../Icon';
+import {Button} from '../Button/Button';
+import {useIcon} from '../Icon/useIcon';
+import {ComponentIcon} from '../Icon/ComponentIcon';
 import {useChatComposerContext} from './ChatContext';
 
 import type {BaseProps} from '../BaseProps';
-import {composeEventHandlers, mergeProps} from '../utils';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {radiusVars} from '../theme/tokens.stylex';
 import {
@@ -50,7 +52,7 @@ export interface ChatSendButtonProps extends BaseProps<HTMLButtonElement> {
   onSend?: () => void;
   /** Called when the user clicks the stop button. */
   onStop?: () => void;
-  /** Icon for the send state. Resolves from icon registry by default. */
+  /** Icon for the send state. Use null to hide the glyph or undefined to use the theme's send slot. */
   sendIcon?: ReactNode;
   /** Icon for the stop state. Resolves from icon registry by default. */
   stopIcon?: ReactNode;
@@ -110,7 +112,6 @@ export function ChatSendButton(props: ChatSendButtonProps): ReactNode {
 
   const handleSend = onSend ?? (() => context?.onSubmit(context.value));
   const defaultStopIcon = useIcon('stop');
-  const defaultSendIcon = useIcon('arrowUp');
 
   return (
     <Button
@@ -123,9 +124,17 @@ export function ChatSendButton(props: ChatSendButtonProps): ReactNode {
       variant={isStopShown ? 'secondary' : 'primary'}
       size={size}
       icon={
-        isStopShown
-          ? (stopIcon ?? defaultStopIcon)
-          : (sendIcon ?? defaultSendIcon)
+        isStopShown ? (
+          (stopIcon ?? defaultStopIcon)
+        ) : (
+          <ComponentIcon
+            slot="chat-send-button-send"
+            state={undefined}
+            fallback="arrowUp"
+            color="inherit"
+            content={sendIcon}
+          />
+        )
       }
       isIconOnly
       isDisabled={!isStopShown && isDisabled}
