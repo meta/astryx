@@ -37,6 +37,8 @@ import {
 } from '../../packages/cli/authoring/shadcn/receipt.mjs';
 import {DEMO_CONTENT_MODULE} from '../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {expandWorkspaceDirs} from '../../scripts/lib/workspace-globs.mjs';
+import {readImportSpecifiers} from '../../apps/docsite/scripts/generate-shadcn-registry.mjs';
+import {packageNameFromSpecifier} from '../../apps/docsite/scripts/published-exports.mjs';
 import {registryNameForPath} from '../../apps/docsite/src/lib/shadcnRegistry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -59,6 +61,42 @@ const USE_PUBLISHED_PACKAGES =
 const MAX_COMMAND_OUTPUT = 16 * 1024 * 1024;
 const COPIED_KINDS = new Set(['showcase', 'example', 'block', 'page']);
 const MODES = {typescript: [true], javascript: [false], all: [true, false]};
+const CONSUMER_BASELINE_PACKAGES = new Set([
+  'react',
+  'react-dom',
+  '@types/react',
+  '@types/react-dom',
+]);
+const SAFE_CHILD_ENV_KEYS = new Set([
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'USERPROFILE',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'SYSTEMROOT',
+  'SYSTEMDRIVE',
+  'COMSPEC',
+  'PATHEXT',
+  'PROGRAMFILES',
+  'PROGRAMFILES(X86)',
+  'PROGRAMDATA',
+  'PNPM_HOME',
+  'COREPACK_HOME',
+  'XDG_CACHE_HOME',
+  'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
+  'NPM_CONFIG_REGISTRY',
+  'NODE_EXTRA_CA_CERTS',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+]);
 
 /** The consumer modes to verify, as `tsx` flags: `--mode <name>`, or both. */
 export function selectedModes(argv) {
@@ -84,10 +122,10 @@ function resolveInside(root, relative, label) {
   }
   const resolvedRoot = path.resolve(root);
   const resolved = path.resolve(resolvedRoot, relative);
-  if (
-    resolved !== resolvedRoot &&
-    !resolved.startsWith(`${resolvedRoot}${path.sep}`)
-  ) {
+  const rootPrefix = resolvedRoot.endsWith(path.sep)
+    ? resolvedRoot
+    : `${resolvedRoot}${path.sep}`;
+  if (!resolved.startsWith(rootPrefix)) {
     fail(`${label} escapes its root: ${relative}`);
   }
   return resolved;
@@ -96,11 +134,76 @@ function resolveInside(root, relative, label) {
 function packageName(spec) {
   if (spec.startsWith('@')) {
     const slash = spec.indexOf('/');
-    const version = spec.indexOf('@', slash);
+    if (slash === -1) return spec;
+    const version = spec.indexOf('@', slash + 1);
     return version === -1 ? spec : spec.slice(0, version);
   }
   const version = spec.indexOf('@');
   return version === -1 ? spec : spec.slice(0, version);
+}
+
+function extractExternalImports(source, fileName) {
+  const packages = new Set();
+  for (const specifier of readImportSpecifiers(source, fileName)) {
+    if (
+      specifier.startsWith('.') ||
+      specifier.startsWith('/') ||
+      specifier.startsWith('@/') ||
+      specifier.startsWith('~/') ||
+      specifier.startsWith('node:') ||
+      specifier.includes(':')
+    ) {
+      continue;
+    }
+    const pkg = packageNameFromSpecifier(specifier);
+    if (!CONSUMER_BASELINE_PACKAGES.has(pkg)) {
+      packages.add(pkg);
+    }
+  }
+  return packages;
+}
+
+function declaredPackagesForItem(item, itemsByName, seen = new Set()) {
+  const declared = new Set();
+  if (seen.has(item.name)) return declared;
+  seen.add(item.name);
+
+  for (const spec of [
+    ...(item.dependencies ?? []),
+    ...(item.devDependencies ?? []),
+    ...(item.peerDependencies ?? []),
+  ]) {
+    declared.add(packageName(spec));
+  }
+  for (const depName of item.registryDependencies ?? []) {
+    const upstream =
+      itemsByName.get(depName) ??
+      itemsByName.get(depName.replace(/^.*\/([^/]+?)(?:\.json)?$/, '$1'));
+    if (upstream != null) {
+      for (const pkg of declaredPackagesForItem(upstream, itemsByName, seen)) {
+        declared.add(pkg);
+      }
+    }
+  }
+  return declared;
+}
+
+function childProcessEnv(scratch) {
+  const env = {
+    CI: 'true',
+    TMPDIR: scratch,
+    TMP: scratch,
+    TEMP: scratch,
+  };
+  for (const [key, value] of Object.entries(process.env)) {
+    if (
+      typeof value === 'string' &&
+      SAFE_CHILD_ENV_KEYS.has(key.toUpperCase())
+    ) {
+      env[key] = value;
+    }
+  }
+  return env;
 }
 
 function localPackageDirs() {
@@ -380,12 +483,6 @@ function writeConsumer(project, items, packageDirs, {tsx}) {
       2,
     )}\n`,
   );
-  // Every dependency is pinned by generated registry data. The consumer is
-  // ephemeral, and local Astryx packages need their checked-in install hooks.
-  fs.writeFileSync(
-    path.join(project, 'pnpm-workspace.yaml'),
-    'packages: []\ndangerouslyAllowAllBuilds: true\n',
-  );
   fs.writeFileSync(
     path.join(project, 'tsconfig.json'),
     `${JSON.stringify(
@@ -462,8 +559,40 @@ function writeConsumer(project, items, packageDirs, {tsx}) {
       `${item.name} temporary item`,
     );
     fs.writeFileSync(itemPath, JSON.stringify(installItem));
-    itemPaths.push(itemPath);
+    itemPaths.push(path.relative(project, itemPath));
   }
+
+  // Every dependency is pinned by generated registry data. The consumer is
+  // ephemeral, and only local Astryx packages may run install hooks.
+  // pnpm 11 matches file: dependencies by <name>@file:<path relative to consumer>.
+  const allowBuilds = {};
+  if (packageDirs) {
+    const realProject = fs.realpathSync(project);
+    for (const [name, directory] of [...packageDirs.entries()].sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    )) {
+      if (!name.startsWith('@astryxdesign/')) continue;
+      const relDir = path.relative(realProject, directory).split(path.sep).join('/');
+      allowBuilds[`${name}@file:${relDir}`] = true;
+    }
+  } else {
+    for (const name of [...dependencyNames].sort()) {
+      if (name.startsWith('@astryxdesign/')) {
+        allowBuilds[name] = true;
+      }
+    }
+  }
+  const workspaceLines = ['packages: []'];
+  if (Object.keys(allowBuilds).length > 0) {
+    workspaceLines.push('allowBuilds:');
+    for (const [selector, allowed] of Object.entries(allowBuilds)) {
+      workspaceLines.push(`  ${JSON.stringify(selector)}: ${allowed}`);
+    }
+  }
+  fs.writeFileSync(
+    path.join(project, 'pnpm-workspace.yaml'),
+    `${workspaceLines.join('\n')}\n`,
+  );
 
   return {dependencyNames, itemPaths};
 }
@@ -482,7 +611,7 @@ function runShadcn(project, itemPaths) {
     {
       cwd: project,
       encoding: 'utf8',
-      env: {...process.env, CI: 'true', TMPDIR: scratch},
+      env: childProcessEnv(scratch),
       maxBuffer: MAX_COMMAND_OUTPUT,
       timeout: 10 * 60_000,
     },
@@ -510,10 +639,12 @@ function expectedInstalledFile(file, tsx) {
 }
 
 function verifyInstall(project, items, dependencyNames, {tsx}) {
+  const itemsByName = new Map(items.map(item => [item.name, item]));
   const sources = [];
   let installedFiles = 0;
 
   for (const item of items) {
+    const declared = declaredPackagesForItem(item, itemsByName);
     for (const file of item.files) {
       const expected = expectedInstalledFile(file, tsx);
       const installed = resolveInside(
@@ -536,6 +667,13 @@ function verifyInstall(project, items, dependencyNames, {tsx}) {
         !/\.d\.[cm]?ts$/.test(expected.target)
       ) {
         sources.push(installed);
+        for (const importedPkg of extractExternalImports(actual, expected.target)) {
+          if (!declared.has(importedPkg)) {
+            fail(
+              `${item.name} imports ${importedPkg} in ${expected.target} without declaring it in dependencies`,
+            );
+          }
+        }
       }
     }
   }
