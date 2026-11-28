@@ -135,6 +135,19 @@ const styles = stylex.create({
     // Override browser default [popover] background (canvas color)
     backgroundColor: 'transparent',
   },
+  // Firefox applies a scrolling anchor's offset after it resolves the gutter.
+  // The fixed marker follows the trigger first. As the last preceding anchor
+  // with the same name, it gives the layer the trigger's viewport rectangle.
+  viewportAnchor: {
+    display: 'block',
+    position: 'fixed',
+    insetInlineStart: 'anchor(inside)',
+    insetBlockStart: 'anchor(inside)',
+    inlineSize: 'anchor-size(inline, 0px)',
+    blockSize: 'anchor-size(block, 0px)',
+    visibility: 'hidden',
+    pointerEvents: 'none',
+  },
   // Fixed positioning mode
   fixed: {
     position: 'fixed',
@@ -604,6 +617,8 @@ interface InternalContextLayerReturn extends Omit<
  * not part of the public `useLayer` options.
  */
 interface InternalContextLayerOptions extends ContextLayerOptions {
+  /** Use the inline layer marker as a viewport-space anchor for a scrolling item. */
+  anchorsThroughMarker?: boolean;
   /**
    * The layer must never settle over its anchor (spec:AST-059 FR4). When the
    * standard fallback list settles it over its anchor, it switches to its
@@ -697,9 +712,13 @@ function toCssLength(value: number | string): string {
 function placeAfresh(layer: HTMLElement): void {
   preserveAnimations(layer, () => {
     const display = layer.style.display;
+    const behavior = layer.style.transitionBehavior;
+    // A discrete display transition would keep the old box in layout.
+    layer.style.transitionBehavior = 'normal';
     layer.style.display = 'none';
     layer.getBoundingClientRect();
     layer.style.display = display;
+    layer.style.transitionBehavior = behavior;
   });
 }
 
@@ -1199,8 +1218,10 @@ function ContextLayerSlot({
   mountStore,
   renderLayer,
   sentinelRef,
+  anchorsThroughMarker,
   whileUnmounted,
 }: {
+  readonly anchorsThroughMarker?: boolean;
   readonly mountStore: ContextLayerMountStore;
   readonly renderLayer: (mount: ContextLayerMount) => ReactNode;
   readonly sentinelRef: RefCallback<HTMLTemplateElement>;
@@ -1214,7 +1235,17 @@ function ContextLayerSlot({
   // Keep the marker mounted after resolving the layer. Apart from giving
   // us the real JSX parent on first show, this lets its ref report when a
   // persistent hook's render call moves to a different host.
-  const sentinel = <template ref={sentinelRef} />;
+  const sentinel = (
+    <template
+      ref={sentinelRef}
+      {...stylex.props(
+        anchorsThroughMarker &&
+          mount &&
+          !mount.portalTarget &&
+          styles.viewportAnchor,
+      )}
+    />
+  );
   // The stand-in and the layer share this render, so the commit that mounts
   // the layer also removes the stand-in, and the reverse. Each child keeps
   // its own position, so the marker never remounts.
@@ -1439,6 +1470,8 @@ function useLayerImplementation(
       : false;
   const keepsAnchorClear =
     mode === 'context' ? (options.keepsAnchorClear ?? false) : false;
+  const anchorsThroughMarker =
+    mode === 'context' && options.anchorsThroughMarker;
   const watchesOutside =
     mode === 'context' ? options.watchesOutside : undefined;
   const writesEntranceSide =
@@ -1577,6 +1610,11 @@ function useLayerImplementation(
         const trigger = triggerRef.current;
         if (!isOpenRef.current && trigger != null) {
           removeAnchorName(trigger, anchorId);
+        }
+        const marker = sentinelRef.current;
+        if (!isOpenRef.current && marker?.style.anchorName === anchorId) {
+          marker.style.removeProperty('anchor-name');
+          marker.style.removeProperty('position-anchor');
         }
       };
       // The animation read lays out the page between the writes of the close.
@@ -1890,6 +1928,11 @@ function useLayerImplementation(
         replayWhenSettled();
         return;
       }
+      const marker = sentinelRef.current;
+      if (anchorsThroughMarker && marker?.nextElementSibling === popover) {
+        marker.style.positionAnchor = anchorId;
+        marker.style.anchorName = anchorId;
+      }
       // A keyframe animation that only the closed state declares starts at
       // the close, and it can animate `display`. One that both states declare
       // is the entrance, and the hide stops it.
@@ -1919,6 +1962,7 @@ function useLayerImplementation(
     }
   }, [
     anchorId,
+    anchorsThroughMarker,
     onShow,
     keepsAnchorClear,
     writesEntranceSide,
@@ -2865,12 +2909,14 @@ function useLayerImplementation(
           mountStore={mountStore}
           renderLayer={renderLayer}
           sentinelRef={sentinelRefCallback}
+          anchorsThroughMarker={anchorsThroughMarker}
           whileUnmounted={whileUnmounted}
         />
       );
     },
     [
       anchorId,
+      anchorsThroughMarker,
       declaredInset,
       id,
       isAnchorInView,
