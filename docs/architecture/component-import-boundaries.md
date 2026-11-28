@@ -80,11 +80,13 @@ module. A static import of a touch module from a base module that defers a
 surface is a crossing too (INV8). The walk stops at a crossing, so imports
 inside a surface's or a capability's own graph are not crossings. Each pair
 of a base module and the module it first crosses into is one crossing and
-one allowlist row. A module that an `import()` targets is a surface module.
+one allowlist row. A module that an `import()` targets is a surface module,
+unless it is one of the base modules in a surface folder named below.
 
 Some modules in a surface or capability folder are base code: the trigger
-contract a surface folder keeps for base imports
-(`Tooltip/tooltipPresentInterest`, `Layer/layerScopedContext`), and a
+contract a surface folder keeps for base imports (`Tooltip`,
+`Tooltip/Tooltip`, `Tooltip/useTooltip`, `Tooltip/tooltipPresentInterest`,
+`Layer/layerScopedContext`), and a
 capability's own import (a Table plugin's folder index and the modules it
 re-exports, and `SnapPaging/SnapPaging`). INV7's wiring lives in base code:
 the component's own modules or the capability's own import. A wiring module
@@ -121,14 +123,16 @@ one pending load per module, caches a success, and resets after a failure.
 - **INV3 — The trigger contract is complete before load.** The trigger's
   role, accessible name, and tab stop, and the ARIA its own record gives its
   closed state, are in server and hydrating markup and do not change when the
-  module loads. That ARIA differs per trigger: `component:Timestamp` AR3
+  module loads, except for a description reference that arrives with its
+  surface, as the last sentences of this rule allow. That ARIA differs per trigger: `component:Timestamp` AR3
   gives its `time` no `aria-haspopup` or `aria-expanded` and sets
   `aria-controls` only while the card is open, as
   `component:DropdownMenuSubMenu` FR1 does for its surface. Every ARIA
   reference names an element in the document. A
   description a surface supplies (a tooltip on an icon-only button) is in the
   base markup as hidden text before load, or the trigger carries no reference
-  to it. Focus stays where it is across the load, and the load remounts no
+  to it until the surface exists; the reference then arrives in the same task
+  as the element it names (`component:Tooltip` FR2). Focus stays where it is across the load, and the load remounts no
   content (`architecture:layer-runtime`, layer content boundary;
   `component:Timestamp` FR6).
 - **INV4 — An intent made before load is honored once.** The latest intent
@@ -141,7 +145,10 @@ one pending load per module, caches a success, and resets after a failure.
   arms the surface's dismissal as the same intent does on a loaded surface.
   For a `Tooltip` or `HoverCard` surface, a hover made while it loads shows
   the surface once the load has landed and the hover delay has passed, if the
-  pointer is still on the trigger; otherwise the next hover shows it.
+  pointer is still on the trigger; otherwise the next hover shows it. Keyboard
+  focus still on the trigger shows it when the load lands. A tap on a
+  `Tooltip` trigger before load is not held: the next tap is handled as on a
+  loaded tooltip (`component:Tooltip` FR5, FR14).
 - **INV5 — The load moves nothing.** Loading changes no box in the page: the
   trigger's size, position, and content are the same before and after. No
   closed surface paints during the load. The surface paints in the top layer
@@ -238,19 +245,17 @@ one pending load per module, caches a success, and resets after a failure.
 
 ### Allowlist
 
-| Crossing (base module → module it imports statically) | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                                                        |
-| ----------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
-| `Text/TruncationTooltip` → `Layer/gestureCounter`     | Text, Heading, Button, IconButton, Link, Table | 1.7 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer; the row moves with the recognizer |
-| `Button/Button` → `Tooltip/useTooltip`                | Button, IconButton                             | 19.5 KB                | INV1       | Button's tooltip layer code is lazy                                                                    |
-| `Link/Link` → `Tooltip`                               | Link                                           | 21.6 KB                | INV1       | Link's tooltip layer code is lazy                                                                      |
-| `Table/tableContextMenu` → `ContextMenu`              | Table                                          | 88.5 KB                | INV1       | cells without actions reach no menu module                                                             |
+| Crossing (base module → module it imports statically) | Entries that reach it                          | Cost, gzip                                                                | Invariant  | Row leaves when                                                                                        |
+| ----------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
+| `Text/TruncationTooltip` → `Layer/gestureCounter`     | Text, Heading, Button, IconButton, Link, Table | 1.2 KB (Text, Link); 1.1 KB (Heading, Button, IconButton); 0.0 KB (Table) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer; the row moves with the recognizer |
+| `Table/tableContextMenu` → `ContextMenu`              | Table                                          | 88.5 KB                                                                   | INV1       | cells without actions reach no menu module                                                             |
 
 Costs are the check's own printout in CI: each crossing's removal from the
 entry with every other crossing kept, in the entry build above. A local run
 on another platform or Node version can print gzip sizes a few tenths of a KB
-apart. Rows share modules, so they do not add up. The truncation tooltip's touch code costs Button,
-IconButton, Link, and Table nothing on its own, because another of their
-crossings brings the same module. Table carries 121.3 KB eager.
+apart. Rows share modules, so they do not add up. The truncation tooltip's touch code costs Table
+nothing on its own, because another of its crossings brings the same
+module. Table carries 121.3 KB eager.
 
 ### Must not reach
 
@@ -273,28 +278,25 @@ an allowlist row does.
 ## Current-state impact
 
 - INV1, INV8 gap: Text's and Heading's imports reach the touch tap recognizer
-  through the truncation tooltip, 1.7 KB gzip each, on pages whose text never
+  through the truncation tooltip, 1.2 and 1.1 KB gzip, on pages whose text never
   truncates. Button, IconButton, Link, and Table reach it the same way
   through Text.
-- INV1 gap: the `Tooltip`, `HoverCard`, `Popover`, `DropdownMenu`, and
-  `ContextMenu` imports load their layer statically. `useTooltip`,
-  `useHoverCard`, `usePopover`, and `ContextMenu` import the layer hook from
-  `Layer/useLayer`, and `DropdownMenu` reaches it through `usePopover`. The
-  check holds the crossings of none of these five: `Tooltip`, `HoverCard`,
-  `Popover`, and `ContextMenu` are not in INV9's entry list, and
-  `DropdownMenu` is an entry whose crossings are not checked.
-- INV1 gap: Button's and IconButton's imports reach the tooltip hook and the
-  layer runtime, 19.5 KB gzip, with or without a `tooltip` prop. Through
-  Button, Link, or their own code, 32 of Core's 95 component imports that are
-  not surfaces carry 17–24 KB of tooltip code, and 52 carry at least 1 KB.
-- INV1 gap: Link's import reaches the Tooltip component and the layer
-  runtime, 21.6 KB gzip, with or without a `tooltip` prop.
+- INV1 gap: the `HoverCard`, `Popover`, `DropdownMenu`, and `ContextMenu`
+  imports load their layer statically. `useHoverCard`, `usePopover`, and
+  `ContextMenu` import the layer hook from `Layer/useLayer`, and
+  `DropdownMenu` reaches it through `usePopover`. The check holds the
+  crossings of none of these four: `HoverCard`, `Popover`, and `ContextMenu`
+  are not in INV9's entry list, and `DropdownMenu` is an entry whose
+  crossings are not checked.
+- INV2 gap: HoverCard still loads with the page. Deferring it needs the
+  loaded card to adopt a node rendered before the load, a layer-runtime
+  render change: its trigger names the card through `aria-controls`,
+  `aria-haspopup` and `aria-expanded`, which its own record gives its closed
+  state, so the reference cannot wait for the card as a tooltip's
+  description does (`component:Tooltip` FR2).
 - INV1 gap: Table's import reaches the cell context menu, 88.5 KB gzip, for
   cells with no actions, while `component:TableCell` PR1 loads a menu only
   when actions are given.
-- INV3 gap: no record says how a tooltip's description reaches assistive
-  technology before its surface loads, for the triggers whose tooltip is
-  their description.
 - INV6 gap: a menu holding an essential action has no path to that action
   when its module fails to load (`architecture:interaction-modality` INV7).
 - INV9 gap: the check does not measure INV7's wiring allowance. An entry's
@@ -318,6 +320,9 @@ Review against this record when a change:
 - `packages/core/src/utils/moduleLoader.ts` — the shared module loader.
 - `packages/core/src/Text/TruncationTooltip.tsx` — the truncation tooltip's
   intent tracking and load.
+- `packages/core/src/Tooltip/useTooltip.tsx` — the tooltip's trigger
+  contract (refs, description, open requests) and its after-paint load;
+  `packages/core/src/Tooltip/tooltipSurface.tsx` is the surface it loads.
 - `packages/core/src/Tooltip/`, `packages/core/src/HoverCard/`,
   `packages/core/src/Popover/`, `packages/core/src/DropdownMenu/`,
   `packages/core/src/ContextMenu/` — surfaces and their triggers.
@@ -432,8 +437,8 @@ allowance, `usePopover`'s `tabBehavior: 'pageOrder'`. INV10 names it.
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV1, INV7 | The entry-boundary check (INV9) with a positive control per kind: a fixture entry that imports a surface statically, and one that imports a capability                                                                                                                                                                                                                                                                                                                             | An entry whose crossings are checked reaches a surface or capability module statically outside the allowlist; a component reaches a capability module with `import()`; a positive control passes                                                                                                                                        |
 | INV2       | Unit tests per surface: no load before intent; one load per intent kind (mouse or pen enter, focus, pointer down, open request); none during server render or hydration; Tooltip and HoverCard: a load after the first paint with no intent, and an early hover that does not start it                                                                                                                                                                                             | A load before intent, during server render, or during hydration; an intent that starts no load; a gesture recognizer in the pre-load listeners; a Tooltip or HoverCard load that waits for intent, starts before first paint, or starts sooner on an input                                                                              |
-| INV3       | Server render then hydrate, plus real-browser tests (Chromium and WebKit) with axe before and after load                                                                                                                                                                                                                                                                                                                                                                           | Closed-state trigger ARIA differs between server, hydration, and after load; an ARIA reference names a missing element; focus moves or content remounts on load                                                                                                                                                                         |
-| INV4       | Tests with a deferred loader: hover, tap, focus, and open request before load; leave, blur, and a later intent before load                                                                                                                                                                                                                                                                                                                                                         | A held intent lost or replayed twice; a hover delay restarted at load; a stale intent opening after a newer one; a replayed tap without outside dismissal                                                                                                                                                                               |
+| INV3       | Server render then hydrate, plus real-browser tests (Chromium and WebKit) with axe before and after load                                                                                                                                                                                                                                                                                                                                                                           | Closed-state trigger ARIA differs between server, hydration, and after load, other than a description reference that arrives with its surface; an ARIA reference names a missing element; focus moves or content remounts on load                                                                                                       |
+| INV4       | Tests with a deferred loader: hover, tap, focus, and open request before load; leave, blur, and a later intent before load                                                                                                                                                                                                                                                                                                                                                         | A held intent lost or replayed twice; a hover delay restarted at load; a stale intent opening after a newer one; a replayed tap without outside dismissal; a tap on a Tooltip trigger before load, or the `:hover` a touch browser keeps after it, opening the tooltip at load                                                          |
 | INV5       | Real-browser layout test: trigger box before and after load; no paint of a closed surface                                                                                                                                                                                                                                                                                                                                                                                          | Any trigger box change; a closed surface painted; a false state during load                                                                                                                                                                                                                                                             |
 | INV6       | Tests with a rejecting loader                                                                                                                                                                                                                                                                                                                                                                                                                                                      | The page unmounts or the trigger stops working; a held intent survives; a suppressed native behavior does not return; a later intent does not retry                                                                                                                                                                                     |
 | INV8       | `scripts/touch-support-bundle.test.mjs` extended over lazy chunks: two deferred surfaces and one base component on one page                                                                                                                                                                                                                                                                                                                                                        | A second copy of a touch module on one page; an `import()` whose target is a touch module; a touch module in an entry's eager graph only for a deferred surface                                                                                                                                                                         |

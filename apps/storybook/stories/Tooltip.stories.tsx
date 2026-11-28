@@ -146,7 +146,7 @@ export const WithHook: Story = {
         <Button
           label="Using hook directly"
           ref={tooltip.ref}
-          aria-describedby={tooltip.describedBy}>
+          aria-describedby={tooltip.describedBy || undefined}>
           Using hook directly
         </Button>
         {tooltip.renderTooltip('Tooltip via hook')}
@@ -173,7 +173,7 @@ export const CustomToggleTrigger: Story = {
           label="About billing"
           variant="secondary"
           ref={tooltip.ref}
-          aria-describedby={tooltip.describedBy}
+          aria-describedby={tooltip.describedBy || undefined}
           aria-expanded={isPinned}
           onClick={() => {
             if (isPinned) {
@@ -269,7 +269,7 @@ export const TallContentMovingHost: Story = {
         <Button
           label="Tall tooltip trigger"
           ref={tooltip.ref}
-          aria-describedby={tooltip.describedBy}>
+          aria-describedby={tooltip.describedBy || undefined}>
           Tall tooltip trigger
         </Button>
         {inParagraph ? <p>{rendered}</p> : <div>{rendered}</div>}
@@ -314,7 +314,7 @@ export const TallContentReplacedTrigger: Story = {
             key={generation}
             label={`Trigger ${generation + 1}`}
             ref={tooltip.ref}
-            aria-describedby={tooltip.describedBy}>
+            aria-describedby={tooltip.describedBy || undefined}>
             {`Trigger ${generation + 1}`}
           </Button>
         </div>

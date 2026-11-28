@@ -34,6 +34,13 @@ async function openPaths(page: Page): Promise<void> {
     `${storybook.origin}/iframe.html?id=a11y-tooltip-description--paths&viewMode=story`,
   );
   await page.locator('[data-case="cut"] button').waitFor();
+  // The tooltips load after the page's first paint, and only then describe
+  // their triggers (component:Tooltip FR2, FR14). Each case reads the page
+  // after that load.
+  await expect(page.locator('[data-case="wrapped"] button')).toHaveAttribute(
+    'aria-describedby',
+    /\S/,
+  );
 }
 
 /** The element the trigger's aria-describedby names, read in the page. */

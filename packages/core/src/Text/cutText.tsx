@@ -15,6 +15,7 @@
 
 import type {RefObject} from 'react';
 import {UndescribedTooltip} from '../Tooltip/Tooltip';
+import {isTooltipTriggerBeforeLoad} from '../Tooltip/useTooltip';
 import {isTooltipDescription} from '../privateAttributes/tooltipDescription.stylex';
 
 /** Whether a box clips its content. */
@@ -86,6 +87,11 @@ function visibleText(root: HTMLElement): string {
  * tooltip shows at one spot.
  */
 function hasCallerTooltip(anchor: HTMLElement): boolean {
+  // Until the page loads the tooltip surface, a caller's tooltip has no
+  // description for the anchor to name.
+  if (isTooltipTriggerBeforeLoad(anchor)) {
+    return true;
+  }
   const ids = anchor.getAttribute('aria-describedby')?.split(/\s+/) ?? [];
   return ids.some(id => {
     const described =

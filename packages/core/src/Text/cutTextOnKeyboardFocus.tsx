@@ -24,18 +24,13 @@ import {
   type RefObject,
 } from 'react';
 import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
-import {createModuleLoader} from '../utils/moduleLoader';
+import {afterNextPaint, createModuleLoader} from '../utils/moduleLoader';
 import {isElement} from '../utils/nodeType';
 
 // A parent's commit can run this hook's effect before the browser paints, as
-// a Table's commit does. A task queued in the next animation frame runs after
-// that frame paints.
+// a Table's commit does, so the load waits for the next paint.
 const cutTextModule = createModuleLoader(async () => {
-  await new Promise<void>(resolve => {
-    requestAnimationFrame(() => {
-      setTimeout(resolve, 0);
-    });
-  });
+  await afterNextPaint(window);
   return import('./cutText');
 });
 

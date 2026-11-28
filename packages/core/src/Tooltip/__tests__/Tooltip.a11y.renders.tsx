@@ -47,7 +47,7 @@ function HookTrigger({state}: {state: TriggerState}): ReactElement {
       <button
         ref={tooltip.ref}
         type="button"
-        aria-describedby={tooltip.describedBy}>
+        aria-describedby={tooltip.describedBy || undefined}>
         {state.triggerText}
       </button>
       {tooltip.renderTooltip(state.content)}

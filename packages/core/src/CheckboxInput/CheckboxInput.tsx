@@ -48,7 +48,7 @@ import {FieldStatus} from '../FieldStatus/FieldStatus';
 import type {IconType} from '../Icon';
 import type {InputStatus} from '../Field/types';
 import {Spinner} from '../Spinner/Spinner';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {useIsTooltipLoaded, useTooltip} from '../Tooltip/useTooltip';
 import {TooltipDescriptionIdContext} from '../Tooltip/tooltipPresentInterest';
 import {mergeProps} from '../utils/mergeProps';
 import {rtlStyles} from '../utils/rtlStyles';
@@ -396,10 +396,11 @@ export function CheckboxInput({
   // native disabled attribute (spec:AST-085 FR1). Value mutation is blocked by
   // the click and onChange guards on the input.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  // A hidden copy of the disabled reason describes the input from the first
-  // markup on. The tooltip mounts only while it can show, so a
-  // checkbox with no reason runs none of its work.
+  // From the tooltip's load, after the page's first paint, a hidden copy of
+  // the disabled reason describes the input. The tooltip mounts only while it
+  // can show, so a checkbox with no reason runs none of its work.
   const disabledMessageID = useId();
+  const isTooltipLoaded = useIsTooltipLoaded();
 
   // The checkbox visual is an indicator: a theme can restyle it through the
   // canonical `checkbox-indicator` target or replace the component outright.
@@ -493,7 +494,7 @@ export function CheckboxInput({
   if (status?.message) {
     describedByParts.push(statusMessageID);
   }
-  if (showsDisabledMessage) {
+  if (showsDisabledMessage && isTooltipLoaded) {
     describedByParts.push(disabledMessageID);
   }
   const ariaDescribedBy =

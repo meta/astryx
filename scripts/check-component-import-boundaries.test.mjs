@@ -260,6 +260,32 @@ describe('a static import from an entry', () => {
 });
 
 describe('an import() from an entry', () => {
+  it('keeps a listed base module as base code when an import() also targets it, and counts any other target as a surface', () => {
+    const graph = graphOf('Text/__entry__.mjs', {
+      'Text/__entry__.mjs': {imports: [['Text/Text.tsx']]},
+      'Text/Text.tsx': {
+        imports: [
+          ['Layer/layerScopedContext.tsx'],
+          ['Text/cutText.tsx'],
+          ['Text/lazyText.tsx', 'dynamic-import'],
+        ],
+      },
+      'Text/lazyText.tsx': {
+        bytes: 0,
+        imports: [
+          ['Layer/layerScopedContext.tsx', 'dynamic-import'],
+          ['Text/cutText.tsx', 'dynamic-import'],
+        ],
+      },
+      'Layer/layerScopedContext.tsx': {},
+      'Text/cutText.tsx': {},
+    });
+    const {crossings} = violationsOf('Text', graph);
+    expect(crossings.map(({from, to}) => `${from} → ${to}`)).toEqual([
+      'Text/Text → Text/cutText',
+    ]);
+  });
+
   it('passes when it targets a surface whose graph reaches touch modules', () => {
     const graph = graphOf('Text/__entry__.mjs', {
       'Text/__entry__.mjs': {imports: [['Text/Text.tsx']]},
@@ -395,12 +421,6 @@ describe('the allowlist', () => {
         to: 'Layer/gestureCounter',
         entries: ['Text', 'Heading', 'Button', 'IconButton', 'Link', 'Table'],
       },
-      {
-        from: 'Button/Button',
-        to: 'Tooltip/useTooltip',
-        entries: ['Button', 'IconButton'],
-      },
-      {from: 'Link/Link', to: 'Tooltip', entries: ['Link']},
       {from: 'Table/tableContextMenu', to: 'ContextMenu', entries: ['Table']},
     ]);
   });

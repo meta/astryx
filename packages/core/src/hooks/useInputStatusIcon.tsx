@@ -19,6 +19,8 @@ import {Icon, type IconSize} from '../Icon/Icon';
 import type {IconName} from '../Icon/globalIconRegistry';
 import type {InputStatus, InputStatusType} from '../Field/types';
 import {useTooltip} from '../Tooltip/useTooltip';
+import {useMergedRefs} from './useMergedRefs';
+import {registerStatusButton} from './statusButtonPress';
 import {radiusVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
@@ -110,7 +112,9 @@ export interface UseInputStatusIconReturn {
    * with a message). It is `undefined` in every other case (no status, no
    * message, `attached`/`detached`, or inside a group), so call-sites can drop
    * it straight into their described-by list without a dangling reference: the
-   * id is present exactly when its tooltip element is in the DOM.
+   * id is present exactly when its tooltip element is in the DOM. In the
+   * `tooltip` variant it is the empty string until the tooltip's layer loads
+   * after first paint, which described-by lists skip.
    */
   describedBy: string | undefined;
 }
@@ -148,6 +152,10 @@ export function useInputStatusIcon({
     isEnabled: hasTooltip,
     isOpen: tapOpen,
   });
+  const buttonRef = useMergedRefs<HTMLButtonElement>(
+    tooltip.ref,
+    registerStatusButton,
+  );
 
   // Give control back to hover and focus after a tap-opened tooltip is
   // dismissed.
@@ -216,7 +224,7 @@ export function useInputStatusIcon({
       <>
         <button
           type="button"
-          ref={tooltip.ref}
+          ref={buttonRef}
           aria-label={t(STATUS_BUTTON_LABEL_KEY[status.type])}
           aria-describedby={tooltip.describedBy || undefined}
           onClick={handleButtonClick}

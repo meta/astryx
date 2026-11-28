@@ -15,7 +15,8 @@
 /// <reference types="@testing-library/jest-dom" />
 import '@testing-library/jest-dom/vitest';
 import {configure} from '@testing-library/react';
-import {afterAll, afterEach, vi} from 'vitest';
+import {afterAll, afterEach, beforeAll, vi} from 'vitest';
+import {__loadTooltipForTest} from '../../../packages/core/src/Tooltip/useTooltip';
 import {__resetClickGuardForTest} from '../../../packages/core/src/utils/clickGuard';
 import {GROUP_LAST_MEMBER} from './jsdomRefusedRules';
 
@@ -35,6 +36,13 @@ import {GROUP_LAST_MEMBER} from './jsdomRefusedRules';
 configure({
   defaultIgnore:
     'script, style, [data-astryx-live-region], span[hidden][id$="-description"]',
+});
+
+// A tooltip loads its behavior and visible layer after the page's first paint
+// (Tooltip/useTooltip.tsx). Most tests exercise the loaded tooltip, so each
+// file starts with it loaded. The load tests reset it.
+beforeAll(async () => {
+  await __loadTooltipForTest();
 });
 
 // The click guard (packages/core/src/utils/clickGuard.ts) is armed per

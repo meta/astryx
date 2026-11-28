@@ -69,6 +69,9 @@ async function mountState(
           exact: true,
         });
   await expect(subject).toBeVisible();
+  // The tooltip loads after the page's first paint. Until then the trigger
+  // names no description (component:Tooltip FR2), so the checks wait for it.
+  await expect(subject).toHaveAttribute('aria-describedby', /\S/);
   const neighbours = {
     before: root.getByRole('button', {
       name: 'Before the trigger',

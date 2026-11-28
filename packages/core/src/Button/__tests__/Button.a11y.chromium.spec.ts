@@ -78,11 +78,13 @@ function storyUrl(storyId: string): string {
 async function mountState(page: Page, state: ButtonBindingRow): Promise<void> {
   await page.goto(storyUrl(state.storyId), {waitUntil: 'load'});
   await holdMotionStill(page);
-  await page
-    .locator('#storybook-root')
-    .getByRole('button')
-    .first()
-    .waitFor({state: 'attached'});
+  const button = page.locator('#storybook-root').getByRole('button').first();
+  await button.waitFor({state: 'attached'});
+  // A tooltip describes its button only once it loads, after the page's first
+  // paint (component:Tooltip FR2, FR14).
+  if (state.facts.described === true) {
+    await expect(button).toHaveAttribute('aria-describedby', /\S/);
+  }
 }
 
 /**
