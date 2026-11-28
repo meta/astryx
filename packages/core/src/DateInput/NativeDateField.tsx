@@ -303,7 +303,6 @@ export function NativeDateField({
     containerClassName,
     containerStyle,
   });
-  // A disabled field runs no caller handler except focus and blur.
   const {
     id: idProp,
     'aria-describedby': ariaDescribedByProp,

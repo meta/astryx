@@ -768,6 +768,81 @@ describe('SegmentedControl disabled state', () => {
     expect(handlers.onBlur).toHaveBeenCalledOnce();
   });
 
+  it('runs only a caller onFocus and onBlur on a segment of a disabled control (spec:AST-085 FR2)', () => {
+    const handlers = {
+      onClick: vi.fn(),
+      onKeyDown: vi.fn(),
+      onKeyUp: vi.fn(),
+      onPaste: vi.fn(),
+      onPointerDown: vi.fn(),
+      onFocus: vi.fn(),
+      onBlur: vi.fn(),
+    };
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={() => {}}
+        label="View mode"
+        isDisabled>
+        <SegmentedControlItem value="grid" label="Grid" {...handlers} />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>,
+    );
+    const grid = screen.getByRole('radio', {name: 'Grid'});
+    fireEvent.focus(grid);
+    fireEvent.pointerDown(grid);
+    fireEvent.click(grid);
+    fireEvent.keyDown(grid, {key: 'a'});
+    fireEvent.keyUp(grid, {key: 'a'});
+    fireEvent.paste(grid);
+    fireEvent.blur(grid);
+    expect(handlers.onClick).not.toHaveBeenCalled();
+    expect(handlers.onKeyDown).not.toHaveBeenCalled();
+    expect(handlers.onKeyUp).not.toHaveBeenCalled();
+    expect(handlers.onPaste).not.toHaveBeenCalled();
+    expect(handlers.onPointerDown).not.toHaveBeenCalled();
+    expect(handlers.onFocus).toHaveBeenCalledOnce();
+    expect(handlers.onBlur).toHaveBeenCalledOnce();
+  });
+
+  it('runs a caller onKeyDown, onPaste and onPointerDown on a segment of an enabled control', () => {
+    const handlers = {
+      onKeyDown: vi.fn(),
+      onPaste: vi.fn(),
+      onPointerDown: vi.fn(),
+    };
+    render(
+      <SegmentedControl value="grid" onChange={() => {}} label="View mode">
+        <SegmentedControlItem value="grid" label="Grid" {...handlers} />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>,
+    );
+    const grid = screen.getByRole('radio', {name: 'Grid'});
+    fireEvent.pointerDown(grid);
+    fireEvent.keyDown(grid, {key: 'a'});
+    fireEvent.paste(grid);
+    expect(handlers.onKeyDown).toHaveBeenCalledOnce();
+    expect(handlers.onPaste).toHaveBeenCalledOnce();
+    expect(handlers.onPointerDown).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a caller className and style on a segment', () => {
+    render(
+      <SegmentedControl value="grid" onChange={() => {}} label="View mode">
+        <SegmentedControlItem
+          value="grid"
+          label="Grid"
+          className="caller-segment"
+          style={{marginInlineStart: 3}}
+        />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>,
+    );
+    const grid = screen.getByRole('radio', {name: 'Grid'});
+    expect(grid).toHaveClass('caller-segment');
+    expect(grid.style.marginInlineStart).toBe('3px');
+  });
+
   it('runs every caller handler on the radiogroup while enabled', () => {
     const handlers = {
       onClick: vi.fn(),

@@ -181,7 +181,7 @@ The consumer record includes composed targets owned by CheckboxIndicator, FieldL
 - `design:user-states` owns enabled/disabled pointer-hold paint for CheckboxInput.
 - `architecture:interaction-modality` owns focus-visibility modality and the boundary between semantic focus and indicator paint.
 - `architecture:component-theming-surface` owns target placement and state reflection.
-- `spec:AST-085` owns disabled focusability; FR4 records the handler gap.
+- `spec:AST-085` owns disabled focusability and callbacks; FR4 applies them.
 - `spec:AST-086` FR8 owns the busy announcement.
 - CheckboxIndicator, FieldLabel, FieldStatus, Spinner, Tooltip, and the Indicator registry retain their own implementation and theming ownership when composed here.
 

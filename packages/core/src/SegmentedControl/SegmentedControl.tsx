@@ -376,7 +376,6 @@ export function SegmentedControl({
   const handleContainerKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       selection.keyPressed();
-      // A disabled control runs no caller handler except focus and blur.
       if (!isDisabled) {
         onKeyDownProp?.(e);
       }

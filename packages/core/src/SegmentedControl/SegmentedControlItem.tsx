@@ -41,6 +41,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {isRenderable} from '../utils/isRenderable';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
@@ -209,6 +210,8 @@ export function SegmentedControlItem({
   isDisabled = false,
   onClick: onClickProp,
   xstyle,
+  className,
+  style,
   'aria-describedby': ariaDescribedByProp,
   ...rest
 }: SegmentedControlItemProps) {
@@ -245,7 +248,7 @@ export function SegmentedControlItem({
   return (
     <button
       ref={segmentRef}
-      {...rest}
+      {...withholdCallerHandlers(rest, isItemDisabled)}
       type="button"
       role="radio"
       aria-checked={isSelected}
@@ -285,6 +288,8 @@ export function SegmentedControlItem({
           ctx.isTouchPresentation === true && styles.touchPresentation,
           xstyle,
         ),
+        className,
+        style,
       )}>
       {iconElement}
       {!isLabelHidden && (
