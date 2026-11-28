@@ -174,10 +174,12 @@ function resolveReviewApprovals({
  * removal by an engineering or design owner. A pushed commit carries its
  * committer date, not its push time, so the head's arrival is the earliest
  * trusted `review-required` status on it, which review-signal writes for every
- * new head, or a later force push that brought it back. With no such status
- * the head's arrival is unknown, and the removal does not count. Then the
- * owner has seen this head, and the label is not added back to it. A later
- * head is judged again from its own arrival: nothing carries across heads.
+ * new head, or a later force push that names it. With no such status the
+ * head's arrival is unknown, and the removal does not count. Then the owner
+ * has seen this head, and the label is not added back to it. A later head is
+ * judged again from its own arrival. A head another pull request already gated
+ * has an earlier status than its arrival here, so it relies on the run that
+ * brings it adding the label (see the label step in review-signal.yml).
  * @param {object} options
  * @param {Array<{event?: string, actor?: {login?: string}, label?: {name?: string}, created_at?: string}>} options.events
  *   the pull request's timeline
