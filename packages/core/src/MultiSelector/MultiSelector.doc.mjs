@@ -433,7 +433,7 @@ export const docs = {
           name: 'ref',
           type: 'Ref<HTMLElement>',
           description:
-            "Ref to the trigger button, or with renderTrigger to the caller's control. The trigger shows the value and carries the combobox role, except in an editable field with hasSearch, where the search input is the combobox.",
+            "Ref to the trigger button, or with renderTrigger to the caller's control. The trigger shows the value and carries the combobox role, except with hasSearch on a field that is not read-only, where the search input is the combobox.",
         },
         {
           name: 'containerXstyle',
@@ -601,7 +601,7 @@ export const docsZh = {
         onFocus: '触发器的焦点处理函数，在选择器自身的焦点处理之前运行。',
         onKeyDown:
           '触发器的按键处理函数，在内置键盘模型之后运行；该模型处理并取消的按键不会传给它。',
-        ref: '指向触发按钮的 ref；使用 renderTrigger 时指向调用方的控件。触发按钮显示当前值并承载 combobox 角色；在启用 hasSearch 的可编辑字段中，combobox 角色由搜索输入承载。',
+        ref: '指向触发按钮的 ref；使用 renderTrigger 时指向调用方的控件。触发按钮显示当前值并承载 combobox 角色；在启用 hasSearch 且非只读的字段中，combobox 角色由搜索输入承载。',
         containerXstyle:
           '字段容器（标签、控件和状态整体）的 StyleX 样式。在 InputGroup 内或 `horizontal-labels` FormLayout 中无效。不接受根级 xstyle、className 和 style。',
         containerClassName: '字段容器的类名，作用目标同 containerXstyle。',
@@ -779,7 +779,7 @@ export const docsDense = {
         onFocus: 'trigger focus; runs before built-in focus handling',
         onKeyDown:
           'trigger keys; runs after the built-in keyboard model, skipped for keys it handles and cancels',
-        ref: "trigger button; with renderTrigger, the caller's control; w/ hasSearch (editable) the search input is the combobox",
+        ref: "trigger button; with renderTrigger, the caller's control; w/ hasSearch (not read-only) the search input is the combobox",
         containerXstyle:
           'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
         containerClassName: 'Class name for the field container.',
