@@ -290,3 +290,17 @@ describe('this repository', () => {
     );
   });
 });
+
+describe('install scripts', () => {
+  // pnpm runs a dependency's install scripts only after the project approves
+  // them, and reports each unapproved package as "Ignored build scripts". So a
+  // package npm receives declares none.
+  it('no published package declares a preinstall, install, or postinstall script', () => {
+    const declared = publishedPackages(ROOT).flatMap(({manifest}) =>
+      ['preinstall', 'install', 'postinstall']
+        .filter(script => manifest.scripts?.[script] !== undefined)
+        .map(script => `${manifest.name}: scripts.${script}`),
+    );
+    expect(declared).toEqual([]);
+  });
+});

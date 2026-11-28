@@ -219,7 +219,7 @@ followed. Two cells did not pass, for two unrelated reasons.
 
 **1. `guest-contained-r2` / `enterprise-scoped-synthetic` / `s1` — the install
 never completed.** Not a host-damage result at all: the build failed, so
-nothing about the strategy was measured. `@astryxdesign/core` ships a
+nothing about the strategy was measured. `@astryxdesign/core` 0.5.2 ships a
 `postinstall`, and pnpm 11 refuses to install a dependency with an install
 script until that dependency is approved:
 

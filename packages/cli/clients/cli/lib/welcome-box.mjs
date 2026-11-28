@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The welcome box `astryx postinstall` prints after the package installs.
+ * @file The box of setup steps that `astryx postinstall` prints on demand. No
+ * package runs it at install.
  *
  * A fixed banner, not tabular output, so it is drawn here rather than with the
  * formatter kit; the command prints it verbatim through `emit(code(...))`.

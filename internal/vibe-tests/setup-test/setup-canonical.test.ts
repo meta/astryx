@@ -2280,7 +2280,8 @@ describeCanonical('canonical established-app strategies', () => {
 /**
  * The executor's real install path — the one the canonical suite was missing.
  *
- * `@astryxdesign/core` ships a `postinstall`, and pnpm 11 refuses to install a
+ * The `@astryxdesign/core` release these tests pin (0.5.2) ships a
+ * `postinstall` (current Core ships none), and pnpm 11 refuses to install a
  * dependency with an install script until that dependency is approved. A cell
  * died on it: the executor put the approval in `package.json`, pnpm never read
  * it there, and the install aborted with `ERR_PNPM_IGNORED_BUILDS` before

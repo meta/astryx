@@ -12,7 +12,6 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
@@ -718,17 +717,8 @@ describe('only `init --user` writes the computer-level text (FR7)', () => {
     );
   });
 
-  it('install (postinstall), project init, and upgrade write none of it', async () => {
+  it('project init and upgrade write none of it', async () => {
     const dir = project();
-    const postinstall = spawnSync(
-      process.execPath,
-      [path.join(CLI_ROOT, 'scripts', 'postinstall.mjs')],
-      {
-        env: {...process.env, HOME: home, USERPROFILE: home, INIT_CWD: dir},
-        encoding: 'utf8',
-      },
-    );
-    expect(postinstall.status).toBe(0);
     expect((await runCli(['--json', 'init'], dir)).status).toBe(0);
     expect((await runCli(['--json', 'init', '--all'], dir)).status).toBe(0);
     await runCli(['--json', 'upgrade'], dir);

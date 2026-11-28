@@ -5,22 +5,15 @@
  * Astryx writes its agent block" and "has this project run init yet?".
  *
  * Deliberately a LEAF module: it imports only node builtins (`fs`, `path`), so
- * it is safe to load in constrained contexts — most importantly the CLI's
- * `postinstall` script, which runs at `npm install` time, before the rest of the
- * CLI's module graph is guaranteed importable. Its sibling `agent-docs.mjs`
- * reaches component discovery, package-manager detection, and the response
- * layer, so the pure setup-check lives HERE and `agent-docs.mjs` re-exports it.
+ * a module can load it without the rest of the CLI's module graph. Its sibling
+ * `agent-docs.mjs` reaches component discovery, package-manager detection, and
+ * the response layer, so the pure setup-check lives HERE and `agent-docs.mjs`
+ * re-exports it.
  *
- * SINGLE SOURCE OF TRUTH for every "is Astryx set up?" enforcement layer:
- *   - layer 3 — the per-command setup nudge (`clients/cli/index.mjs`),
- *   - layer 2 — the CLI postinstall nudge (`scripts/postinstall.mjs`),
+ * SINGLE SOURCE OF TRUTH for every "is Astryx set up?" check:
+ *   - the per-command setup nudge (`clients/cli/index.mjs`),
  *   - the `init` / `upgrade` / `agent-docs` commands (via `agent-docs.mjs`).
- * Core's postinstall (layer 1) is a separate published package and cannot import
- * the CLI, so it ships a package-local copy at
- * `packages/core/scripts/agent-doc-state.mjs`. That copy is GENERATED from this
- * file, byte for byte, by `scripts/generate-setup-contract.mjs`, and
- * `pnpm check:setup-contract` (part of `check:repo`) fails the build when the
- * two differ. Edit the contract HERE and nowhere else.
+ * Edit the contract HERE and nowhere else.
  */
 
 import * as fs from 'node:fs';
@@ -178,9 +171,8 @@ function savedFolderSkillFiles(root) {
  * Single source of truth for "is Astryx set up in this project?" — true when any
  * agent-doc file already holds an Astryx block, or a project skills folder or
  * a folder place saved in astryx.config holds the Astryx project skill
- * (`init --to`), i.e. `init` has run. Reused by the init & upgrade commands, the per-command setup nudge
- * (enforcement layer 3), and the cli postinstall nudge (layer 2). Core's
- * postinstall (separate package, layer 1) mirrors the same marker contract.
+ * (`init --to`), i.e. `init` has run. Reused by the init & upgrade commands
+ * and the per-command setup nudge.
  *
  * @param {string} [targetDir=process.cwd()]
  * @returns {boolean}
@@ -219,8 +211,8 @@ export function isAstryxInitialized(targetDir = process.cwd()) {
  * they work in. So inside a git repository, init's block in any folder from
  * `startDir` up to the repository root counts: a workspace package of a
  * monorepo initialized at its root is set up. Outside a repository only
- * `startDir` itself is checked, as {@link isAstryxInitialized} does. Both the
- * per-command nudge and the postinstall nudges ask this.
+ * `startDir` itself is checked, as {@link isAstryxInitialized} does. The
+ * per-command nudge asks this.
  *
  * @param {string} [startDir=process.cwd()]
  * @returns {boolean}
@@ -260,10 +252,8 @@ function findRepositoryRoot(start) {
 export const SETUP_INVOCATION = 'npx @astryxdesign/cli';
 
 /**
- * The one-line next-step every setup layer prints. Kept here so layer 1
- * (core), layer 2 (cli postinstall) and layer 3 (each command) can never word
- * it differently. Each layer passes the stem from the CLI's picker when it can
- * load it.
+ * The one-line next step the setup nudge prints, with the stem from the CLI's
+ * picker when it can load it.
  *
  * @param {string} [invocation] the CLI invocation stem, e.g. `pnpm exec astryx`
  * @param {{before?: string | null}} [options] `before`: a command to run
@@ -278,26 +268,4 @@ export function setupNudge(
     ? `\`${before}\`, then \`${invocation} init\``
     : `\`${invocation} init\``;
   return `\nAstryx is not set up in this project yet. Next step: run ${run} now, before you write Astryx code. It asks no questions, prints the getting-started steps, and saves the Astryx guide to AGENTS.md.\n\n`;
-}
-
-/** The nudge with the fallback invocation. */
-export const SETUP_NUDGE = setupNudge();
-
-/**
- * Pure decision: should a postinstall print the setup nudge? Shared by BOTH
- * postinstall layers, so the matrix cannot drift between them, and unit-testable
- * without an actual npm install.
- *
- * @param {object} [opts]
- * @param {string} [opts.scriptPath] - Absolute path of the calling script
- *   (location tells us dependency vs monorepo vs npx-cache).
- * @param {string} [opts.npmCommand] - process.env.npm_command ('install', 'exec', …).
- * @param {boolean} [opts.isSetUp] - Whether the project already ran init.
- * @returns {boolean}
- */
-export function shouldNudge({scriptPath, npmCommand, isSetUp} = {}) {
-  if (!scriptPath || !scriptPath.includes('node_modules')) return false; // monorepo/source build
-  if (scriptPath.includes('_npx') || npmCommand === 'exec') return false; // npx transient — init runs next
-  if (isSetUp) return false; // already set up — stay quiet
-  return true;
 }

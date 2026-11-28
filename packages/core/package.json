@@ -933,8 +933,6 @@
   "files": [
     "dist",
     "src",
-    "scripts/postinstall.mjs",
-    "scripts/agent-doc-state.mjs",
     "locales",
     "docs.mjs",
     "groups.doc.mjs",
@@ -956,7 +954,6 @@
   ],
   "scripts": {
     "prepack": "pnpm build",
-    "postinstall": "node scripts/postinstall.mjs",
     "build": "node ../../scripts/clean-dist.mjs && pnpm build:i18n && pnpm build:esm && tsc --project tsconfig.build.json && node ../../scripts/add-declaration-extensions.mjs && pnpm build:css && node ../../scripts/check-no-dev-jsx.mjs && node ../../scripts/check-fully-specified.mjs",
     "build:i18n": "node ../../scripts/generate-i18n-runtime.mjs && node scripts/build-pseudo-locale.mjs",
     "build:esm": "babel src --out-dir dist --extensions .ts,.tsx --out-file-extension .js --ignore \"**/*.test.ts,**/*.test.tsx,**/__tests__/**,**/*.perf.test.*,**/*.doc.mjs,**/*.d.ts,**/*.css,**/*.css.d.ts\" --config-file ./babel.config.json",

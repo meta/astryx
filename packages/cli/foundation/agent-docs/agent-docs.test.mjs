@@ -1802,8 +1802,8 @@ describe('injectXdsBlock / removeXdsBlock — malformed managed blocks (no user-
   });
 });
 
-describe('isAstryxInitialized — resilient to malformed markers (postinstall hot path)', () => {
-  // isAstryxInitialized runs on every consumer `npm install` (via postinstall).
+describe('isAstryxInitialized — resilient to malformed markers (setup nudge hot path)', () => {
+  // isAstryxInitialized runs before CLI commands in a project (the setup nudge).
   // It must never throw — even on a half-written or garbage-marker file — so it
   // uses a plain `.includes(MARKER_START)`, never the strict findManagedBlock.
   const START = '<!-- ASTRYX:START -->';

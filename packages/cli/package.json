@@ -90,7 +90,6 @@
     "authoring",
     "foundation",
     "host",
-    "scripts/postinstall.mjs",
     "CHANGELOG.md",
     "!**/*.test.*",
     "!**/*.spec.js",
@@ -108,7 +107,6 @@
   ],
   "scripts": {
     "astryx": "node clients/cli/bin/astryx.mjs",
-    "postinstall": "node scripts/postinstall.mjs",
     "test": "cd ../.. && vitest run packages/cli",
     "test:watch": "cd ../.. && vitest packages/cli",
     "typecheck": "pnpm typecheck:template-docs && pnpm typecheck:strict",

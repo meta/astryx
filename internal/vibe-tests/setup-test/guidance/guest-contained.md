@@ -37,9 +37,10 @@ gaps as much as it is a recipe.
 
 ### Installing the packages — approving the build script
 
-`@astryxdesign/core` ships a `postinstall` script, and pnpm 11 does not run a
-dependency's install scripts until that dependency is approved. It fails the
-install rather than skipping quietly:
+`@astryxdesign/core` 0.5.2, the release these tests install, ships a
+`postinstall` script, and pnpm 11 does not run a dependency's install scripts
+until that dependency is approved. It fails the install rather than skipping
+quietly:
 
 ```
 [ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @astryxdesign/core@0.5.2
@@ -73,8 +74,8 @@ Two things about this are worth knowing before you hand-write anything:
   `approve-builds`, or the `allowBuilds` map it writes.
 
 Setting a package to `false` also satisfies pnpm — it records a decision not to
-build — but `@astryxdesign/core` expects its `postinstall` to run, so approve it
-rather than suppressing it.
+build — but `@astryxdesign/core` 0.5.2 expects its `postinstall` to run, so
+approve it rather than suppressing it.
 
 Prefer `pnpm-workspace.yaml` over `package.json` for another reason too: it is
 pnpm's own file and npm and yarn ignore it, so approving a pnpm build leaves no
