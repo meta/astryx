@@ -1321,6 +1321,7 @@ export function Selector<T extends SelectorOptionType>(
   const searchRef = useRef<HTMLInputElement>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchRequested, setIsSearchRequested] = useState(false);
   // Mirrors searchQuery for the seed path, which runs before focus reaches the
   // input and so cannot read the rendered state.
   const searchQueryRef = useRef('');
@@ -1429,29 +1430,46 @@ export function Selector<T extends SelectorOptionType>(
   // window and poisons the next keystroke ("Dog" then "c" would search "dc").
   const resetTypeaheadRef = useRef<() => void>(() => {});
 
+  const openFocusFrameRef = useRef<number | null>(null);
+  const cancelOpenFocus = useCallback(() => {
+    if (openFocusFrameRef.current != null) {
+      cancelAnimationFrame(openFocusFrameRef.current);
+      openFocusFrameRef.current = null;
+    }
+  }, []);
+  // Releases the browser's pending focus frame when this control unmounts.
+  useEffect(() => cancelOpenFocus, [cancelOpenFocus]);
+
   // Layer for dropdown positioning
   const handleLayerHide = useCallback(() => {
+    cancelOpenFocus();
+    setIsSearchRequested(false);
     setSearchQuery('');
     searchQueryRef.current = '';
     resetTypeaheadRef.current();
     // Clear any lingering result count when the popover closes so stale status
     // text does not linger in the a11y tree.
     announce('');
-  }, [announce]);
+  }, [announce, cancelOpenFocus]);
 
-  const handleLayerShow = useCallback(() => {
-    if (hasSearch) {
-      requestAnimationFrame(() => {
-        const input = searchRef.current;
-        if (input) {
-          input.focus();
-          // When typing seeded the query, place the caret after it so the user
-          // keeps typing where they left off.
-          input.setSelectionRange(input.value.length, input.value.length);
-        }
-      });
-    }
-  }, [hasSearch]);
+  const handleLayerShow = useCallback(
+    (activePresentation: 'popover' | 'bottom-sheet') => {
+      cancelOpenFocus();
+      if (hasSearch && activePresentation === 'popover') {
+        openFocusFrameRef.current = requestAnimationFrame(() => {
+          openFocusFrameRef.current = null;
+          const input = searchRef.current;
+          if (input) {
+            input.focus();
+            // When typing seeded the query, place the caret after it so the user
+            // keeps typing where they left off.
+            input.setSelectionRange(input.value.length, input.value.length);
+          }
+        });
+      }
+    },
+    [hasSearch, cancelOpenFocus],
+  );
 
   // Explicit placement opts out of the selector-specific overlay behavior and
   // uses the standard layer positioning API instead.
@@ -1617,6 +1635,7 @@ export function Selector<T extends SelectorOptionType>(
   // setState callback.
   const appendSearchQuery = useCallback(
     (char: string) => {
+      setIsSearchRequested(true);
       const nextQuery = searchQueryRef.current + char;
       searchQueryRef.current = nextQuery;
       setSearchQuery(nextQuery);
@@ -1901,10 +1920,9 @@ export function Selector<T extends SelectorOptionType>(
           variant === 'input' &&
           styles.searchRowInput
         }
-        // When hasSearch is set, focus moves into this input on open, so it —
-        // not the trigger — must be the combobox that reports the highlighted
-        // option via aria-activedescendant (comboboxes-4). A bare searchbox
-        // left the highlight silent to screen readers.
+        // This input owns search focus, so it — not the trigger — must report
+        // the highlighted option via aria-activedescendant (comboboxes-4).
+        // A bare searchbox left the highlight silent to screen readers.
         role="combobox"
         aria-required={isEffectivelyRequired || undefined}
         aria-expanded={surface.isOpen}
@@ -2268,6 +2286,7 @@ export function Selector<T extends SelectorOptionType>(
           onOpenChange={surface.onSheetOpenChange}
           finalFocusRef={triggerRef}
           initialFocusRef={hasSearch ? searchRef : listboxRef}
+          isSearchRequested={isSearchRequested}
           label={label}>
           {panelContent}
         </SelectorBottomSheet>

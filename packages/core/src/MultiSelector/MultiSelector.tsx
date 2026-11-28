@@ -1500,6 +1500,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       openFocusFrameRef.current = null;
     }
   }, []);
+  // Releases the browser's pending focus frame when this control unmounts.
+  useEffect(() => cancelOpenFocus, [cancelOpenFocus]);
 
   const handleLayerHide = useCallback(() => {
     cancelOpenFocus();
@@ -1511,25 +1513,37 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onOpenChange?.(false);
   }, [announce, onOpenChange, cancelOpenFocus]);
 
-  const handleLayerShow = useCallback(() => {
-    // Snapshot selection only after the surface actually opens; a same-gesture
-    // rejection must not prepare state for an opening that never happened.
-    setSelectedAtOpen(new Set(optimisticValue));
-    if (hasSearch) {
-      openFocusFrameRef.current = requestAnimationFrame(() => {
-        openFocusFrameRef.current = null;
-        searchRef.current?.focus();
-      });
-    } else if (hasExternalTrigger) {
-      // The caller's anchor may not take focus (a glyph in a link row), so
-      // the listbox owns the keyboard while the panel is open.
-      openFocusFrameRef.current = requestAnimationFrame(() => {
-        openFocusFrameRef.current = null;
-        listboxRef.current?.focus();
-      });
-    }
-    onOpenChange?.(true);
-  }, [hasSearch, hasExternalTrigger, optimisticValue, onOpenChange]);
+  const handleLayerShow = useCallback(
+    (activePresentation: 'popover' | 'bottom-sheet') => {
+      cancelOpenFocus();
+      // Snapshot selection only after the surface actually opens; a same-gesture
+      // rejection must not prepare state for an opening that never happened.
+      setSelectedAtOpen(new Set(optimisticValue));
+      if (activePresentation === 'popover') {
+        if (hasSearch) {
+          openFocusFrameRef.current = requestAnimationFrame(() => {
+            openFocusFrameRef.current = null;
+            searchRef.current?.focus();
+          });
+        } else if (hasExternalTrigger) {
+          // The caller's anchor may not take focus (a glyph in a link row), so
+          // the listbox owns the keyboard while the panel is open.
+          openFocusFrameRef.current = requestAnimationFrame(() => {
+            openFocusFrameRef.current = null;
+            listboxRef.current?.focus();
+          });
+        }
+      }
+      onOpenChange?.(true);
+    },
+    [
+      hasSearch,
+      hasExternalTrigger,
+      optimisticValue,
+      onOpenChange,
+      cancelOpenFocus,
+    ],
+  );
 
   const surface = useSelectorPresentation({
     presentation,
@@ -2094,9 +2108,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           label: t('@astryx.multiSelector.searchOptions'),
         })}
         {...themeProps('multi-selector-search')}
-        // When hasSearch is set, focus moves into this input on open, so it —
-        // not the trigger — must be the combobox reporting the highlighted
-        // option via aria-activedescendant (comboboxes-4).
+        // This input owns search focus, so it — not the trigger — must report
+        // the highlighted option via aria-activedescendant (comboboxes-4).
         role="combobox"
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-expanded={surface.isOpen}

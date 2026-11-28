@@ -245,6 +245,57 @@ describe('MultiSelector', () => {
     expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
   });
 
+  it('opens a searchable adaptive touch sheet on its panel from a caller trigger without focusing search', async () => {
+    vi.mocked(window.matchMedia).mockImplementation(query => ({
+      matches:
+        query === '(pointer: coarse)' ||
+        query === COMPACT_TOUCH_PRESENTATION_QUERY,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <MultiSelector
+        label="Fruit"
+        options={defaultOptions}
+        value={[]}
+        onChange={onChange}
+        hasSearch
+        presentation="adaptive"
+        renderTrigger={props => (
+          <button {...props} type="button">
+            Choose fruit
+          </button>
+        )}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Choose fruit'});
+    await user.click(trigger);
+    const dialog = await screen.findByRole('dialog', {name: 'Fruit'});
+    const panel = dialog.querySelector('.astryx-bottom-sheet');
+    await waitFor(() => expect(panel).toHaveFocus());
+    const search = screen.getByRole('combobox');
+    expect(focus.mock.contexts).not.toContain(search);
+    await user.tab();
+    expect(search).toHaveFocus();
+    await user.paste('Banana');
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(onChange).toHaveBeenCalledWith(['Banana']);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await user.keyboard('{Escape}');
+    fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
+      propertyName: 'transform',
+    });
+    expect(trigger).toHaveFocus();
+  });
+
   it.each([false, true])(
     'names a bottom-sheet listbox from label (hasSearch=%s)',
     async hasSearch => {
