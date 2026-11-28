@@ -15,9 +15,10 @@
  * - /packages/core/src/hooks/index.ts
  */
 
-import {useState, useCallback, useEffect, useRef} from 'react';
+import {useState, useCallback, useEffect, useMemo, useRef} from 'react';
 import {flushSync} from 'react-dom';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
+import {useCommittedRef} from './useCommittedRef';
 
 /**
  * Where the content is shown while something other than scrolling moves it:
@@ -59,10 +60,37 @@ function isRendered(el: HTMLElement): boolean {
   return typeof el.checkVisibility !== 'function' || el.checkVisibility();
 }
 
+const NO_CLASS_NAMES: ReadonlyArray<string> = [];
+
+function classTokens(value: string | null): Set<string> {
+  return new Set(value?.split(/\s+/).filter(Boolean));
+}
+
+function isOwnClassWrite(
+  before: string | null,
+  after: string | null,
+  own: ReadonlySet<string>,
+): boolean {
+  const from = classTokens(before);
+  const to = classTokens(after);
+  for (const token of from) {
+    if (!to.has(token) && !own.has(token)) {
+      return false;
+    }
+  }
+  for (const token of to) {
+    if (!from.has(token) && !own.has(token)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Observes what changes `el`'s overflow besides its scroll: its own size,
  * each child's size, the children added or removed, and its class or style.
- * Returns the teardown, which ends every observation.
+ * Returns the teardown, which ends every observation. The observer skips a
+ * class write that only adds or removes the caller's own classes.
  *
  * The container attaches in React's commit, where a read forces a style and
  * layout pass before the browser's own. So the first measurement waits for
@@ -79,6 +107,7 @@ function observeContent(
   el: HTMLElement,
   measure: () => void,
   measureFirst: () => void,
+  getOwnClassNames: () => ReadonlySet<string>,
 ): () => void {
   let isActive = true;
   let isLaidOut = false;
@@ -131,15 +160,40 @@ function observeContent(
   }
   const mutations =
     typeof MutationObserver === 'function'
-      ? new MutationObserver(() => {
-          followChildren();
-          measure();
+      ? new MutationObserver(records => {
+          const own = getOwnClassNames();
+          let changed = false;
+          let childrenChanged = false;
+          records.forEach((record, index) => {
+            if (record.type === 'childList') {
+              childrenChanged = true;
+              changed = true;
+            } else if (record.attributeName === 'class') {
+              // The class after this write is what the next class write found.
+              const next = records
+                .slice(index + 1)
+                .find(r => r.attributeName === 'class');
+              const after = next ? next.oldValue : el.getAttribute('class');
+              if (!isOwnClassWrite(record.oldValue, after, own)) {
+                changed = true;
+              }
+            } else {
+              changed = true;
+            }
+          });
+          if (childrenChanged) {
+            followChildren();
+          }
+          if (changed) {
+            measure();
+          }
         })
       : null;
   mutations?.observe(el, {
     childList: true,
     attributes: true,
     attributeFilter: ['class', 'style'],
+    attributeOldValue: true,
   });
   return () => {
     isActive = false;
@@ -182,7 +236,19 @@ export function useScrollOverflow() {
  * current. `isFirstMeasurement` is true while the edges are the ones the
  * first measurement set. Internal: not exported from the hooks entry.
  */
-export function useShownScrollOverflow() {
+export function useShownScrollOverflow(
+  options: {
+    /**
+     * The classes the caller sets on the container from the edges this hook
+     * reports. A write that only adds or removes them is not measured again.
+     */
+    readonly ownClassNames?: ReadonlyArray<string>;
+  } = {},
+) {
+  const ownClassNames = options.ownClassNames ?? NO_CLASS_NAMES;
+  const ownSetRef = useCommittedRef(
+    useMemo(() => new Set(ownClassNames), [ownClassNames]),
+  );
   const elRef = useRef<HTMLElement | null>(null);
   const unobserveRef = useRef<(() => void) | null>(null);
   const shownRef = useRef<ShownPosition | null>(null);
@@ -307,10 +373,15 @@ export function useShownScrollOverflow() {
 
       if (el) {
         el.addEventListener('scroll', measureOnScroll, {passive: true});
-        unobserveRef.current = observeContent(el, measure, measureFirst);
+        unobserveRef.current = observeContent(
+          el,
+          measure,
+          measureFirst,
+          () => ownSetRef.current,
+        );
       }
     },
-    [measure, measureFirst, measureOnScroll],
+    [measure, measureFirst, measureOnScroll, ownSetRef],
   );
 
   useEffect(() => {

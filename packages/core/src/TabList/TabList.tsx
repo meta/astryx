@@ -5,7 +5,7 @@
 /**
  * @file TabList.tsx
  * @input Uses React, StyleX, TabListContext, useListFocus, useKeyboardHint,
- *   useScrollOverflow, Icon
+ *   useShownScrollOverflow, Icon
  * @output Exports TabList component, TabListProps and TabListOverflow types
  * @position Tab strip wrapper; provides TabListContext to Tab and TabMenu
  *   children. A `<nav>` landmark by default; speaks the WAI-ARIA tabs pattern
@@ -49,7 +49,7 @@ import {useSize} from '../SizeContext/SizeContext';
 import {mergeProps, rtlStyles} from '../utils';
 import {useListFocus} from '../hooks/useListFocus';
 import {useKeyboardHint} from '../hooks/useKeyboardHint';
-import {useScrollOverflow} from '../hooks/useScrollOverflow';
+import {useShownScrollOverflow} from '../hooks/useScrollOverflow';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {isRtlElement} from '../hooks/isRtlElement';
@@ -372,6 +372,16 @@ const styles = stylex.create({
   },
 });
 
+/**
+ * The classes the edge fade puts on the strip, in any of its states. The
+ * scroll hook does not measure again for a class write that only sets them.
+ */
+const FADE_CLASS_NAMES = [
+  styles.fadeStart,
+  styles.fadeEnd,
+  styles.fadeBoth,
+].flatMap(style => (stylex.props(style).className ?? '').split(' '));
+
 const arrowSizeStyles = stylex.create({
   sm: {
     width: sizeVars['--size-element-sm'],
@@ -467,7 +477,9 @@ export function TabList({
     onBlur: onHintBlur,
   } = useKeyboardHint();
 
-  const {scrollRef, overflowStart, overflowEnd} = useScrollOverflow();
+  const {scrollRef, overflowStart, overflowEnd} = useShownScrollOverflow({
+    ownClassNames: FADE_CLASS_NAMES,
+  });
 
   const attachStrip = useCallback(
     (el: HTMLDivElement | null) => {

@@ -11,7 +11,8 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {act, renderHook} from '@testing-library/react';
+import {useCallback} from 'react';
+import {act, render, renderHook} from '@testing-library/react';
 import {useScrollOverflow, useShownScrollOverflow} from './useScrollOverflow';
 import {observeResize} from '../utils/sharedResizeObserver';
 
@@ -78,6 +79,9 @@ async function layOut(el: HTMLElement) {
     deliverResize?.([resizeEntry(el)]);
   });
 }
+
+// The classes a fade mask sets from the edges, as TabList's do.
+const FADE_CLASSES = ['faded-end', 'faded-both'];
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', FakeResizeObserver);
@@ -393,6 +397,93 @@ describe('useScrollOverflow', () => {
       el.style.columnGap = '0px';
     });
     expect(result.current.hasOverflow).toBe(false);
+    unmount();
+  });
+
+  it('does not measure again for a class its own edges put on the container', async () => {
+    // A fade mask is a class chosen from the edges, as TabList sets it. That
+    // write follows the measurement that chose it and changes no layout. A
+    // strip whose class never changes is the baseline for the same mount.
+    async function readsAfterSettling(isFaded: boolean): Promise<number> {
+      let reads: Reads | null = null;
+      let strip: HTMLDivElement | null = null;
+      function Strip() {
+        const {scrollRef, overflowEnd} = useShownScrollOverflow({
+          ownClassNames: FADE_CLASSES,
+        });
+        // One callback for the strip's life, as TabList keeps: a new ref
+        // each render would reattach the observation around the class write.
+        const ref = useCallback(
+          (el: HTMLDivElement | null) => {
+            if (el != null && reads == null) {
+              reads = fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+              stubRendered(el, true);
+              strip = el;
+            }
+            scrollRef(el);
+          },
+          [scrollRef],
+        );
+        return (
+          <div
+            className={isFaded && overflowEnd ? 'faded-end' : undefined}
+            ref={ref}
+          />
+        );
+      }
+      const {container, unmount} = render(<Strip />);
+      await layOut(strip as unknown as HTMLElement);
+      await act(async () => {});
+      expect(container.firstElementChild?.classList.contains('faded-end')).toBe(
+        isFaded,
+      );
+      const total = totalReads(reads as unknown as Reads);
+      unmount();
+      return total;
+    }
+
+    const baseline = await readsAfterSettling(false);
+    expect(baseline).toBe(3);
+    expect(await readsAfterSettling(true)).toBe(baseline);
+  });
+
+  it("still measures an app's own class change made in the same commit as an edge change", async () => {
+    // The commit that sets the end edge also sets the app's own class, and
+    // that class moves the scroll offset. Only the fade's classes are the
+    // hook's own, so the app's class write is measured and the start edge
+    // follows.
+    let overflowStart = false;
+    let strip: HTMLDivElement | null = null;
+    function Strip() {
+      const shown = useShownScrollOverflow({ownClassNames: FADE_CLASSES});
+      const {scrollRef} = shown;
+      overflowStart = shown.overflowStart;
+      const ref = useCallback(
+        (el: HTMLDivElement | null) => {
+          if (el != null) {
+            fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+            Object.defineProperty(el, 'scrollLeft', {
+              configurable: true,
+              get: () => (el.classList.contains('app-scrolled') ? 10 : 0),
+            });
+            stubRendered(el, true);
+            strip = el;
+          }
+          scrollRef(el);
+        },
+        [scrollRef],
+      );
+      return (
+        <div
+          className={shown.overflowEnd ? 'faded-end app-scrolled' : undefined}
+          ref={ref}
+        />
+      );
+    }
+    const {unmount} = render(<Strip />);
+    await layOut(strip as unknown as HTMLElement);
+    await act(async () => {});
+    expect(overflowStart).toBe(true);
     unmount();
   });
 
