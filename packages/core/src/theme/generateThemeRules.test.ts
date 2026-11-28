@@ -792,6 +792,67 @@ describe("Text size overrides and a theme's own size rule", () => {
     expect(lastFontSize(css, XSM)).toBe('9px');
   });
 
+  it("falls back to Core's token for a size font size the boundary check refuses", () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'size-refused',
+        components: {
+          text: {
+            'type:supporting': {fontSize: '20px'},
+            'size:xsm': {fontSize: '9px; color: red'},
+          },
+        },
+      }),
+      [],
+    ).join('\n');
+    expect(lastFontSize(css, XSM)).toBe('var(--font-size-xs)');
+  });
+
+  it("re-emits only a size rule's font size, so the type keeps its line height", () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'size-shorthand',
+        components: {
+          text: {
+            'type:supporting': {fontSize: '20px', lineHeight: '30px'},
+            'size:xsm': {font: '9px serif'},
+          },
+        },
+      }),
+    ).join('\n');
+    // The last xsm rule, the override, sets only a font size: no shorthand
+    // that would reset the type's line height after the type rule.
+    const lastXsm = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(([, sel]) => sel.trim().endsWith(XSM))
+      .at(-1)?.[2];
+    expect(lastXsm).not.toMatch(/\bfont:/);
+    expect(lastFontSize(css, XSM)).toBe('var(--font-size-xs)');
+  });
+
+  it("keeps a size rule's color-mode font size after the type rule", () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'size-modes',
+        components: {
+          // Size rules first: only the override can place them after the type.
+          text: {
+            'size:xsm': {fontSize: '9px', '@dark': {fontSize: '11px'}},
+            'size:sm': {'@dark': {fontSize: '13px'}},
+            'type:supporting': {fontSize: '20px'},
+          },
+        },
+      }),
+    ).join('\n');
+    const typeAt = css.indexOf('.astryx-text[data-type="supporting"]');
+    expect(css.lastIndexOf('font-size: 11px')).toBeGreaterThan(typeAt);
+    expect(css.lastIndexOf('font-size: 13px')).toBeGreaterThan(typeAt);
+    // A size whose rule sets a font size only in dark keeps Core's token in
+    // light, after the type rule.
+    expect(
+      css.lastIndexOf(`${SM} { font-size: var(--font-size-sm); }`),
+    ).toBeGreaterThan(typeAt);
+  });
+
   it("keeps the theme's size rule on a media surface that restyles the type", () => {
     const css = generateOnMediaCSS(
       defineTheme({
