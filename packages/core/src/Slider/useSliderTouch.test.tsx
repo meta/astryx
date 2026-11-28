@@ -185,12 +185,14 @@ function Controlled({
   onChange,
   onChangeEnd,
   orientation,
+  step,
   valueDisplay = 'none',
 }: {
   initial: number | [number, number];
   onChange?: (value: number | [number, number]) => void;
   onChangeEnd?: (value: number | [number, number]) => void;
   orientation?: 'horizontal' | 'vertical';
+  step?: number;
   valueDisplay?: 'none' | 'tooltip' | 'text';
 }) {
   const [value, setValue] = useState<number | [number, number]>(initial);
@@ -203,6 +205,7 @@ function Controlled({
       label="Level"
       valueDisplay={valueDisplay}
       orientation={orientation}
+      step={step}
       value={value}
       onChange={report}
       onChangeEnd={onChangeEnd}
@@ -212,6 +215,7 @@ function Controlled({
       label="Level"
       valueDisplay={valueDisplay}
       orientation={orientation}
+      step={step}
       value={value}
       onChange={report}
       onChangeEnd={onChangeEnd}
@@ -621,7 +625,9 @@ describe('Slider touch presentation (UISlider tracking)', () => {
     stubControlGeometry();
     haptics.playHaptic.mockClear();
     const onChangeEnd = vi.fn();
-    await renderTouch(<Controlled initial={50} onChangeEnd={onChangeEnd} />);
+    await renderTouch(
+      <Controlled initial={50} step={3} onChangeEnd={onChangeEnd} />,
+    );
     const control = document.querySelector(
       '.astryx-slider-control',
     ) as HTMLElement;
@@ -636,6 +642,7 @@ describe('Slider touch presentation (UISlider tracking)', () => {
       });
     }
     expect(onChangeEnd).toHaveBeenLastCalledWith(100);
+    expect(screen.getByRole('slider')).toHaveAttribute('aria-valuenow', '100');
     expect(haptics.playHaptic).not.toHaveBeenCalled();
     // A drag from there into the minimum plays it once.
     dragThumb(
