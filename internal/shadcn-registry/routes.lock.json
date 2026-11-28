@@ -107,6 +107,11 @@
       "aliases": []
     },
     {
+      "name": "component-charts-area-chart",
+      "path": "components/charts/area-chart",
+      "aliases": []
+    },
+    {
       "name": "component-charts-chart",
       "path": "components/charts/chart",
       "aliases": []

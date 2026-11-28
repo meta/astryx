@@ -70,6 +70,10 @@
     "reason": "BottomSheetSwitcher owns no direction-sensitive visual or interaction. Its shared dialog spans both axes symmetrically; sheet handoff, close, swipe, and alignment motion use only the block axis; and it owns no directional glyph, inline ordering, horizontal scroll action, or arrow-key behavior. Each child BottomSheet retains its own independently verified logical layout."
   },
   {
+    "component": "charts/AreaChart",
+    "reason": "AreaChart adds no directional layout of its own: the SVG areas sit on a Cartesian data scale with physical axes and grid, the legend is owned by ChartLegend (measured RTL-ready), the tooltip by ChartTooltip, and the title and subtitle are block-flow text. It owns no inline-axis placement or order, directional glyph, scroll, drag, overlay, or keyboard behavior."
+  },
+  {
     "component": "charts/ChartAxis",
     "reason": "ChartAxis renders Cartesian data coordinates on physical top, right, bottom, or left plot edges. Tick lines, labels, and value order stay tied to the data scale rather than reading direction; it owns no directional glyph, logical overlay, scroll, drag, or horizontal keyboard behavior."
   },
