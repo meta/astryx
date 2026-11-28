@@ -57,6 +57,7 @@ import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {cutTextDirection, truncatedTextStyles} from '../utils/cutTextDirection';
 import {
   TextClampContext,
   TextMeasureOnInterestContext,
@@ -304,6 +305,16 @@ export function Text({
   // Build inline style for -webkit-line-clamp (dynamic value)
   const inlineStyle = maxLines > 1 ? {WebkitLineClamp: maxLines} : undefined;
 
+  // Plain text in one script that one line's ellipsis cuts takes its own
+  // direction, so it keeps its start on either page. A multi-line clamp keeps
+  // the start on any page, and in Chromium its ellipsis leaves the box under
+  // the page's alignment, so it keeps the page's direction. End-aligned text
+  // keeps it too: its own direction would move it to the other edge.
+  const cutDirection =
+    maxLines === 1 && justify !== 'end'
+      ? cutTextDirection(children).dir
+      : undefined;
+
   return (
     <>
       <Component
@@ -327,6 +338,8 @@ export function Text({
             // Text wrap
             textWrap && textWrapStyles[textWrap],
             // Justify (text alignment)
+            // The page's alignment, unless the text sets its own.
+            cutDirection != null && truncatedTextStyles.pageAlign,
             justify !== 'start' && justifyStyles[justify],
             // Capsize
             hasCapsize && capsizeStyles.enabled,
@@ -339,6 +352,7 @@ export function Text({
           className,
           {...style, ...inlineStyle},
         )}
+        dir={cutDirection}
         {...props}
         onPointerMove={composeEventHandlers(
           tooltipInterest.onPointerMove,

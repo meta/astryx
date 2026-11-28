@@ -27,6 +27,7 @@ applies_to:
     packages/core/src/hooks/useStreamingText.ts,
     packages/core/src/utils/typeaheadMatch.ts,
     packages/core/src/utils/textDirection.ts,
+    packages/core/src/utils/cutTextDirection.ts,
     internal/eslint-plugin-astryx/,
     scripts/check-i18n-catalog.mjs,
   ]
@@ -41,6 +42,7 @@ verified_by:
     packages/core/src/i18n/__tests__/calendarSystem.test.tsx,
     packages/core/src/utils/calendarSystem.test.ts,
     packages/core/src/utils/textDirection.test.ts,
+    packages/core/src/utils/cutTextDirection.test.ts,
     packages/core/src/i18n/useTranslator.test.tsx,
     packages/core/src/i18n/__tests__/englishFallback.test.ts,
     scripts/i18n-english-fallback.test.mjs,
@@ -332,12 +334,15 @@ for all 30 shipped locales plus `pseudo`.
   and create first-paint or hydration errors. `utils/textDirection.ts`
   (`textDirectionProps`, `withTextDirection`) is the shared helper that marks
   caller text with no right-to-left letter `dir="ltr"`; components use it
-  rather than reading direction themselves. `cutTextDirection` in the same
-  module gives a label that cuts its own text its direction: `ltr` for text
-  with no right-to-left letter, `rtl` for text whose letters are all
-  right-to-left, so the label keeps its start on either page. Text that mixes
-  both scripts takes no direction and follows the page. A known limit: a
-  mixed label led by the other script than the page's is cut at its start.
+  rather than reading direction themselves. `cutTextDirection`, which the same
+  module re-exports from `utils/cutTextDirection.ts`, gives a label that cuts
+  its own text its direction: `ltr` for text with no right-to-left letter,
+  `rtl` for text whose letters are all right-to-left, so the label keeps its
+  start on either page. Text that mixes both scripts takes no direction and
+  follows the page. Known limits: a mixed label led by the other script than
+  the page's is cut at its start, and Text or Heading with `justify="end"`
+  keeps the page's direction, so on a right-to-left page a cut Latin label
+  there is cut at its start.
 - **INV12 — Locale and direction are related but distinct.** The provider derives
   a default direction from locale and accepts an explicit override. It does not
   mutate DOM `dir`. Applications own the page or region `dir`, and must keep it

@@ -620,3 +620,29 @@ describe('Heading without a valid level', () => {
     warn.mockRestore();
   });
 });
+
+describe('Heading cut by maxLines keeps the start of a one-script label', () => {
+  it.each([
+    {label: 'Quarterly planning overview', dir: 'ltr'},
+    {label: 'סקירת תכנון רבעונית', dir: 'rtl'},
+  ])('"$label" takes dir $dir', ({label, dir}) => {
+    render(
+      <div dir="rtl">
+        <Heading level={2} maxLines={1} hasTruncateTooltip={false}>
+          {label}
+        </Heading>
+      </div>,
+    );
+    expect(screen.getByRole('heading', {name: label})).toHaveAttribute(
+      'dir',
+      dir,
+    );
+  });
+
+  it('keeps the page direction without maxLines', () => {
+    render(<Heading level={2}>Uncut heading</Heading>);
+    expect(
+      screen.getByRole('heading', {name: 'Uncut heading'}),
+    ).not.toHaveAttribute('dir');
+  });
+});

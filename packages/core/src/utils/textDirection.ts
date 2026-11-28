@@ -4,9 +4,10 @@
  * @file textDirection.ts
  * @input For textDirectionProps, a component's text content (a string, a
  *   number, or a rich node)
- * @output textDirectionProps, cutTextDirection (a cut label's direction),
- *   withTextDirection, isolatedText, cutText, and the `pageAlign` styles
- *   (localeTextStyles, truncatedTextStyles)
+ * @output textDirectionProps, withTextDirection, isolatedText, cutText, the
+ *   `pageAlign` styles (localeTextStyles, and truncatedTextStyles), and
+ *   cutTextDirection (a cut label's direction); the last two come from
+ *   cutTextDirection.ts
  * @position Core-internal helper, not exported from the package: the one
  *   owner of direction decisions for caller text (a locale's own direction
  *   comes from getLocaleDirection)
@@ -15,6 +16,9 @@
 import {createElement, type ReactElement, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {hasStrongRightToLeft} from '../i18n/firstStrongDirection';
+import {cutTextDirection, truncatedTextStyles} from './cutTextDirection';
+
+export {cutTextDirection, truncatedTextStyles};
 
 /**
  * Under a right-to-left page, weak and neutral characters in left-to-right
@@ -30,52 +34,6 @@ export function textDirectionProps(content: ReactNode): {dir?: 'ltr'} {
   }
   return hasStrongRightToLeft(String(content)) ? {} : {dir: 'ltr'};
 }
-
-/**
- * The direction of a label that cuts its own text with an ellipsis. The
- * element's own direction decides which end the ellipsis cuts. Text with no
- * right-to-left letter takes `ltr`, so a Latin label keeps its start on a
- * right-to-left page ("Mon…"). Text whose letters are all right-to-left takes
- * `rtl`, so a Hebrew or Arabic label keeps its start on a left-to-right page.
- * Text that mixes both scripts, and a rich node, take no direction and follow
- * the page.
- */
-export function cutTextDirection(content: ReactNode): {dir?: 'ltr' | 'rtl'} {
-  if (typeof content !== 'string' && typeof content !== 'number') {
-    return {};
-  }
-  const text = String(content);
-  if (!hasStrongRightToLeft(text)) {
-    return {dir: 'ltr'};
-  }
-  return hasStrongLeftToRight(text) ? {} : {dir: 'rtl'};
-}
-
-// Built at runtime, as the shared classifier builds its own: a source build
-// may rewrite a regular expression literal with a Unicode property escape.
-const LETTER = new RegExp(String.raw`\p{Letter}`, 'u');
-
-// A letter that is not right-to-left. Digits and punctuation do not count,
-// so "דוח 2026" is in one script.
-function hasStrongLeftToRight(text: string): boolean {
-  for (const character of text) {
-    if (LETTER.test(character) && !hasStrongRightToLeft(character)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * For an element that cuts its own text with an ellipsis and takes
- * `cutTextDirection`. Put `pageAlign` beside the `dir` so the element keeps
- * the page's alignment.
- */
-export const truncatedTextStyles = stylex.create({
-  pageAlign: {
-    textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
-  },
-});
 
 /**
  * The same `pageAlign` for a field that shows text a locale formats, with
