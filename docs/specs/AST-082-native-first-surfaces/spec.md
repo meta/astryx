@@ -107,6 +107,13 @@ depends only on runtimes it can maintain.
     prop. Moving a released prop from the core to the web contract changes no
     web caller's types, because the web types are the core contract plus the web
     contract; native contracts stop offering it.
+  - Every public prop has one definition, which every surface's contract builds
+    in; a consumer installs nothing extra for it, and `@astryxdesign/core` still
+    exposes the core contracts (FR5, DEC-7). Astryx manages each prop in that one
+    definition for every surface at once. A new prop is a permanent part of every contract that
+    carries it, so admitting one is a high bar (`spec:AST-002/DEC-1`): when a
+    better default behavior meets the need, the component changes its default
+    and adds no prop (DEC-17).
   - The web contract holds the web base props: styling inputs, DOM events, refs,
     element choice, and HTML attributes.
   - A component may exist on some platforms only; using it elsewhere fails at
@@ -429,6 +436,12 @@ depends only on runtimes it can maintain.
 
 ## Current-state impact
 
+- **DEC-7 gap:** FR5, FR6, FR9, FR10, FR15, FR16 and FR19, and `spec:AST-093`
+  FR1 and FR6, assign their roles and native implementations to
+  `@astryxdesign/native`, which DEC-7 deprecates, and the canary still
+  publishes.
+- **FR3 gap:** the contracts live in `packages/native` (`@astryxdesign/native`);
+  Core's published types do not build them in.
 - `architecture:public-component-api` gains the shared base props, the web base
   as a platform contract, base-prop targeting, and core-owned concepts (FR7)
   when a native platform ships.
@@ -579,8 +592,21 @@ The React Native candidate's native code lives in the platform layer of
 `@astryxdesign/react-native` (`spec:AST-112` FR4), and `@astryxdesign/native` stays the single cross-platform
 contracts package.
 
+Amended 2026-11-18 (**Decider:** `cixzhang`, `2026-11-18 13:23 PT`): the
+contracts no longer live in `@astryxdesign/native`. Every public prop has one
+definition, which every surface's contract builds in. A consumer installs
+nothing extra for it, web pages gain 0 bytes, and no published package depends
+on where it lives. `@astryxdesign/native` is deprecated. Its remaining roles in
+FR5, FR6, FR9, FR10, FR15, FR16 and FR19 (the native contracts' bindings,
+`defineNativeTheme`, the wire) and the native implementations that
+`spec:AST-093` FR1 and FR6 place in it move to successors that their own
+changes name.
+Core never imports or depends on `@astryxdesign/native` (FR14).
+
 Rejected: native types and implementations inside `@astryxdesign/core`, because
 every web consumer would carry them and core's API would grow with each platform.
+Rejected: publishing the contracts as their own package, which adds a
+compatibility promise, a release slot, and one more install for every app.
 
 ### DEC-8 — The portable entry is an entry of `@astryxdesign/core`
 
@@ -705,6 +731,19 @@ it once as durable intent rather than repeating it in each platform's entry.
 
 Rejected: iOS platform-entry terms only, because every other native platform
 would need the same words again.
+
+### DEC-17 — Every public prop has one definition, and a new prop is a high bar
+
+**Reference:** `spec:AST-082/DEC-17`
+**Decider:** `cixzhang`, `2026-11-18 13:35 PT`
+
+A new prop becomes a permanent part of every contract that carries it, so the
+owner holds new props to a high bar. Every public prop has one definition
+(DEC-7), where it is managed centrally and judged against every surface before
+it ships. When a better default behavior meets a need, the component
+changes its default and adds no prop.
+
+Rejected: props defined in each package and reconciled later.
 
 ## Open questions
 
