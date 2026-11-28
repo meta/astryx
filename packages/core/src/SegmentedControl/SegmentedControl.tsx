@@ -31,6 +31,7 @@ import type {
 } from './SegmentedControlContext';
 import {mergeProps} from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {joinAriaIDs} from '../utils/inputAria';
 import {useSize} from '../SizeContext/SizeContext';
 import type {BaseProps} from '../BaseProps';
@@ -375,14 +376,16 @@ export function SegmentedControl({
   const handleContainerKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       selection.keyPressed();
-      onKeyDownProp?.(e);
+      if (!isDisabled) {
+        onKeyDownProp?.(e);
+      }
       if (e.defaultPrevented) {
         return;
       }
       hint.onKeyDown(e);
       handleKeyDown(e);
     },
-    [selection, onKeyDownProp, hint, handleKeyDown],
+    [selection, isDisabled, onKeyDownProp, hint, handleKeyDown],
   );
 
   // Selection-follows-focus (APG radiogroup): useListFocus only *moves* focus,
@@ -462,7 +465,7 @@ export function SegmentedControl({
           attachTrack,
           disabledMessageTooltip.ref,
         )}
-        {...rest}
+        {...withholdCallerHandlers(rest, isDisabled)}
         role="radiogroup"
         aria-label={label}
         aria-disabled={isDisabled || undefined}

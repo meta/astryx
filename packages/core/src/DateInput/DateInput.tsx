@@ -75,6 +75,7 @@ import {TouchDateField} from './TouchDateField';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA, isImeKeyEvent} from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
 import {getLocaleDirection} from '../i18n/getLocaleDirection';
@@ -649,7 +650,7 @@ function PointerDateField({
     onFocus: onFocusProp,
     onKeyDown: onKeyDownProp,
     ...controlProps
-  } = rest;
+  } = withholdCallerHandlers(rest, isDisabled);
   // Form attributes pass through untyped, as other input attributes do.
   const formControl = controlProps as typeof controlProps & {
     name?: string;

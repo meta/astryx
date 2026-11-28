@@ -85,6 +85,7 @@ import {
   type ISOTimeString,
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
   plainDateFromISO,
@@ -477,7 +478,7 @@ export function TouchDateTimeField({
     onClick: onClickProp,
     onKeyDown: onKeyDownProp,
     ...controlProps
-  } = rest;
+  } = withholdCallerHandlers(rest, isDisabled);
   const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {locale} = use(InternationalizationContext);

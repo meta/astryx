@@ -85,6 +85,7 @@ import {
   type ISODateString,
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -310,7 +311,7 @@ export function NativeDateField({
     onBlur: onBlurProp,
     onKeyDown: onKeyDownProp,
     ...controlProps
-  } = rest;
+  } = withholdCallerHandlers(rest, isDisabled);
   const t = useComponentTranslator();
   const locale = useLocale();
   // A date the locale formats reads in the locale's direction.
