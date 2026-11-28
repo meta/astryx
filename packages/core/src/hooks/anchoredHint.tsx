@@ -29,6 +29,9 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import type {ContextLayerReturn} from '../Layer/useLayer';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
+
+const HINT_FADE_DURATION = '150ms';
 
 const styles = stylex.create({
   hint: {
@@ -59,7 +62,12 @@ const styles = stylex.create({
       ':popover-open': 1,
     },
     transitionProperty: 'opacity, display, overlay',
-    transitionDuration: '150ms',
+    transitionDuration: {
+      default: `calc(${HINT_FADE_DURATION} * ${reducedMotionTransform.factor})`,
+      '@media (pointer: coarse)': HINT_FADE_DURATION,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
     transitionBehavior: 'allow-discrete',
   },
   // A hint that only teaches floats above the content without taking its
