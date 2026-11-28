@@ -1299,6 +1299,15 @@ function DropdownMenuPopover({
     onEscape: closeMenu,
   });
 
+  // A stable ref: an inline one re-runs on every render (null, then the element).
+  const setListElement = useCallback(
+    (el: HTMLDivElement | null) => {
+      listRef.current = el;
+      contentRef.current = el?.closest<HTMLDivElement>('[popover]') ?? null;
+    },
+    [listRef],
+  );
+
   // Typeahead over the menu items, disabled ones included — jump to the next item whose
   // LABEL starts with the typed text, never its description, shortcut or
   // badge. Reuses the hook's scoped item collection so an inline submenu
@@ -1949,11 +1958,7 @@ function DropdownMenuPopover({
         renderWithRegions(
           <div
             {...rest}
-            ref={el => {
-              listRef.current = el;
-              contentRef.current =
-                el?.closest<HTMLDivElement>('[popover]') ?? null;
-            }}
+            ref={setListElement}
             id={menuId}
             // While a sub-menu's view shows in place of the rows, that view is
             // the one menu, so this box stops being a menu around it.
