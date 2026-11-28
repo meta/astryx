@@ -2798,5 +2798,69 @@
   "@astryx.searchField.cancel": {
     "defaultMessage": "Cancel",
     "description": "Accessible name of a lab SearchField's close button, which ends the search: it clears the query, ends editing and deactivates the field."
+  },
+  "@astryx.byokCard.connect": {
+    "defaultMessage": "Connect",
+    "description": "Button label to initiate API key connection."
+  },
+  "@astryx.byokCard.connected": {
+    "defaultMessage": "Connected",
+    "description": "Status badge label when provider is connected."
+  },
+  "@astryx.byokCard.notConnected": {
+    "defaultMessage": "Not connected",
+    "description": "Status badge label when provider is not connected."
+  },
+  "@astryx.byokCard.rotate": {
+    "defaultMessage": "Rotate",
+    "description": "Button label to rotate or update an existing API key."
+  },
+  "@astryx.byokCard.delete": {
+    "defaultMessage": "Delete",
+    "description": "Button label to delete a stored API key."
+  },
+  "@astryx.byokCard.cancel": {
+    "defaultMessage": "Cancel",
+    "description": "Button label to dismiss connection or deletion dialog."
+  },
+  "@astryx.byokCard.saveKey": {
+    "defaultMessage": "Save Key",
+    "description": "Submit button label to save the entered API key."
+  },
+  "@astryx.byokCard.updateKey": {
+    "defaultMessage": "Update Key",
+    "description": "Submit button label to update the API key in rotate mode."
+  },
+  "@astryx.byokCard.remove": {
+    "defaultMessage": "Remove",
+    "description": "Button label to confirm removing the API key."
+  },
+  "@astryx.byokCard.showKey": {
+    "defaultMessage": "Show key",
+    "description": "Button label to reveal plain text of masked API key."
+  },
+  "@astryx.byokCard.hideKey": {
+    "defaultMessage": "Hide key",
+    "description": "Button label to mask API key as password."
+  },
+  "@astryx.byokCard.dialog.rotateDescription": {
+    "defaultMessage": "Enter a new API key to replace your current key for {provider}.",
+    "description": "Description in key dialog when rotating an existing key."
+  },
+  "@astryx.byokCard.dialog.connectDescription": {
+    "defaultMessage": "Enter your {provider} API key below to connect.",
+    "description": "Description in key dialog when connecting a new provider."
+  },
+  "@astryx.byokCard.dialog.deleteDescription": {
+    "defaultMessage": "Are you sure you want to remove your API key for {provider}? This will disconnect all models from this provider.",
+    "description": "Confirmation description when deleting an API key."
+  },
+  "@astryx.byokCard.dialog.apiKeyInputLabel": {
+    "defaultMessage": "{provider} API Key",
+    "description": "Aria label for the API key text input."
+  },
+  "@astryx.byokCard.dialog.apiKeyPlaceholder": {
+    "defaultMessage": "sk-...",
+    "description": "Placeholder for the API key text input."
   }
 }
