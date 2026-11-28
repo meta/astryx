@@ -4,10 +4,44 @@ import {afterEach, describe, it, expect} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import ts from 'typescript';
 import {swizzle} from './swizzle.mjs';
 
 // api/swizzle/ -> up 3 = packages/cli, up 4 = repo root (has packages/core).
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+
+/**
+ * The module specifiers a file imports or re-exports, read by TypeScript's
+ * scanner, which skips comments: a header comment can quote an import
+ * (`export * from './utils'`) that the file does not make.
+ */
+function importSpecifiers(content) {
+  return ts
+    .preProcessFile(content, true, true)
+    .importedFiles.map(entry => entry.fileName);
+}
+
+describe('importSpecifiers', () => {
+  it('reads imports and re-exports, and not import text in comments', () => {
+    const content = [
+      '/**',
+      " * Not listed in `export * from './utils'`, so naming it there would",
+      ' * publish it as API.',
+      ' */',
+      "// import {x} from './commented';",
+      "import {a} from './a';",
+      "import type {B} from '../b';",
+      "export * from './c';",
+      "export {d} from '@astryxdesign/core/d';",
+    ].join('\n');
+    expect(importSpecifiers(content)).toEqual([
+      './a',
+      '../b',
+      './c',
+      '@astryxdesign/core/d',
+    ]);
+  });
+});
 
 describe('swizzle() API', () => {
   it('no component → swizzle.list of core components', async () => {
@@ -52,8 +86,7 @@ describe('swizzle imports resolve for components with .stylex imports', () => {
 
     for (const file of copied) {
       const content = fs.readFileSync(file, 'utf-8');
-      for (const m of content.matchAll(/from ['"]([^'"]+)['"]/g)) {
-        const specifier = m[1];
+      for (const specifier of importSpecifiers(content)) {
         if (specifier.startsWith('@astryxdesign/core/')) {
           const subpath = './' + specifier.replace('@astryxdesign/core/', '');
           expect(
