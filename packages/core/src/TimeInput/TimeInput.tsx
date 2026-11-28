@@ -74,7 +74,10 @@ import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
-import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {
+  InputGroupInternalContext,
+  useIsMemberInvalid,
+} from '../InputGroup/InputGroupInternalContext';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useTooltip} from '../Tooltip';
 import {themeProps} from '../utils/themeProps';
@@ -544,6 +547,7 @@ function TimeField({
   const mergedInputRef = useMergedRefs(ref, inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputGroup = useInputGroup();
+  const isMemberInvalid = useIsMemberInvalid(status);
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -873,7 +877,7 @@ function TimeField({
           isFocusableDisabled
           isEffectivelyRequired={isEffectivelyRequired}
           isBusy={isBusy}
-          statusType={fieldStatus?.type}
+          statusType={isMemberInvalid ? 'error' : fieldStatus?.type}
           ariaDescribedBy={ariaDescribedBy}
           isRejected={typedTime.isSurfaceRejectionShown}
           onRejectedChange={typedTime.setSurfaceRejected}
@@ -920,7 +924,9 @@ function TimeField({
             aria-describedby={ariaDescribedBy}
             aria-required={isEffectivelyRequired ? 'true' : undefined}
             aria-invalid={
-              fieldStatus?.type === 'error' || typedTime.isRejected
+              isMemberInvalid ||
+              fieldStatus?.type === 'error' ||
+              typedTime.isRejected
                 ? 'true'
                 : undefined
             }

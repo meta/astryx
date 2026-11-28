@@ -71,7 +71,10 @@ import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
-import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {
+  InputGroupInternalContext,
+  useIsMemberInvalid,
+} from '../InputGroup/InputGroupInternalContext';
 
 // Public padding tokens for the `number-input` theme target. A theme writes an
 // ordinary `padding` (in ANY spelling — the shorthand, `paddingBlock`, or a
@@ -752,6 +755,7 @@ export function NumberInput({
   useMobileKeyboard(inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputGroup = useInputGroup();
+  const isMemberInvalid = useIsMemberInvalid(status);
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
 
@@ -1442,7 +1446,9 @@ export function NumberInput({
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={
-          fieldStatus?.type === 'error' || shownEntryError != null
+          isMemberInvalid ||
+          fieldStatus?.type === 'error' ||
+          shownEntryError != null
             ? 'true'
             : undefined
         }

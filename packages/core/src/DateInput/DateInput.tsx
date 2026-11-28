@@ -47,7 +47,10 @@ import {
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
-import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {
+  InputGroupInternalContext,
+  useIsMemberInvalid,
+} from '../InputGroup/InputGroupInternalContext';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
@@ -764,6 +767,9 @@ function PointerDateField({
   });
   // A date the locale formats reads in the locale's direction.
   const textDirection = getLocaleDirection(useLocale());
+  // Pass `fieldStatus`, not `status`: it carries the rejected-entry error, which
+  // is the field's own status and so wins over the group's.
+  const isMemberInvalid = useIsMemberInvalid(fieldStatus);
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -1045,9 +1051,7 @@ function PointerDateField({
         }
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={
-          fieldStatus?.type === 'error' || isInvalid ? 'true' : undefined
-        }
+        aria-invalid={isMemberInvalid || isInvalid ? 'true' : undefined}
         aria-busy={isBusy || undefined}
         aria-expanded={popover.isOpen}
         aria-haspopup="dialog"
