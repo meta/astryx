@@ -83,6 +83,7 @@ export interface PressTrackerOptions {
    * A continuous-tracking control (a held stepper) keeps its touch once its
    * press is delivered: the host cancels the browser's pan for that finger,
    * as UIKit's `touchesShouldCancel(in:)` is false for a tracking control.
+   * With a second finger down, the moves stay the browser's, for its pinch.
    * Its element then gets a blocking `touchmove` listener, so a scroll that
    * starts on it waits on the main thread: never set it on plain buttons,
    * links, cards or list cells.
