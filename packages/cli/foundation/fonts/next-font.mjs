@@ -112,8 +112,9 @@ function loadsNextFont(file, imports) {
  * layout or its Pages Router custom App imports `next/font/google`,
  * `next/font/local` or a `geist/font` entry, itself or through a module of
  * the app's own it imports that itself imports or re-exports one (such as
- * `./fonts`, or `@/app/fonts` through the app's tsconfig paths); a font
- * loaded two modules away is not followed. next/font loads each family under a name of its own
+ * `./fonts`, or `@/app/fonts` through the app's tsconfig or jsconfig
+ * paths). A package.json `imports` alias (`#fonts`), a `baseUrl`-only
+ * path, and a font loaded two modules away are not followed. next/font loads each family under a name of its own
  * and exposes a CSS variable, so a theme that names the family itself does
  * not use the loaded font. Imports are read from the syntax tree, so a
  * mention in a comment or a string does not count. A file that does not
