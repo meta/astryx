@@ -45,7 +45,13 @@ import {
   shadowVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {HStack, Text, useLayer, VStack} from '@astryxdesign/core';
+import {
+  HStack,
+  Text,
+  useLayer,
+  useTranslator,
+  VStack,
+} from '@astryxdesign/core';
 import {useChart} from './ChartContext';
 import {ChartSwatch, swatchVariantForType} from './ChartSwatch';
 import {
@@ -56,6 +62,7 @@ import {
 } from './tooltip';
 import type {SeriesDef, ChartPointerEvent} from './types';
 import {isBandScale, xPixel} from './utils';
+import {resolveValueText} from './valueText';
 
 export type ChartTooltipPlacement = 'auto' | 'right' | 'left' | 'top';
 
@@ -128,13 +135,17 @@ const DefaultTooltipContent = memo(function DefaultTooltipContent({
   rows: TooltipSeriesValue[];
   labelRows: boolean;
 }) {
+  const t = useTranslator();
+  const noDataText = t('@astryx.chart.noData');
   return (
     <VStack gap={1}>
       <Text type="body" weight="semibold">
-        {String(xValue)}
+        {resolveValueText(xValue, noDataText)}
       </Text>
       {rows.length === 1 && !labelRows ? (
-        <Text type="supporting">{String(rows[0].value)}</Text>
+        <Text type="supporting">
+          {resolveValueText(rows[0].value, noDataText)}
+        </Text>
       ) : (
         <VStack gap={1}>
           {rows.map((row, i) => (
@@ -145,7 +156,7 @@ const DefaultTooltipContent = memo(function DefaultTooltipContent({
               />
               <Text type="supporting">{row.label}</Text>
               <Text type="supporting" weight="semibold">
-                {String(row.value)}
+                {resolveValueText(row.value, noDataText)}
               </Text>
             </HStack>
           ))}

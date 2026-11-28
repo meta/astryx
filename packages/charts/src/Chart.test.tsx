@@ -11,6 +11,8 @@
  * @position Testing; validates Chart.tsx accessible name + data-table fallback
  */
 
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {createRef} from 'react';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {render, screen, act, within, fireEvent} from '@testing-library/react';
@@ -348,6 +350,74 @@ describe('Chart data table fallback', () => {
         ).toEqual(['100', '200', '150']);
       },
     );
+  });
+});
+
+describe('Chart data table empty values', () => {
+  const englishCatalog = JSON.parse(
+    readFileSync(join(__dirname, '../../core/locales/en.json'), 'utf8'),
+  ) as Record<string, {defaultMessage: string}>;
+  const NO_DATA = englishCatalog['@astryx.chart.noData'].defaultMessage;
+
+  const tableText = () =>
+    within(screen.getByRole('table'))
+      .getAllByRole('row')
+      .map(row =>
+        Array.from(row.querySelectorAll('th, td')).map(
+          cell => cell.textContent,
+        ),
+      );
+
+  it('shows the catalog phrase for empty cells and row headers', () => {
+    render(
+      <Chart
+        data={[
+          {month: 'Jan', revenue: 100, profit: Number.NaN},
+          {month: 'Feb', revenue: null, profit: 40},
+          {month: 'Mar', revenue: 150},
+          {month: null, revenue: Number.POSITIVE_INFINITY, profit: 0},
+          {month: 'May', revenue: '', profit: 30},
+        ]}
+        xKey="month"
+        series={[bar('revenue'), bar('profit')]}
+      />,
+    );
+    reportWidth(600);
+
+    expect(tableText()).toEqual([
+      ['month', 'revenue', 'profit'],
+      ['Jan', '100', 'NaN'],
+      ['Feb', NO_DATA, '40'],
+      ['Mar', '150', NO_DATA],
+      [NO_DATA, 'Infinity', '0'],
+      ['May', '', '30'],
+    ]);
+  });
+
+  it('translates the phrase for the provider locale', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        messages={{
+          fr: {'@astryx.chart.noData': {defaultMessage: 'Aucune donnée'}},
+        }}>
+        <Chart
+          data={[
+            {month: 'Jan', revenue: 100},
+            {month: 'Feb', revenue: null},
+          ]}
+          xKey="month"
+          series={[bar('revenue')]}
+        />
+      </InternationalizationProvider>,
+    );
+    reportWidth(600);
+
+    expect(tableText()).toEqual([
+      ['month', 'revenue'],
+      ['Jan', '100'],
+      ['Feb', 'Aucune donnée'],
+    ]);
   });
 });
 

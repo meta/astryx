@@ -73,7 +73,7 @@ export const docs = {
         name: 'Tooltip card',
         required: true,
         description:
-          'Non-interactive surface containing the current x value and series values.',
+          'Non-interactive surface containing the current x value as its heading and the series values in its rows. A null or undefined value reads as the translated message "No data"; other values read as String(value).',
       },
       {
         name: 'Series row',

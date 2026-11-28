@@ -208,8 +208,6 @@ calendar: CalendarSystem) => string | null | undefined`. A format returns the
 - `component:ChartAxis` uses the shared default text for continuous ticks
   without `formatTick` (FR13) and takes `formatTick` (FR15); its record's FR3
   defers to both.
-- FR8 gap: for an empty value, the default tooltip body reads `null` or
-  `undefined`, and the hidden data table shows an empty cell.
 - FR13 gap: `ChartAxis` formats continuous ticks with the d3 default tick
   format, which groups digits (`2,019`) and uses a typographic minus
   (`−20,000`).
