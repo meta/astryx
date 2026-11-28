@@ -5429,6 +5429,11 @@
       "aliases": []
     },
     {
+      "name": "showcase-table-two-axis-archive",
+      "path": "showcases/table/two-axis-archive",
+      "aliases": []
+    },
+    {
       "name": "showcase-text-area-default",
       "path": "showcases/text-area/default",
       "aliases": []
