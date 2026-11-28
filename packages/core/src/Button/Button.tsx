@@ -76,6 +76,7 @@ import {createSharedContext} from '../utils/sharedContext';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
+import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
@@ -853,6 +854,10 @@ export function Button({
   // mid-action would drop focus the same way the native attribute does
   // (credit @AKnassa, #4879), which is exactly the bug this PR fixes.
   const renderAsLink = href != null && !isTrueDisabled;
+  const {target: resolvedTarget, rel: resolvedRel} = computeTargetAndRel(
+    target,
+    rel,
+  );
 
   // Attach tooltip behavior via the hook rather than wrapping the button in a
   // <Tooltip> element. The hook adds hover/focus triggers to the button itself,
@@ -1116,8 +1121,8 @@ export function Button({
       <LinkComponent
         ref={mergedButtonRef as React.Ref<HTMLAnchorElement>}
         href={href}
-        target={target}
-        rel={rel}
+        target={resolvedTarget}
+        rel={resolvedRel}
         {...(inputGroup != null && buttonGroup == null
           ? inputGroupItemProps
           : undefined)}
