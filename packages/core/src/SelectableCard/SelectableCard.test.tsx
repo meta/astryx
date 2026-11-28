@@ -214,3 +214,138 @@ describe('SelectableCard pressed state (touch)', () => {
     expect(pressArmsShadowedByDefault(card)).toEqual([]);
   });
 });
+
+describe('SelectableCard target, handler order and passthrough (FR1, FR2, FR5, FR6)', () => {
+  function card(container: HTMLElement) {
+    const root = container.querySelector('.astryx-selectable-card');
+    if (!(root instanceof HTMLElement)) {
+      throw new Error('no selectable-card target');
+    }
+    return root;
+  }
+
+  it('reflects variant, selection and disabled on the selectable-card target', () => {
+    const {container, rerender} = render(
+      <SelectableCard
+        label="Test"
+        isSelected={false}
+        onChange={() => {}}
+        variant="blue">
+        Content
+      </SelectableCard>,
+    );
+    expect(card(container)).toHaveAttribute('data-variant', 'blue');
+    expect(card(container)).toHaveAttribute('data-selected', 'false');
+    expect(card(container)).not.toHaveAttribute('data-disabled');
+    rerender(
+      <SelectableCard
+        label="Test"
+        isSelected
+        onChange={() => {}}
+        variant="blue"
+        isDisabled>
+        Content
+      </SelectableCard>,
+    );
+    expect(card(container)).toHaveAttribute('data-selected', 'true');
+    expect(card(container)).toHaveAttribute('data-disabled');
+  });
+
+  it('toggles once for a surface click and then runs the caller onClick', () => {
+    const calls: string[] = [];
+    render(
+      <SelectableCard
+        label="Test"
+        isSelected={false}
+        onChange={value => calls.push(`change:${value}`)}
+        onClick={() => calls.push('click')}>
+        <span>Content</span>
+      </SelectableCard>,
+    );
+    fireEvent.click(screen.getByText('Content'));
+    expect(calls).toEqual(['change:true', 'click']);
+  });
+
+  it('runs the caller onClick before the toggle for a click on the checkbox, and not for Enter', () => {
+    const calls: string[] = [];
+    render(
+      <SelectableCard
+        label="Test"
+        isSelected={false}
+        onChange={value => calls.push(`change:${value}`)}
+        onClick={() => calls.push('click')}>
+        Content
+      </SelectableCard>,
+    );
+    const checkbox = screen.getByRole('checkbox', {name: 'Test'});
+    fireEvent.click(checkbox);
+    expect(calls).toEqual(['click', 'change:true']);
+    calls.length = 0;
+    fireEvent.keyDown(checkbox, {key: 'Enter'});
+    expect(calls).toEqual(['change:true']);
+  });
+
+  it('does not toggle for a click on a nested button, but still runs the caller onClick', () => {
+    const onChange = vi.fn();
+    const onClick = vi.fn();
+    const onNested = vi.fn();
+    render(
+      <SelectableCard
+        label="Test"
+        isSelected={false}
+        onChange={onChange}
+        onClick={onClick}>
+        <button type="button" onClick={onNested}>
+          Details
+        </button>
+      </SelectableCard>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Details'}));
+    expect(onNested).toHaveBeenCalledOnce();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('runs no caller onClick or onMouseUp while disabled', () => {
+    const onClick = vi.fn();
+    const onMouseUp = vi.fn();
+    render(
+      <SelectableCard
+        label="Test"
+        isSelected={false}
+        onChange={() => {}}
+        onClick={onClick}
+        onMouseUp={onMouseUp}
+        isDisabled>
+        <span>Content</span>
+      </SelectableCard>,
+    );
+    fireEvent.mouseUp(screen.getByText('Content'));
+    fireEvent.click(screen.getByText('Content'));
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onMouseUp).not.toHaveBeenCalled();
+  });
+
+  it('connects ref and data props to the card root, which adds no role or tab stop', () => {
+    const ref = {current: null as HTMLDivElement | null};
+    const {container} = render(
+      <SelectableCard
+        ref={ref}
+        label="Test"
+        isSelected={false}
+        onChange={() => {}}
+        data-testid="plan"
+        className="caller"
+        style={{marginInlineStart: '4px'}}>
+        Content
+      </SelectableCard>,
+    );
+    const root = card(container);
+    expect(ref.current).toBe(root);
+    expect(screen.getByTestId('plan')).toBe(root);
+    expect(root).toHaveClass('caller');
+    expect(root.style.marginInlineStart).toBe('4px');
+    expect(root).not.toHaveAttribute('role');
+    expect(root).not.toHaveAttribute('tabindex');
+  });
+});
