@@ -2,7 +2,7 @@
 
 /**
  * @file highlightStyles.ts
- * @input Syntax token defaults from domainTokens
+ * @input The built-in syntax token rule from the theme engine
  * @output Injects ::highlight() CSS rules + fallback token values into the
  *   document head, inside the astryx-base cascade layer
  * @position Shared utility; consumed by CodeBlock and CodeEditor
@@ -11,17 +11,14 @@
  * - /packages/core/src/theme/domainTokens/syntaxTokens.ts (syntax color token names/defaults)
  */
 
-import {syntaxTokenDefaults} from '../theme';
+import {syntaxFallbackRule} from '../theme/syntax/syntaxFallbackRule';
 
 /**
- * Build the fallback CSS custom properties from the syntax token defaults.
  * These provide colors when no theme explicitly sets --color-syntax-* tokens.
  * They sit in the astryx-base layer, so a theme's astryx-theme layer and
  * unlayered app CSS override them in any load order.
  */
-const FALLBACK_TOKENS = `:root {\n${Object.entries(syntaxTokenDefaults)
-  .map(([name, value]) => `  ${name}: ${value};`)
-  .join('\n')}\n}`;
+const FALLBACK_TOKENS = syntaxFallbackRule();
 
 /**
  * Scoped ::highlight() rules — attached to the `code` element so the

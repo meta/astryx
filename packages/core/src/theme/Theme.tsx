@@ -59,6 +59,7 @@ import {
   typographyVars,
 } from './tokens.stylex';
 import {isDefinedTheme, type DefinedTheme} from './defineTheme';
+import {themeColorsMarkProps} from '../privateAttributes/themeColors';
 import {generateThemeCSS, resolvedAdaptationRules} from './generateThemeRules';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
@@ -566,6 +567,7 @@ export function Theme({
           reducesMotion && wrapperStyles.reducedMotion,
         )}
         data-astryx-theme={applied?.name}
+        {...themeColorsMarkProps(declaresCoreColors)}
         {...reducedMotionMarkProps(reducesMotion)}
         data-theme={mode === 'system' ? undefined : mode}>
         {children}

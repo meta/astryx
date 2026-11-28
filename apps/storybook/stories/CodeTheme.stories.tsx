@@ -360,3 +360,68 @@ export const ThemeWithSyntaxDefaults: StoryObj = {
     </Theme>
   ),
 };
+
+// ---------------------------------------------------------------------------
+// Nested themes — code inside a nested Theme takes that Theme's colors
+// ---------------------------------------------------------------------------
+
+const accentTheme = defineTheme({
+  name: 'own-accent',
+  tokens: {'--color-text-accent': 'rgb(200, 0, 100)'},
+});
+
+const componentsOnlyTheme = defineTheme({
+  name: 'components-only',
+  components: {card: {base: {padding: '4px'}}},
+});
+
+const nestedCode = 'const greeting = "hello";\nreturn greeting;';
+
+export const NestedThemes: StoryObj = {
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+      <CodeBlock code={nestedCode} language="typescript" title="Page theme" />
+      <Theme mode="dark">
+        <CodeBlock
+          code={nestedCode}
+          language="typescript"
+          title="Nested dark Theme"
+        />
+      </Theme>
+      <Theme theme={accentTheme}>
+        <CodeBlock
+          code={nestedCode}
+          language="typescript"
+          title="Nested theme with its own accent"
+        />
+      </Theme>
+      <Theme theme={darkDevTheme} mode="dark">
+        <Theme theme={componentsOnlyTheme}>
+          <CodeBlock
+            code={nestedCode}
+            language="typescript"
+            title="Components-only theme inside dark-dev"
+          />
+        </Theme>
+      </Theme>
+      <Theme theme={accentTheme}>
+        <SyntaxThemeProvider theme={nord}>
+          <CodeBlock
+            code={nestedCode}
+            language="typescript"
+            title="SyntaxTheme inside a theme"
+          />
+        </SyntaxThemeProvider>
+      </Theme>
+      <SyntaxThemeProvider theme={nord}>
+        <Theme theme={accentTheme}>
+          <CodeBlock
+            code={nestedCode}
+            language="typescript"
+            title="Theme inside a SyntaxTheme"
+          />
+        </Theme>
+      </SyntaxThemeProvider>
+    </div>
+  ),
+};

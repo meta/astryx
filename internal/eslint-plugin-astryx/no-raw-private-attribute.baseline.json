@@ -108,9 +108,6 @@
     "data-astryx-id",
     "data-astryx-theme-prose"
   ],
-  "packages/core/src/theme/syntax/SyntaxTheme.tsx": [
-    "data-astryx-syntax-theme"
-  ],
   "packages/core/src/utils/interactionOverlay.stylex.ts": [
     "data-astryx-press",
     "data-astryx-press",

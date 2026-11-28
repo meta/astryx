@@ -307,6 +307,28 @@ describe('Theme', () => {
     }
   });
 
+  it('marks only a wrapper whose theme sets Core color tokens, for the syntax token rule', () => {
+    const partsOnly = defineTheme({
+      name: 'parts-only-mark',
+      components: {card: {base: {padding: '4px'}}},
+    });
+    const {container} = render(
+      <Theme theme={testTheme}>
+        <Theme theme={partsOnly}>
+          <span>parts</span>
+        </Theme>
+      </Theme>,
+    );
+    const root = container.querySelector(
+      `[data-astryx-theme="${testTheme.name}"]`,
+    )!;
+    const parts = container.querySelector(
+      '[data-astryx-theme="parts-only-mark"]',
+    )!;
+    expect(root.hasAttribute('data-astryx-theme-colors')).toBe(true);
+    expect(parts.hasAttribute('data-astryx-theme-colors')).toBe(false);
+  });
+
   it('declares no own color value on a wrapper that applies no theme', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
