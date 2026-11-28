@@ -947,27 +947,41 @@ function frameTime(frame: number | undefined, clock: () => number): number {
   return read.time;
 }
 
+/** One call's baked keyframes, and the effect that parsed them. */
+interface KeyframesBake {
+  readonly key: unknown[];
+  readonly keyframes: Keyframe[];
+  effect: AnimationEffect | null;
+}
+
 /**
  * What the calls of the running task have baked. A call that plays the same
- * curve objects reuses them: a row of items that one curve moves samples it
- * once. Cleared at the next microtask checkpoint.
+ * curve objects, or the same spring move (springMoves), reuses them: a row of
+ * items that one motion moves samples it once. Cleared at the next microtask
+ * checkpoint.
  */
 interface TaskBakes {
   /** Sample times, from the bake's start, by curve, offset and tolerance. */
   readonly times: {readonly key: unknown[]; readonly times: number[]}[];
-  /** Keyframes, by curves, offsets and the channel's rest values. */
-  readonly keyframes: {
-    readonly key: unknown[];
-    readonly keyframes: Keyframe[];
-    effect: AnimationEffect | null;
-  }[];
+  /** Keyframes whose key holds a curve object, matched by isSameKey. */
+  readonly keyframes: KeyframesBake[];
+  /**
+   * Keyframes whose key holds only strings and numbers, by its text
+   * (keyText): a task that springs many different moves finds each in one
+   * lookup, not a scan.
+   */
+  readonly keyframesByText: Map<string, KeyframesBake>;
 }
 
 let taskBakes: TaskBakes | null = null;
 
 function bakesOfTask(): TaskBakes {
   if (taskBakes == null) {
-    const bakes: TaskBakes = {times: [], keyframes: []};
+    const bakes: TaskBakes = {
+      times: [],
+      keyframes: [],
+      keyframesByText: new Map(),
+    };
     taskBakes = bakes;
     queueMicrotask(() => {
       if (taskBakes === bakes) {
@@ -980,6 +994,25 @@ function bakesOfTask(): TaskBakes {
 
 function isSameKey(a: unknown[], b: unknown[]): boolean {
   return a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+}
+
+/**
+ * A key of only strings and numbers as text, equal exactly where isSameKey
+ * holds: -0 stays apart from 0, and a string from a number. Null for a key
+ * that holds an object, such as a curve.
+ */
+function keyText(key: unknown[]): string | null {
+  let text = '';
+  for (const value of key) {
+    if (typeof value === 'string') {
+      text += `${JSON.stringify(value)},`;
+    } else if (typeof value === 'number') {
+      text += `${Object.is(value, -0) ? '-0' : String(value)},`;
+    } else {
+      return null;
+    }
+  }
+  return text;
 }
 
 /** Whether the engine can copy an effect with its parsed keyframes. */
@@ -1369,6 +1402,13 @@ export function createMotionEngine(
   };
   const base = expand(options.base ?? {});
   const segments = new Map<MotionProperty, Segment>();
+  /**
+   * The move each of this engine's spring segments follows: its physics,
+   * start value, target and start velocity. Only the segment a spring solve
+   * made has one. A copy with other values has none, so it never takes this
+   * move's bake.
+   */
+  const springMoves = new WeakMap<Segment, ReadonlyArray<number>>();
   const running = new Map<Channel, Animation>();
   /** Drops a finished, still-filling animation once the main thread runs. */
   const retireTimers = new Map<Channel, ReturnType<typeof setTimeout>>();
@@ -1707,9 +1747,9 @@ export function createMotionEngine(
 
   /**
    * What identifies a channel's keyframes across calls of one task: each
-   * moving property's curve object, offset and length, and each other
-   * property's rest value. Null when a moving property has no shared curve
-   * (a spring, a rebase, a jump).
+   * moving property's curve object or spring move, offset and length, and
+   * each other property's rest value. Null when a moving property has
+   * neither (a rebase, an additive retarget, a fade) or jumps.
    */
   const taskBakeKey = (
     channel: Channel,
@@ -1721,10 +1761,16 @@ export function createMotionEngine(
     const key: unknown[] = [channel, end - from, devicePixel];
     for (const property of CHANNELS[channel]) {
       const segment = segments.get(property);
+      const move = segment == null ? undefined : springMoves.get(segment);
       if (!moving.includes(property)) {
         key.push(property, resting[property]);
-      } else if (segment?.source != null && segment.jumps.length === 0) {
+      } else if (segment == null || segment.jumps.length > 0) {
+        return null;
+      } else if (segment.source != null) {
         key.push(property, segment.source, segment.start - from);
+        key.push(segment.duration);
+      } else if (move != null) {
+        key.push(property, 'spring', ...move, segment.start - from);
         key.push(segment.duration);
       } else {
         return null;
@@ -2061,18 +2107,22 @@ export function createMotionEngine(
     // Read where the keyframes are baked: a page moved to another screen
     // bakes its next motion for that screen.
     const devicePixel = 1 / Math.max(1, globalThis.devicePixelRatio || 1);
-    // An earlier call of this task that played the same curves from the same
-    // offset, over the same rest values, baked these keyframes already.
+    // An earlier call of this task that played the same curves, or the same
+    // spring moves, from the same offset, over the same rest values, baked
+    // these keyframes already.
     // A custom property's keyframes write its own properties, so they are
     // never shared with another call's.
     const bakeKey =
       pseudoElement == null && !isCustom(channel)
         ? taskBakeKey(channel, moving, from, end, devicePixel)
         : null;
+    const bakeText = bakeKey == null ? null : keyText(bakeKey);
     const baked =
       bakeKey == null
         ? undefined
-        : bakesOfTask().keyframes.find(bake => isSameKey(bake.key, bakeKey));
+        : bakeText != null
+          ? bakesOfTask().keyframesByText.get(bakeText)
+          : bakesOfTask().keyframes.find(bake => isSameKey(bake.key, bakeKey));
     const collect = (scale: number) => {
       const times = new Set<number>([from, end]);
       for (const property of moving) {
@@ -2145,11 +2195,12 @@ export function createMotionEngine(
             ...(pseudoElement != null ? {pseudoElement} : {}),
           });
     if (bakeKey != null && baked == null) {
-      bakesOfTask().keyframes.push({
-        key: bakeKey,
-        keyframes,
-        effect: animation.effect,
-      });
+      const bake = {key: bakeKey, keyframes, effect: animation.effect};
+      if (bakeText != null) {
+        bakesOfTask().keyframesByText.set(bakeText, bake);
+      } else {
+        bakesOfTask().keyframes.push(bake);
+      }
     }
     if (waiting != null) {
       // From rest: no start time, so the browser starts the animation when
@@ -3404,12 +3455,13 @@ export function createMotionEngine(
     if (from === to && velocity === 0) {
       return null;
     }
-    const curve = solveSpring(toSpring(resolved), {from, to, velocity});
+    const physics = toSpring(resolved);
+    const curve = solveSpring(physics, {from, to, velocity});
     const duration = Math.min(
       MAX_DURATION_MS,
       curve.settleTime(SETTLE_THRESHOLD[property]) * 1000,
     );
-    return {
+    const segment: Segment = {
       start,
       duration,
       target: to,
@@ -3419,6 +3471,15 @@ export function createMotionEngine(
       owner,
       spring: resolved,
     };
+    springMoves.set(segment, [
+      physics.mass,
+      physics.stiffness,
+      physics.damping,
+      from,
+      to,
+      velocity,
+    ]);
+    return segment;
   };
 
   /** The retarget of `additive`: the old curve plus a spring of the difference. */
