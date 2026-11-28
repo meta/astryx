@@ -191,6 +191,7 @@ describe('planChecks --quick', () => {
     expect(checks.map(check => check.id)).toEqual([
       'typecheck',
       'lint',
+      'cli structure',
       'changed tests',
       'knowledge',
       'changesets',
@@ -213,6 +214,19 @@ describe('planChecks --quick', () => {
     });
     expect(byId(checks, 'changed tests').skip).toBe('no changed test file');
     expect(byId(checks, 'interaction specs')).toBeUndefined();
+  });
+
+  it("runs the CLI structure check when the change touches packages/cli, as CI's node tests do", () => {
+    const cli = plan(['packages/cli/api/doctor/theme-checks.mjs'], {
+      quick: true,
+    });
+    expect(argvs(byId(cli, 'cli structure'))).toEqual([
+      'pnpm check:cli-structure',
+    ]);
+    const core = plan(['packages/core/src/Button/Button.tsx'], {quick: true});
+    expect(byId(core, 'cli structure').skip).toBe(
+      'no change under packages/cli',
+    );
   });
 
   it('says quick mode is not CI-equivalent', () => {
@@ -355,7 +369,7 @@ describe('--quick with workspace builds missing', () => {
 
   it('names missing builds only when every error is a missing build output', () => {
     expect(unbuilt(missing)).toBe(
-      'skipped, workspace builds missing; run `pnpm build` first',
+      'typecheck needs built packages: run `pnpm build` (or `pnpm preflight` without --quick)',
     );
     expect(unbuilt(real)).toBeNull();
     expect(unbuilt('no errors here')).toBeNull();
@@ -381,10 +395,13 @@ describe('--quick with workspace builds missing', () => {
           `a.ts(1,1): error TS2307: Cannot find module '${specifier}' or its corresponding type declarations.`,
         ),
         specifier,
-      ).toBe('skipped, workspace builds missing; run `pnpm build` first');
+      ).toBe(
+        'typecheck needs built packages: run `pnpm build` (or `pnpm preflight` without --quick)',
+      );
   });
 
-  const SKIPPED = 'skipped, workspace builds missing; run `pnpm build` first';
+  const UNBUILT =
+    'typecheck needs built packages: run `pnpm build` (or `pnpm preflight` without --quick)';
   const unresolved = (file, specifier) =>
     `${file}(1,1): error TS2307: Cannot find module '${specifier}' or its corresponding type declarations.`;
   const implicitAny = (file, code = 'TS7006') =>
@@ -398,7 +415,7 @@ describe('--quick with workspace builds missing', () => {
       '@astryxdesign/core/theme/tokens.stylex',
     ])
       expect(unbuilt(unresolved('src/a.ts', specifier)), specifier).toBe(
-        SKIPPED,
+        UNBUILT,
       );
     // A package outside the workspace scope is still a real error.
     expect(unbuilt(unresolved('src/a.ts', '@astryx/other'))).toBeNull();
@@ -471,7 +488,7 @@ describe('--quick with workspace builds missing', () => {
       missingBuilds(unresolved('src/a.ts', '@astryxdesign/core/utilz'), {
         declares: () => true,
       }),
-    ).toBe(SKIPPED);
+    ).toBe(UNBUILT);
   });
 
   it('treats implicit-any errors in a file with an unresolved workspace import as follow-ons', () => {
@@ -483,7 +500,7 @@ describe('--quick with workspace builds missing', () => {
           implicitAny('src/Chart/webgl.ts', 'TS7031'),
         ].join('\n'),
       ),
-    ).toBe(SKIPPED);
+    ).toBe(UNBUILT);
   });
 
   it('still fails on an implicit-any error in a file with no unresolved workspace import', () => {
@@ -516,13 +533,13 @@ describe('--quick with workspace builds missing', () => {
     ).commands[0];
     expect(typecheck.tee).toBe(true);
     expect(typecheck.stdout).toMatch(/typecheck\.log$/);
-    expect(typecheck.skipWhen).toBe(missingBuilds);
+    expect(typecheck.explain).toBe(missingBuilds);
   });
 
-  it('reports a SKIP, not a failure, and the verdict does not count it', () => {
+  it('fails with the build hint, and the verdict counts it, so --quick exits 1', () => {
     const dir = tmp();
     const log = path.join(dir, 'typecheck.log');
-    const check = text => [
+    const check = () => [
       {
         id: 'typecheck',
         commands: [
@@ -531,27 +548,30 @@ describe('--quick with workspace builds missing', () => {
             argv: ['tsc'],
             stdout: log,
             tee: true,
-            skipWhen: unbuilt,
+            explain: unbuilt,
           },
         ],
       },
     ];
     const exec = text => () => (fs.writeFileSync(log, text), 2);
-    const [skipped] = runChecks(check(), {exec: exec(missing), now: () => 0});
-    expect(skipped).toMatchObject({
-      result: 'SKIP',
-      note: 'skipped, workspace builds missing; run `pnpm build` first',
-      failed: null,
+    const [unbuiltRow] = runChecks(check(), {
+      exec: exec(missing),
+      now: () => 0,
     });
-    const verdict = formatTable([skipped], {quick: true});
-    expect(verdict).not.toContain('not ready');
-    // A skipped typecheck checked nothing: the verdict says so, never a pass.
-    expect(verdict).toContain(
-      'not checked: typecheck (workspace builds missing); run `pnpm build`, then run again before you flip',
-    );
+    expect(unbuiltRow).toMatchObject({
+      result: 'FAIL',
+      note: UNBUILT,
+      failed: 'tsc',
+    });
+    const verdict = formatTable([unbuiltRow], {quick: true});
+    expect(verdict).toContain('not ready: 1');
     expect(verdict).not.toContain('quick checks pass');
     const [failed] = runChecks(check(), {exec: exec(real), now: () => 0});
-    expect(failed).toMatchObject({result: 'FAIL', failed: 'tsc'});
+    expect(failed).toMatchObject({
+      result: 'FAIL',
+      note: 'exit 2',
+      failed: 'tsc',
+    });
   });
 });
 
