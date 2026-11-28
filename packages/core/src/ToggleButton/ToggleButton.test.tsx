@@ -24,6 +24,16 @@ import {
 // ToggleButton — Standalone
 // =============================================================================
 
+describe('ToggleButton held Enter', () => {
+  it('cancels the auto-repeated keydowns so a held key is one press', () => {
+    render(<ToggleButton label="Bold" />);
+    const button = screen.getByRole('button');
+
+    expect(fireEvent.keyDown(button, {key: 'Enter'})).toBe(true);
+    expect(fireEvent.keyDown(button, {key: 'Enter', repeat: true})).toBe(false);
+  });
+});
+
 describe('ToggleButton', () => {
   describe('elevation', () => {
     it('reflects the elevation prop as a theme attribute', () => {
