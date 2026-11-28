@@ -102,6 +102,11 @@ const STRUCTURAL_VARS = new Set([
   '--_table-header-inline',
   '--_table-header-end-room',
   '--_table-edge-inline-end',
+  // A container's press paint while a press on a nested control is held,
+  // and what it paints at rest instead (hooks/useClickableContainer.ts).
+  // Private runtime plumbing, never authored by a theme.
+  '--_nested-press-paint',
+  '--_nested-press-rest',
   // A gliding row's divider, carried on the row for the glide
   // (Table/glidingDivider.ts). Private runtime plumbing.
   '--_table-row-glide-width',

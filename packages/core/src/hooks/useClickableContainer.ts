@@ -11,8 +11,17 @@
  *   handlers without the marker
  * @position Core hook for clickable containers with nested interactive
  *   elements. A click on a nested button or link does not run the card's
- *   action, and a finger press there shows no press on the card. Each navigation
- *   passes the rule in utils/safeUrl.ts first.
+ *   action. A mouse or pen press there shows no press on the card, and so
+ *   does a finger where the primary pointer is coarse.
+ *   Each navigation passes the rule in utils/safeUrl.ts first.
+ *
+ * SYNC: Each style that paints a container's `:active` press reads
+ *   `--_nested-press-paint` there, resets it on its own element, and declares
+ *   `--_nested-press-rest`:
+ * - /packages/core/src/utils/interactionOverlay.stylex.ts
+ * - /packages/core/src/privateAttributes/press.stylex.ts
+ * - /packages/core/src/ClickableCard/ClickableCard.tsx
+ * - /packages/core/src/SelectableCard/SelectableCard.tsx
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts (export)
@@ -28,7 +37,7 @@ import {
 import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isSafeUrl} from '../utils/safeUrl';
 import {cancelPress} from '../utils/pressFeedback';
-import {pressBoxesIn} from '../privateAttributes/pressBox.stylex';
+import {subscribeInput} from '../utils/inputStream';
 
 /**
  * The attribute this hook sets on the container it makes clickable. A click
@@ -144,31 +153,84 @@ function belongsToSomethingElse(element: Element): boolean {
 }
 
 /**
+ * The custom property that turns off a container's `:active` press paint. The
+ * styles in this file's SYNC list paint the pressed overlay as
+ * `var(--_nested-press-paint, <pressed overlay>)`. Each resets it to `initial`
+ * on its own element, so a nested control keeps its own press. Each also
+ * declares `--_nested-press-rest`, what it paints at rest under the pointer
+ * (its hover overlay, or none). A marked container paints that instead of
+ * its press, so it keeps its hover.
+ */
+const NESTED_PRESS_PAINT = '--_nested-press-paint';
+
+/** Gives `container` its `:active` press paint back. */
+function clearNestedPress(container: HTMLElement): void {
+  container.style.removeProperty(NESTED_PRESS_PAINT);
+}
+
+/**
+ * Turns off `container`'s `:active` press paint until the press ends. A
+ * browser applies `:active` to every ancestor of the pressed element, so a
+ * mouse's or a pen's press on a nested control would paint the container too.
+ */
+function markNestedPress(container: HTMLElement): void {
+  const view = container.ownerDocument.defaultView;
+  if (view == null) {
+    return;
+  }
+  container.style.setProperty(NESTED_PRESS_PAINT, 'var(--_nested-press-rest)');
+  const stops = [
+    subscribeInput(view, 'pointerup', end),
+    subscribeInput(view, 'pointercancel', end),
+  ];
+  function end() {
+    clearNestedPress(container);
+    for (const stop of stops) {
+      stop();
+    }
+  }
+}
+
+/**
  * The press half of a container's press rule. A press that starts on a nested
- * interactive element other than the container's own action does not activate
- * the container. So it ends the press controller's paint on `container`. The
- * rule covers a finger's press on every container. On a container that owns a
- * control's box (pressBox.stylex.ts), it covers a mouse's and a pen's press
- * too. A press on the container's surface or on `ownAction` is left alone.
- * Not part of the package's public API.
+ * interactive element, other than the container's own action, does not
+ * activate the container. So the container shows no press for it: a mouse, a
+ * pen, or a finger where the primary pointer is coarse. The press
+ * controller's paint on `container` ends. For a mouse or a pen, the
+ * container's `:active` paint also stays off until the press ends. A press on
+ * the container's surface or on `ownAction` is left alone. `belongsToControl`
+ * is the container's own test for a press that is not its own, so the press
+ * decides as the click does. Not part of the package's public API.
  */
 export function cancelNestedPress(
   event: PointerEvent<HTMLElement>,
   container: HTMLElement | null,
   ownAction: Element | null,
+  belongsToControl: (
+    target: Element,
+    container: Element,
+  ) => boolean = hasInteractiveAncestor,
 ): void {
   const target = event.target;
+  // A mark that outlived its press, such as one whose release the page never
+  // saw, does not hold back this press.
+  if (container != null) {
+    clearNestedPress(container);
+  }
   if (
     container == null ||
-    (event.pointerType !== 'touch' && pressBoxesIn(container).length === 0) ||
+    event.button !== 0 ||
     !(target instanceof Element) ||
     target === event.currentTarget ||
-    !hasInteractiveAncestor(target, container) ||
+    !belongsToControl(target, container) ||
     // The container's own action, such as the control it delegates to: a
     // press on it activates the container.
     ownAction?.contains(target) === true
   ) {
     return;
+  }
+  if (event.pointerType !== 'touch') {
+    markNestedPress(container);
   }
   cancelPress(container);
 }
@@ -216,10 +278,9 @@ export interface ClickableContainerResult {
   onMouseUp: (event: MouseEvent<HTMLElement>) => void;
   /**
    * Spread on the container with `onClick`. A press that starts on a nested
-   * interactive element does not activate the container. On a container that
-   * paints its press with `usePressFeedback`, this drops that touch press.
-   * A mouse `:active` press paint is unchanged. A container without it keeps
-   * its activation rule and shows its pressed state for every press.
+   * interactive element does not activate the container, so the container
+   * shows no press for it: this drops the press controller's paint and, for
+   * a mouse or a pen, the `:active` paint of the shared press styles.
    */
   onPointerDown: (event: PointerEvent<HTMLElement>) => void;
 }
@@ -384,8 +445,7 @@ export function useClickableContainerProxy({
   );
 
   // The press-state counterpart of onClick's rule: a press that would not
-  // activate the container shows no press on it. That holds for a finger on
-  // every container, and for a mouse or a pen on one that owns a control's box.
+  // activate the container shows no press on it.
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       if (disabled) {

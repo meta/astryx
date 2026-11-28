@@ -73,7 +73,14 @@ const NESTED_CONTROL_ACTIVE =
 const PRESS_ALPHA = pressVars['--astryx-press-alpha'];
 
 const hoverImage = `linear-gradient(${colorVars['--color-overlay-hover']}, ${colorVars['--color-overlay-hover']})`;
-const pressedImage = `linear-gradient(${colorVars['--color-overlay-pressed']}, ${colorVars['--color-overlay-pressed']})`;
+/**
+ * The pressed overlay a mouse or a pen paints at `:active`, which a container
+ * turns off for a press on a nested control (hooks/useClickableContainer.ts).
+ * Each style below that reads it resets it on its own element and declares
+ * its own rest paint.
+ */
+const mousePressed = `var(--_nested-press-paint, ${colorVars['--color-overlay-pressed']})`;
+const pressedImage = `linear-gradient(${mousePressed}, ${mousePressed})`;
 /** The overlay's paint, read back off the element (its gradient layer). */
 const pressedOverlayImage = 'var(--_press-paint-image)';
 
@@ -255,6 +262,17 @@ export const rowPressLayerStyles = stylex.create({
    * travelling row's surface, which this shadow replaces otherwise.
    */
   overDividers: {
+    '--_nested-press-paint': 'initial',
+    '--_nested-press-rest': {
+      default: 'transparent',
+      [ENABLED]: {
+        default: null,
+        [HOVER_HOVER]: {
+          default: null,
+          ':hover': colorVars['--color-overlay-hover'],
+        },
+      },
+    },
     boxShadow: {
       default: TRAVELLING_SURFACE,
       [ENABLED]: {
@@ -262,13 +280,13 @@ export const rowPressLayerStyles = stylex.create({
         ':not(:first-child)': {
           default: null,
           ':active': {
-            default: tintAbove(colorVars['--color-overlay-pressed']),
+            default: tintAbove(mousePressed),
             [COARSE]: TRAVELLING_SURFACE,
           },
           [HOVER_HOVER]: {
             default: null,
             ':hover': tintAbove(colorVars['--color-overlay-hover']),
-            ':active': tintAbove(colorVars['--color-overlay-pressed']),
+            ':active': tintAbove(mousePressed),
           },
           // A press the controller paints. Under a coarse pointer, the press
           // layer covers the divider above. Elsewhere the strip takes the
@@ -332,6 +350,17 @@ export const rowPressLayerStyles = stylex.create({
    * touch press paint yielding to the layer under a coarse primary pointer.
    */
   cellOnImage: {
+    '--_nested-press-paint': 'initial',
+    '--_nested-press-rest': {
+      default: 'transparent',
+      [ENABLED]: {
+        default: null,
+        [HOVER_HOVER]: {
+          default: null,
+          ':hover': colorVars['--color-overlay-hover'],
+        },
+      },
+    },
     backgroundImage: {
       default: null,
       [ENABLED]: {
@@ -356,6 +385,8 @@ export const rowPressLayerStyles = stylex.create({
    * pressed row, so the row shows only its press.
    */
   cellOnImagePressOnly: {
+    '--_nested-press-paint': 'initial',
+    '--_nested-press-rest': 'transparent',
     backgroundImage: {
       default: null,
       [ENABLED]: {

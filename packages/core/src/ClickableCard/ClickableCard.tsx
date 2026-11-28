@@ -100,19 +100,34 @@ const styles = stylex.create({
     // stylesheet and a flat one alike. A custom property's attribute arm
     // does not: a layered build emits the property's default outside the
     // priority layers its attribute arms land in, and the default wins.
+    // A press that starts on a control inside the card sets
+    // `--_nested-press-paint` on the card (useClickableContainer). The card
+    // then paints its rest overlay, not a mouse press. A card inside resets it.
+    '--_nested-press-paint': 'initial',
+    '--_nested-press-rest': {
+      default: 'transparent',
+      ':where(:not(:disabled,[aria-disabled="true"]))': {
+        default: null,
+        '@media (hover: hover)': {
+          default: null,
+          ':hover:where(:not(:disabled,[aria-disabled="true"]))':
+            colorVars['--color-overlay-hover'],
+        },
+      },
+    },
     '--_press-overlay': {
       default: 'transparent',
       ':where(:not(:disabled,[aria-disabled="true"]))': {
         default: null,
         ':active': {
-          default: colorVars['--color-overlay-pressed'],
+          default: `var(--_nested-press-paint, ${colorVars['--color-overlay-pressed']})`,
           '@media (pointer: coarse)': 'transparent',
         },
         '@media (hover: hover)': {
           default: null,
           ':hover:where(:not(:disabled,[aria-disabled="true"]))':
             colorVars['--color-overlay-hover'],
-          ':active': colorVars['--color-overlay-pressed'],
+          ':active': `var(--_nested-press-paint, ${colorVars['--color-overlay-pressed']})`,
         },
       },
     },
