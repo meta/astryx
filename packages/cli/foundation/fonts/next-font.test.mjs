@@ -53,6 +53,43 @@ describe('rootLayoutImportsNextFont', () => {
     expect(rootLayoutImportsNextFont(path.join(dir, 'src/themes'))).toBe(true);
   });
 
+  it('is true when a Pages Router app loads next/font in pages/_app', () => {
+    write(
+      'pages/_app.tsx',
+      "import {Geist} from 'next/font/google';\nconst geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\nexport default function App({Component, pageProps}) {\n  return <main className={geist.variable}><Component {...pageProps} /></main>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it('is true when src/pages/_app loads next/font', () => {
+    write(
+      'src/pages/_app.js',
+      "import localFont from 'next/font/local';\nconst brand = localFont({src: './Brand.woff2', variable: '--font-brand'});\nexport default function App({Component, pageProps}) {\n  return <main className={brand.variable}><Component {...pageProps} /></main>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it('is true when the root layout imports its fonts from a module that loads next/font', () => {
+    write(
+      'app/fonts.ts',
+      "import {Geist} from 'next/font/google';\nexport const geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\n",
+    );
+    write(
+      'app/layout.tsx',
+      "import {geist} from './fonts';\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it('is false when a module the layout imports does not load next/font', () => {
+    write('app/fonts.ts', "export const fontClass = 'font-sans';\n");
+    write(
+      'app/layout.tsx',
+      "import {fontClass} from './fonts';\nexport default function RootLayout({children}) {\n  return <html className={fontClass}><body>{children}</body></html>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(false);
+  });
+
   it('is false for a mention in a comment or a string', () => {
     write(
       'app/layout.tsx',
