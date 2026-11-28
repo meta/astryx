@@ -6,6 +6,7 @@ import {renderToString} from 'react-dom/server';
 import {act, render, cleanup} from '@testing-library/react';
 import React from 'react';
 import {declaredValue} from '../__tests__/stylexDeclarations';
+import {colorDefaults} from './tokens.stylex';
 import {Theme} from './Theme';
 import {useTheme} from './useTheme';
 import {defineTheme} from './defineTheme';
@@ -36,6 +37,28 @@ const altTheme = defineTheme({
     '--color-accent': ['#00AA00', '#55FF55'],
   },
 });
+
+/**
+ * The value a rule for one of the element's classes declares for `property`,
+ * including a rule that lists the class beside other selectors
+ * (`:root, .x`), as a StyleX variable group's rule does.
+ */
+function declaredByClass(el: Element, property: string): string | null {
+  const classes = new Set(Array.from(el.classList, name => `.${name}`));
+  let value: string | null = null;
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      if (
+        rule instanceof CSSStyleRule &&
+        rule.selectorText.split(',').some(part => classes.has(part.trim())) &&
+        rule.style.getPropertyValue(property) !== ''
+      ) {
+        value = rule.style.getPropertyValue(property);
+      }
+    }
+  }
+  return value;
+}
 
 describe('Theme', () => {
   beforeEach(() => {
@@ -146,6 +169,128 @@ describe('Theme', () => {
     }
   });
 
+  it("declares Core's own color values again on a wrapper whose theme sets Core color tokens", () => {
+    const {container} = render(
+      <Theme theme={testTheme}>
+        <Theme theme={testTheme} mode="dark">
+          <span>child</span>
+        </Theme>
+      </Theme>,
+    );
+    const wrappers = container.querySelectorAll('[data-astryx-theme="test"]');
+    expect(wrappers).toHaveLength(2);
+    for (const wrapper of wrappers) {
+      const missing = Object.keys(colorDefaults).filter(
+        name => declaredByClass(wrapper, name) == null,
+      );
+      expect(missing).toEqual([]);
+      expect(declaredByClass(wrapper, '--color-accent')).toMatch(
+        /light-dark\(/,
+      );
+      expect(declaredByClass(wrapper, '--color-text-info')).toMatch(
+        /var\(--color-text-blue\)/,
+      );
+    }
+  });
+
+  it('declares no own color value on a wrapper whose theme sets no Core color token, so it keeps the colors around it', () => {
+    const partsOnly = defineTheme({
+      name: 'parts-only',
+      components: {card: {base: {padding: '4px'}}},
+    });
+    const {container} = render(
+      <Theme theme={testTheme}>
+        <Theme theme={partsOnly}>
+          <span>parts</span>
+        </Theme>
+      </Theme>,
+    );
+    const parts = container.querySelector('[data-astryx-theme="parts-only"]')!;
+    expect(
+      Object.keys(colorDefaults).filter(
+        name => declaredByClass(parts, name) != null,
+      ),
+    ).toEqual([]);
+    expect(declaredValue(parts, '--focus-outline-color')).toMatch(
+      /var\(--color-accent\)/,
+    );
+  });
+
+  it("declares Core's own color values again for a theme that sets Core color tokens through extends or an adaptation rule", () => {
+    const extendsColors = defineTheme({
+      name: 'extends-colors',
+      extends: testTheme,
+    });
+    const adaptsColors = defineTheme({
+      name: 'adapts-colors',
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-background-surface': '#ffffff'}},
+          },
+        ],
+      },
+    });
+    // A built theme module can carry its adaptation rules unresolved, or only
+    // resolved.
+    const builtAdapts = {
+      ...adaptsColors,
+      name: 'built-adapts',
+      __adaptationRules: undefined,
+    };
+    const resolvedOnly = {
+      ...adaptsColors,
+      name: 'resolved-only',
+      __adaptations: undefined,
+    };
+    // A built theme (its CSS compiled ahead of time) is read without
+    // validation, from its resolved rules or its authored ones.
+    const builtResolved = {
+      ...resolvedOnly,
+      name: 'built-resolved',
+      __built: true as const,
+    };
+    const builtAuthored = {
+      ...builtAdapts,
+      name: 'built-authored',
+      __built: true as const,
+    };
+    const names = [
+      'extends-colors',
+      'adapts-colors',
+      'built-adapts',
+      'resolved-only',
+      'built-resolved',
+      'built-authored',
+    ];
+    const {container} = render(
+      <Theme theme={testTheme}>
+        {[
+          extendsColors,
+          adaptsColors,
+          builtAdapts,
+          resolvedOnly,
+          builtResolved,
+          builtAuthored,
+        ].map(theme => (
+          <Theme key={theme.name} theme={theme}>
+            <span>{theme.name}</span>
+          </Theme>
+        ))}
+      </Theme>,
+    );
+    for (const name of names) {
+      const wrapper = container.querySelector(`[data-astryx-theme="${name}"]`)!;
+      expect(
+        Object.keys(colorDefaults).filter(
+          token => declaredByClass(wrapper, token) == null,
+        ),
+        name,
+      ).toEqual([]);
+    }
+  });
+
   it('declares no focus color on a wrapper that applies no theme', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -157,6 +302,25 @@ describe('Theme', () => {
       const wrapper = container.querySelector('[data-child]')!.parentElement!;
       expect(wrapper.hasAttribute('data-astryx-theme')).toBe(false);
       expect(declaredValue(wrapper, '--focus-outline-color')).toBeNull();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('declares no own color value on a wrapper that applies no theme', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const {container} = render(
+        <Theme theme={null as never} mode="dark">
+          <span data-child="">child</span>
+        </Theme>,
+      );
+      const wrapper = container.querySelector('[data-child]')!.parentElement!;
+      expect(
+        Object.keys(colorDefaults).filter(
+          name => declaredByClass(wrapper, name) != null,
+        ),
+      ).toEqual([]);
     } finally {
       warn.mockRestore();
     }

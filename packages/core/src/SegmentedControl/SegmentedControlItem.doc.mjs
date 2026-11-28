@@ -68,7 +68,7 @@ export const docsZh = {
     label: '该分段的无障碍标签。除非 isLabelHidden 为 true，否则渲染为可见文本。',
     isLabelHidden: '是否在视觉上隐藏标签。为 true 时仅显示图标，label 用作 aria-label。',
     icon: '显示在标签前的图标元素。',
-    isDisabled: '是否禁用该单个项。',
+    isDisabled: '是否禁用该单个项。已选中的禁用项保留控件的 Tab 停靠点。',
   },
 };
 
@@ -82,6 +82,6 @@ export const docsDense = {
     label: 'segment label; visible unless isLabelHidden',
     isLabelHidden: 'hides label visually; label becomes aria-label',
     icon: 'icon before label',
-    isDisabled: 'disables this item',
+    isDisabled: 'disables this item; a disabled selected item keeps the Tab stop',
   },
 };

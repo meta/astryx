@@ -104,6 +104,8 @@ export function renderAnchoredHint(
   return layer.render(content, {
     placement: 'below',
     alignment: 'start',
+    // A popover exposes a group even when its content is aria-hidden.
+    role: isInteractive ? undefined : 'none',
     xstyle: [styles.hint, !isInteractive && styles.passive],
     style: {
       marginBlockStart: spacingVars['--spacing-2'],
