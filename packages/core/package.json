@@ -229,6 +229,11 @@
       "types": "./dist/ButtonGroup/index.d.ts",
       "default": "./dist/ButtonGroup/index.js"
     },
+    "./ByokCard": {
+      "source": "./src/ByokCard/index.ts",
+      "types": "./dist/ByokCard/index.d.ts",
+      "default": "./dist/ByokCard/index.js"
+    },
     "./Calendar": {
       "source": "./src/Calendar/index.ts",
       "types": "./dist/Calendar/index.d.ts",

@@ -97,6 +97,9 @@ const powerSearchConfig: Core.PowerSearchConfig = {
  * element. Every other component renders with the probe alone.
  */
 const FIXTURES: Readonly<Record<string, (probe: Probe) => ReactElement>> = {
+  ByokCard: probe => (
+    <Core.ByokCard provider={{id: 'test', name: 'Test Provider'}} {...probe} />
+  ),
   BaseTypeahead: probe => (
     <Core.BaseTypeahead
       searchSource={searchSource}

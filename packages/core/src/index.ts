@@ -24,6 +24,7 @@ export * from './BottomSheet';
 export * from './Breadcrumbs';
 export * from './Button';
 export * from './ButtonGroup';
+export * from './ByokCard';
 export * from './IconButton';
 export * from './Card';
 export * from './ClickableCard';

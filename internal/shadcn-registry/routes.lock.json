@@ -87,6 +87,11 @@
       "aliases": []
     },
     {
+      "name": "component-byok-card",
+      "path": "components/byok-card",
+      "aliases": []
+    },
+    {
       "name": "component-calendar",
       "path": "components/calendar",
       "aliases": []
@@ -5576,6 +5581,11 @@
     {
       "name": "template-ai-chat-landing",
       "path": "templates/ai-chat-landing",
+      "aliases": []
+    },
+    {
+      "name": "template-blank",
+      "path": "templates/blank",
       "aliases": []
     },
     {
