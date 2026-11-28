@@ -6,7 +6,7 @@ import {renderToString} from 'react-dom/server';
 import {act, render, cleanup} from '@testing-library/react';
 import React from 'react';
 import {declaredValue} from '../__tests__/stylexDeclarations';
-import {colorDefaults} from './tokens.stylex';
+import {coreColorDefaultValues} from './themeColorDefaults.stylex';
 import {Theme} from './Theme';
 import {useTheme} from './useTheme';
 import {defineTheme} from './defineTheme';
@@ -147,7 +147,7 @@ describe('Theme', () => {
     }
   });
 
-  it("declares Core's color defaults again on a wrapper that applies a theme", () => {
+  it('declares again the Core color defaults that differ by color mode on a wrapper that applies a theme', () => {
     const {container} = render(
       <Theme theme={testTheme}>
         <Theme theme={testTheme} mode="dark">
@@ -158,7 +158,7 @@ describe('Theme', () => {
     const wrappers = container.querySelectorAll('[data-astryx-theme="test"]');
     expect(wrappers).toHaveLength(2);
     for (const wrapper of wrappers) {
-      const missing = Object.keys(colorDefaults).filter(
+      const missing = Object.keys(coreColorDefaultValues).filter(
         name => declaredValue(wrapper, name) == null,
       );
       expect(missing).toEqual([]);
@@ -181,7 +181,7 @@ describe('Theme', () => {
       expect(wrapper.hasAttribute('data-astryx-theme')).toBe(false);
       expect(declaredValue(wrapper, '--focus-outline-color')).toBeNull();
       expect(
-        Object.keys(colorDefaults).filter(
+        Object.keys(coreColorDefaultValues).filter(
           name => declaredValue(wrapper, name) != null,
         ),
       ).toEqual([]);

@@ -52,12 +52,12 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import type {ThemeMode} from './types';
 import {
-  colorDefaults,
   colorVars,
   focusVars,
   typeScaleVars,
   typographyVars,
 } from './tokens.stylex';
+import {coreColorDefaults} from './themeColorDefaults.stylex';
 import {isDefinedTheme, type DefinedTheme} from './defineTheme';
 import {generateThemeCSS} from './generateThemeRules';
 import {registerTheme} from './themeRegistry';
@@ -95,15 +95,6 @@ interface ThemeProps {
   /** Children to render */
   children: React.ReactNode;
 }
-
-// Core declares its color defaults at the root. A build that lowers
-// `light-dark()` resolves a custom property in the mode of the element that
-// declares it, and a `var()` default resolves where it is declared. So a
-// wrapper that applies a theme declares the defaults again, and each one
-// resolves in that wrapper's mode and from that wrapper's tokens. The theme's
-// own rules still win. Every default differs by mode
-// (themeColorDefaults.test.ts).
-const coreColorDefaults = stylex.createTheme(colorVars, colorDefaults);
 
 /**
  * Styles for the theme wrapper
@@ -522,6 +513,8 @@ export function Theme({
         {...stylex.props(
           wrapperStyles.base,
           colorSchemeStyle,
+          // Core's color defaults again, so each resolves in this wrapper's
+          // mode and from its tokens; the theme's own rules still win.
           applied != null && coreColorDefaults,
           applied != null && wrapperStyles.themedFocus,
           reducesMotion && wrapperStyles.reducedMotion,
