@@ -49,6 +49,22 @@ describe('ByokCard', () => {
     expect(queryByText('Connect')).not.toBeInTheDocument();
   });
 
+  it('transitions actions when status prop changes from disconnected to connected', () => {
+    const {getByText, queryByText, rerender} = render(
+      <ByokCard provider={mockProvider} status="disconnected" />,
+    );
+
+    expect(getByText('Connect')).toBeInTheDocument();
+    expect(queryByText('Rotate')).not.toBeInTheDocument();
+    expect(queryByText('Delete')).not.toBeInTheDocument();
+
+    rerender(<ByokCard provider={mockProvider} status="connected" />);
+
+    expect(queryByText('Connect')).not.toBeInTheDocument();
+    expect(getByText('Rotate')).toBeInTheDocument();
+    expect(getByText('Delete')).toBeInTheDocument();
+  });
+
   it('opens connect dialog and calls onConnect with submitted key', async () => {
     const handleConnect = vi.fn();
     const {getByText, getByPlaceholderText} = render(
@@ -76,6 +92,21 @@ describe('ByokCard', () => {
     });
   });
 
+  it('displays error status with accessible message on TextInput when submitting empty key', () => {
+    const {getByText, getByPlaceholderText} = render(
+      <ByokCard provider={mockProvider} status="disconnected" />,
+    );
+
+    fireEvent.click(getByText('Connect'));
+
+    // Click Save Key with empty input
+    fireEvent.click(getByText('Save Key'));
+
+    const input = getByPlaceholderText('sk-...');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(getByText('API key is required')).toBeInTheDocument();
+  });
+
   it('toggles password masking when Show key / Hide key is clicked', () => {
     const {getByText, getByPlaceholderText} = render(
       <ByokCard provider={mockProvider} status="disconnected" />,
@@ -95,6 +126,31 @@ describe('ByokCard', () => {
     fireEvent.click(getByText('Hide key'));
     expect(input).toHaveAttribute('type', 'password');
     expect(getByText('Show key')).toBeInTheDocument();
+  });
+
+  it('resets showPlainKey and clears input when connect dialog is closed or reopened', () => {
+    const {getByText, getByPlaceholderText, queryByText} = render(
+      <ByokCard provider={mockProvider} status="disconnected" />,
+    );
+
+    // Open connect dialog
+    fireEvent.click(getByText('Connect'));
+    const input = getByPlaceholderText('sk-...');
+    fireEvent.change(input, {target: {value: 'my-secret-key'}});
+
+    // Show plain text key
+    fireEvent.click(getByText('Show key'));
+    expect(input).toHaveAttribute('type', 'text');
+
+    // Close dialog via Cancel
+    fireEvent.click(getByText('Cancel'));
+    expect(queryByText('Save Key')).not.toBeInTheDocument();
+
+    // Reopen connect dialog
+    fireEvent.click(getByText('Connect'));
+    const reopenedInput = getByPlaceholderText('sk-...');
+    expect(reopenedInput).toHaveAttribute('type', 'password');
+    expect(reopenedInput).toHaveValue('');
   });
 
   it('opens rotate dialog and calls onRotate with new key', async () => {
