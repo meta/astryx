@@ -329,7 +329,8 @@ export interface ClickableCardProps extends BaseProps {
  * accessible role and label. The card surface is a plain <div> —
  * no role or tabIndex on the container. The `aria-current`,
  * `aria-describedby`, `aria-expanded` and `aria-pressed` given to the card
- * apply to that hidden control.
+ * apply to that hidden control. `aria-pressed` applies only when the card
+ * renders as a button (no `href`); for navigation state, use `aria-current`.
  *
  * @compositionHint Use for cards that navigate to a detail page or trigger an action.
  * For toggle selection cards, use SelectableCard instead.
