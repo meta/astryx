@@ -99,6 +99,45 @@ test('in a narrow strip with a TabMenu, the menu trigger keeps its width too', a
   }
 });
 
+test.describe('horizontal wheel', () => {
+  test.use({
+    viewport: {width: 800, height: 520},
+    isMobile: false,
+    hasTouch: false,
+  });
+
+  test('the keyboard hint stays inside the gutter while its focused tab is partly visible', async ({
+    page,
+  }) => {
+    await openStory(page, 'core-tablist--overflow');
+    const tab = page.getByRole('button', {name: 'Overview', exact: true});
+    await page.keyboard.press('Tab');
+    // Firefox can put its scroll container in the tab order too.
+    if (await page.locator('.astryx-tab-strip:focus').count()) {
+      await page.keyboard.press('Tab');
+    }
+    await expect(tab).toBeFocused();
+    const hint = page
+      .locator(':popover-open')
+      .filter({has: page.locator('kbd')});
+    await expect(hint.locator('kbd')).toHaveText(['←', '→']);
+    const hintLeft = async () =>
+      hint.evaluate(el => el.getBoundingClientRect().left);
+    const before = await hintLeft();
+
+    await tab.hover();
+    await page.mouse.wheel(45, 0);
+    await expect
+      .poll(async () => tab.evaluate(el => el.getBoundingClientRect().left))
+      .toBeLessThan(0);
+    await expect.poll(hintLeft).toBe(16);
+    await expect(tab).toBeFocused();
+
+    await page.mouse.wheel(-45, 0);
+    await expect.poll(hintLeft).toBe(before);
+  });
+});
+
 for (const direction of ['ltr', 'rtl'] as const) {
   test(`the forward arrow from the last visible tab focuses and reveals the next one (${direction})`, async ({
     page,

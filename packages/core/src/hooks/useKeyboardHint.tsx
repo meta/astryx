@@ -179,6 +179,7 @@ export function useKeyboardHint(
 
   const layer = useLayerInternal({
     mode: 'context',
+    anchorsThroughMarker: true,
     onShow: handleLayerShow,
     onHide: handleLayerHide,
     getInvoker: noInvoker,
