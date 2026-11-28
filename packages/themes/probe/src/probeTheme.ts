@@ -4354,6 +4354,12 @@ export const probeTheme = defineTheme({
         borderColor: 'hsl(221.8 87% 25%)',
         outlineColor: 'hsl(50.2 93% 25%)',
       },
+      disabled: {
+        backgroundColor: 'hsl(350.3 83% 53%)',
+        color: 'hsl(22.1 94% 12%)',
+        borderColor: 'hsl(262.8 92% 25%)',
+        outlineColor: 'hsl(57.8 86% 25%)',
+      },
     },
     selector: {
       base: {

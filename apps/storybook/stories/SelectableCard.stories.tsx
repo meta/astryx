@@ -40,8 +40,8 @@ const meta: Meta<typeof SelectableCard> = {
       description: {
         component:
           'A card that toggles between selected and unselected states. ' +
-          'Shows an accent border when selected. Manage selection state externally: ' +
-          'single value for radio behavior, Set for multi-select.',
+          'Shows an accent border when selected. Manage selection state externally, ' +
+          'for example in a Set. Each card is a checkbox, so it is not for single-select groups.',
       },
     },
   },
@@ -51,9 +51,9 @@ export default meta;
 type Story = StoryObj<typeof SelectableCard>;
 
 export const SingleSelect: Story = {
-  name: 'Single Select (Radio)',
+  name: 'One Selected Card',
   render: () => {
-    const [selected, setSelected] = useState<string | null>('basic');
+    const [selected, setSelected] = useState(new Set(['basic']));
     const plans = [
       {id: 'basic', name: 'Basic', price: '$9/mo'},
       {id: 'pro', name: 'Pro', price: '$29/mo'},
@@ -66,8 +66,18 @@ export const SingleSelect: Story = {
           <SelectableCard
             key={plan.id}
             label={plan.name}
-            isSelected={selected === plan.id}
-            onChange={() => setSelected(plan.id)}
+            isSelected={selected.has(plan.id)}
+            onChange={isNow => {
+              setSelected(prev => {
+                const next = new Set(prev);
+                if (isNow) {
+                  next.add(plan.id);
+                } else {
+                  next.delete(plan.id);
+                }
+                return next;
+              });
+            }}
             width={200}>
             <VStack gap={1}>
               <Text type="body" weight="bold">
@@ -86,7 +96,7 @@ export const SingleSelect: Story = {
     docs: {
       description: {
         story:
-          'Radio-style selection: track a single selected ID in state. Clicking a card sets it as selected, deselecting the previous.',
+          'One selected card beside unselected ones. Each card is a checkbox that toggles on its own, so selecting one does not deselect another, and assistive technology announces a multi-select group. For a single choice, use radio semantics instead.',
       },
     },
   },
