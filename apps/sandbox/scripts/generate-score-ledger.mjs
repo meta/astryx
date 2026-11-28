@@ -22,6 +22,8 @@
  *   without a rebuild — and the page labels which of the two you are reading.
  *   If the fetch here fails — offline build, wiki down — the snapshot is null
  *   and the page relies on the live fetch alone; it never fails the build.
+ *   Nor does a bad row: an item that the snapshot cannot carry is skipped,
+ *   and `snapshotSkipped` in the generated file lists each skip.
  *
  * SYNC: When the ledger schema changes, update scripts/score-ledger.mjs and the
  *   Component-Audit-Rubric wiki page too.
@@ -42,6 +44,7 @@ import {
   isEvidenceItem,
   listComponents,
 } from '../../../scripts/score-ledger.mjs';
+import {readRows, readSectionBlocks, readSectionIds} from './score-ledger-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -121,22 +124,28 @@ const KNOWN_SECTION_KEYS = new Set([
 /** Drop keys `LedgerEntry` doesn't declare, or whose shape it rejects. */
 const droppedKeys = new Set();
 const malformedKeys = new Set();
+/** Every item the snapshot skipped. The generated file lists them. */
+const skipped = [];
+const skip = item => skipped.push(item);
 
 /** Prune each section object to the keys `LedgerSection` declares. */
-function pruneSections(sections) {
+function pruneSections(sections, openBlocks, component) {
   if (sections == null || typeof sections !== 'object' || Array.isArray(sections)) {
     return sections;
   }
   const kept = {};
-  for (const [id, section] of Object.entries(sections)) {
+  for (const [id, section] of readSectionIds(sections, `${component}: sections`, skip)) {
     if (section == null || typeof section !== 'object' || Array.isArray(section)) {
       kept[id] = section;
       continue;
     }
     const kept_section = {};
     for (const [k, v] of Object.entries(section)) {
-      if (KNOWN_SECTION_KEYS.has(k)) kept_section[k] = v;
-      else droppedKeys.add(`sections.*.${k}`);
+      if (!KNOWN_SECTION_KEYS.has(k)) droppedKeys.add(`sections.*.${k}`);
+      else if (k === 'blocks') {
+        const where = `${component}: sections.${id}.blocks`;
+        kept_section[k] = readSectionBlocks(v, openBlocks, where, skip);
+      } else kept_section[k] = v;
     }
     kept[id] = kept_section;
   }
@@ -156,13 +165,20 @@ function pruneEntry(entry) {
       if (shape.repair) kept[k] = shape.repair(v);
       continue;
     }
-    kept[k] = k === 'sections' ? pruneSections(v) : v;
+    kept[k] = v;
+  }
+  // After every key, so a section can repair a bare id from the entry's BLOCKs.
+  if ('sections' in kept) {
+    const openBlocks = isBlocksShape(kept.blocks) ? kept.blocks.open : [];
+    kept.sections = pruneSections(kept.sections, openBlocks, entry.component ?? '?');
   }
   return kept;
 }
 
 let snapshot = null;
 let snapshotFetchedAt = null;
+let fetched = false;
+let parsed;
 try {
   // Bounded on purpose. A 404 or a refused connection lands in the catch
   // immediately, but a STALLED connection would not: a bare fetch inherits
@@ -175,19 +191,36 @@ try {
     signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const parsed = JSON.parse(await res.text());
-  if (!Array.isArray(parsed.components)) throw new Error('missing a components array');
-  snapshot = {...parsed, components: parsed.components.map(pruneEntry)};
-  snapshotFetchedAt = new Date().toISOString();
-  console.log(
-    `componentScores: snapshot of ${parsed.components.length} audited component(s) from the wiki`,
-  );
+  parsed = JSON.parse(await res.text());
+  fetched = true;
 } catch (e) {
   // Never fail the build over this — and never hang it either. The page
   // fetches the same URL at runtime and says which copy it is showing.
   const why = e.name === 'TimeoutError' ? 'no response within 5000ms' : e.message;
   console.warn(
     `componentScores: could not snapshot the ledger (${why}) — the page will rely on its runtime fetch.`,
+  );
+}
+
+// Outside the catch: bad wiki data is skipped and recorded, so an error here
+// is a fault in this script, and it stops the build.
+if (fetched) {
+  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    skip({where: 'ledger', item: String(JSON.stringify(parsed)), reason: 'not a ledger object'});
+  } else {
+    snapshot = {...parsed, components: readRows(parsed.components, skip).map(pruneEntry)};
+    snapshotFetchedAt = new Date().toISOString();
+    console.log(
+      `componentScores: snapshot of ${snapshot.components.length} audited component(s) from the wiki`,
+    );
+  }
+}
+
+if (skipped.length > 0) {
+  console.warn(
+    `componentScores: skipped ${skipped.length} ledger item(s) the snapshot cannot carry: ` +
+      skipped.map(({where, item, reason}) => `${where} ${item} (${reason})`).join('; ') +
+      '. snapshotSkipped lists them. Fix each row in the wiki.',
   );
 }
 
@@ -227,6 +260,10 @@ export interface LedgerBlock {
   summary: string;
   section?: string;
   evidence?: string;
+  /** The finding's severity as the audit recorded it, e.g. \`BLOCK\`. */
+  severity?: string;
+  /** The fix the audit proposes. */
+  fix?: string;
   /** The \`hardening\` issue filed for this BLOCK, or null if none is filed. */
   issue: number | null;
 }
@@ -327,6 +364,25 @@ export const snapshot: Ledger | null = ${JSON.stringify(snapshot, null, 2)};
 
 /** When the snapshot above was taken, so the fallback can date itself. */
 export const snapshotFetchedAt: string | null = ${JSON.stringify(snapshotFetchedAt)};
+
+/** One ledger item that the snapshot skipped. */
+export interface SkippedItem {
+  /** The row and the place in it, e.g. \`Button: sections.behavior.blocks[0]\`. */
+  where: string;
+  /** The item as the wiki wrote it, as JSON. */
+  item: string;
+  reason: string;
+}
+
+/**
+ * Every ledger item that the snapshot above skipped because it could not carry
+ * it. Each one is an error in its wiki row: fix the row.
+ */
+export const snapshotSkipped: {count: number; entries: SkippedItem[]} = ${JSON.stringify(
+  {count: skipped.length, entries: skipped},
+  null,
+  2,
+)};
 `;
 
 fs.mkdirSync(OUT_DIR, {recursive: true});
