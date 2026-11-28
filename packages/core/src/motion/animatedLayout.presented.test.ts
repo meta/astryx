@@ -7,9 +7,9 @@
  * @output Checks that a running translate glide reports its element to the
  *   presented hit-test registry. The cases cover its offset from where iOS
  *   WebKit hit-tests it, a touch-down's resolve and its end. Each motion
- *   resolves once more as it settles: a glide, an inert element's, a reveal
- *   that rides a glide and an indicator's transition. A cancelled or removed
- *   one never does. A change's
+ *   resolves once more as it settles: a glide, an inert element's and a
+ *   reveal that rides a glide. So do its sliding parts and an indicator's
+ *   transition. A cancelled or removed one never does. A change's
  *   glides cost one notice as they start and one as they end, even after a
  *   glide in a removed frame ended. A fade or an inert element reports
  *   nothing, and a glide whose element left its document loses its report
@@ -687,6 +687,76 @@ describe('a glide in the presented hit-test registry (motion/presentation.ts)', 
       expect(settles).toBeLessThan(ridden);
       reveal.finish?.();
       expect(written()).toBe('');
+      frames.run();
+      expect(frames.pending()).toBe(0);
+    } finally {
+      frames.restore();
+    }
+  });
+
+  it("retimes the settle of a reveal's sliding part whose ride replaces its frames: it resolves at its own ride's settle", async () => {
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    const frames = holdFrames();
+    try {
+      withEffects = true;
+      const {area, changed, phase} = setUp(
+        '<div id="area"><div id="changed"><div id="part"></div></div><div id="a"></div></div>',
+      );
+      const part = document.getElementById('part') as HTMLElement;
+      const a = document.getElementById('a') as HTMLElement;
+      // The part fills the opened element, so it slides in under its clip.
+      placeAt(part, {before: [0, 0, 400, 0], after: [0, 0, 400, 80]}, phase);
+      placeAt(a, {before: [0, 0, 400, 40], after: [0, 80, 400, 40]}, phase);
+      // The row below glides from 200 ms before the reveal starts.
+      startTimes.set(a, -200);
+      startTimes.set(changed, 0);
+      startTimes.set(part, 0);
+      await runChange(
+        createAnimatedLayout(() => area),
+        changed,
+        phase,
+      );
+      const slide = played.find(p => p.element === part);
+      if (slide == null) {
+        throw new Error(
+          'the part did not slide: the reveal kept a moving clip',
+        );
+      }
+      const effect = (
+        slide.animation as {
+          effect: {
+            frames: Keyframe[];
+            getTiming: () => KeyframeAnimationOptions;
+          };
+        }
+      ).effect;
+      const ridden = Number(effect.getTiming().duration);
+      // The part rides the rest of the glide, as the reveal does.
+      expect(ridden).toBe(Number(slide.options.duration) - 200);
+      const own = settleOf(slide.keyframes, Number(slide.options.duration));
+      const settles = settleOf(effect.frames, ridden);
+      expect(settles).toBeLessThan(own);
+      // The other glides end. The reveal runs on, since its end releases the
+      // part.
+      const reveal = played.find(p => p.element === changed) as Played;
+      for (const entry of played) {
+        if (entry !== slide && entry !== reveal) {
+          entry.finish?.();
+        }
+      }
+      const timing = slide.animation as {currentTime: number};
+      const written = () => part.style.getPropertyValue('--astryx-presented');
+      timing.currentTime = settles - 1;
+      frames.run();
+      expect(written()).toBe('');
+      // Its ride's settle frame writes, before its own curve would settle.
+      timing.currentTime = settles;
+      frames.run();
+      expect(written()).not.toBe('');
+      slide.finish?.();
+      reveal.finish?.();
       frames.run();
       expect(frames.pending()).toBe(0);
     } finally {
