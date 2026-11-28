@@ -173,7 +173,7 @@ defineTheme({
 //
 // Use theme tokens, never raw values — run \`astryx docs tokens\` for the
 // full set. Color: --color-accent, --color-on-accent, --color-border,
-// --color-border-emphasized, --color-background-surface,
+// --color-border-control, --color-background-surface,
 // --color-background-muted. Radius: --radius-inner, --radius-full.
 // Border width: --border-width.
 import {isRenderable} from '@astryxdesign/core/utils';
@@ -186,7 +186,7 @@ function BrandCheckbox({state, size = 'md', isDisabled, children}) {
         width: size === 'sm' ? 20 : 24,
         height: size === 'sm' ? 20 : 24,
         borderRadius: 'var(--radius-inner)',
-        border: 'var(--border-width) solid var(--color-border-emphasized)',
+        border: 'var(--border-width) solid var(--color-border-control)',
         color: 'var(--color-accent)',
         opacity: isDisabled ? 0.5 : 1,
       }}>

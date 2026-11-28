@@ -9498,7 +9498,7 @@ export function compileTheme(ctx, data, base) {
         putTok(k, color, m);
       }
     // The edge the fields draw (the token the census reads for their
-    // border color at rest: today --color-border-emphasized) follows a
+    // border color at rest: today --color-border-control) follows a
     // whole-theme border color: the color itself where it reads at 3:1 on
     // the field's fill, else the nearest shade of it that does, so a field
     // keeps a boundary people can see (WCAG 1.4.11) in the border's color.
@@ -9506,8 +9506,20 @@ export function compileTheme(ctx, data, base) {
     const border = pinned('--color-border', m)
       ? written('--color-border', m)
       : null;
+    const fieldEdges = fieldEdgeTokens(ctx);
+    // The emphasized border (cards, dividers) moves with a set border as
+    // it does where the fields draw it: on the fields' fill, at 3:1.
+    const edges = fieldEdges.some(e => e.token === '--color-border-emphasized')
+      ? fieldEdges
+      : [
+          ...fieldEdges,
+          {
+            token: '--color-border-emphasized',
+            fill: fieldEdges[0]?.fill ?? '--color-background-surface',
+          },
+        ];
     if (border)
-      for (const edge of fieldEdgeTokens(ctx)) {
+      for (const edge of edges) {
         if (edge.token === '--color-border' || pinned(edge.token, m)) continue;
         const fill =
           written(edge.fill, m) ??
@@ -9520,7 +9532,7 @@ export function compileTheme(ctx, data, base) {
         putTok(edge.token, shade, m);
         if (shade.toLowerCase() !== String(border).toLowerCase())
           (ctx.compileNotes ??= []).push(
-            `fields kept at 3:1: their edge (${edge.token}) is ${shade} in ${m} mode, the nearest shade of ${border} that reads on their fill; for the exact color: \`${P} set ${data.name} ${edge.token} ${quoteCommandArgument(String(border))}${data.mode === 'both' ? ` --mode ${m}` : ''}\``,
+            `${fieldEdges.includes(edge) ? 'fields' : 'cards and dividers'} kept at 3:1: their edge (${edge.token}) is ${shade} in ${m} mode, the nearest shade of ${border} that reads on their fill; for the exact color: \`${P} set ${data.name} ${edge.token} ${quoteCommandArgument(String(border))}${data.mode === 'both' ? ` --mode ${m}` : ''}\``,
           );
       }
   }
@@ -10027,6 +10039,7 @@ export const FOLLOWS = Object.freeze(
       SURFACE_FAMILY.map(k => [k, '--color-background-surface']),
     ),
     '--color-border-emphasized': '--color-border',
+    '--color-border-control': '--color-border',
   }),
 );
 

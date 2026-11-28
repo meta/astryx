@@ -130,8 +130,10 @@ export const myTheme = defineTheme({
    *   contrast      'standard' | 'high' — 'high' widens the text/surface tone
    *                 gap, for dense data UI or bright and clinical screens
    *
-   * Whatever seed you pass, generated text holds >= 4.5:1 against its surface
-   * and --color-border-emphasized >= 3:1. Two limits on that guarantee:
+   * Whatever seed you pass, generated text holds >= 4.5:1 against its surface,
+   * --color-border-emphasized >= 3:1 against its surface, and
+   * --color-border-control (the edge of a field or a checkbox or radio box)
+   * >= 3:1 against its surface and page body. Two limits on that guarantee:
    *
    *   - It covers what this config generates. Write one side of a pair by hand
    *     in `tokens` below — an accent without its --color-on-accent, a surface
@@ -229,7 +231,8 @@ export const myTheme = defineTheme({
   // The families, so you know what exists:
   //   --color-*        accent, on-accent · background-{body,surface,card,popover,
   //                    muted,inverted} · text-* · icon-* · border,
-  //                    border-emphasized · overlay{,-hover,-pressed} ·
+  //                    border-emphasized, border-control ·
+  //                    overlay{,-hover,-pressed} ·
   //                    success/warning/error (+ -muted, on-*) · skeleton, track,
   //                    shadow, tint-hover · categorical {blue,cyan,gray,green,
   //                    orange,pink,purple,red,teal,yellow} ×

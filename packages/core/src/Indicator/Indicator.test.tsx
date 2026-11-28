@@ -373,11 +373,11 @@ describe('RadioIndicator presentation', () => {
     },
   );
 
-  it('draws an emphasized border on the surface when unchecked', () => {
+  it('draws a control border on the surface when unchecked', () => {
     const {container} = render(<RadioIndicator state="unchecked" />);
     const {circle} = radioParts(container);
     expect(declaredValue(circle, 'border-color')).toContain(
-      '--color-border-emphasized',
+      '--color-border-control',
     );
     expect(declaredValue(circle, 'background-color')).toContain(
       '--color-background-surface',

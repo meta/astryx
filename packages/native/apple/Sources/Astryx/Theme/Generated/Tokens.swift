@@ -96,6 +96,8 @@ public struct ColorTokens: Equatable, Sendable {
   public var border: Color
   /// `--color-border-blue`
   public var borderBlue: Color
+  /// `--color-border-control`
+  public var borderControl: Color
   /// `--color-border-cyan`
   public var borderCyan: Color
   /// `--color-border-emphasized`
@@ -423,6 +425,7 @@ public struct ColorTokens: Equatable, Sendable {
     backgroundYellow: Color,
     border: Color,
     borderBlue: Color,
+    borderControl: Color,
     borderCyan: Color,
     borderEmphasized: Color,
     borderError: Color,
@@ -597,6 +600,7 @@ public struct ColorTokens: Equatable, Sendable {
     self.backgroundYellow = backgroundYellow
     self.border = border
     self.borderBlue = borderBlue
+    self.borderControl = borderControl
     self.borderCyan = borderCyan
     self.borderEmphasized = borderEmphasized
     self.borderError = borderError
@@ -776,6 +780,7 @@ public struct ColorTokens: Equatable, Sendable {
     case "color-background-yellow": backgroundYellow
     case "color-border": border
     case "color-border-blue": borderBlue
+    case "color-border-control": borderControl
     case "color-border-cyan": borderCyan
     case "color-border-emphasized": borderEmphasized
     case "color-border-error": borderError

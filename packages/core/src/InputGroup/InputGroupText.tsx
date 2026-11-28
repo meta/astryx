@@ -46,7 +46,7 @@ const styles = stylex.create({
     flexShrink: 0,
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
-    borderColor: colorVars['--color-border-emphasized'],
+    borderColor: colorVars['--color-border-control'],
     marginInlineStart: {
       default: `calc(-1 * ${borderVars['--border-width']})`,
       ':first-child': 0,

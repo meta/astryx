@@ -60,6 +60,8 @@ const rulesOf = (css, part) =>
   ).join('\n');
 
 const edgeIn = (/** @type {string} */ css) =>
+  /--color-border-control: ([^;]+);/.exec(css)?.[1]?.trim() ?? '';
+const emphasizedIn = (/** @type {string} */ css) =>
   /--color-border-emphasized: ([^;]+);/.exec(css)?.[1]?.trim() ?? '';
 const borderIn = (/** @type {string} */ css) =>
   /--color-border: ([^;]+);/.exec(css)?.[1]?.trim() ?? '';
@@ -83,10 +85,30 @@ describe('a whole-theme border color', () => {
       ),
     ).toBeGreaterThanOrEqual(3);
     expect(r.data.notes.join(' ')).toMatch(
-      /fields kept at 3:1: their edge \(--color-border-emphasized\) is #[0-9a-f]{6} in light mode/i,
+      /fields kept at 3:1: their edge \(--color-border-control\) is #[0-9a-f]{6} in light mode/i,
     );
     await themeEditUndo('lg', {cwd});
     expect(cssOf('lg')).not.toMatch(/#e5e7eb/i);
+  }, 240_000);
+
+  it('moves the emphasized border as it moves the fields, so cards and dividers keep their colors', async ctx => {
+    if (needBases(ctx)) return;
+    for (const [name, color] of [
+      ['ef', '#e5e7eb'],
+      ['es', '#444444'],
+    ]) {
+      await themeEditNew(name, {cwd, like: 'neutral'});
+      const r = await themeEditSet(name, '--color-border', color, {cwd});
+      const css = cssOf(name);
+      // The emphasized border takes the same color the fields' edge takes:
+      // the border itself where it reads at 3:1 on the fields' fill, else
+      // its nearest shade that does.
+      expect(emphasizedIn(css), name).toBe(edgeIn(css));
+      if (color === '#e5e7eb')
+        expect(r.data.notes.join(' ')).toMatch(
+          /cards and dividers kept at 3:1: their edge \(--color-border-emphasized\) is #[0-9a-f]{6} in light mode/i,
+        );
+    }
   }, 240_000);
 
   it('gives the fields the exact color where it reads, and keeps a field edge the theme set', async ctx => {
@@ -98,7 +120,7 @@ describe('a whole-theme border color', () => {
     });
     expect(edgeIn(cssOf('dk'))).toMatch(/#444444/i);
     expect(r.data.notes.join(' ')).not.toMatch(/fields kept at 3:1/);
-    await themeEditSet('dk', '--color-border-emphasized', '#ff00aa', {
+    await themeEditSet('dk', '--color-border-control', '#ff00aa', {
       cwd,
       mode: 'light',
     });

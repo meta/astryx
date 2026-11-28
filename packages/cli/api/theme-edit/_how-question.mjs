@@ -24225,9 +24225,9 @@ export function draftAnswer(ctx, env, question) {
               options: [[set('--border-width', '0px')]],
             };
           // "thick black borders on everything": the shared width (thick is
-          // one pixel past it), the shared border colors (inputs draw the
-          // emphasized one), and on "everything" a border on the surfaces
-          // that draw none (dialogs, popovers, menus).
+          // one pixel past it), the shared border colors (inputs and checkbox
+          // and radio boxes draw the control edge), and on "everything" a
+          // border on the surfaces that draw none (dialogs, popovers, menus).
           const bwNow0 = String(current('--border-width') ?? '1px');
           const onePast = (() => {
             const m = /^(\d*\.?\d+)(px|rem)$/.exec(bwNow0);
@@ -24281,7 +24281,7 @@ export function draftAnswer(ctx, env, question) {
               ...dividers.map(pt => set('--border-width', bwNow0, {on: pt})),
             ];
             return {
-              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
+              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-control, what inputs and checkbox and radio boxes draw, follows at the nearest shade that keeps 3:1 on their fill)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
               options: [steps],
               sequence: true,
             };
