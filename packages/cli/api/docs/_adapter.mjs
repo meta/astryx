@@ -2517,11 +2517,12 @@ export function withPageBelow(topic, byRoute, ordered, deeper) {
  * hyphens; failing that, the topics and top-level namespaces,
  * closest first and cut where the matches get weaker (every one of them when
  * none shares a word with the argument, with the names a slip or two from it
- * first). When the argument matches a component, hook or template
- * (exact, folded or last segment), the command that reads that entry joins the list as
- * foundation/suggest/other-command.mjs places it, and the list keeps its
- * length; when no suggested doc
- * shares a word with the argument, that command is the only suggestion.
+ * first). When the argument matches a component, hook or template (exact,
+ * folded or last segment, or a Core component or hook its last path segment
+ * names, unless a stable doc has that name), the command that reads that
+ * entry joins the list as foundation/suggest/other-command.mjs places it, and
+ * the list keeps its length; when no suggested doc shares a word with the
+ * argument, that command is the only suggestion.
  * When no command joins, the docs whose route, title or declared keywords
  * carry a typed word ({@link wordMatches}) take the place of the topics and
  * namespaces, the named route that list leads with first, in a list no
@@ -2583,8 +2584,11 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       ...catalog.names().map(name => ({name, reason: 'available topic'})),
     ];
   }
+  // A child the route names stays first, ahead of another command's entry.
+  let namedChild = 0;
   if (typeof topic === 'string' && routeChildren) {
     const byRoute = orderRouteSuggestions(topic, suggestions, {closest: false});
+    namedChild = namesRoute(topic, byRoute[0]?.name ?? '') ? 1 : 0;
     suggestions = withPageBelow(
       topic,
       byRoute,
@@ -2644,6 +2648,7 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
           // Kept with the project's one name index (the docs catalog itself
           // is not asked from here).
           docsRoutes: routes.docsRoutesLazily,
+          tail: componentTail(String(topic), hint.tailForms, tree, catalog),
         })
       : null;
   if (hint && elsewhere) {
@@ -2655,6 +2660,7 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       hint.withOtherCommand(suggestions, elsewhere, String(topic), {
         from: 'docs',
         alone: !sharesAWord,
+        pinned: namedChild,
       }) ?? [];
   } else if (byWords.length > 0) {
     suggestions = fewerWordMatches(String(topic), suggestions, byWords, 0);
@@ -2664,6 +2670,31 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
     suggestions,
     ERROR_CODES.ERR_UNKNOWN_TOPIC,
   );
+}
+
+/**
+ * The names a typed last route segment may give a Core component or hook by,
+ * or none when a stable doc or topic name, as typed or with its words
+ * singular, is one of them: a doc wins (`icons` is a topic, so `guides/icon`
+ * names no component), while an experimental doc changes no stable answer.
+ * @param {string} topic
+ * @param {(name: string) => string[]} formsOf other-command.mjs tailForms
+ * @param {DocsTree} tree
+ * @param {DocsCatalog} catalog
+ * @returns {string[]}
+ */
+function componentTail(topic, formsOf, tree, catalog) {
+  const forms = formsOf(topic);
+  const docNames = [
+    ...[...tree.nodes.values()]
+      .filter(node => !isExperimentalTreeNode(tree, node))
+      .map(node => node.name),
+    ...catalog.names(),
+  ];
+  const namesADoc = docNames.some(name =>
+    formsOf(name).some(form => forms.includes(form)),
+  );
+  return namesADoc ? [] : forms;
 }
 
 /**

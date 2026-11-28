@@ -135,6 +135,7 @@ async function groupBorders(
   page: Page,
   storyId: string,
   forcedColors: 'active' | 'none',
+  {hiddenFollower = false}: {hiddenFollower?: boolean} = {},
 ): Promise<ReadonlyArray<Record<Side, number>>> {
   await page.emulateMedia({forcedColors});
   await page.goto(
@@ -145,6 +146,17 @@ async function groupBorders(
   );
   const buttons = page.locator('#storybook-root [role="group"] .astryx-button');
   await buttons.first().waitFor({state: 'attached'});
+  if (hiddenFollower) {
+    // A caller's hidden element after the last button.
+    await page
+      .locator('#storybook-root [role="group"]')
+      .first()
+      .evaluate(group => {
+        const follower = document.createElement('span');
+        follower.hidden = true;
+        group.append(follower);
+      });
+  }
   expect(
     await page.evaluate(() => matchMedia('(forced-colors: active)').matches),
   ).toBe(forcedColors === 'active');
@@ -206,6 +218,34 @@ test.describe('Connected ButtonGroup', () => {
         );
         expect(border[crossA], `button ${index} ${crossA}`).toBe(1);
         expect(border[crossB], `button ${index} ${crossB}`).toBe(1);
+      });
+    });
+
+    test(`${story}: in forced colors a hidden last child leaves the outer edge closed on the last visible button`, async ({
+      page,
+    }) => {
+      const borders = await groupBorders(page, story, 'active', {
+        hiddenFollower: true,
+      });
+      const last = borders.length - 1;
+      borders.forEach((border, index) => {
+        expect(border[lead], `button ${index} ${lead}`).toBe(1);
+        expect(border[trail], `button ${index} ${trail}`).toBe(
+          index === last ? 1 : 0,
+        );
+        expect(border[crossA], `button ${index} ${crossA}`).toBe(1);
+        expect(border[crossB], `button ${index} ${crossB}`).toBe(1);
+      });
+    });
+
+    test(`${story}: outside forced colors a hidden last child adds no outer edge`, async ({
+      page,
+    }) => {
+      const borders = await groupBorders(page, story, 'none', {
+        hiddenFollower: true,
+      });
+      borders.forEach((border, index) => {
+        expect(border[trail], `button ${index} ${trail}`).toBe(0);
       });
     });
   }

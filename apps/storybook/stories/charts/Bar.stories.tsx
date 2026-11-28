@@ -21,6 +21,7 @@ import {
 const meta: Meta<typeof Chart> = {
   title: 'Charts/Marks/Bar',
   component: Chart,
+  tags: ['autodocs'],
 };
 export default meta;
 

@@ -596,6 +596,29 @@ describe('useTableColumnResize', () => {
       expect(role).toHaveAttribute('aria-label', 'Resize column role');
     });
 
+    it("names a handle by its header's text as it reads, with inline markup joined", () => {
+      render(
+        <ResizeTable
+          columns={[
+            {
+              key: 'name',
+              header: (
+                <span>
+                  H<sub>2</sub>O level
+                </span>
+              ),
+            },
+            {key: 'role', header: 'Role'},
+            {key: 'id', header: 'ID'},
+          ]}
+        />,
+      );
+      expect(getResizeHandles()[0]).toHaveAttribute(
+        'aria-label',
+        'Resize column H2O level',
+      );
+    });
+
     it("the handle never adds to its column header's name (AR1)", () => {
       render(<ResizeTable />);
       const headers = screen.getAllByRole('columnheader');

@@ -32,29 +32,42 @@ import {
   DEFAULT_MIN_COLUMN_WIDTH,
 } from './columnUtils';
 import type {TablePlugin, TableColumn, ProportionalWidth} from './types';
+import type * as ModuleLoaderModule from '../utils/moduleLoader';
 import {Text} from '../Text/Text';
 
 /**
- * A fresh Table module graph whose Tooltip imports are counted, and frames
+ * A fresh Table module graph whose own Tooltip loads are counted, and frames
  * held until `releaseFrames` runs them.
  */
 async function freshTableWithCountedTooltip() {
-  // An earlier test's page-wide preload runs from its own module graph. It
-  // waits a frame and a task before it imports, so wait the same here, then
-  // a little longer: it then imports before the counting mock below exists.
-  await act(async () => {
-    await new Promise(resolve => {
-      requestAnimationFrame(() => {
-        setTimeout(resolve, 0);
-      });
-    });
-    await new Promise(resolve => setTimeout(resolve, 50));
-  });
   vi.resetModules();
+  // Counts the Tooltip module loads that this table's own loaders make. An
+  // earlier test's page-wide preload runs from its own module graph, and on
+  // a busy runner its import can resolve in this registry at any time. So
+  // the count reads this graph's loaders, not the Tooltip module itself.
   const loads = {count: 0};
-  vi.doMock('../Tooltip/Tooltip', async importOriginal => {
-    loads.count += 1;
-    return importOriginal();
+  const counted = new WeakSet<object>();
+  vi.doMock('../utils/moduleLoader', async importOriginal => {
+    const actual = await importOriginal<typeof ModuleLoaderModule>();
+    return {
+      ...actual,
+      createModuleLoader: <T,>(importModule: () => Promise<T>) =>
+        actual.createModuleLoader(async () => {
+          const loaded = await importModule();
+          // The after-paint preload resolves through the Tooltip loader, so
+          // one module counts once.
+          if (
+            typeof loaded === 'object' &&
+            loaded !== null &&
+            'Tooltip' in loaded &&
+            !counted.has(loaded)
+          ) {
+            counted.add(loaded);
+            loads.count += 1;
+          }
+          return loaded;
+        }),
+    };
   });
   // These tests count the cells' Tooltip load. A truncating header cell's
   // keyboard cut-text loads its own module, which also imports Tooltip, on
@@ -87,7 +100,7 @@ async function freshTableWithCountedTooltip() {
     },
     restore() {
       frame.mockRestore();
-      vi.doUnmock('../Tooltip/Tooltip');
+      vi.doUnmock('../utils/moduleLoader');
       vi.doUnmock('../Text/cutTextOnKeyboardFocus');
     },
   };
@@ -711,6 +724,58 @@ describe('BaseTable', () => {
       expect(receivedKeys).toEqual(['name', 'age', 'email']);
       const headers = screen.getAllByRole('columnheader');
       expect(headers[0]).toHaveAttribute('data-column', 'name');
+    });
+
+    it('gives a plain-text label beside an "after" control its own direction', () => {
+      const plugin: TablePlugin<User> = {
+        transformHeaderCell: props => ({...props, after: <span>after</span>}),
+      };
+      render(
+        <BaseTable
+          data={users}
+          columns={[
+            {key: 'name', header: 'Name'},
+            {key: 'email', header: 'אימייל'},
+          ]}
+          plugins={[plugin]}
+        />,
+      );
+      expect(screen.getByText('Name')).toHaveAttribute('dir', 'ltr');
+      expect(screen.getByText('אימייל')).toHaveAttribute('dir', 'rtl');
+    });
+
+    it('gives a truncating plain-text label beside an overlay alone its own direction', () => {
+      const plugin: TablePlugin<User> = {
+        transformHeaderCell: props => ({
+          ...props,
+          overlay: <span aria-hidden="true">boundary</span>,
+        }),
+      };
+      const columns: TableColumn<User>[] = [
+        {key: 'name', header: 'Name'},
+        {key: 'email', header: 'אימייל'},
+      ];
+      const {unmount} = render(
+        <BaseTable
+          data={users}
+          columns={columns}
+          textOverflow="truncate"
+          plugins={[plugin]}
+        />,
+      );
+      expect(screen.getByText('Name')).toHaveAttribute('dir', 'ltr');
+      expect(screen.getByText('אימייל')).toHaveAttribute('dir', 'rtl');
+      expect(screen.getByRole('columnheader', {name: 'Name'})).toBeTruthy();
+      unmount();
+      render(
+        <BaseTable
+          data={users}
+          columns={columns}
+          textOverflow="wrap"
+          plugins={[plugin]}
+        />,
+      );
+      expect(screen.getByText('Name')).not.toHaveAttribute('dir');
     });
 
     it('applies transformBodyRow plugin with item and index', () => {
@@ -1522,6 +1587,22 @@ describe('Table', () => {
     const names = (element: Element) =>
       [...element.attributes].map(attribute => attribute.name).sort();
     expect(names(cellText)).toEqual(names(plainText));
+  });
+
+  it('counts no Tooltip load that an earlier module graph makes after the count starts', async () => {
+    // An earlier test's page-wide preload runs from its own module graph.
+    // On a busy runner its import can resolve only after this count starts.
+    const {createModuleLoader} = await import('../utils/moduleLoader');
+    const earlierTooltip = createModuleLoader(
+      async () => import('../Tooltip/Tooltip'),
+    );
+    const fresh = await freshTableWithCountedTooltip();
+    try {
+      await earlierTooltip.load();
+      expect(fresh.loads.count).toBe(0);
+    } finally {
+      fresh.restore();
+    }
   });
 
   it('loads the Tooltip module after a table of default cells paints, with no interaction', async () => {

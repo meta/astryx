@@ -71,6 +71,14 @@ export function killGroup(child) {
   }
 }
 
+/**
+ * Each folder by its given path and its real path, because a symlink (for
+ * example the macOS temp folder) gives one folder two names.
+ */
+export function givenAndRealPaths(roots) {
+  return [...new Set(roots.flatMap(root => [path.resolve(root), fs.existsSync(root) ? fs.realpathSync(root) : root]))];
+}
+
 export function isInside(candidate, root) {
   const relative = path.relative(root, candidate);
   return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));

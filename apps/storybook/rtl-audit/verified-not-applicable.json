@@ -190,10 +190,6 @@
     "reason": "Markdown sets each prose block's and table cell's dir from its own text, so a Hebrew paragraph in a left-to-right document starts at the right edge; its unit tests and a mixed-direction story cover that. Semantic list markers, links, and caller-authored content follow browser semantics and shared components. Its own prose styling uses logical block/inline properties, a table's sideways scroll belongs to the nested Table, and it owns no directional icon, control order, physical placement, drag, or overlay."
   },
   {
-    "component": "core/Section",
-    "reason": "Section is a block-flow surface with symmetric decoration and logical padding/insets. It owns no directional glyph, inline-axis ordering, physical transform, scrolling action, dragging, overlay, or keyboard behavior."
-  },
-  {
     "component": "core/TextInput",
     "reason": "TextInput composes a native input and optional start/end affordances in logical flex flow. Padding and status placement use logical properties; owned status, clear, and visibility glyphs are non-directional, and horizontal editing behavior remains native to the input."
   },
@@ -464,5 +460,18 @@
   {
     "component": "core/MobileNavToggle",
     "reason": "MobileNavToggle is one icon-only ghost Button. Its default `menu` glyph is three horizontal bars, symmetric about the block axis, so it has nothing to mirror; caller `children` replace that glyph and are the caller's content. It positions, orders, scrolls, drags and animates nothing along the inline axis, and its only keyboard behavior is the native button activation. Where it sits in a bar is the placing component's layout (AppShell's mobile top bar, TopNav's mobile bar, or the caller's own row)."
+  },
+  {
+    "component": "core/LayerProvider",
+    "reason": "LayerProvider renders no box of its own: it provides layer context and mounts the root ToastViewport. Its toast `position` (`topStart` to `bottomEnd`) and its `inset` (`inlineStart`, `inlineEnd` and the block edges) are logical values it passes through unchanged; the layer runtime and ToastViewport resolve them against the document direction and own that evidence (spec:AST-059 FR6). It owns no glyph, inline spacing, physical position, order, scroll, drag, overlay or keyboard behavior."
+  },
+  {
+    "component": "core/VisuallyHidden",
+    "reason": "VisuallyHidden renders one element clipped to a 1px box (`clip: rect(0, 0, 0, 0)`, `overflow: hidden`, `position: absolute`) and pinned with the logical `insetBlockStart` and `insetInlineStart`, so it paints nothing and its anchor follows the region's direction. It draws no glyph or decoration, takes no pointer input or text selection, and owns no order, scroll, drag, overlay or keyboard behavior; assistive technology reads its content in the document's direction. Its three stories render the hidden node beside visible caller content, which the caller lays out.",
+    "evidence": {
+      "apps/storybook/stories/VisuallyHidden.stories.tsx": "sha256:c163e87a911bc4d9413c86b24f9a6dc878a71fdab648bc4475a14b7305a9721e",
+      "packages/core/src/VisuallyHidden/VisuallyHidden.tsx": "sha256:28385fc054e66d4b10ef30cef41954342dce9363d97a283b94ebcd765ef7b992",
+      "packages/core/src/VisuallyHidden/index.ts": "sha256:e33d2b0f24e30a768df6b4347eddb0261157a57bb98018048ba60112f4134905"
+    }
   }
 ]

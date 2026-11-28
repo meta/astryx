@@ -19,6 +19,12 @@ import type {
 } from './types';
 import type {InternalConfig} from './useInternalConfig';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
+import {loadDateRangeCalendar} from '../DateRangeInput/DateRangeCalendar';
+// DateRangeInput loads its Calendar on the first intent. Loading it up front
+// lets these cases find the calendar's days right after the open.
+beforeAll(async () => {
+  await loadDateRangeCalendar();
+});
 
 // =============================================================================
 // Test infrastructure

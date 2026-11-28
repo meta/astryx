@@ -2,8 +2,9 @@
 
 /**
  * @file layerDismissalFamilies.test.tsx
- * @input Uses vitest, @testing-library/react, BottomSheet, Dialog, Lightbox,
- *   MobileNav, HoverCard, Tooltip (also pinned through InfoTip's show() hold)
+ * @input Uses vitest, @testing-library/react, BottomSheet, ContextMenu, Dialog,
+ *   DropdownMenu, Lightbox, MobileNav, HoverCard, Tooltip (also pinned through
+ *   InfoTip's show() hold)
  * @output Tests that every overlay family shares the one dismissal stack
  * @position Colocated with layerStack; the families' own behavior is tested in
  *   their own files, this one only asks who takes the press
@@ -33,7 +34,9 @@ import {act, fireEvent, render, screen} from '@testing-library/react';
 import {useState} from 'react';
 
 import {BottomSheet} from '../BottomSheet/BottomSheet';
+import {ContextMenu} from '../ContextMenu/ContextMenu';
 import {Dialog} from '../Dialog/Dialog';
+import {DropdownMenu} from '../DropdownMenu/DropdownMenu';
 import {HoverCard} from '../HoverCard/HoverCard';
 import {Lightbox} from '../Lightbox/Lightbox';
 import {MobileNav} from '../MobileNav/MobileNav';
@@ -402,6 +405,92 @@ describe('overlay families on the shared dismissal stack', () => {
 
       expect(onDialogChange).not.toHaveBeenCalled();
       expect(onLightboxChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('menus opened inside a Dialog', () => {
+    const MENU_ITEMS = [{label: 'Rename'}, {label: 'Archive'}];
+
+    function openContextMenu() {
+      fireEvent.contextMenu(screen.getByText('Right-click here'), {
+        clientX: 20,
+        clientY: 20,
+      });
+    }
+
+    it('a ContextMenu takes the Escape, and the Dialog stays open', () => {
+      const onDialogChange = vi.fn();
+      const onMenuChange = vi.fn();
+
+      render(
+        <Dialog isOpen={true} onOpenChange={onDialogChange} aria-label="Host">
+          <ContextMenu items={MENU_ITEMS} onOpenChange={onMenuChange}>
+            <div>Right-click here</div>
+          </ContextMenu>
+        </Dialog>,
+      );
+      openContextMenu();
+      expect(onMenuChange).toHaveBeenLastCalledWith(true);
+
+      let event = new KeyboardEvent('keydown');
+      act(() => {
+        event = pressEscape();
+      });
+
+      expect(onMenuChange).toHaveBeenLastCalledWith(false);
+      expect(onDialogChange).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('the Dialog stays open on a browser-initiated cancel while a ContextMenu is open inside it', () => {
+      const onDialogChange = vi.fn();
+      const onMenuChange = vi.fn();
+
+      render(
+        <Dialog isOpen={true} onOpenChange={onDialogChange} aria-label="Host">
+          <ContextMenu items={MENU_ITEMS} onOpenChange={onMenuChange}>
+            <div>Right-click here</div>
+          </ContextMenu>
+        </Dialog>,
+      );
+      openContextMenu();
+      expect(onMenuChange).toHaveBeenLastCalledWith(true);
+
+      let cancel = new Event('cancel');
+      act(() => {
+        cancel = fireCancel(getDialog('Host'));
+      });
+
+      expect(cancel.defaultPrevented).toBe(true);
+      expect(onDialogChange).not.toHaveBeenCalled();
+    });
+
+    it('a DropdownMenu takes the Escape, and the next Escape closes the Dialog', () => {
+      const onDialogChange = vi.fn();
+
+      render(
+        <Dialog isOpen={true} onOpenChange={onDialogChange} aria-label="Host">
+          <DropdownMenu button={{label: 'Actions'}} items={MENU_ITEMS} />
+        </Dialog>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Actions'});
+      fireEvent.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+      let event = new KeyboardEvent('keydown');
+      act(() => {
+        event = pressEscape();
+      });
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(onDialogChange).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(true);
+
+      act(() => {
+        pressEscape();
+      });
+
+      expect(onDialogChange).toHaveBeenCalledWith(false);
     });
   });
 

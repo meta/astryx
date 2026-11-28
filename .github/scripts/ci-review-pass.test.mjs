@@ -11,12 +11,22 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const HEAVY_MODULE = path.join(root, '.github/scripts/lib/heavy-turn.mjs');
 const turn = await import(HEAVY_MODULE);
+// The runs below are from 2026-11-17 around noon: the clock reads 14:00 that
+// day, so a run from 12:00 is two hours old.
+const NOW = new Date('2026-11-17T14:00:00Z');
+beforeEach(() => {
+  vi.useFakeTimers({toFake: ['Date']});
+  vi.setSystemTime(NOW);
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 const workflow = yaml.parse(
   fs.readFileSync(
     path.join(root, '.github/workflows/ci-review-pass.yml'),
@@ -50,11 +60,17 @@ const ranJobs = [
 /** A stub GitHub with pull requests, CI runs, their jobs and statuses. */
 const APP = 'astracat-bot[bot]';
 const REVIEW = {engOwners: ['owner1'], reviewApp: APP};
+// Each head was pushed at PUSHED (its first check suite); reviews default to
+// after it.
+const PUSHED = '2026-11-20T10:00:00Z';
+const AFTER = '2026-11-20T11:00:00Z';
+const BEFORE = '2026-11-19T09:00:00Z';
 /** The review app's approval of a head. */
-const appApproval = sha => ({
+const appApproval = (sha, submittedAt = AFTER) => ({
   user: {login: APP, type: 'Bot'},
   commit_id: sha,
   state: 'APPROVED',
+  submitted_at: submittedAt,
 });
 
 function stubGithub({
@@ -65,6 +81,7 @@ function stubGithub({
   reviews = null,
   permission = 'write',
   events = [],
+  pushReadFails = false,
 }) {
   const calls = {reRunWorkflow: [], listWorkflowRuns: []};
   const github = {
@@ -92,7 +109,16 @@ function stubGithub({
           };
         },
       },
+      checks: {
+        listSuitesForRef: async () => {
+          if (pushReadFails) throw new Error('rate limited');
+          return {data: {check_suites: [{created_at: PUSHED}]}};
+        },
+      },
       repos: {
+        getCommit: async () => ({
+          data: {commit: {committer: {date: '2026-11-19T08:00:00Z'}}},
+        }),
         // One permission for everyone, or one per login.
         getCollaboratorPermissionLevel: async ({username}) => ({
           data: {
@@ -256,7 +282,14 @@ describe('starting the heavy suites', () => {
       'an engineering owner approved the exact head',
       {
         reviews: {
-          1: [{user: {login: 'Owner1'}, commit_id: 'h1', state: 'APPROVED'}],
+          1: [
+            {
+              user: {login: 'Owner1'},
+              commit_id: 'h1',
+              state: 'APPROVED',
+              submitted_at: AFTER,
+            },
+          ],
         },
         permission: 'read',
       },
@@ -286,6 +319,7 @@ describe('starting the heavy suites', () => {
               user: {login: APP, type: 'User'},
               commit_id: 'h1',
               state: 'APPROVED',
+              submitted_at: AFTER,
             },
           ],
         },
@@ -332,6 +366,79 @@ describe('starting the heavy suites', () => {
     expect(stub.calls.reRunWorkflow).toEqual([11]);
   });
 
+  it('re-runs only the newest run at the head, never an older one beside it', async () => {
+    const stub = stubGithub({
+      pulls: [pull(1, 'h1')],
+      runs: [
+        ciRun(12, 'h1', {created_at: '2026-11-17T13:00:00Z'}),
+        ciRun(11, 'h1', {created_at: '2026-11-17T11:00:00Z'}),
+      ],
+      jobs: {11: deferredJobs, 12: deferredJobs},
+      statuses: {h1: passed},
+    });
+    await turn.startHeavy({
+      ...REVIEW,
+      ...stub,
+      owner: 'o',
+      repo: 'r',
+      pull: pull(1, 'h1'),
+    });
+    expect(stub.calls.reRunWorkflow).toEqual([12]);
+  });
+
+  it('re-runs nothing while a newer run at the head is in progress', async () => {
+    const stub = stubGithub({
+      pulls: [pull(1, 'h1')],
+      runs: [
+        ciRun(11, 'h1', {created_at: '2026-11-17T11:00:00Z'}),
+        ciRun(12, 'h1', {
+          created_at: '2026-11-17T13:00:00Z',
+          status: 'in_progress',
+          conclusion: null,
+        }),
+      ],
+      jobs: {11: deferredJobs},
+      statuses: {h1: passed},
+    });
+    const said = await turn.startHeavy({
+      ...REVIEW,
+      ...stub,
+      owner: 'o',
+      repo: 'r',
+      pull: pull(1, 'h1'),
+    });
+    expect(stub.calls.reRunWorkflow).toEqual([]);
+    expect(said).toContain('run 12 still runs');
+  });
+
+  it('does not re-run a run older than six hours: its merge with main is stale', async () => {
+    // A re-run replays the run's own merge commit. A run from days ago merges
+    // the head with a main that has moved on, so it can fail on contracts main
+    // has since changed, and finish after a fresh run.
+    const stub = stubGithub({
+      pulls: [pull(1, 'h1')],
+      runs: [ciRun(11, 'h1', {created_at: '2026-11-17T07:59:00Z'})],
+      jobs: {11: deferredJobs},
+      statuses: {h1: passed},
+    });
+    const said = await turn.startHeavy({
+      ...REVIEW,
+      ...stub,
+      owner: 'o',
+      repo: 'r',
+      pull: pull(1, 'h1'),
+    });
+    expect(stub.calls.reRunWorkflow).toEqual([]);
+    expect(said).toMatch(
+      /run 11 is from 2026-11-17T07:59:00Z, more than 6 hours ago/,
+    );
+    // The cheap path first: a draft-and-ready toggle merges the same head
+    // with today's main, so its review still holds.
+    expect(said).toContain(
+      "Mark the pull request draft, then ready, to start a fresh run on today's main (no new head, so no new review; a fork head needs its ci:run label first); a push or a main merge also works.",
+    );
+  });
+
   it("reads the newest run at the head, not an older head's", async () => {
     const stub = stubGithub({
       pulls: [pull(1, 'h1')],
@@ -351,6 +458,41 @@ describe('starting the heavy suites', () => {
       pull: pull(1, 'h1'),
     });
     expect(stub.calls.reRunWorkflow).toEqual([12]);
+  });
+});
+
+describe('reviews GitHub re-binds to a new head', () => {
+  // [heavy turn, merge gate] for a write-access author's pull request.
+  const both = async (reviews, extra = {}) => {
+    const pr = pull(1, 'h1');
+    const stub = stubGithub({
+      pulls: [pr],
+      statuses: {h1: passed},
+      reviews: {1: reviews},
+      ...extra,
+    });
+    const input = {...REVIEW, ...stub, owner: 'o', repo: 'r', pull: pr};
+    return [
+      await turn.heavyReviewPasses(input),
+      await turn.reviewPasses(input),
+    ];
+  };
+
+  it('does not start or pass a head whose only approval predates its push', async () => {
+    // GitHub reports the older approval's commit_id as the new head.
+    expect(await both([appApproval('h1', BEFORE)])).toEqual([false, false]);
+  });
+
+  it('starts and passes on an approval submitted after the push', async () => {
+    expect(
+      await both([appApproval('h1', BEFORE), appApproval('h1', AFTER)]),
+    ).toEqual([true, true]);
+  });
+
+  it('counts no review when the push time cannot be read', async () => {
+    expect(
+      await both([appApproval('h1', AFTER)], {pushReadFails: true}),
+    ).toEqual([false, false]);
   });
 });
 
@@ -422,7 +564,12 @@ describe("the heavy turn's review (DEC-32)", () => {
     expect(
       await both(forkPull('h1'), {
         reviews: [
-          {user: {login: 'owner1'}, commit_id: 'h1', state: 'APPROVED'},
+          {
+            user: {login: 'owner1'},
+            commit_id: 'h1',
+            state: 'APPROVED',
+            submitted_at: AFTER,
+          },
         ],
       }),
     ).toEqual([true, true]);
@@ -442,7 +589,12 @@ describe("the heavy turn's review (DEC-32)", () => {
     expect(
       await both(own, {
         reviews: [
-          {user: {login: 'owner1'}, commit_id: 'h1', state: 'APPROVED'},
+          {
+            user: {login: 'owner1'},
+            commit_id: 'h1',
+            state: 'APPROVED',
+            submitted_at: AFTER,
+          },
         ],
       }),
     ).toEqual([false, true]);
@@ -506,8 +658,10 @@ describe('the workflow', () => {
     expect(workflow.permissions).toEqual({});
     const job = workflow.jobs.start;
     expect(job['runs-on']).toBe('ubuntu-slim');
+    // checks: read lets the review read when the head was pushed.
     expect(job.permissions).toEqual({
       actions: 'write',
+      checks: 'read',
       contents: 'read',
       'pull-requests': 'read',
       statuses: 'read',
@@ -560,6 +714,7 @@ describe('the workflow', () => {
 
   it('waits for the gate to settle after a review, then starts the deferred run', async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     let looks = 0;
     const {calls} = await pass(
       'pull_request_review',
@@ -578,6 +733,7 @@ describe('the workflow', () => {
 
   it('starts nothing for a pull request into a release branch', async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     const {calls, logs} = await pass(
       'workflow_run',
       {workflow_run: {pull_requests: [{number: 1}]}},
@@ -608,6 +764,7 @@ describe('the workflow', () => {
 
   it("sweeps recent failed runs on the schedule, a fork's and a failed-jobs re-run's included", async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     const {calls} = await pass(
       'schedule',
       {},
@@ -646,6 +803,7 @@ describe('the workflow', () => {
     // The gates passed before `ci:run`; admitting the head starts a first
     // attempt that defers, and its end starts the review-pass run.
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     const run = forkRun(15, 'h5');
     const {calls} = await pass(
       'workflow_run',
@@ -665,6 +823,7 @@ describe('the workflow', () => {
     // A draft runs no CI; marking it ready starts a first attempt that defers,
     // and that run's end starts the review-pass run.
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     const run = ciRun(18, 'h7', {pull_requests: [{number: 7}]});
     const {calls} = await pass(
       'workflow_run',
@@ -682,6 +841,7 @@ describe('the workflow', () => {
 
   it("starts a fork head after a review, on Review signal's end: the review event's own token is read-only for a fork", async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     let looks = 0;
     const {calls} = await pass(
       'workflow_run',
@@ -730,6 +890,7 @@ describe('the workflow', () => {
 
   it('gives a later head whose gates pass its own review-pass run', async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     const {calls} = await pass(
       'pull_request_review',
       {pull_request: {number: 6}},

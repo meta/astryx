@@ -125,7 +125,11 @@ describe('the workflow', () => {
         .split('\n')
         .map(line => line.trim())
         .filter(Boolean);
-      for (const file of listed) {
+      // A listed pattern (`dir/*.test.mjs`) brings the files it matches.
+      const matched = listed.flatMap(entry =>
+        entry.includes('*') ? fs.globSync(entry, {cwd: root}) : [entry],
+      );
+      for (const file of matched) {
         fs.mkdirSync(path.dirname(path.join(tree, file)), {recursive: true});
         fs.copyFileSync(path.join(root, file), path.join(tree, file));
       }

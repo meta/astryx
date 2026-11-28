@@ -62,7 +62,7 @@ export const docs = {
       name: 'tooltip',
       type: 'string',
       description:
-        "Tooltip text shown on hover and keyboard focus. It also describes the button, unless it repeats the button's accessible name.",
+        "Tooltip text shown on hover and keyboard focus. It also describes the button, unless it repeats the button's accessible name. The text shows above the button; for another side, rich content, or control over when it shows, wrap the button in `Tooltip` instead (`placement`, `content`, `isOpen`).",
     },
     {
       name: 'onClick',
@@ -251,7 +251,7 @@ export const docsDense = {
       'shows loading spinner, blocks re-activation but stays focusable (aria-disabled, not native disabled)',
     isDisabled: 'disables button; uses aria-disabled instead of native disabled',
     tooltip:
-      'tooltip on hover + keyboard focus; also describes the button unless it repeats the accessible name',
+      'tooltip text on hover + keyboard focus, shown above; also describes the button unless it repeats the accessible name; other side, rich content or open control: wrap in Tooltip instead, without this prop (placement, content, isOpen)',
     onClick: 'standard click handler',
     clickAction: 'async click handler w/ automatic loading state',
     isInterruptible:

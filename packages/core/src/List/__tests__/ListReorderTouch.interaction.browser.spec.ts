@@ -10,7 +10,9 @@
  *   place. While the finger holds the drag, the rows stay still, the source
  *   dims, a preview follows and an insertion line marks the drop position. A
  *   flick on a handle scrolls and moves nothing. A cancelled drag puts the
- *   row back. With Reduce Motion the drop takes its place without travel. A
+ *   row back. With Reduce Motion the drop takes its place without travel,
+ *   and its cross-fade ends within 200 ms of the lift; a release that
+ *   reaches the page late lands the rows at once, never blank. A
  *   flush row's handle stays inside the list. A finger held on a handle
  *   refuses text selection on the list until it lifts. A drag that crosses
  *   rows forces no style or layout pass, and neither does the pick-up. A
@@ -52,6 +54,7 @@ import {
   writeEvidence,
   type TouchEventStep,
 } from '@astryxdesign/interaction-harness';
+import {END_HOLD_MS} from '../../motion/animator';
 import {solveSpring, toSpring} from '../../motion/spring';
 import {reorder} from '../../motion/uikit/reorder';
 import {springs} from '../../motion/uikit/springs';
@@ -539,6 +542,162 @@ test.describe('under a finger', () => {
         ),
     ).toBe(false);
   });
+
+  test("with Reduce Motion a finger drop's cross-fade ends within 200 ms of the lift", async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    // Each row animation's curve end on the document timeline, read every
+    // frame while it lives, and when the page handles the lift, on the same
+    // clock. An animation holds its end state for END_HOLD_MS after its
+    // curve, so the curve ends that much before the animation does.
+    await page.evaluate(hold => {
+      const record = window as unknown as {
+        liftedAt: number;
+        ends: Map<Animation, number>;
+      };
+      record.liftedAt = Number.NaN;
+      record.ends = new Map();
+      window.addEventListener(
+        'touchend',
+        () => {
+          record.liftedAt = performance.now();
+        },
+        {capture: true},
+      );
+      const sample = () => {
+        for (const animation of document.getAnimations()) {
+          const target =
+            animation.effect instanceof KeyframeEffect
+              ? animation.effect.target
+              : null;
+          const start = animation.startTime;
+          if (
+            target?.closest('#storybook-root li') == null ||
+            typeof start !== 'number'
+          ) {
+            continue;
+          }
+          const end = animation.effect?.getComputedTiming().endTime;
+          if (typeof end === 'number') {
+            record.ends.set(animation, start + end - hold);
+          }
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    }, END_HOLD_MS);
+    const {at, rowHeight} = await handleOf(page, 'Inbox');
+    const driver = await touchDriver(page);
+    await driver.play(
+      holdThenDrag(
+        at,
+        {x: at.x, y: at.y + rowHeight * 2},
+        {holdMs: HOLD_MS, durationMs: 400, restMs: 120},
+      ),
+    );
+    await page.waitForTimeout(600);
+    const {liftedAt, lastEnd} = await page.evaluate(() => {
+      const record = window as unknown as {
+        liftedAt: number;
+        ends: Map<Animation, number>;
+      };
+      return {
+        liftedAt: record.liftedAt,
+        lastEnd: Math.max(...record.ends.values()),
+      };
+    });
+    const detail = JSON.stringify({liftedAt, lastEnd});
+    expect(Number.isFinite(liftedAt), detail).toBe(true);
+    expect(Number.isFinite(lastEnd), detail).toBe(true);
+    // The page handles the lift a little after its own listeners do, so the
+    // bound is exact; half a millisecond covers the timeline's rounding.
+    expect(lastEnd - liftedAt, detail).toBeLessThanOrEqual(200.5);
+  });
+
+  test('with Reduce Motion a drop whose release reaches the page late lands the rows at once, never blank', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'the release time stamp is set through Chromium CDP',
+    );
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const before = await settledTops(page);
+    const {at, rowHeight} = await handleOf(page, 'Inbox');
+    // A mouse drag whose release is stamped 300 ms before the page handles
+    // it, as when a busy main thread runs the release late.
+    const cdp = await page.context().newCDPSession(page);
+    const mouse = async (
+      type: 'mousePressed' | 'mouseMoved' | 'mouseReleased',
+      y: number,
+      timestamp?: number,
+    ) =>
+      cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x: at.x,
+        y,
+        button: 'left',
+        buttons: type === 'mouseReleased' ? 0 : 1,
+        clickCount: 1,
+        ...(timestamp == null ? {} : {timestamp}),
+      });
+    await mouse('mousePressed', at.y);
+    for (let step = 1; step <= 12; step += 1) {
+      await mouse('mouseMoved', at.y + (rowHeight * 2 * step) / 12);
+    }
+    // Every row's lowest opacity in each frame from here on.
+    await page.evaluate(() => {
+      const record = window as unknown as {lowest: number[]; mark: number};
+      record.lowest = [];
+      record.mark = -1;
+      // The frames from the page's handling of the release on follow it.
+      window.addEventListener(
+        'pointerup',
+        () => {
+          record.mark = record.lowest.length;
+        },
+        {capture: true, once: true},
+      );
+      const sample = () => {
+        const rows = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            '#storybook-root li:not([data-astryx-reorder-preview])',
+          ),
+        );
+        record.lowest.push(
+          Math.min(...rows.map(row => Number(getComputedStyle(row).opacity))),
+        );
+        if (record.lowest.length < 40) {
+          requestAnimationFrame(sample);
+        }
+      };
+      requestAnimationFrame(sample);
+    });
+    await mouse('mouseReleased', at.y + rowHeight * 2, Date.now() / 1000 - 0.3);
+    await page.waitForTimeout(800);
+    expect(await labels(page)).toEqual([
+      'Sent',
+      'Drafts',
+      'Inbox',
+      'Archive',
+      'Spam',
+      'Trash',
+    ]);
+    expect((await settledTops(page)).Inbox).toBe(before.Drafts);
+    const {lowest, mark} = await page.evaluate(() => {
+      const record = window as unknown as {lowest: number[]; mark: number};
+      return {lowest: record.lowest, mark: record.mark};
+    });
+    // Before the release the dragged row is dimmed in its place. From the
+    // release on, no row is ever faded out.
+    const afterRelease = lowest.slice(mark);
+    const detail = JSON.stringify({mark, lowest});
+    expect(mark, detail).toBeGreaterThanOrEqual(0);
+    expect(afterRelease.length, detail).toBeGreaterThan(10);
+    expect(Math.min(...afterRelease), detail).toBeGreaterThanOrEqual(0.95);
+  });
 });
 
 test.describe('a row that reorders and has a menu', () => {
@@ -703,6 +862,50 @@ test('a flush row keeps its handle inside the list', async ({page}) => {
     listBox.x + listBox.width + 0.5,
   );
 });
+
+for (const [story, edge] of [
+  ['core-list--reorderable', 'padded'],
+  ['core-list--reorder-flush', 'flush'],
+] as const) {
+  test(`a ${edge} row's handle keeps a finger's 44 px target across its centre, inside the list`, async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), story);
+    test.skip(
+      !(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)),
+      'the 44 px target applies under (pointer: coarse)',
+    );
+    const handle = page.getByRole('button', {name: 'Reorder Inbox'});
+    await expect(handle).toBeVisible();
+    // The hit area's observers settle its reach after layout.
+    await page.waitForTimeout(300);
+    // The span across the handle's centre that lands on it, a half pixel at
+    // a time, up to past the list's end edge.
+    const span = await handle.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      const list = element.closest('ul, ol')?.getBoundingClientRect();
+      const y = box.top + box.height / 2;
+      const to = Math.min(innerWidth, (list?.right ?? innerWidth) + 10);
+      let first = Number.NaN;
+      let last = Number.NaN;
+      for (let x = box.left - 40; x < to; x += 0.5) {
+        const hit = document
+          .elementFromPoint(x, y)
+          ?.closest('button[data-astryx-list-reorder]');
+        if (hit === element) {
+          if (Number.isNaN(first)) {
+            first = x;
+          }
+          last = x;
+        }
+      }
+      return {first, last, listRight: list?.right ?? innerWidth};
+    });
+    const detail = JSON.stringify(span);
+    expect(span.last - span.first + 0.5, detail).toBeGreaterThanOrEqual(44);
+    expect(span.last, detail).toBeLessThanOrEqual(span.listRight + 0.5);
+  });
+}
 
 /** The dragged row's preview, which follows the finger. */
 const PREVIEW = '[data-astryx-reorder-preview]';
@@ -940,7 +1143,7 @@ test.describe('the preview, the drop and the handle under a finger', () => {
     expect(ring.right).toBeGreaterThanOrEqual(-0.5);
   });
 
-  test("the handle keeps a small control's size; a finger's target grows toward 44 pt and meets the next handle's halfway, its ring clears its lines, and its row is no taller for it", async ({
+  test("the handle keeps a small control's size; a finger's target grows toward 44 pt and meets the next handle's halfway, its ring clears its grip, and its row is no taller for it", async ({
     page,
   }) => {
     const handle = page.getByRole('button', {name: 'Reorder Inbox'});
@@ -994,17 +1197,10 @@ test.describe('the preview, the drop and the handle under a finger', () => {
         box.left + box.width / 2,
         box.top - (box.top - hit.top) / 2,
       );
-      // The lines are the handle's ::before: one bar centred in it, and a
-      // shadow of it on each side.
-      const lines = getComputedStyle(element, '::before');
-      const bar = parseFloat(lines.height);
-      const shadows = Array.from(
-        lines.boxShadow.matchAll(/(-?[\d.]+)px\s+(-?[\d.]+)px/g),
-        ([, , y]) => Math.abs(parseFloat(y)),
-      );
-      const reach = Math.max(0, ...shadows) + bar / 2;
-      const centre = box.top + box.height / 2;
-      const glyph = {top: centre - reach, bottom: centre + reach};
+      // The grip is the handle's drag icon, centred in it.
+      const glyph = (
+        element.firstElementChild ?? element
+      ).getBoundingClientRect();
       const withHandle = row.getBoundingClientRect().height;
       // The same row without its handle.
       element.style.display = 'none';
@@ -1041,12 +1237,12 @@ test.describe('the preview, the drop and the handle under a finger', () => {
       expect(geometry.gapToNext).toBeLessThanOrEqual(0.5);
     }
     expect(geometry.probeHits).toBe(true);
-    // The ring clears the lines above and below. It shows, so the band
+    // The ring clears the grip above and below. It shows, so the band
     // judged is the ring's.
     expect(geometry.ring).not.toBe('none');
     expect(geometry.above).toBeGreaterThan(0);
     expect(geometry.below).toBeGreaterThan(0);
-    // The handle takes only its lines' height in the row's layout.
+    // The handle takes only its grip's height in the row's layout.
     expect(geometry.withHandle).toBeCloseTo(geometry.withoutHandle, 1);
   });
 });

@@ -40,6 +40,7 @@ import {TopNav, TopNavHeading, TopNavItem} from '../TopNav';
 import {TextInput} from '../TextInput';
 import {useAppShellMobile} from './AppShellMobileContext';
 import {Theme, defineTheme} from '../theme';
+import {loadMobileNavDrawer} from '../MobileNav/MobileNavToggle';
 
 // jsdom doesn't implement showModal/close on <dialog>, so we mock them
 beforeAll(() => {
@@ -149,6 +150,12 @@ afterEach(() => {
   act(() => {
     document.documentElement.removeAttribute('data-astryx-theme');
   });
+});
+
+// These cases test the drawer once it has loaded. MobileNavDrawer.test.tsx
+// tests the closed placeholder and the load itself.
+beforeAll(async () => {
+  await loadMobileNavDrawer();
 });
 
 describe('AppShell', () => {
@@ -261,6 +268,47 @@ describe('AppShell', () => {
     fireEvent.click(skipLink);
     expect(document.activeElement).toBe(main);
   });
+
+  it('leaves the URL alone when the skip link is activated, so a hash router stays on its page', async () => {
+    window.history.replaceState(null, '', '#/orders/46');
+    try {
+      render(
+        <AppShell>
+          <div>Content</div>
+        </AppShell>,
+      );
+      const skipLink = screen.getByTestId('skip-to-content');
+      // The link keeps its href for a page without script.
+      expect(skipLink).toHaveAttribute('href', '#astryx-app-shell-main');
+      expect(fireEvent.click(skipLink)).toBe(false);
+      expect(document.activeElement).toBe(screen.getByRole('main'));
+      // A followed link changes the URL a task after the click, so the check
+      // waits for that task first.
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(window.location.hash).toBe('#/orders/46');
+    } finally {
+      window.history.replaceState(null, '', ' ');
+    }
+  });
+
+  it.each([
+    ['Cmd', {metaKey: true}],
+    ['Ctrl', {ctrlKey: true}],
+    ['Shift', {shiftKey: true}],
+  ])(
+    'keeps the browser action for a %s-click on the skip link, and still moves focus to main',
+    (_, modifier) => {
+      render(
+        <AppShell>
+          <div>Content</div>
+        </AppShell>,
+      );
+      expect(
+        fireEvent.click(screen.getByTestId('skip-to-content'), modifier),
+      ).toBe(true);
+      expect(document.activeElement).toBe(screen.getByRole('main'));
+    },
+  );
 
   it('gives a second shell its own main id; the first keeps the fixed id', () => {
     const view = render(

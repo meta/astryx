@@ -14,8 +14,9 @@ import * as stylex from '@stylexjs/stylex';
 import {Token} from '../Token';
 import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {fontWeightVars} from '../theme/tokens.stylex';
-import {formatFilterValue} from './formatFilterValue';
+import {formatFilterValueForRender} from './formatFilterValue';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {useInternalConfig} from './useInternalConfig';
 import type {PowerSearchTokenProps} from './types';
@@ -64,6 +65,9 @@ export function PowerSearchToken({
   const t = useComponentTranslator();
   const locale = useLocale();
   const calendar = useCalendarSystem(undefined, 'PowerSearchToken');
+  // The server and the hydrating render write a range's days only when no
+  // clock reading is needed.
+  const isHydrating = useIsHydrating();
 
   const fieldLabel = field.label;
   const resolvedOperatorLabel = resolveOperatorLabel(operator, t);
@@ -74,7 +78,7 @@ export function PowerSearchToken({
     10,
   );
 
-  const valueStr = formatFilterValue(
+  const valueStr = formatFilterValueForRender(
     config,
     operator.value,
     filter.value,
@@ -83,6 +87,7 @@ export function PowerSearchToken({
     locale,
     timezoneID,
     calendar,
+    !isHydrating,
   );
 
   const valueContent = valueStr ? (

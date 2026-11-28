@@ -17,9 +17,20 @@ import {
   within,
   cleanup,
 } from '@testing-library/react';
+import {useRef} from 'react';
 import {createPortal} from 'react-dom';
-import {FOCUSABLE_SELECTOR} from './focusableSelector';
-import {useFocusTrap} from './useFocusTrap';
+import {
+  FOCUSABLE_SELECTOR,
+  inTabOrder,
+  notePopoverSource,
+  popoverSourceOptions,
+  readsPopoverSource,
+} from './focusableSelector';
+import {
+  focusRegionAround,
+  useFocusRegionContainment,
+  useFocusTrap,
+} from './useFocusTrap';
 
 function Trap({children}: {children: React.ReactNode}) {
   const {containerRef, focusFirst} = useFocusTrap<HTMLDivElement>({
@@ -264,6 +275,46 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
     fireEvent.keyDown(document, {key: 'Tab', shiftKey: true});
 
     expect(screen.getByTestId('last')).toHaveFocus();
+  });
+
+  it('skips buttons with tabindex="-1" at either end of the Tab cycle', () => {
+    render(
+      <Trap>
+        <div role="toolbar" aria-label="Start">
+          <button type="button" tabIndex={-1}>
+            Bold
+          </button>
+          <button type="button" tabIndex={0} data-testid="first">
+            Italic
+          </button>
+        </div>
+        <button type="button" data-testid="middle">
+          Save
+        </button>
+        <div role="radiogroup" aria-label="View">
+          <button
+            type="button"
+            role="radio"
+            aria-checked="true"
+            tabIndex={0}
+            data-testid="last">
+            All
+          </button>
+          <button type="button" role="radio" aria-checked="false" tabIndex={-1}>
+            Mine
+          </button>
+        </div>
+      </Trap>,
+    );
+    const first = screen.getByTestId('first');
+    const last = screen.getByTestId('last');
+
+    last.focus();
+    expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+    expect(first).toHaveFocus();
+
+    expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+    expect(last).toHaveFocus();
   });
 
   it('keeps a programmatic focus target when the trap has no tabbable controls', () => {
@@ -1106,5 +1157,258 @@ describe('useFocusTrap radio-group Tab stops', () => {
     const a1 = screen.getByRole('radio', {name: 'A1'});
     a1.focus();
     expect(fireEvent.keyDown(a1, {key: 'Tab'})).toBe(true);
+  });
+});
+
+describe('useFocusTrap with a popover that a browser orders after another element', () => {
+  function Region() {
+    return (
+      <Trap>
+        <button type="button" data-testid="first">
+          First
+        </button>
+        <button type="button" data-testid="source">
+          Source
+        </button>
+        <button type="button" data-testid="last">
+          Last
+        </button>
+        <div popover="manual" data-testid="popover">
+          <h2 tabIndex={-1} data-testid="title">
+            Title
+          </h2>
+          <button type="button" data-testid="popover-first">
+            In the popover, first
+          </button>
+          <button type="button" data-testid="popover-last">
+            In the popover, last
+          </button>
+        </div>
+      </Trap>
+    );
+  }
+  const el = (testId: string) => screen.getByTestId(testId);
+  const press = (testId: string, shiftKey = false) => {
+    el(testId).focus();
+    // False: the region wrapped focus and cancelled the press.
+    return fireEvent.keyDown(el(testId), {key: 'Tab', shiftKey});
+  };
+
+  it('finds its first and last control in document order when the popover has no such element', () => {
+    render(<Region />);
+    expect(press('popover-last')).toBe(false);
+    expect(el('first')).toHaveFocus();
+    expect(press('last')).toBe(true);
+    expect(press('first', true)).toBe(false);
+    expect(el('popover-last')).toHaveFocus();
+  });
+
+  it('finds its first and last control in the Tab order: the popover comes after the element it is shown with', () => {
+    render(<Region />);
+    notePopoverSource(el('popover'), el('source'));
+
+    // The popover's last control has the region's last control after it.
+    expect(press('popover-last')).toBe(true);
+    expect(el('popover-last')).toHaveFocus();
+    expect(press('last')).toBe(false);
+    expect(el('first')).toHaveFocus();
+    expect(press('first', true)).toBe(false);
+    expect(el('last')).toHaveFocus();
+    // The title is no tab stop. It has a control before it and after it.
+    expect(press('title')).toBe(true);
+    expect(press('title', true)).toBe(true);
+
+    notePopoverSource(el('popover'), null);
+    expect(press('popover-last')).toBe(false);
+    expect(el('first')).toHaveFocus();
+  });
+
+  it('cancels the press when the first control hands focus on to another element', () => {
+    function Handoff() {
+      return (
+        <Trap>
+          <span
+            tabIndex={0}
+            data-testid="entry"
+            onFocus={() => screen.getByTestId('next').focus()}
+          />
+          <button type="button" data-testid="next">
+            Next
+          </button>
+          <button type="button" data-testid="last">
+            Last
+          </button>
+        </Trap>
+      );
+    }
+    render(<Handoff />);
+    expect(press('last')).toBe(false);
+    expect(el('next')).toHaveFocus();
+  });
+
+  it('wraps from an element that is no tab stop when only radios that Tab skips come after it, or before it', () => {
+    render(
+      <Trap>
+        <input type="radio" name="size" aria-label="Small" />
+        <h2 tabIndex={-1} data-testid="lead">
+          Lead
+        </h2>
+        <button type="button" data-testid="first">
+          First
+        </button>
+        <input type="radio" name="size" aria-label="Medium" defaultChecked />
+        <button type="button" data-testid="last">
+          Last
+        </button>
+        <h2 tabIndex={-1} data-testid="title">
+          Title
+        </h2>
+        <input type="radio" name="size" aria-label="Large" />
+      </Trap>,
+    );
+    expect(press('title')).toBe(false);
+    expect(el('first')).toHaveFocus();
+    expect(press('lead', true)).toBe(false);
+    expect(el('last')).toHaveFocus();
+  });
+});
+
+describe('focusRegionAround', () => {
+  function Region({host}: {host: string}) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    useFocusRegionContainment(containerRef, true);
+    return (
+      <div key={host} ref={containerRef} data-testid="region">
+        <button type="button" data-testid="inside">
+          Inside
+        </button>
+      </div>
+    );
+  }
+
+  it('follows a container that mounts again while the region is active, and forgets it on unmount', () => {
+    const {rerender, unmount} = render(<Region host="one" />);
+    const first = screen.getByTestId('region');
+    const firstInside = screen.getByTestId('inside');
+    expect(focusRegionAround(firstInside)).toBe(first);
+
+    rerender(<Region host="two" />);
+    const second = screen.getByTestId('region');
+    const secondInside = screen.getByTestId('inside');
+    expect(second).not.toBe(first);
+    expect(focusRegionAround(secondInside)).toBe(second);
+    expect(focusRegionAround(firstInside)).toBeNull();
+
+    unmount();
+    expect(focusRegionAround(secondInside)).toBeNull();
+  });
+});
+
+describe('readsPopoverSource', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('is true in a browser that reads the source option, and false in one that does not', () => {
+    expect(readsPopoverSource(document)).toBe(false);
+    vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(
+      (options?: ShowPopoverOptions) => {
+        void options?.source;
+      },
+    );
+    expect(readsPopoverSource(document)).toBe(true);
+  });
+
+  it('is true when the browser reads the option and then refuses an element that is not a popover', () => {
+    vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(
+      (options?: ShowPopoverOptions) => {
+        void options?.source;
+        throw new DOMException('Not a popover', 'NotSupportedError');
+      },
+    );
+    expect(readsPopoverSource(document)).toBe(true);
+  });
+
+  it('hands over the source and reports the read only after the read', () => {
+    const source = document.createElement('button');
+    const {options, wasRead} = popoverSourceOptions(source);
+    expect(wasRead()).toBe(false);
+    expect(options.source).toBe(source);
+    expect(wasRead()).toBe(true);
+    expect(popoverSourceOptions(null).options.source).toBeUndefined();
+  });
+});
+
+describe('inTabOrder', () => {
+  function build() {
+    document.body.innerHTML = `
+      <button id="a"></button>
+      <button id="b"></button>
+      <button id="c"></button>
+      <div popover="manual" id="outer">
+        <button id="o1"></button>
+        <button id="o2"></button>
+      </div>
+      <div popover="manual" id="inner">
+        <button id="i1"></button>
+      </div>`;
+    const get = (id: string) => document.getElementById(id) as HTMLElement;
+    const all = ['a', 'b', 'c', 'o1', 'o2', 'i1'].map(get);
+    return {get, all, ids: (list: Element[]) => list.map(item => item.id)};
+  }
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('keeps document order when no popover is shown with an element', () => {
+    const {all, ids} = build();
+    expect(ids(inTabOrder(all))).toEqual(['a', 'b', 'c', 'o1', 'o2', 'i1']);
+  });
+
+  it('puts the controls of a popover right after the element it is shown with, and a popover shown with one of those after that one', () => {
+    const {get, all, ids} = build();
+    notePopoverSource(get('outer'), get('a'));
+    notePopoverSource(get('inner'), get('o1'));
+    expect(ids(inTabOrder(all))).toEqual(['a', 'o1', 'i1', 'o2', 'b', 'c']);
+  });
+
+  it('leaves a popover in place when the element it is shown with is not in the list, or is inside it, and still moves the others', () => {
+    const {get, all, ids} = build();
+    notePopoverSource(get('inner'), get('b'));
+    notePopoverSource(get('outer'), get('a'));
+    expect(ids(inTabOrder(all.filter(item => item.id !== 'a')))).toEqual([
+      'b',
+      'i1',
+      'c',
+      'o1',
+      'o2',
+    ]);
+    notePopoverSource(get('outer'), get('o2'));
+    expect(ids(inTabOrder(all))).toEqual(['a', 'b', 'i1', 'c', 'o1', 'o2']);
+  });
+
+  it('keeps a popover that is inside another popover, and is shown with no element of the list, at its place inside that one', () => {
+    document.body.innerHTML = `
+      <button id="a"></button>
+      <button id="b"></button>
+      <div popover="manual" id="outer">
+        <button id="o1"></button>
+        <div popover="manual" id="nested"><button id="n1"></button></div>
+        <button id="o2"></button>
+      </div>`;
+    const get = (id: string) => document.getElementById(id) as HTMLElement;
+    const all = ['a', 'b', 'o1', 'n1', 'o2'].map(get);
+    const ids = (list: Element[]) => list.map(item => item.id);
+    notePopoverSource(get('outer'), get('a'));
+    expect(ids(inTabOrder(all))).toEqual(['a', 'o1', 'n1', 'o2', 'b']);
+    notePopoverSource(get('nested'), document.createElement('button'));
+    expect(ids(inTabOrder(all))).toEqual(['a', 'o1', 'n1', 'o2', 'b']);
+  });
+
+  it('keeps document order for two popovers that are each shown with a control of the other', () => {
+    const {get, all, ids} = build();
+    notePopoverSource(get('outer'), get('i1'));
+    notePopoverSource(get('inner'), get('o1'));
+    expect(ids(inTabOrder(all))).toEqual(['a', 'b', 'c', 'o1', 'o2', 'i1']);
   });
 });

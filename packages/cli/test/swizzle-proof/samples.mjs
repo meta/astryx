@@ -140,27 +140,6 @@ function threeD(React, mod, Pkg, child) {
   );
 }
 
-function tour(React, Tour, TourStep) {
-  const h = React.createElement;
-  function Sample() {
-    const a = React.useRef(null);
-    const b = React.useRef(null);
-    return h(
-      React.Fragment,
-      null,
-      h('button', {type: 'button', ref: a}, 'Target A'),
-      h('button', {type: 'button', ref: b}, 'Target B'),
-      h(
-        Tour,
-        {isActive: true, onDismiss: noop},
-        h(TourStep, {targetRef: a, heading: 'First'}, 'First body'),
-        h(TourStep, {targetRef: b, heading: 'Second'}, 'Second body'),
-      ),
-    );
-  }
-  return h(Sample);
-}
-
 function navigation(React, Stack, Screen) {
   const h = React.createElement;
   return h(Stack, {
@@ -372,9 +351,6 @@ export const samples = {
       onReactionClick: noop,
       onAddReaction: noop,
     }),
-  lab__Tour: ({C, React, mod, Pkg}) =>
-    tour(React, C, mod.TourStep ?? Pkg.TourStep),
-  lab__TourStep: ({C, React, mod, Pkg}) => tour(React, mod.Tour ?? Pkg.Tour, C),
   lab__CodeEditor: ({C, React}) =>
     React.createElement(C, {
       value: 'const answer = 42;',
@@ -509,6 +485,13 @@ export const samples = {
         React.createElement(mod.ThreeDBar ?? Pkg.ThreeDBar, {color: '#00aa00'}),
       ),
     ),
+  lab__Tour: ({C, React}) =>
+    React.createElement(C, {
+      steps: [{id: 'first', title: 'First', body: 'First body'}],
+      activeId: 'first',
+      onActiveIdChange: noop,
+      onEnd: noop,
+    }),
   lab__TransferList: ({C, React}) =>
     React.createElement(C, {
       label: 'Columns',

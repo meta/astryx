@@ -239,6 +239,7 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   // (architecture:react-component-runtime INV13).
   'internal/indicatorPress.stylex',
   'internal/reorder',
+  'internal/reorderHandle.stylex',
   'internal/touchHitArea.stylex',
   'internal/touch',
   'internal/selectable-card',
@@ -253,6 +254,7 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   'internal/committed-ref',
   'internal/clipboard-copy',
   'internal/shared-context',
+  'internal/tour',
 ];
 
 /**

@@ -7,7 +7,7 @@
  * @output Unit tests for what Switch's touch presentation asks the animator
  *   to do. A value change mid-fade swaps the colour layer on its running
  *   clock (a rebase), never from rest. A press's settle takes the theme's
- *   tempo, as its lift does
+ *   tempo, as its lift does. A switch reads no style when it attaches
  * @position Testing; the controller's calls, without a browser. The motion
  *   itself is proven in __tests__/Switch.interaction.browser.spec.ts and on
  *   the iOS simulator
@@ -92,7 +92,11 @@ const {trackStateOf} = await import('./switchFill');
 /** Every controller a test attaches. The top-level afterEach detaches them. */
 const controllers: InstanceType<typeof SwitchTouchController>[] = [];
 
-function mount() {
+function mount({
+  isRtl = false,
+  isOn = false,
+  thumbClassName = '',
+}: {isRtl?: boolean; isOn?: boolean; thumbClassName?: string} = {}) {
   // The theme's two fills, as the track's classes paint them.
   const style = document.createElement('style');
   style.textContent =
@@ -102,17 +106,21 @@ function mount() {
   const input = document.createElement('input');
   input.type = 'checkbox';
   const track = document.createElement('div');
-  track.className = 'off';
+  track.className = isOn ? 'on' : 'off';
   const thumb = document.createElement('div');
+  thumb.className = thumbClassName;
   track.append(thumb);
   surface.append(input, track);
   document.body.append(surface);
+  if (isRtl) {
+    surface.style.direction = 'rtl';
+  }
   const controller = new SwitchTouchController(
-    false,
+    isOn,
     switchTouchGeometry(40, 24),
   );
   controllers.push(controller);
-  controller.setOtherTrack(trackStateOf({className: 'on'}));
+  controller.setOtherTrack(trackStateOf({className: isOn ? 'off' : 'on'}));
   controller.attach({surface, input, thumb, track}, 'touch');
   const fade = animators.find(
     animator =>
@@ -341,6 +349,185 @@ describe('the track geometry', () => {
     press.onControlEvent('touchUpInside', {x: 0, startX: 0});
     press.onControlEvent('touchDown', {x: 0, startX: 0});
     expect(boxReads.filter(element => element === track)).toHaveLength(2);
+  });
+});
+
+describe('the style reads', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+    document.head.innerHTML = '';
+    animators.length = 0;
+  });
+
+  /** Counts every computed-style read, through `window` or the global. */
+  function countStyleReads(): () => number {
+    let count = 0;
+    for (const owner of new Set<Window>([
+      window,
+      globalThis as unknown as Window,
+    ])) {
+      const original = owner.getComputedStyle;
+      vi.spyOn(owner, 'getComputedStyle').mockImplementation((...args) => {
+        count++;
+        return original.apply(window, args);
+      });
+    }
+    return () => count;
+  }
+
+  /** A switch attached under a mouse or a pen, with no touch presentation. */
+  function attachForPointer() {
+    const surface = document.createElement('div');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    const track = document.createElement('div');
+    const thumb = document.createElement('div');
+    track.append(thumb);
+    surface.append(input, track);
+    document.body.append(surface);
+    const controller = new SwitchTouchController(
+      false,
+      switchTouchGeometry(40, 24),
+    );
+    controllers.push(controller);
+    controller.attach({surface, input, thumb, track}, 'pointer');
+  }
+
+  // A style read at mount forces the browser to compute styles inside the
+  // task that mounts the switch, such as a dialog's open.
+  it('reads no style when it attaches under a finger', () => {
+    const reads = countStyleReads();
+    mount();
+    expect(reads()).toBe(0);
+  });
+
+  it('reads no style when it attaches under a mouse or a pen', () => {
+    const reads = countStyleReads();
+    attachForPointer();
+    expect(reads()).toBe(0);
+  });
+
+  /** The thumb's rebase on a switch's first change off to on. */
+  function firstRebase(isRtl: boolean): number {
+    const {controller, track} = mount({isRtl});
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        return this === track
+          ? DOMRect.fromRect({x: 0, y: 0, width: 40, height: 24})
+          : DOMRect.fromRect();
+      },
+    );
+    controller.setDefaultThumb({off: 16, on: 20});
+    const thumbElement = track.firstElementChild as HTMLElement;
+    thumbElement.style.width = '20px';
+    thumbElement.style.height = '20px';
+    const thumb = animators.find(
+      animator =>
+        animator.element === thumbElement && animator.pseudoElement == null,
+    );
+    render(controller, track, true);
+    const rebase = thumb?.calls.find(call => call.name === 'rebase');
+    return (rebase?.args[0] as {x: number}).x;
+  }
+
+  it('moves the thumb toward the inline end on the first change, right to left as left to right', () => {
+    const travel = switchTouchGeometry(40, 24, {width: 16, height: 16}).travel;
+    const leftToRight = firstRebase(false);
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+    animators.length = 0;
+    const rightToLeft = firstRebase(true);
+    // Off to on: the thumb is shifted back by its travel, toward the start.
+    expect(leftToRight).toBeCloseTo(-travel, 6);
+    expect(rightToLeft).toBeCloseTo(travel, 6);
+  });
+
+  /**
+   * A switch mounted under a finger in `isOn`, and the fade colour painted
+   * when each motion of its fade layer starts.
+   */
+  function fadeColours(isOn: boolean) {
+    const {controller, fade, track} = mount({isOn});
+    const colours: string[] = [];
+    const push = fade.calls.push.bind(fade.calls);
+    fade.calls.push = (...calls: Call[]) => {
+      for (const call of calls) {
+        if (call.name !== 'set') {
+          colours.push(track.style.getPropertyValue('--_switch-fade-fill'));
+        }
+      }
+      return push(...calls);
+    };
+    return {controller, track, colours};
+  }
+
+  const OFF_FILL = 'rgb(212, 212, 212)';
+  const ON_FILL = 'rgb(27, 27, 27)';
+
+  it("paints the fade layer's colour before its first motion after a finger mount, in both states", () => {
+    for (const isOn of [false, true]) {
+      // The app changes the value first: the layer shows the fill it left.
+      const changed = fadeColours(isOn);
+      render(changed.controller, changed.track, !isOn);
+      expect(changed.colours.length).toBeGreaterThan(0);
+      expect(new Set(changed.colours)).toEqual(
+        new Set([isOn ? ON_FILL : OFF_FILL]),
+      );
+      // A tap first: the layer heads for the other state's fill.
+      const tapped = fadeColours(isOn);
+      const press = tapped.controller as unknown as {
+        onControlEvent(event: string, touch: {x: number; startX: number}): void;
+      };
+      press.onControlEvent('touchDown', {x: 0, startX: 0});
+      press.onControlEvent('touchUpInside', {x: 0, startX: 0});
+      expect(tapped.colours.length).toBeGreaterThan(0);
+      expect(new Set(tapped.colours)).toEqual(
+        new Set([isOn ? OFF_FILL : ON_FILL]),
+      );
+    }
+  });
+
+  it("takes the theme's circle for the state the switch attached in, though the theme sizes each state", () => {
+    // As a theme's compiled CSS sizes `switch-thumb` by its checked state.
+    const style = document.createElement('style');
+    style.textContent =
+      '.astryx-switch-thumb { --_switch-thumb-width: 27px; } .astryx-switch-thumb[data-checked] { --_switch-thumb-width: 20px; }';
+    document.head.append(style);
+    // It attaches off: the theme's off circle is 27px.
+    const {controller, track} = mount({thumbClassName: 'astryx-switch-thumb'});
+    const thumbElement = track.firstElementChild as HTMLElement;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        return this === track
+          ? DOMRect.fromRect({x: 0, y: 0, width: 51, height: 31})
+          : DOMRect.fromRect();
+      },
+    );
+    controller.setDefaultThumb({off: 16, on: 20});
+    const thumb = animators.find(
+      animator =>
+        animator.element === thumbElement && animator.pseudoElement == null,
+    );
+    if (thumb == null) {
+      throw new Error('no thumb animator');
+    }
+    thumb.values.scaleX = 1;
+    thumb.values.scaleY = 1;
+    // The value turns on: the thumb now renders the on state's 20px circle.
+    thumbElement.setAttribute('data-checked', 'checked');
+    thumbElement.style.width = '20px';
+    thumbElement.style.height = '20px';
+    render(controller, track, true);
+    // The thumb's scale takes the 27px circle over and settles to the 20px
+    // one. The travel is the same for any circle, so only the scale shows
+    // which circle it attached with.
+    const scales = thumb.calls
+      .filter(call => call.name === 'play')
+      .map(call => (call.args[0] as {scaleX?: MotionCurve}).scaleX)
+      .filter(curve => curve != null);
+    expect(scales).toHaveLength(1);
+    expect(scales[0]?.at(0)).toBeCloseTo(27 / 20, 6);
   });
 });
 

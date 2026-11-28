@@ -141,7 +141,10 @@ position unsafe, it portals only beyond the outermost unsafe ancestor. A
 persistent `<template>` marker preserves the intended position so the host can be
 resolved again when the render call moves. The nearest safe host preserves live
 CSS custom-property inheritance; direction and writing mode are copied only when
-the portal would otherwise lose them.
+the portal would otherwise lose them. A copied direction also goes on the
+layer's `dir` attribute, so `:dir()` inside the layer agrees with its layout.
+When the caller's own style sets a direction, that style wins and no `dir` is
+added.
 
 A normal React portal retains React context. `architecture:theme-application`
 owns Theme provider behavior; this record owns where a layer's DOM is hosted.
@@ -896,7 +899,8 @@ it on the surface inside the layer and run no layout while it plays.
   its one touch module. `Layer/layerKeyboardClearance.ts` holds the clearance
   and the cap's arithmetic. `Layer/settledBox.ts` reads a layer's box without
   its entrance transform, for the fallback order, the keyboard's cap and the
-  exit copy.
+  exit copy. The touch grow reads its source the same way, without the press
+  transform (INV22).
 - `Layer/preserveAnimations.ts` owns carrying the CSS animations and
   transitions of a layer and its content across the re-placement's display
   reset.

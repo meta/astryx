@@ -61,6 +61,13 @@ export const doc = {
         "The rendered page's title (default: its first top-level heading, else the file name). Rendering only.",
     },
     {
+      name: 'options.pictures',
+      type: 'boolean',
+      description:
+        'Also take pictures of the written file, to check how it looks: a phone in light and dark, and a desktop window, after the page\u2019s script ran, with a browser already on the machine (the project\u2019s Playwright, else Chrome or Chromium), into a new folder in the system temp folder. With no browser, or one that fails, `pictures.skipped` says why, and the file stands as written. Rendering only.',
+      default: 'false',
+    },
+    {
       name: 'options.overwrite',
       type: 'boolean',
       description:
@@ -84,7 +91,7 @@ export const doc = {
     {
       type: 'render.page',
       description:
-        "The page and the HTML file written, its size, the local modules embedded, the stylesheets inlined, the class and image counts, the CSS size, the markup's size (its inlined images included), the embedded source's size, the script's size and how many modules it holds, the files it could not carry (`notCarried`, when there are any), the remote images fetched and not fetched (`remoteImages`, when the page names any), any warnings, and the checks run on the written file: every reference it loads from outside the file (none for a file that stands alone) and whether its embedded source gives back every carried file exactly, naming the files that differ.",
+        "The page and the HTML file written, its size, the local modules embedded, the stylesheets inlined, the class and image counts, the CSS size, the markup's size (its inlined images included), the embedded source's size, the script's size and how many modules it holds, the files it could not carry (`notCarried`, when there are any), the remote images fetched and not fetched (`remoteImages`, when the page names any), any warnings, the checks run on the written file: every reference it loads from outside the file (none for a file that stands alone) and whether its embedded source gives back every carried file exactly, naming the files that differ, and with `pictures` the pictures taken of it (`pictures`: the phone, phone dark and desktop PNG paths, or `skipped` with why).",
     },
     {
       type: 'render.reverse',
@@ -96,7 +103,7 @@ export const doc = {
     {code: 'ERR_MISSING_ARGUMENT', when: 'no file is given'},
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the file or `out` has the wrong kind of extension, `out` is the input itself, `title` or `keepClassNames` is given with `reverse`, or `overwrite` without it; with `reverse`, the page would land under a configuration name (`vite.config.ts`) or where a test, story or benchmark runner would run it (judged from the repository root)',
+      when: 'the file or `out` has the wrong kind of extension, `out` is the input itself, `title`, `keepClassNames` or `pictures` is given with `reverse`, or `overwrite` without it; with `reverse`, the page would land under a configuration name (`vite.config.ts`) or where a test, story or benchmark runner would run it (judged from the repository root)',
     },
     {code: 'ERR_FILE_NOT_FOUND', when: 'the file, or a local file the page imports, does not exist'},
     {code: 'ERR_READ_FAILED', when: 'the file is there but cannot be read: no read permission, a folder or a pipe given as the file, or another file-system error; the message names the reason'},

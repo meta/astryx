@@ -7,8 +7,11 @@ import {
   focusForLastInputTemporarily,
   releaseTemporaryFocus,
   isFocusLost,
+  isFocusUnclaimed,
   moveFocusLeftBehind,
   noteFocusWithin,
+  ownsFocus,
+  prepareFocusReturnOnRemoval,
   returnFocusForLastInput,
   takesFocusAsIs,
 } from './focusReturn';
@@ -200,6 +203,181 @@ describe('returnFocusForLastInput', () => {
   });
 });
 
+describe('returnFocusForLastInput reveal', () => {
+  // jsdom lays nothing out and has no scrollIntoView. Each case gives the
+  // opener a box and records the reveal.
+  let reveal: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    reveal = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: reveal,
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+    document.body.innerHTML = '';
+  });
+
+  function opener(
+    html: string,
+    box: {width: number; height: number} = {width: 80, height: 32},
+  ): HTMLElement {
+    document.body.innerHTML = html;
+    const element = document.querySelector<HTMLElement>('[data-opener]');
+    if (element == null) {
+      throw new Error('no opener');
+    }
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+      ...box,
+      top: 0,
+      left: 0,
+      right: box.width,
+      bottom: box.height,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    return element;
+  }
+
+  it('scrolls a Tab-stop opener just into view, to its nearest edge', () => {
+    const element = opener('<button data-opener>Open</button>');
+    returnFocusForLastInput(element);
+    expect(document.activeElement).toBe(element);
+    expect(reveal.mock.calls).toEqual([
+      [{block: 'nearest', inline: 'nearest'}],
+    ]);
+  });
+
+  it('scrolls a contenteditable opener, which Tab reaches', () => {
+    const element = opener(
+      '<div data-opener contenteditable="true">Note</div>',
+    );
+    returnFocusForLastInput(element);
+    expect(document.activeElement).toBe(element);
+    expect(reveal).toHaveBeenCalledOnce();
+  });
+
+  it('never scrolls to a button taken out of the Tab order', () => {
+    const element = opener('<button data-opener tabindex="-1">Open</button>');
+    returnFocusForLastInput(element);
+    expect(document.activeElement).toBe(element);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it('never scrolls to an opener that is not a Tab stop', () => {
+    const element = opener('<div data-opener tabindex="-1">Region</div>');
+    returnFocusForLastInput(element);
+    expect(document.activeElement).toBe(element);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it('does not scroll a Tab-stop opener taller than the viewport', () => {
+    const element = opener(
+      '<div data-opener tabindex="0">Table viewport</div>',
+      {width: 80, height: window.innerHeight + 1},
+    );
+    returnFocusForLastInput(element);
+    expect(document.activeElement).toBe(element);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it('does not scroll a Tab-stop opener taller than the scroller around it', () => {
+    const element = opener(
+      '<div style="overflow-x: auto; overflow-y: auto"><button data-opener>Open</button></div>',
+    );
+    const scroller = element.parentElement as HTMLElement;
+    vi.spyOn(scroller, 'clientHeight', 'get').mockReturnValue(20);
+    vi.spyOn(scroller, 'clientWidth', 'get').mockReturnValue(200);
+    returnFocusForLastInput(element);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it('does not scroll an opener that a box with overflow hidden clips', () => {
+    const element = opener(
+      '<div style="overflow-x: hidden; overflow-y: hidden"><button data-opener>Open</button></div>',
+    );
+    const track = element.parentElement as HTMLElement;
+    // The track shows 0 to 20; the opener's box (0 to 32) runs past it.
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
+      width: 200,
+      height: 20,
+      top: 0,
+      left: 0,
+      right: 200,
+      bottom: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    returnFocusForLastInput(element);
+    expect(document.activeElement).toBe(element);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it('scrolls an opener that a box with overflow hidden shows in full', () => {
+    const element = opener(
+      '<div style="overflow-x: hidden; overflow-y: hidden"><button data-opener>Open</button></div>',
+    );
+    const track = element.parentElement as HTMLElement;
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
+      width: 200,
+      height: 100,
+      top: 0,
+      left: 0,
+      right: 200,
+      bottom: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    returnFocusForLastInput(element);
+    expect(reveal).toHaveBeenCalledOnce();
+  });
+
+  it('scrolls an opener inside a scroller that a box with overflow hidden shows in full', () => {
+    // A dialog's clipped frame around its scrolling body: the body shows
+    // the opener after the scroll, so the frame need not move.
+    const element = opener(
+      '<div style="overflow-x: hidden; overflow-y: hidden"><div style="overflow-x: auto; overflow-y: auto"><button data-opener>Open</button></div></div>',
+    );
+    const body = element.parentElement as HTMLElement;
+    const frame = body.parentElement as HTMLElement;
+    const rect = (top: number, height: number) => ({
+      width: 200,
+      height,
+      top,
+      left: 0,
+      right: 200,
+      bottom: top + height,
+      x: 0,
+      y: top,
+      toJSON: () => ({}),
+    });
+    // The opener sits below both, scrolled out of the body's view.
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+      ...rect(500, 32),
+      width: 80,
+      right: 80,
+    });
+    vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(rect(0, 300));
+    vi.spyOn(body, 'clientHeight', 'get').mockReturnValue(300);
+    vi.spyOn(body, 'clientWidth', 'get').mockReturnValue(200);
+    vi.spyOn(frame, 'getBoundingClientRect').mockReturnValue(rect(0, 300));
+    returnFocusForLastInput(element);
+    expect(reveal).toHaveBeenCalledOnce();
+  });
+
+  it('does not scroll when the opener did not take focus', () => {
+    const element = opener('<button data-opener disabled>Open</button>');
+    returnFocusForLastInput(element);
+    expect(document.activeElement).not.toBe(element);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+});
+
 describe('focusForLastInput in a second document', () => {
   it("follows the last input in the element's own document by default", () => {
     __startInteractionModalityTrackingForTest();
@@ -350,6 +528,7 @@ describe('temporary programmatic focus', () => {
 
 describe('isFocusLost', () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     document.body.innerHTML = '';
   });
 
@@ -363,6 +542,108 @@ describe('isFocusLost', () => {
     document.getElementById('outside')?.focus();
     expect(isFocusLost(surface)).toBe(false);
     expect(isFocusLost(null)).toBe(false);
+  });
+
+  it('returns focus within an unfocused cross-origin document after removal', async () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const doc = frame.contentDocument!;
+    vi.spyOn(doc.defaultView!, 'frameElement', 'get').mockReturnValue(null);
+    const hasFocus = vi.spyOn(doc, 'hasFocus').mockReturnValue(true);
+    const opener = doc.createElement('button');
+    const surface = doc.createElement('div');
+    const inside = doc.createElement('button');
+    surface.append(inside);
+    doc.body.append(opener, surface);
+    inside.focus();
+    const returnOnRemoval = prepareFocusReturnOnRemoval(surface);
+
+    hasFocus.mockReturnValue(false);
+    returnOnRemoval(opener);
+    surface.remove();
+    await Promise.resolve();
+    expect(doc.activeElement).toBe(opener);
+  });
+});
+
+describe('isFocusUnclaimed', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+  });
+
+  it('reads a shadow root without taking focus from its host or a sibling', () => {
+    const host = document.createElement('div');
+    host.tabIndex = -1;
+    document.body.append(host);
+    const root = host.attachShadow({mode: 'open'});
+    const surface = document.createElement('div');
+    const inside = document.createElement('button');
+    const outside = document.createElement('button');
+    surface.append(inside);
+    root.append(surface, outside);
+
+    inside.focus();
+    expect(isFocusUnclaimed(surface)).toBe(false);
+    outside.focus();
+    expect(isFocusUnclaimed(surface)).toBe(false);
+    outside.blur();
+    expect(isFocusUnclaimed(surface)).toBe(true);
+    host.focus();
+    expect(root.activeElement).toBeNull();
+    expect(isFocusUnclaimed(surface)).toBe(false);
+  });
+
+  it('does not treat a document with a named host as a shadow root', () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const doc = frame.contentDocument!;
+    const form = doc.createElement('form');
+    form.name = 'host';
+    const target = doc.createElement('button');
+    doc.body.append(form, target);
+    Object.defineProperty(doc, 'host', {value: form, configurable: true});
+
+    target.focus();
+    expect(ownsFocus(target)).toBe(true);
+    expect(isFocusUnclaimed(doc)).toBe(false);
+    target.remove();
+    expect(isFocusUnclaimed(doc)).toBe(true);
+  });
+
+  it('preserves focus outside a nested frame even when its document is detached', () => {
+    const outer = document.createElement('iframe');
+    const outside = document.createElement('button');
+    document.body.append(outer, outside);
+    const outerDocument = outer.contentDocument!;
+    const inner = outerDocument.createElement('iframe');
+    outerDocument.body.append(inner);
+    const innerDocument = inner.contentDocument!;
+    const target = innerDocument.createElement('button');
+    innerDocument.body.append(target);
+
+    target.focus();
+    expect(isFocusUnclaimed(innerDocument)).toBe(false);
+    target.remove();
+    expect(isFocusUnclaimed(innerDocument)).toBe(true);
+    outside.focus();
+    expect(isFocusUnclaimed(innerDocument)).toBe(false);
+  });
+
+  it('keeps document-local ownership in an unfocused child with an inaccessible parent', () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const doc = frame.contentDocument!;
+    vi.spyOn(doc.defaultView!, 'frameElement', 'get').mockReturnValue(null);
+    vi.spyOn(doc, 'hasFocus').mockReturnValue(false);
+    const target = doc.createElement('button');
+    doc.body.append(target);
+
+    target.focus();
+    expect(ownsFocus(target)).toBe(true);
+    expect(isFocusUnclaimed(doc)).toBe(false);
+    target.remove();
+    expect(isFocusUnclaimed(doc)).toBe(true);
   });
 });
 

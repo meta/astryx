@@ -64,6 +64,7 @@ import {resolveMotion} from '../motion/resolveMotion';
 import {springs} from '../motion/uikit/springs';
 import type {ResizableSize} from './utils';
 import {sharedWeakMap} from '../utils/sharedRealm';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 // The English for the two messages it names, and nothing more of the catalog.
 registerEnglishFallback(english);
@@ -1310,10 +1311,7 @@ export function createResizableAs(
     }
     const element = pane.element;
     const view = element.ownerDocument.defaultView;
-    if (
-      view == null ||
-      view.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
-    ) {
+    if (view == null || reducesMotion(element)) {
       drawing.clear();
       return;
     }
@@ -1409,9 +1407,7 @@ export function createResizableAs(
     const view = pane?.element.ownerDocument.defaultView;
     // Under Reduce Motion the pane shuts at once: nothing is left to catch.
     closingSlide =
-      remaining == null ||
-      view == null ||
-      view.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+      remaining == null || view == null || reducesMotion(pane?.element)
         ? null
         : {
             fromSize: shown,

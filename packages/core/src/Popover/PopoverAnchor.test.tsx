@@ -18,6 +18,11 @@ import React, {
   type RefObject,
 } from 'react';
 import {usePopover} from './usePopover';
+import {Button} from '../Button/Button';
+import {Selector} from '../Selector/Selector';
+import {MultiSelector} from '../MultiSelector/MultiSelector';
+import {ComplexSelector} from '../ComplexSelector/ComplexSelector';
+import {inTabOrder} from '../hooks/focusableSelector';
 import {__resetDevWarnings} from '../utils/devWarning';
 
 function query(selector: string): Element {
@@ -844,6 +849,42 @@ describe('usePopover anchor', () => {
       }
     }
 
+    it("counts in a focus region's Tab order only in a browser that reads the option", () => {
+      const order = () => {
+        const anchor = document.querySelector<HTMLElement>('[data-anchor]');
+        const start = screen.getByRole('button', {name: 'Start'});
+        const close = screen.getByRole('button', {
+          name: /close/i,
+          hidden: true,
+        });
+        return inTabOrder([anchor as HTMLElement, start, close]).map(
+          element => element.textContent,
+        );
+      };
+      // The test environment's `showPopover` does not read its options.
+      const {unmount} = render(
+        <Coachmark isAnchorFocusable hasTrigger={false} />,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Start'}));
+      const closeLabel = order()[2];
+      expect(order()).toEqual(['Chart', 'Start', closeLabel]);
+      unmount();
+
+      const original = HTMLElement.prototype.showPopover;
+      HTMLElement.prototype.showPopover = function (
+        options?: ShowPopoverOptions,
+      ) {
+        void options?.source;
+      };
+      try {
+        render(<Coachmark isAnchorFocusable hasTrigger={false} />);
+        fireEvent.click(screen.getByRole('button', {name: 'Start'}));
+        expect(order()).toEqual(['Chart', closeLabel, 'Start']);
+      } finally {
+        HTMLElement.prototype.showPopover = original;
+      }
+    });
+
     it('is the trigger when the popover has one', () => {
       const source = openAndReadSource(
         <Coachmark isAnchorFocusable hasTrigger />,
@@ -863,6 +904,71 @@ describe('usePopover anchor', () => {
         <Coachmark isAnchorFocusable={false} hasTrigger={false} />,
       );
       expect(source).toBeUndefined();
+    });
+
+    it('is the anchor that the ref holds when the layer element mounts again while the popover is open', () => {
+      const step = {id: 'first'};
+      const anchorRef = {
+        get current() {
+          return document.querySelector<HTMLElement>(
+            `[data-step="${step.id}"]`,
+          );
+        },
+      };
+      function Steps() {
+        const [mountKey, setMountKey] = useState('first');
+        const popover = usePopover({
+          anchorRef,
+          dialogLabel: 'Tip',
+          tabBehavior: 'pageOrder',
+          hasLightDismiss: false,
+          hasAutoFocus: false,
+        });
+        return (
+          <>
+            <button type="button" data-step="first">
+              First
+            </button>
+            <button type="button" data-step="second">
+              Second
+            </button>
+            <button type="button" onClick={() => popover.show()}>
+              Start
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                step.id = 'second';
+                setMountKey('second');
+              }}>
+              Move
+            </button>
+            <React.Fragment key={mountKey}>
+              {popover.render(<span>Tip content</span>)}
+            </React.Fragment>
+          </>
+        );
+      }
+      const original = HTMLElement.prototype.showPopover;
+      const sources: unknown[] = [];
+      HTMLElement.prototype.showPopover = function (
+        this: HTMLElement,
+        options?: ShowPopoverOptions,
+      ) {
+        sources.push(options?.source);
+        original.call(this, options);
+      };
+      try {
+        render(<Steps />);
+        fireEvent.click(screen.getByRole('button', {name: 'Start'}));
+        fireEvent.click(screen.getByRole('button', {name: 'Move'}));
+        expect(sources).toEqual([
+          query('[data-step="first"]'),
+          query('[data-step="second"]'),
+        ]);
+      } finally {
+        HTMLElement.prototype.showPopover = original;
+      }
     });
 
     function Wrapped({tabBehavior}: {tabBehavior: 'contain' | 'pageOrder'}) {
@@ -932,5 +1038,267 @@ describe('usePopover anchor', () => {
     expect(screen.getByTestId('state')).toHaveTextContent('closed');
     expect(open).toHaveFocus();
     host.remove();
+  });
+  describe('the press scale of the control the anchor names', () => {
+    const factorOf = (element: Element) =>
+      (element as HTMLElement).style.getPropertyValue('--_astryx-press-scale');
+
+    /** Two controls marked as an Astryx control that paints a press is. */
+    function Pointer({isMounted = true}: {isMounted?: boolean}) {
+      const anchorRef = useRef<Element | null>(null);
+      const [target, setTarget] = useState('first');
+      const popover = usePopover({
+        anchorRef,
+        dialogLabel: 'Tip',
+        hasLightDismiss: false,
+        hasAutoFocus: false,
+      });
+      return (
+        <>
+          <button
+            type="button"
+            ref={popover.triggerRef}
+            onClick={popover.toggle}
+            {...popover.triggerProps}>
+            Show tip
+          </button>
+          <button type="button" onClick={() => setTarget('second')}>
+            Point at second
+          </button>
+          {isMounted &&
+            ['first', 'second'].map(name => (
+              <button
+                key={name}
+                type="button"
+                data-astryx-pressable=""
+                data-testid={name}
+                ref={element => {
+                  if (name === target) {
+                    anchorRef.current = element;
+                  }
+                }}>
+                {name}
+              </button>
+            ))}
+          {popover.render(<span>Tip</span>)}
+        </>
+      );
+    }
+
+    it('holds the control at rest while the popover is open, and frees it when the popover closes', () => {
+      render(<Pointer />);
+      const opener = screen.getByRole('button', {name: 'Show tip'});
+      const first = screen.getByTestId('first');
+      expect(factorOf(first)).toBe('');
+
+      fireEvent.click(opener);
+      expect(factorOf(first)).toBe('1');
+      // The opener is the trigger, not the anchor.
+      expect(factorOf(opener)).toBe('');
+
+      fireEvent.click(opener);
+      expect(factorOf(first)).toBe('');
+    });
+
+    it('moves the hold when the ref names another control', () => {
+      render(<Pointer />);
+      fireEvent.click(screen.getByRole('button', {name: 'Show tip'}));
+      fireEvent.click(screen.getByRole('button', {name: 'Point at second'}));
+      expect(factorOf(screen.getByTestId('first'))).toBe('');
+      expect(factorOf(screen.getByTestId('second'))).toBe('1');
+    });
+
+    it('frees the control when an open popover unmounts', () => {
+      function Test() {
+        const [isShown, setIsShown] = useState(true);
+        const controlRef = useRef<HTMLButtonElement>(null);
+        return (
+          <>
+            <button
+              type="button"
+              ref={controlRef}
+              data-astryx-pressable=""
+              data-testid="control"
+              onClick={() => setIsShown(false)}>
+              Done
+            </button>
+            {isShown && (
+              <Triggerless
+                anchorRef={controlRef}
+                label="Tip"
+                content={<span>Tip</span>}
+              />
+            )}
+          </>
+        );
+      }
+      render(<Test />);
+      const control = screen.getByTestId('control');
+      expect(factorOf(control)).toBe('1');
+      fireEvent.click(control);
+      expect(factorOf(control)).toBe('');
+    });
+
+    it('frees the control when it leaves the document', () => {
+      const {rerender} = render(<Pointer />);
+      fireEvent.click(screen.getByRole('button', {name: 'Show tip'}));
+      const first = screen.getByTestId('first');
+      expect(factorOf(first)).toBe('1');
+      rerender(<Pointer isMounted={false} />);
+      expect(factorOf(first)).toBe('');
+    });
+
+    it('holds nothing when the trigger is the anchor', () => {
+      function Test() {
+        const popover = usePopover({dialogLabel: 'Tip'});
+        return (
+          <>
+            <button
+              type="button"
+              data-astryx-pressable=""
+              ref={popover.triggerRef}
+              onClick={popover.toggle}
+              {...popover.triggerProps}>
+              Show tip
+            </button>
+            {popover.render(<span>Tip</span>)}
+          </>
+        );
+      }
+      render(<Test />);
+      const trigger = screen.getByRole('button', {name: 'Show tip'});
+      fireEvent.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(factorOf(trigger)).toBe('');
+    });
+
+    it('holds the control around an anchor that is inside one, and writes nothing for an anchor in no control', () => {
+      function Test() {
+        const iconRef = useRef<HTMLSpanElement>(null);
+        const cellRef = useRef<HTMLDivElement>(null);
+        return (
+          <>
+            <button
+              type="button"
+              data-astryx-pressable=""
+              data-testid="control">
+              <span ref={iconRef} data-testid="icon" />
+            </button>
+            <div ref={cellRef} data-testid="cell" />
+            <Triggerless
+              anchorRef={iconRef}
+              label="Icon tip"
+              content={<span>Icon tip</span>}
+            />
+            <Triggerless
+              anchorRef={cellRef}
+              label="Cell tip"
+              content={<span>Cell tip</span>}
+            />
+          </>
+        );
+      }
+      render(<Test />);
+      expect(factorOf(screen.getByTestId('control'))).toBe('1');
+      expect(factorOf(screen.getByTestId('icon'))).toBe('');
+      expect(factorOf(screen.getByTestId('cell'))).toBe('');
+    });
+
+    it('keeps the hold until every popover that points at the control closes', () => {
+      function Test() {
+        const controlRef = useRef<HTMLButtonElement>(null);
+        const [shown, setShown] = useState(['first', 'second']);
+        return (
+          <>
+            <button
+              type="button"
+              ref={controlRef}
+              data-astryx-pressable=""
+              data-testid="control">
+              Control
+            </button>
+            {['first', 'second'].map(name => (
+              <button
+                key={name}
+                type="button"
+                onClick={() =>
+                  setShown(names => names.filter(other => other !== name))
+                }>
+                {`Close ${name}`}
+              </button>
+            ))}
+            {shown.map(name => (
+              <Triggerless
+                key={name}
+                anchorRef={controlRef}
+                label={name}
+                content={<span>{name}</span>}
+              />
+            ))}
+          </>
+        );
+      }
+      render(<Test />);
+      const control = screen.getByTestId('control');
+      expect(factorOf(control)).toBe('1');
+      fireEvent.click(screen.getByRole('button', {name: 'Close first'}));
+      expect(factorOf(control)).toBe('1');
+      fireEvent.click(screen.getByRole('button', {name: 'Close second'}));
+      expect(factorOf(control)).toBe('');
+    });
+
+    it('is the factor that Button and the selector triggers scale by on a press', () => {
+      render(
+        <>
+          <Button label="Save" />
+          <Selector
+            label="Status"
+            variant="secondary"
+            options={['Open', 'Closed']}
+            value="Open"
+            onChange={() => {}}
+          />
+          <MultiSelector
+            label="Columns"
+            variant="secondary"
+            options={['Name', 'Email']}
+            value={['Name']}
+            onChange={() => {}}
+          />
+          <ComplexSelector<string>
+            label="Density"
+            variant="secondary"
+            value="Compact"
+            onChange={() => {}}
+            triggerLabel="Compact">
+            {() => <span>Options</span>}
+          </ComplexSelector>
+        </>,
+      );
+      // jsdom resolves no press state, so this reads the rules StyleX wrote.
+      const css = Array.from(document.styleSheets)
+        .flatMap(sheet => Array.from(sheet.cssRules))
+        .map(rule => rule.cssText)
+        .join('\n');
+      // StyleX writes 0.98 as `.98`.
+      expect(css).toMatch(/scale\(var\(--_astryx-press-scale, ?0?\.98\)\)/);
+      // No control scales by a factor that the hold cannot reach.
+      expect(css).not.toMatch(/scale\(0?\.98\)/);
+      // Each control sets the factor to `initial` on the element that scales.
+      expect(css).toMatch(/--_astryx-press-scale: ?initial/);
+      for (const className of [
+        'astryx-button',
+        'astryx-selector',
+        'astryx-multi-selector',
+        'astryx-complex-selector',
+      ]) {
+        const scaled = document.querySelector(`.${className}`);
+        expect(scaled, className).not.toBeNull();
+        // The element that scales is the one the hold finds.
+        expect(scaled?.closest('[data-astryx-pressable]'), className).toBe(
+          scaled,
+        );
+      }
+    });
   });
 });

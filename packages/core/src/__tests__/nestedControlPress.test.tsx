@@ -277,6 +277,43 @@ describe('the press rule’s other edges', () => {
     expect(token.style.getPropertyValue(PAINT)).toBe('');
   });
 
+  it('paints no press on an Item row for a press on a read-only input, which does not run the row', () => {
+    vi.useFakeTimers();
+    render(
+      <Item
+        label="Invoice 42"
+        onClick={() => {}}
+        endContent={
+          <input
+            type="checkbox"
+            aria-readonly="true"
+            aria-label="Paid"
+            readOnly
+          />
+        }
+      />,
+    );
+    const input = screen.getByRole('checkbox', {name: 'Paid'});
+    const row = closestOrThrow(input, '.astryx-item');
+    fireEvent.pointerDown(input, {pointerType: 'mouse', button: 0});
+    expect(row.style.getPropertyValue(PAINT)).toBe('var(--_nested-press-rest)');
+    fireEvent.pointerUp(input, {pointerType: 'mouse', button: 0});
+    fireEvent.pointerDown(input, {
+      pointerType: 'touch',
+      pointerId: 1,
+      button: 0,
+    });
+    act(() => {
+      vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
+    });
+    expect(row.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    fireEvent.pointerUp(input, {
+      pointerType: 'touch',
+      pointerId: 1,
+      button: 0,
+    });
+  });
+
   it('keeps the press paint of an Item row whose root is a link, since a press on its nested control runs the row', () => {
     function RowLink(props: {href?: string; children?: ReactNode}) {
       return <a {...props} />;

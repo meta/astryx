@@ -20,7 +20,7 @@ export const docs = {
       name: 'anchorRef',
       type: 'React.RefObject<Element | null>',
       description:
-        'External ref to use as the popover anchor: the element the popover sits on when it is not the trigger. Any element with a CSS box works (an HTML element or an <svg> element; a shape inside an <svg> warns in development). The trigger keeps its toggle and ARIA; the anchor gets neither and is never a trigger. The ref is read on open, on each render of your component, and on each show(). To move an open popover, set anchorRef.current and call show(). A show() while the ref holds no element waits, and opens when the ref is next read and holds one. With no trigger attached, open it with show(). Omit it and the trigger is the anchor.',
+        'External ref to use as the popover anchor: the element the popover sits on when it is not the trigger. Any element with a CSS box works (an HTML element or an <svg> element; a shape inside an <svg> warns in development). The trigger keeps its toggle and ARIA; the anchor gets neither and is never a trigger. While the popover is open, a press does not scale a Button or a selector trigger that is the anchor or holds it, so the popover does not move. The ref is read on open, on each render of your component, and on each show(). To move an open popover, set anchorRef.current and call show(). A show() while the ref holds no element waits, and opens when the ref is next read and holds one. With no trigger attached, open it with show(). Omit it and the trigger is the anchor.',
     },
     {
       name: 'onShow',
@@ -103,7 +103,7 @@ export const docs = {
       name: 'hasSurface',
       type: 'boolean',
       description:
-        'Whether to apply the default popover surface background, radius, and shadow.',
+        'Whether to apply the default popover surface background, text color, radius, and shadow.',
       default: 'true',
     },
     {
@@ -223,7 +223,7 @@ export const docsDense = {
     'Headless click-triggered popovers w/ focus trap, auto-focus, light dismiss, Escape, optional hidden close button. Every surface emits the canonical popover target. Custom compositions needing a distinct seam pass/document an owned surfaceTarget.',
   paramDescriptions: {
     anchorRef:
-      'ref to the element popover sits on when not the trigger; read on open, each render and each show(); position only, no trigger ARIA or handlers.',
+      'ref to the element popover sits on when not the trigger; read on open, each render and each show(); position only, no trigger ARIA or handlers; while open, a press does not scale a Button or selector trigger that is or holds it.',
     onShow: 'fires when popover becomes visible.',
     onHide:
       'fires when popover hides; focus a specific element here to send focus there (focus return then leaves it).',
@@ -241,7 +241,7 @@ export const docsDense = {
       'whether a dialog-role popover is modal (aria-modal); Tab stays inside either way.',
     tabBehavior:
       "'contain' cycles Tab inside; 'pageOrder' lets Tab pass through in page order (popover after its trigger, or after a focusable anchor when it has no trigger; needs browser popover invokers; lost until it reopens when another layer opened from the same element closes), scopes Escape to focus in the popover or on its trigger/anchor, never aria-modal.",
-    hasSurface: 'apply default surface background/radius/shadow.',
+    hasSurface: 'apply default surface background/text color/radius/shadow.',
     padding: 'spacing-scale padding on the painted surface; omit for none.',
     surfaceTarget:
       'optional owned refinement target; document it when distinct reachability is needed.',
