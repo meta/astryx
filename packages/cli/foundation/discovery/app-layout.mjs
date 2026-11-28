@@ -9,8 +9,8 @@
 
 import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
 
-/** The source extensions a Next.js app's own modules use, in the order Next.js tries them. */
-export const APP_MODULE_EXTENSIONS = ['.tsx', '.jsx', '.js', '.mjs', '.ts'];
+/** The source extensions a Next.js app's own modules use. */
+const APP_MODULE_EXTENSIONS = ['.tsx', '.jsx', '.js', '.mjs', '.ts'];
 
 /** The Next.js App Router root layout files: under the project, or under `src/`. */
 export const APP_ROOT_LAYOUT_FILES = ['app/layout', 'src/app/layout'].flatMap(

@@ -7370,10 +7370,18 @@ Or load the same stylesheet natively:
       familyNotice(family, `astryx ${recipeTopic}`),
     ),
   ];
+  // In a next/font app each note names the family alone, and the fix prints
+  // once after them.
   for (const family of unloadedFonts)
     logger.log(
-      `  note: ${familyNotice(family, formatCliCommand(recipeTopic, cwd))}`,
+      `  note: ${
+        nextFont
+          ? `Font "${family}" is named by this theme family but not loaded.`
+          : familyNotice(family, formatCliCommand(recipeTopic, cwd))
+      }`,
     );
+  if (nextFont && unloadedFonts.length > 0)
+    logger.log(`  note: ${nextFontFix(formatCliCommand(recipeTopic, cwd))}.`);
   return {
     type: 'theme.build',
     data: {

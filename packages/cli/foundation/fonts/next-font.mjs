@@ -3,7 +3,7 @@
 /**
  * @file Whether an app loads its fonts with Next.js `next/font`.
  * @input a folder in the project
- * @output true when the project's root layout or custom App loads next/font, directly, through the geist package, or through a module it imports
+ * @output true when the project's root layout or custom App loads next/font, directly, through the geist package, or through a module of the app's own it imports
  * @position shared by `doctor`'s theme-fonts check and `theme build`'s font notes, so their fix names the recipe a next/font app needs
  */
 
@@ -11,11 +11,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {findThemeProject} from '../config/theme-state.mjs';
 import {
-  APP_MODULE_EXTENSIONS,
   APP_ROOT_LAYOUT_FILES,
   PAGES_APP_FILES,
   parseAppModule,
 } from '../discovery/app-layout.mjs';
+import {resolveLocalModule} from '../discovery/module-exports.mjs';
+import {pathsFor, resolvePath} from '../render/ts-paths.mjs';
 
 /** The modules that load a font through next/font. */
 const NEXT_FONT_MODULES = new Set(['next/font/google', 'next/font/local']);
@@ -69,55 +70,46 @@ function moduleImports(file) {
 }
 
 /**
- * The file a relative import names, as Next.js resolves it: the path as
- * written, with an app module extension, or as a folder's index.
- * @param {string} fromFile
+ * The file an import of the app's own code names: a relative import as the
+ * app's bundler resolves it, or a path alias through the tsconfig paths the
+ * importing file reads. A package import gives null.
  * @param {string} specifier
+ * @param {string} fromFile
  * @returns {string | null}
  */
-function resolveRelative(fromFile, specifier) {
-  const base = path.resolve(path.dirname(fromFile), specifier);
-  const candidates = [
-    base,
-    ...APP_MODULE_EXTENSIONS.map(ext => `${base}${ext}`),
-    ...APP_MODULE_EXTENSIONS.map(ext => path.join(base, `index${ext}`)),
-  ];
-  return (
-    candidates.find(file =>
-      fs.statSync(file, {throwIfNoEntry: false})?.isFile(),
-    ) ?? null
-  );
+function resolveAppImport(specifier, fromFile) {
+  if (specifier.startsWith('.')) {
+    return resolveLocalModule(specifier, fromFile, {bundler: true});
+  }
+  return resolvePath(pathsFor(fromFile), specifier);
 }
 
 /**
- * Whether a module loads next/font itself, or through a relative module it
- * imports (one level, as a layout imports its fonts from `./fonts`).
+ * Whether a module loads next/font itself, or through a module of the app's
+ * own that it imports (one level, as a layout imports its fonts from
+ * `./fonts` or `@/app/fonts`).
  * @param {string} file
  * @param {string[]} imports
  */
 function loadsNextFont(file, imports) {
   if (imports.some(isNextFontImport)) return true;
-  return imports
-    .filter(
-      specifier => specifier.startsWith('./') || specifier.startsWith('../'),
-    )
-    .some(specifier => {
-      const target = resolveRelative(file, specifier);
-      const nested = target == null ? null : moduleImports(target);
-      return nested != null && nested.some(isNextFontImport);
-    });
+  return imports.some(specifier => {
+    const target = resolveAppImport(specifier, file);
+    const nested = target == null ? null : moduleImports(target);
+    return nested != null && nested.some(isNextFontImport);
+  });
 }
 
 /**
  * Whether the project loads its fonts with next/font: its App Router root
  * layout or its Pages Router custom App imports `next/font/google`,
- * `next/font/local` or a `geist/font` entry, itself or through a relative
- * module it imports (such as `./fonts`). next/font loads each family under a
- * name of its own and exposes a CSS variable, so a theme that names the
- * family itself does not use the loaded font. Imports are read from the
- * syntax tree, so a mention in a comment or a string does not count. A file
- * that does not parse counts as no import. An aliased import (`@/fonts`) is
- * not followed.
+ * `next/font/local` or a `geist/font` entry, itself or through a module of
+ * the app's own it imports (such as `./fonts`, or `@/app/fonts` through the
+ * app's tsconfig paths). next/font loads each family under a name of its own
+ * and exposes a CSS variable, so a theme that names the family itself does
+ * not use the loaded font. Imports are read from the syntax tree, so a
+ * mention in a comment or a string does not count. A file that does not
+ * parse counts as no import.
  * @param {string} dir a folder in the project
  * @returns {boolean}
  */
