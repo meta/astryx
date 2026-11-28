@@ -4,10 +4,77 @@ import {afterEach, describe, it, expect} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import ts from 'typescript';
 import {swizzle} from './swizzle.mjs';
 
 // api/swizzle/ -> up 3 = packages/cli, up 4 = repo root (has packages/core).
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+
+/**
+ * The module specifiers a file imports or re-exports, read from its import and
+ * export declarations as TypeScript parses them, at the top level and inside
+ * `declare module` blocks, so comments never count: a header comment can quote
+ * an import (`export * from './utils'`) that the file does not make.
+ */
+function importSpecifiers(content, fileName = 'file.tsx') {
+  const source = ts.createSourceFile(
+    fileName,
+    content,
+    ts.ScriptTarget.Latest,
+    false,
+    fileName.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const specifiers = [];
+  const read = statements => {
+    for (const statement of statements) {
+      if (
+        (ts.isImportDeclaration(statement) ||
+          ts.isExportDeclaration(statement)) &&
+        statement.moduleSpecifier != null &&
+        ts.isStringLiteral(statement.moduleSpecifier)
+      ) {
+        specifiers.push(statement.moduleSpecifier.text);
+      } else if (ts.isModuleDeclaration(statement)) {
+        // `declare module 'a.b' {…}` can nest as `module a { module b {…} }`.
+        let body = statement.body;
+        while (body != null && ts.isModuleDeclaration(body)) body = body.body;
+        if (body != null && ts.isModuleBlock(body)) read(body.statements);
+      }
+    }
+  };
+  read(source.statements);
+  return specifiers;
+}
+
+describe('importSpecifiers', () => {
+  it('reads imports and re-exports, and not import text in comments', () => {
+    const content = [
+      '/**',
+      " * Not listed in `export * from './utils'`, so naming it there would",
+      ' * publish it as API.',
+      ' */',
+      "// import {x} from './commented';",
+      "import {a} from './a';",
+      "import type {B} from '../b';",
+      "export * from './c';",
+      "export {d} from '@astryxdesign/core/d';",
+      "export * as ns from './e';",
+      "export type * as types from './f';",
+      "declare module '*.doc.mjs' {",
+      "  import type {Doc} from '@astryxdesign/cli/authoring';",
+      '}',
+    ].join('\n');
+    expect(importSpecifiers(content)).toEqual([
+      './a',
+      '../b',
+      './c',
+      '@astryxdesign/core/d',
+      './e',
+      './f',
+      '@astryxdesign/cli/authoring',
+    ]);
+  });
+});
 
 describe('swizzle() API', () => {
   it('no component → swizzle.list of core components', async () => {
@@ -52,8 +119,7 @@ describe('swizzle imports resolve for components with .stylex imports', () => {
 
     for (const file of copied) {
       const content = fs.readFileSync(file, 'utf-8');
-      for (const m of content.matchAll(/from ['"]([^'"]+)['"]/g)) {
-        const specifier = m[1];
+      for (const specifier of importSpecifiers(content, file)) {
         if (specifier.startsWith('@astryxdesign/core/')) {
           const subpath = './' + specifier.replace('@astryxdesign/core/', '');
           expect(
