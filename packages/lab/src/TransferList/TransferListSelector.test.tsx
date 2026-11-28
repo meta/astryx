@@ -10,8 +10,17 @@
  */
 
 import {Profiler, useMemo, useRef, useState} from 'react';
-import {afterAll, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import {
+  act,
   fireEvent,
   render,
   screen,
@@ -25,6 +34,31 @@ import {
 } from './TransferListSelector';
 import type {TransferListOption} from './TransferList';
 import {createReorderable} from '@astryxdesign/core';
+import type * as CoreHooks from '@astryxdesign/core/hooks';
+
+const announcements = vi.hoisted((): string[] => []);
+vi.mock('@astryxdesign/core/hooks', async importOriginal => {
+  const actual = await importOriginal<typeof CoreHooks>();
+  const recorders = new WeakMap<
+    ReturnType<typeof actual.useAnnounce>,
+    ReturnType<typeof actual.useAnnounce>
+  >();
+  return {
+    ...actual,
+    useAnnounce: (...args: Parameters<typeof actual.useAnnounce>) => {
+      const announce = actual.useAnnounce(...args);
+      let recorder = recorders.get(announce);
+      if (recorder == null) {
+        recorder = (message, politeness) => {
+          announcements.push(message);
+          announce(message, politeness);
+        };
+        recorders.set(announce, recorder);
+      }
+      return recorder;
+    },
+  };
+});
 
 type Column = 'name' | 'owner' | 'status' | 'updated';
 
@@ -39,6 +73,7 @@ const hidden = {hidden: true} as const;
 const originalMatches = HTMLElement.prototype.matches;
 
 beforeEach(() => {
+  announcements.length = 0;
   HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
     this.setAttribute('popover-open', '');
     const event = new Event('toggle');
@@ -745,5 +780,173 @@ describe('TransferListSelector draft reset timing', () => {
     expect(
       screen.getByRole('button', {name: 'Add Owner', ...hidden}),
     ).toBeInTheDocument();
+  });
+});
+
+describe('TransferListSelector while a change is pending', () => {
+  const pending: Array<() => void> = [];
+  const settle = async () => {
+    await act(async () => {
+      pending.splice(0).forEach(resolve => resolve());
+    });
+  };
+  afterEach(settle);
+
+  /** The add and remove announcements, of one option or in bulk. */
+  const transferAnnouncements = () =>
+    announcements.filter(message => /\b(added|removed)\b/.test(message));
+
+  /** A changeAction that stays pending until the test settles it. */
+  function pendingChangeAction() {
+    return vi.fn(
+      async () =>
+        new Promise<void>(resolve => {
+          pending.push(resolve);
+        }),
+    );
+  }
+
+  async function openBusySelector(
+    onCommit: (value: readonly Column[]) => void,
+  ) {
+    const user = userEvent.setup();
+    const changeAction = pendingChangeAction();
+    render(
+      <Harness
+        onCommit={onCommit}
+        selectorProps={{changeAction, hasSelectAll: true, hasClear: true}}
+      />,
+    );
+    await openSelector();
+    const dialog = screen.getByRole('dialog', {
+      name: 'Visible fields',
+      ...hidden,
+    });
+    await user.click(
+      within(dialog).getByRole('button', {name: 'Add Owner', ...hidden}),
+    );
+    await waitFor(() => {
+      expect(dialog.querySelector('[aria-busy="true"]')).not.toBeNull();
+      expect(changeAction).toHaveBeenCalledOnce();
+    });
+    return {user, dialog, changeAction};
+  }
+
+  it('refuses each transfer before it announces it, and leaves the focus in place', async () => {
+    const onCommit = vi.fn();
+    const {user, dialog, changeAction} = await openBusySelector(onCommit);
+    expect(onCommit).toHaveBeenCalledOnce();
+    expect(announcements).toContain('Owner added. 3 items selected.');
+    announcements.length = 0;
+    const addUpdated = within(dialog).getByRole('button', {
+      name: 'Add Updated',
+      ...hidden,
+    });
+    await waitFor(() => {
+      expect(addUpdated).toHaveFocus();
+    });
+
+    await user.click(addUpdated);
+    expect(addUpdated).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await user.click(
+      within(dialog).getByRole('button', {name: 'Remove Name', ...hidden}),
+    );
+    await user.click(
+      within(dialog).getByRole('button', {name: 'Add all', ...hidden}),
+    );
+    await user.click(
+      within(dialog).getByRole('button', {name: 'Clear', ...hidden}),
+    );
+
+    expect(onCommit).toHaveBeenCalledOnce();
+    expect(changeAction).toHaveBeenCalledOnce();
+    expect(transferAnnouncements()).toEqual([]);
+    expect(screen.getByTestId('applied-value')).toHaveTextContent(
+      '["name","status","owner"]',
+    );
+
+    await settle();
+    await waitFor(() => {
+      expect(dialog.querySelector('[aria-busy="true"]')).toBeNull();
+    });
+    await user.click(
+      within(dialog).getByRole('button', {name: 'Add Updated', ...hidden}),
+    );
+    expect(onCommit).toHaveBeenLastCalledWith([
+      'name',
+      'status',
+      'owner',
+      'updated',
+    ]);
+    expect(announcements).toContain('Updated added. 4 items selected.');
+  });
+
+  it('refuses transfers while isLoading is set, as while a change is pending', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const view = render(
+      <TransferListSelector
+        label="Visible fields"
+        options={OPTIONS}
+        value={['name']}
+        onChange={onChange}
+      />,
+    );
+    await openSelector();
+    view.rerender(
+      <TransferListSelector
+        label="Visible fields"
+        options={OPTIONS}
+        value={['name']}
+        onChange={onChange}
+        isLoading
+      />,
+    );
+    const dialog = screen.getByRole('dialog', {
+      name: 'Visible fields',
+      ...hidden,
+    });
+    await waitFor(() => {
+      expect(dialog.querySelector('[aria-busy="true"]')).not.toBeNull();
+    });
+    const addOwner = within(dialog).getByRole('button', {
+      name: 'Add Owner',
+      ...hidden,
+    });
+    expect(addOwner).toHaveAttribute('aria-busy', 'true');
+    expect(addOwner).toHaveAttribute('aria-disabled', 'true');
+
+    await user.click(addOwner);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(transferAnnouncements()).toEqual([]);
+  });
+
+  it('marks every transfer action busy and aria-disabled, never natively disabled, until the change settles', async () => {
+    const {dialog} = await openBusySelector(vi.fn());
+    const actionNames = [
+      'Remove Name',
+      'Remove Status',
+      'Remove Owner',
+      'Add Updated',
+      'Add all',
+      'Clear',
+    ];
+    for (const name of actionNames) {
+      const action = within(dialog).getByRole('button', {name, ...hidden});
+      expect(action, name).toHaveAttribute('aria-disabled', 'true');
+      expect(action, name).toHaveAttribute('aria-busy', 'true');
+      expect(action, name).not.toHaveAttribute('disabled');
+    }
+
+    await settle();
+    await waitFor(() => {
+      expect(dialog.querySelector('[aria-busy="true"]')).toBeNull();
+    });
+    for (const name of actionNames) {
+      const action = within(dialog).getByRole('button', {name, ...hidden});
+      expect(action, name).not.toHaveAttribute('aria-disabled');
+      expect(action, name).not.toHaveAttribute('aria-busy');
+    }
   });
 });
