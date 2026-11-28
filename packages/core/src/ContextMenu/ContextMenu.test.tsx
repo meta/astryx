@@ -800,6 +800,44 @@ describe('ContextMenu', () => {
     }
   });
 
+  it('after a touch open, the first arrow key moves focus with the keyboard indicator', async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    vi.useFakeTimers();
+    try {
+      render(
+        <ContextMenu
+          items={[{label: 'Cut'}, {label: 'Copy'}]}
+          data-testid="ctx">
+          <div>Long-press me</div>
+        </ContextMenu>,
+      );
+      const trigger = screen.getByTestId('ctx');
+      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+      fireEvent.touchStart(trigger, {touches: [{clientX: 20, clientY: 20}]});
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+      // A touch open focuses the first row without the indicator.
+      expect(focus).toHaveBeenLastCalledWith(
+        expect.objectContaining({focusVisible: false}),
+      );
+      expect(focus.mock.contexts.at(-1)).toHaveTextContent('Cut');
+      fireEvent.keyDown(document.activeElement ?? document.body, {
+        key: 'ArrowDown',
+      });
+      // The key moves focus without focusVisible: false, so the browser
+      // draws the ring after keyboard input.
+      expect(focus.mock.contexts.at(-1)).toHaveTextContent('Copy');
+      expect(focus.mock.calls.at(-1)?.[0]?.focusVisible).not.toBe(false);
+    } finally {
+      vi.useRealTimers();
+      focus.mockRestore();
+    }
+  });
+
   it('composes consumer touch handlers with long-press detection', () => {
     vi.useFakeTimers();
     try {
