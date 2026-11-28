@@ -1755,26 +1755,47 @@ const TEXT_SIZE_TOKEN_MAP: Record<string, string> = {
 };
 
 /**
- * The font declarations (`font`, `fontSize`) of a theme's own Text rule for a
- * `size`, or null when that rule sets no font size.
+ * The font sizes of a theme's own Text rule for a `size`: its `fontSize`, and
+ * the `fontSize` of its `@light` and `@dark` blocks. It is null when the rule
+ * sets none that can stay one declaration. Only the font size is taken: the
+ * rule's other declarations, a `font` shorthand among them, would reset the
+ * line height, family and weight the type gives, which `size` keeps. A
+ * refused value counts as not authored, so the inherited rule or Core's token
+ * applies; the refusal is reported where the rule itself is emitted.
  */
 function authoredSizeFont(
   components: Record<string, unknown> | undefined,
   sizeName: string,
-): StyleOverrides | null {
+): Record<string, unknown> | null {
   const text = components?.text as Record<string, unknown> | undefined;
   const rule = text?.[`size:${sizeName}`];
-  if (rule == null || typeof rule !== 'object') {
+  /** @param {unknown} block */
+  const sizeOf = (block: unknown): string | undefined => {
+    if (block == null || typeof block !== 'object' || Array.isArray(block)) {
+      return undefined;
+    }
+    const value = (block as Record<string, unknown>).fontSize;
+    if (value == null) {
+      return undefined;
+    }
+    const written = stringifyTokenValue(value);
+    return checkDeclarationValue(written) === null ? written : undefined;
+  };
+  if (rule == null || typeof rule !== 'object' || Array.isArray(rule)) {
     return null;
   }
   const font: Record<string, unknown> = {};
-  for (const prop of ['font', 'fontSize']) {
-    const value = (rule as Record<string, unknown>)[prop];
-    if (value !== undefined) {
-      font[prop] = value;
+  const size = sizeOf(rule);
+  if (size !== undefined) {
+    font.fontSize = size;
+  }
+  for (const mode of ['@light', '@dark']) {
+    const modeSize = sizeOf((rule as Record<string, unknown>)[mode]);
+    if (modeSize !== undefined) {
+      font[mode] = {fontSize: modeSize};
     }
   }
-  return Object.keys(font).length > 0 ? (font as StyleOverrides) : null;
+  return Object.keys(font).length > 0 ? font : null;
 }
 
 /** A sink for a re-emitted declaration: its first emission already reported it. */
@@ -1791,12 +1812,12 @@ const SILENT_SINK: DiagnosticSink = () => {};
  * same layer as the type rules, same `.astryx-text.<x>` specificity, later in
  * source — restores `size` as a real override.
  *
- * A size the theme styles itself keeps the theme's font size: its rule's
- * `font` and `fontSize` are emitted again here, through the same lowering,
- * instead of Core's token, so that rule wins over the type rules in whatever
- * order the theme wrote them (component:Text ORD2, AV1). On a media surface or
- * in an adaptation, `inherited` (the root theme's components) gives that value
- * when the surface or adaptation does not style the size itself.
+ * A size the theme styles keeps the theme's font size. Its rule's font sizes
+ * are emitted again here, after the type rules, so they win in any authored
+ * order. Where the rule sets a font size only in a
+ * color mode, Core's token stays the size's base. On a media surface or in an
+ * adaptation, `inherited` (the root theme's components) gives the value when
+ * the surface or adaptation does not style the size itself.
  *
  * Only `font-size` is overridden; line-height and other type properties are
  * intentionally preserved, matching the prop's documented contract.
@@ -1826,11 +1847,18 @@ function generateSizeOverrides(
       authoredSizeFont(components, sizeName) ??
       authoredSizeFont(inherited, sizeName);
     if (authored) {
-      generateComponentRules({text: {[`size:${sizeName}`]: authored}}, parts, {
-        ...rules,
-        surface,
-        sink: SILENT_SINK,
-      });
+      // A size with a font size only in a color mode keeps Core's token as
+      // its base, so the type rule never wins in the other mode.
+      const block: Record<string, unknown> = {fontSize: sizeValue, ...authored};
+      generateComponentRules(
+        {text: {[`size:${sizeName}`]: block as StyleOverrides}},
+        parts,
+        {
+          ...rules,
+          surface,
+          sink: SILENT_SINK,
+        },
+      );
       continue;
     }
     const suffix = parseStyleKey(`size:${sizeName}`);

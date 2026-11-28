@@ -749,7 +749,7 @@ describe("Text size overrides and a theme's own size rule", () => {
         ([, sel, body]) =>
           (sel.trim().endsWith(selector) ||
             sel.trim().endsWith(`:is(${selector})`)) &&
-          /font-size:/.test(body),
+          body.includes('font-size:'),
       )
       .at(-1)?.[2]
       .match(/font-size:\s*([^;]+);/)?.[1]
@@ -848,9 +848,8 @@ describe("Text size overrides and a theme's own size rule", () => {
     expect(css.lastIndexOf('font-size: 13px')).toBeGreaterThan(typeAt);
     // A size whose rule sets a font size only in dark keeps Core's token in
     // light, after the type rule.
-    expect(
-      css.lastIndexOf(`${SM} { font-size: var(--font-size-sm); }`),
-    ).toBeGreaterThan(typeAt);
+    expect(lastFontSize(css, SM)).toBe('var(--font-size-sm)');
+    expect(css.lastIndexOf(SM)).toBeGreaterThan(typeAt);
   });
 
   it("keeps the theme's size rule on a media surface that restyles the type", () => {
