@@ -104,7 +104,7 @@ test('at 200% text size the trigger grows past its token and does not clip its v
   }
 });
 
-test('inside an InputGroup the trigger takes the group row at both text sizes', async ({
+test('inside an InputGroup a secondary trigger takes the group row at both text sizes', async ({
   page,
 }) => {
   for (const rootFontSize of [undefined, '200%']) {

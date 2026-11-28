@@ -3,10 +3,11 @@
 /**
  * @file inputStyles.stylex.ts
  * @input Uses theme tokens (color, spacing, radius, shadow, transition)
- * @output Exports shared input wrapper appearance styles, and the text field
- *   timing that shows the focus look at once under a coarse pointer
+ * @output Exports shared input wrapper appearance styles, the text field
+ *   timing that shows the focus look at once under a coarse pointer, and the
+ *   trigger line box and row that Selector and MultiSelector share
  * @position Shared styles consumed by TextInput, TextArea, NumberInput, DateInput,
- *   TimeInput, Selector, Typeahead, and Tokenizer
+ *   TimeInput, Selector, MultiSelector, Typeahead, and Tokenizer
  *
  * Centralizes the input wrapper appearance (borders, focus outlines, hover shadows,
  * disabled state, status variants) so all input components stay in sync.
@@ -317,5 +318,58 @@ export const inputStatusFocusStyles = stylex.create({
       default: colorVars['--color-border-success'],
       ':focus': colorVars['--color-border-success'],
     },
+  },
+});
+
+// The Selector and MultiSelector trigger's line box and block padding, by
+// size. The line box is `--spacing-5`, floored at the 20px clear control and
+// 1rem icons. When that row would not fit inside the size token's borders, it
+// is capped at what the token holds, but never below 1.5em of the trigger's
+// own font, so label text too large for the token keeps room rather than
+// being clipped. The padding is what is left of the token, so a one-line
+// trigger is the token and its line box is centred. Nothing changes wherever
+// the row already fit.
+// Keep these calculations inline: a consumer's Babel preset can lower a
+// module-scope helper to a function expression before StyleX evaluates this
+// object, and StyleX cannot constant-evaluate that transformed helper.
+// Not re-exported from the Field index, which is a public entry point.
+export const selectorTriggerLineBoxStyles = stylex.create({
+  sm: {
+    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
+    paddingBlock: `calc((${sizeVars['--size-element-sm']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
+  },
+  md: {
+    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
+    paddingBlock: `calc((${sizeVars['--size-element-md']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
+  },
+  lg: {
+    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
+    paddingBlock: `calc((${sizeVars['--size-element-lg']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
+  },
+});
+
+// The line box of a trigger with no border of its own (ghost, secondary) or
+// inside an InputGroup, whose row is the group's: one line box, not capped by
+// the trigger's size token.
+export const selectorTriggerUncappedLineBoxStyles = stylex.create({
+  base: {
+    lineHeight: `max(${spacingVars['--spacing-5']}, 20px, 1rem)`,
+  },
+});
+
+// The MultiSelector trigger's height: the size token, or the line box above
+// and the borders when a larger text size makes that taller. Its content never
+// sets it. A text field's row (`inputRowSizeStyles`) is not used: it measures
+// the body text, which a mobile type scale makes taller than this line box,
+// so the trigger would grow past its token at the theme's text size.
+export const selectorTriggerRowStyles = stylex.create({
+  sm: {
+    height: `max(${sizeVars['--size-element-sm']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
+  },
+  md: {
+    height: `max(${sizeVars['--size-element-md']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
+  },
+  lg: {
+    height: `max(${sizeVars['--size-element-lg']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
   },
 });

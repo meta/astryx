@@ -42,6 +42,11 @@ import {
   inputStatusHoverShadowStyles,
   inputWrapperStyles,
 } from '../Field';
+import {
+  selectorTriggerLineBoxStyles,
+  selectorTriggerRowStyles,
+  selectorTriggerUncappedLineBoxStyles,
+} from '../Field/inputStyles.stylex';
 import {useKeepLayerOpenProps} from '../Layer/useLayer';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
@@ -54,10 +59,8 @@ import {Badge} from '../Badge';
 import {
   colorVars,
   focusVars,
-  sizeVars,
   spacingVars,
   radiusVars,
-  borderVars,
   durationVars,
   easeVars,
   typographyVars,
@@ -206,10 +209,9 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
   },
   // Inside an InputGroup the group's row is the height (`groupStyles.inGroup`),
-  // so the trigger drops its padding and keeps one uncapped line box.
+  // so the trigger drops its padding.
   triggerInGroup: {
     paddingBlock: 0,
-    lineHeight: `max(${spacingVars['--spacing-5']}, 20px, 1rem)`,
   },
   triggerContent: {
     display: 'flex',
@@ -266,7 +268,6 @@ const styles = stylex.create({
   triggerGhost: {
     width: 'auto',
     borderWidth: 0,
-    lineHeight: `max(${spacingVars['--spacing-5']}, 20px, 1rem)`,
     backgroundColor: 'transparent',
     boxShadow: {
       default: 'none',
@@ -543,41 +544,6 @@ const styles = stylex.create({
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
     lineHeight: typeScaleVars['--text-label-leading'],
-  },
-});
-
-// The trigger height follows the size token and the text size only: it is the
-// token, or one line box and the borders when a larger set text size makes
-// that taller. Its content, such as badges that wrap, never sets it. The line
-// box is `--spacing-5`, floored at 20px and 1rem, and capped at what the token
-// holds inside its borders, but never below 1.5em of the trigger's own font.
-// The padding is what is left of the token, so the line box stays centred.
-// Ghost and grouped triggers keep the uncapped line box.
-// Keep these calculations inline: StyleX must evaluate them as constants, and
-// a shared helper can reach StyleX as a function a consumer's Babel preset
-// lowered, which StyleX cannot evaluate.
-// A text field's row (`inputRowSizeStyles`) is not used: it measures the body
-// text, which a mobile type scale makes taller than this line box, so the
-// trigger would grow past its token at the theme's text size.
-// SYNC: the line box and padding equal Selector's `sizeStyles`
-// (/packages/core/src/Selector/Selector.tsx); Selector's height follows its
-// content instead. They stay copies, because a new module that both import
-// needs an owner decision.
-const sizeStyles = stylex.create({
-  sm: {
-    height: `max(${sizeVars['--size-element-sm']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
-    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
-    paddingBlock: `calc((${sizeVars['--size-element-sm']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
-  },
-  md: {
-    height: `max(${sizeVars['--size-element-md']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
-    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
-    paddingBlock: `calc((${sizeVars['--size-element-md']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
-  },
-  lg: {
-    height: `max(${sizeVars['--size-element-lg']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
-    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
-    paddingBlock: `calc((${sizeVars['--size-element-lg']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
   },
 });
 
@@ -2802,9 +2768,14 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           stylex.props(
             inputWrapperStyles.base,
             styles.triggerContainer,
-            sizeStyles[size],
+            // The height follows the size token and the text size only, and
+            // the value sits where a Selector's does.
+            selectorTriggerRowStyles[size],
+            selectorTriggerLineBoxStyles[size],
             variant === 'secondary' && styles.triggerSecondary,
             variant === 'ghost' && styles.triggerGhost,
+            (variant === 'ghost' || variant === 'secondary') &&
+              selectorTriggerUncappedLineBoxStyles.base,
             variant !== 'input' && interactionOverlayStyles.backgroundImage,
             variant !== 'input' && focusOutlineStyles.focusWithin,
             surface.isTriggerFocusRingSuppressed &&
@@ -2831,6 +2802,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             // group's row height, connected edge radii, and focus stacking.
             variant !== 'ghost' && inputGroup && groupStyles.inGroup,
             inputGroup && styles.triggerInGroup,
+            inputGroup && selectorTriggerUncappedLineBoxStyles.base,
             controlXstyle,
           ),
           controlClassName,
