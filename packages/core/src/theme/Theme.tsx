@@ -96,8 +96,8 @@ interface ThemeProps {
   children: React.ReactNode;
 }
 
-// Core's color defaults, declared again on a wrapper whose theme sets a Core
-// color token. A StyleX theme gives its element the variable group's own
+// Core's own color values, declared again on a wrapper whose theme sets a
+// Core color token. A StyleX theme gives its element the variable group's own
 // class. The group's rule (`:root, .<group>`) declares every default, so an
 // empty theme applies that rule and nothing else. A build that lowers
 // `light-dark()` resolves a custom property where it is declared. A `var()`

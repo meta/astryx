@@ -169,7 +169,7 @@ describe('Theme', () => {
     }
   });
 
-  it("declares Core's color defaults again on a wrapper whose theme sets Core color tokens", () => {
+  it("declares Core's own color values again on a wrapper whose theme sets Core color tokens", () => {
     const {container} = render(
       <Theme theme={testTheme}>
         <Theme theme={testTheme} mode="dark">
@@ -193,7 +193,7 @@ describe('Theme', () => {
     }
   });
 
-  it('declares no color default on a wrapper whose theme sets no Core color token, so it keeps the colors around it', () => {
+  it('declares no own color value on a wrapper whose theme sets no Core color token, so it keeps the colors around it', () => {
     const partsOnly = defineTheme({
       name: 'parts-only',
       components: {card: {base: {padding: '4px'}}},
@@ -216,7 +216,7 @@ describe('Theme', () => {
     );
   });
 
-  it("declares Core's color defaults again for a theme that sets Core color tokens through extends or an adaptation rule", () => {
+  it("declares Core's own color values again for a theme that sets Core color tokens through extends or an adaptation rule", () => {
     const extendsColors = defineTheme({
       name: 'extends-colors',
       extends: testTheme,
@@ -291,7 +291,7 @@ describe('Theme', () => {
     }
   });
 
-  it('declares no focus color and no color default on a wrapper that applies no theme', () => {
+  it('declares no focus color on a wrapper that applies no theme', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const {container} = render(
@@ -302,6 +302,20 @@ describe('Theme', () => {
       const wrapper = container.querySelector('[data-child]')!.parentElement!;
       expect(wrapper.hasAttribute('data-astryx-theme')).toBe(false);
       expect(declaredValue(wrapper, '--focus-outline-color')).toBeNull();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('declares no own color value on a wrapper that applies no theme', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const {container} = render(
+        <Theme theme={null as never} mode="dark">
+          <span data-child="">child</span>
+        </Theme>,
+      );
+      const wrapper = container.querySelector('[data-child]')!.parentElement!;
       expect(
         Object.keys(colorDefaults).filter(
           name => declaredByClass(wrapper, name) != null,
