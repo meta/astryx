@@ -85,6 +85,106 @@ describe('StatusDot', () => {
     expect(dot).toBeInTheDocument();
   });
 
+  it.each(['button', 'menuitem', 'option'] as const)(
+    'includes the tooltip in a %s host name without adding a tab stop',
+    role => {
+      const dot = (
+        <StatusDot
+          variant="success"
+          label="Online"
+          tooltip="Connected to service"
+        />
+      );
+      render(
+        role === 'button' ? (
+          <button type="button">Deploy {dot}</button>
+        ) : (
+          <div role={role} tabIndex={0}>
+            Deploy {dot}
+          </div>
+        ),
+      );
+
+      expect(
+        screen.getByRole(role, {name: 'Deploy Online Connected to service'}),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('img').getAttribute('tabindex')).toBeNull();
+    },
+  );
+
+  it('keeps the standalone dot named by its label', () => {
+    render(
+      <StatusDot
+        variant="success"
+        label="Online"
+        tooltip="Connected to service"
+      />,
+    );
+    expect(screen.getByRole('img', {name: 'Online'})).toBeInTheDocument();
+  });
+
+  it('includes the tooltip in a link name', () => {
+    render(
+      <a href="/status">
+        Service{' '}
+        <StatusDot
+          variant="success"
+          label="Online"
+          tooltip="Connected to service"
+        />
+      </a>,
+    );
+    expect(
+      screen.getByRole('link', {name: 'Service Online Connected to service'}),
+    ).toBeInTheDocument();
+  });
+
+  it('does not override a host explicitly named by its caller', () => {
+    render(
+      <button type="button" aria-label="Service status: online">
+        <StatusDot
+          variant="success"
+          label="Online"
+          tooltip="Connected to service"
+        />
+      </button>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Service status: online'}),
+    ).toBeInTheDocument();
+  });
+
+  it('updates the host name when the status text changes', () => {
+    const {rerender} = render(
+      <button type="button">
+        Service{' '}
+        <StatusDot variant="success" label="Online" tooltip="Connected" />
+      </button>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Service Online Connected'}),
+    ).toBeInTheDocument();
+
+    rerender(
+      <button type="button">
+        Service{' '}
+        <StatusDot variant="error" label="Offline" tooltip="Disconnected" />
+      </button>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Service Offline Disconnected'}),
+    ).toBeInTheDocument();
+
+    rerender(
+      <button type="button">
+        Service <StatusDot variant="error" label="Offline" />
+      </button>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Service Offline'}),
+    ).toBeInTheDocument();
+  });
+
   it('renders every variant as a plain childless dot by default (design review #4373)', () => {
     // The dot is deliberately a colour-only signal by default — no built-in
     // per-variant glyph. Making the status accessible in context (label,
