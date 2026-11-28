@@ -87,17 +87,22 @@ test.describe('on a phone (coarse pointer)', () => {
 
     const drilled = page.getByRole('menu', {name: 'Move to'});
     await expect(drilled).toBeVisible();
-    // Same box: the drilled list sits inside the root menu, no new popover.
+    // Same box: the drilled list sits inside the root's box, no new popover.
+    const rootId = await trigger.getAttribute('aria-controls');
     expect(
       await drilled.evaluate(
-        (el, rootName) =>
+        (el, id) =>
           el.closest('[popover]') ===
-          document
-            .querySelector(`[role="menu"][aria-label="${rootName}"]`)
-            ?.closest('[popover]'),
-        'Actions',
+          document.getElementById(id ?? '')?.closest('[popover]'),
+        rootId,
       ),
     ).toBe(true);
+    // The drilled view is the one menu: the root's box is no menu around it.
+    await expect(page.locator(`[id="${rootId}"]`)).toHaveAttribute(
+      'role',
+      'none',
+    );
+    await expect(page.getByRole('menu', {name: 'Actions'})).toHaveCount(0);
     expect(await perceivablePopovers(page).count()).toBe(popoversBefore);
     await expect(shownRows(page)).toHaveText([
       'Back to Actions',
@@ -125,6 +130,7 @@ test.describe('on a phone (coarse pointer)', () => {
     await page.keyboard.press('Escape');
     await expect(moveTo).toBeFocused();
     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await expect(rootMenu).toBeVisible();
     await expect(shownRows(page)).toHaveText(['Rename', 'Move to', 'Delete']);
 
     // Keyboard drill-in lands on the first row after Back; a second level

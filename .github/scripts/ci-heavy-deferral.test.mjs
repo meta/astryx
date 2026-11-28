@@ -728,6 +728,22 @@ describe('the PR report on a deferred push', () => {
     }
   });
 
+  it('tells the author when the review-pass run starts on its own, and what to do once the run is more than six hours old', () => {
+    const decide = ci.jobs['heavy-ci'].steps.find(step => step.id === 'decide');
+    const notice = /::notice title=Heavy CI deferred::([^"]*)"/.exec(
+      decide.run,
+    )[1];
+    expect(notice).toContain(
+      'It starts on its own once the review app or an engineering owner approves this exact head and the spec gate passes, while this run is at most six hours old.',
+    );
+    // An older run merges the head with an older main: re-running it would
+    // test a different tree, so the notice names the fresh-run paths instead.
+    expect(notice).toContain(
+      'After that, mark the pull request draft, then ready, for a fresh run on the current main (a fork head needs its ci:run label first); a push or a main merge also works.',
+    );
+    expect(notice).not.toMatch(/re-run all jobs/i);
+  });
+
   it('says the heavy CI was deferred', () => {
     const publish = comment.steps.find(step => step.id === 'publish');
     expect(publish.with.script).toContain(HEAVY_DEFERRED_MESSAGE);

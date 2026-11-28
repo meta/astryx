@@ -11,6 +11,7 @@
  */
 
 import {expect, test} from '@playwright/test';
+import {expectTooltipsLive} from './liveTooltips';
 
 for (const topic of [
   'elevation',
@@ -42,10 +43,12 @@ for (const topic of [
       const serverTitle = await title.elementHandle();
 
       resumeHydration();
-      // The article is live when its heading controls have their tooltips.
-      await expect(
-        main.locator('[role="tooltip"]', {hasText: 'Copy link'}).first(),
-      ).toBeAttached();
+      // The article is live when its heading controls answer with their
+      // tooltips.
+      await expectTooltipsLive(
+        page,
+        main.getByRole('button', {name: /^Copy link to/}).first(),
+      );
 
       // A page that React renders again gets new elements. A visitor then
       // loses scroll position and focus.

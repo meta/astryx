@@ -95,7 +95,8 @@ describe('Button', () => {
     );
 
     const addon = screen.getByRole('button', {name: 'Save'});
-    expect(addon.className).toContain('groupStyles.buttonAddon');
+    expect(addon.className).toContain('baseGroupStyles.buttonAddon');
+    expect(addon.className).toContain('groupEndStyles.inputGroupAddon');
 
     // jsdom cannot resolve this compound StyleX focus selector. Keep the
     // direct-child keyboard stacking rule explicit at its definition instead.
@@ -625,6 +626,45 @@ describe('Button', () => {
       );
       const button = screen.getByRole('button', {name: 'Close'});
       expect(button).not.toHaveAttribute('aria-describedby');
+      // No hidden copy either, so browse mode reads the name once.
+      expect(
+        document.querySelector('span[hidden][id$="-description"]'),
+      ).toBeNull();
+    });
+
+    it('describes the button with a hidden copy of a tooltip that adds to the name', () => {
+      render(
+        <Button
+          label="Close"
+          tooltip="Close the panel"
+          icon={<span>x</span>}
+          isIconOnly
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).toHaveAccessibleDescription('Close the panel');
+      const description = document.getElementById(
+        button.getAttribute('aria-describedby') ?? '',
+      );
+      expect(description).toHaveAttribute('hidden');
+      expect(button).not.toContainElement(description);
+      // No layer until the first show.
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+    });
+
+    it('keeps the description when the tooltip is only part of the name', () => {
+      // FR12's public rule is equality: a tooltip with fewer words than the
+      // name still describes the Button.
+      render(
+        <Button
+          label="Dismiss banner"
+          tooltip="Dismiss"
+          icon={<span>x</span>}
+          isIconOnly
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Dismiss banner'});
+      expect(button).toHaveAccessibleDescription('Dismiss');
     });
 
     it('keeps a caller description when the tooltip repeats the name', () => {

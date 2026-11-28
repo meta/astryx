@@ -275,8 +275,8 @@ describe('a wide opt-in selection', () => {
     );
     const legs = planLegs(wide.files, wide.seconds, pullRequestMaxLegs());
     expect(legs.count).toBeGreaterThanOrEqual(6);
-    // One file alone takes just over ten minutes: no leg count splits it, so
-    // it sets the budget, and the plan adds no leg past the one that fits it.
+    // One file alone takes just over ten minutes. It runs in a leg of its own,
+    // and the other legs keep to ten minutes.
     const longestFileMs = Math.max(
       ...wide.files.map(file => (wide.seconds[file] ?? 0) * 1000),
     );

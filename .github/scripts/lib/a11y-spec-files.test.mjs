@@ -55,10 +55,12 @@ describe('the Firefox hover specs', () => {
       expect(read(file), file).toMatch(POINTER);
   });
 
-  it("names every pointer-moving accessibility spec in the hover components' folders, but MenuPress", () => {
-    // MenuPress drives input through Chromium's DevTools protocol.
+  it("names every pointer-moving accessibility spec in the hover components' folders, but the DevTools-protocol ones", () => {
+    // MenuPress drives input, and the Tooltip binding audit reads the
+    // accessibility tree, through Chromium's DevTools protocol.
     const LEFT_OUT = [
       'packages/core/src/DropdownMenu/__tests__/MenuPress.a11y.chromium.spec.ts',
+      'packages/core/src/Tooltip/__tests__/Tooltip.a11y.chromium.spec.ts',
     ];
     const globs = A11Y_SPEC_GLOBS.map(globToRegExp);
     const folders =

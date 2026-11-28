@@ -117,6 +117,10 @@ import {
   formatBatchFontLoadingHelp,
   formatFontLoadingHelp,
 } from './font-warning.mjs';
+import {
+  nextFontFix,
+  rootLayoutImportsNextFont,
+} from '../../../foundation/fonts/next-font.mjs';
 import {interceptCore, withVirtualModules} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
 import {extendsOf, moduleBindings, themeObjectOf} from './theme-object.mjs';
@@ -2142,7 +2146,7 @@ function hasAdaptationIntent(themeDef) {
 /**
  * The default viewport-width tier start points, in CSS px. A theme whose
  * effective map is exactly this asked for nothing.
- * SYNC: packages/core/src/theme/themeAdaptations.ts (DEFAULT_WIDTH_BREAKPOINTS)
+ * SYNC: packages/core/src/theme/breakpoints.ts (DEFAULT_WIDTH_BREAKPOINTS)
  */
 const DEFAULT_WIDTH_BREAKPOINTS = Object.freeze({
   sm: 640,
@@ -6397,16 +6401,29 @@ async function themeBuildInternal(
   // named only inside one needs the same notice as one named at the root.
   // The result names the recipe's command bare, as every machine-read
   // command is; the printed note starts it the way this project runs the CLI.
+  // A next/font app loads each family under a name of its own, so its fix is
+  // the font's CSS variable, not a <link> or @font-face. Its printed notes
+  // name each family alone; the recipe printed after them carries the fix
+  // once. The --json notices keep the fix in each one.
+  const nextFont =
+    !handOff.fontHelp && unloadedFonts.length > 0
+      ? rootLayoutImportsNextFont(cwd)
+      : false;
+  const recipeTopic = nextFont ? 'docs font-setup' : 'docs typography';
   /** @param {string} family @param {string} recipe */
   const fontNotice = (family, recipe) =>
     handOff.fontHelp?.notice(family) ??
-    `Font "${family}" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: ${recipe})`;
+    (nextFont
+      ? `Font "${family}" is named by this theme but not loaded. ${nextFontFix(recipe)}`
+      : `Font "${family}" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: ${recipe})`);
   /** @type {string[]} */
   const fontNotices = [];
   for (const family of unloadedFonts) {
-    noticeMessages.push(fontNotice(family, 'astryx docs typography'));
+    noticeMessages.push(fontNotice(family, `astryx ${recipeTopic}`));
     fontNotices.push(
-      fontNotice(family, formatCliCommand('docs typography', cwd)),
+      nextFont
+        ? `Font "${family}" is named by this theme but not loaded.`
+        : fontNotice(family, formatCliCommand(recipeTopic, cwd)),
     );
   }
 
@@ -6418,7 +6435,17 @@ async function themeBuildInternal(
     cssImport,
     unloadedFonts,
     fontNotices,
-    fontHelp: handOff.fontHelp ?? null,
+    fontHelp:
+      handOff.fontHelp ??
+      (nextFont
+        ? {
+            notice: family =>
+              fontNotice(family, formatCliCommand(recipeTopic, cwd)),
+            recipe: () =>
+              `${nextFontFix(formatCliCommand(recipeTopic, cwd))}.`,
+          }
+        : null),
+    nextFont,
     install: handOff.install ?? null,
   };
   // A batch or compact report prints this once for the whole run instead.
@@ -6458,7 +6485,10 @@ async function themeBuildInternal(
  * @property {string} cssImport Import specifier of the built CSS.
  * @property {string[]} unloadedFonts Font families the theme names but does not load.
  * @property {string[]} fontNotices One notice per unloaded font family, as printed.
- * @property {FontHelp | null} [fontHelp] How the caller loads fonts, when it does.
+ * @property {FontHelp | null} [fontHelp] How the caller loads fonts, when it
+ *   does, or the next/font recipe when the app's root layout imports next/font.
+ * @property {boolean} [nextFont] Whether the app's root layout imports
+ *   next/font, directly or through a `geist/font` entry.
  * @property {string | null} [install] How the app takes the theme, when the
  *   caller wires it another way than importing these outputs (the editor's
  *   app copy).
@@ -6548,8 +6578,13 @@ Or with a <link> tag:
     }
   }
   const fonts = groupUnloadedFonts(trailers);
-  // One caller's recipe serves the batch only when every theme takes it.
-  const help = trailers.every(t => t.fontHelp) ? trailers[0].fontHelp : null;
+  // One caller's recipe serves the batch only when every theme that leaves a
+  // font unloaded takes it.
+  const fontTrailers = trailers.filter(t => t.unloadedFonts.length > 0);
+  const help =
+    fontTrailers.length > 0 && fontTrailers.every(t => t.fontHelp)
+      ? fontTrailers[0].fontHelp
+      : null;
   if (fonts.length > 0)
     logger.log(formatBatchFontLoadingHelp(fonts, help?.recipe));
 }
@@ -6572,8 +6607,13 @@ export function printCompactTrailer(trailers, {hint = false} = {}) {
           : `"${family}"`,
       )
       .join(', ');
+    const nextFont = trailers
+      .filter(trailer => trailer.unloadedFonts.length > 0)
+      .every(trailer => trailer.nextFont);
     logger.log(
-      `[note] Fonts named but not loaded: ${named}. Load them in your app (recipe: ${formatCliCommand('docs typography')}).`,
+      nextFont
+        ? `[note] Fonts named but not loaded: ${named}. ${nextFontFix(formatCliCommand('docs font-setup'))}.`
+        : `[note] Fonts named but not loaded: ${named}. Load them in your app (recipe: ${formatCliCommand('docs typography')}).`,
     );
   }
   if (hint) {
@@ -7314,21 +7354,34 @@ Or load the same stylesheet natively:
   const unloadedFonts = [
     ...new Set(members.flatMap(member => member.unloadedFonts)),
   ];
+  const nextFont =
+    unloadedFonts.length > 0 ? rootLayoutImportsNextFont(cwd) : false;
+  const recipeTopic = nextFont ? 'docs font-setup' : 'docs typography';
   /** @param {string} family @param {string} recipe */
   const familyNotice = (family, recipe) =>
-    `Font "${family}" is named by this theme family but not loaded; add a <link> or @font-face in your app (recipe: ${recipe})`;
+    nextFont
+      ? `Font "${family}" is named by this theme family but not loaded. ${nextFontFix(recipe)}`
+      : `Font "${family}" is named by this theme family but not loaded; add a <link> or @font-face in your app (recipe: ${recipe})`;
   // The result names the command bare; the printed note as this project
   // runs the CLI.
   const notices = [
     ...familySettingNotices,
     ...unloadedFonts.map(family =>
-      familyNotice(family, 'astryx docs typography'),
+      familyNotice(family, `astryx ${recipeTopic}`),
     ),
   ];
+  // In a next/font app each note names the family alone, and the fix prints
+  // once after them.
   for (const family of unloadedFonts)
     logger.log(
-      `  note: ${familyNotice(family, formatCliCommand('docs typography', cwd))}`,
+      `  note: ${
+        nextFont
+          ? `Font "${family}" is named by this theme family but not loaded.`
+          : familyNotice(family, formatCliCommand(recipeTopic, cwd))
+      }`,
     );
+  if (nextFont && unloadedFonts.length > 0)
+    logger.log(`  note: ${nextFontFix(formatCliCommand(recipeTopic, cwd))}.`);
   return {
     type: 'theme.build',
     data: {

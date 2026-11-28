@@ -8,7 +8,7 @@
  *   outside watches (outsidePanClaim)
  * @output Exports the public usePopover hook with derived focus, guarded opening
  *   and an optional anchor apart from the trigger.
- *   For Popover.tsx (internal), exports usePopoverInternal and
+ *   For Astryx's own packages (internal), exports usePopoverInternal and
  *   FALLBACK_CLOSE_SELECTOR.
  * @position Higher-level layer utility; used by DatePicker, Combobox, etc.
  *
@@ -17,6 +17,8 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Popover/index.ts
+ * - The controls that read the press factor this hook writes: Button,
+ *   Selector, MultiSelector and ComplexSelector
  */
 
 import React, {
@@ -36,6 +38,7 @@ import {useAnnounce} from '../hooks/useAnnounce';
 import {containsAlongFlatTree, deepActiveElement} from '../utils/flatTree';
 import {useFocusTrapInternal} from '../hooks/useFocusTrap';
 import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isElement, isHTMLElement} from '../utils/nodeType';
 import {focusableWithin, takesFocusAsIs} from '../utils/focusReturn';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
@@ -55,8 +58,10 @@ import {
 import {rtlStyles} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {surfaceEdgeStyles} from './surfaceEdge.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {isFocusDetached} from '../utils/isFocusDetached';
+import {sharedWeakMap} from '../utils/sharedRealm';
 import {themeProps} from '../utils/themeProps';
 import {paddingStyles} from '../Layout/paddingStyles.stylex';
 import type {SpacingStep} from '../utils/types';
@@ -108,28 +113,71 @@ function focusFirstContentControl(container: HTMLElement): boolean {
   return false;
 }
 
+/** The surface's focus ring with its forced-colors edge, then `styles`. */
+function surfaceEdgeProps(...styles: unknown[]) {
+  return stylex.props(
+    surfaceEdgeStyles.edgeWithFocusRing,
+    ...(styles as never[]),
+  );
+}
+
+/**
+ * The factor a control scales by on a press. Button and the selector
+ * triggers fall back to their own scale. Each sets it to `initial` on
+ * itself, so a value on a control around it does not reach it.
+ */
+const PRESS_SCALE_PROPERTY = '--_astryx-press-scale';
+
+const anchorHolds = sharedWeakMap<HTMLElement, number>(
+  'popover/use-popover/anchor-holds',
+  1,
+);
+
+/**
+ * Chromium and WebKit place an anchored layer from its anchor's box after
+ * transforms. A press that scales the anchor then moves the layer. Until the
+ * release runs, a press does not scale the control that is the anchor or
+ * holds it. More than one popover can hold the same control.
+ */
+function holdAnchorAtRest(anchor: Element): () => void {
+  const control = anchor.closest<HTMLElement>('[data-astryx-pressable]');
+  if (control == null) {
+    return () => {};
+  }
+  const count = anchorHolds.get(control) ?? 0;
+  anchorHolds.set(control, count + 1);
+  if (count === 0) {
+    control.style.setProperty(PRESS_SCALE_PROPERTY, '1');
+  }
+  let isHeld = true;
+  return () => {
+    if (!isHeld) {
+      return;
+    }
+    isHeld = false;
+    const left = (anchorHolds.get(control) ?? 1) - 1;
+    if (left > 0) {
+      anchorHolds.set(control, left);
+      return;
+    }
+    anchorHolds.delete(control);
+    control.style.removeProperty(PRESS_SCALE_PROPERTY);
+  };
+}
+
 const styles = stylex.create({
-  // Default popover surface — background, radius, shadow.
-  // Applied automatically unless hasSurface is false.
+  // Default popover surface. Applied automatically unless hasSurface is false.
   // Consumers that need a raw positioned layer should use useLayer instead.
   surface: {
     backgroundColor: colorVars['--color-background-popover'],
+    // The browser gives `[popover]` `CanvasText`, which follows the color
+    // scheme and not the theme.
+    color: colorVars['--color-text-primary'],
     '--_popover-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_popover-radius)',
     boxShadow: shadowVars['--shadow-low'],
-    // Forced colors removes box-shadow, which is this surface's only edge.
-    borderWidth: {
-      default: null,
-      '@media (forced-colors: active)': '1px',
-    },
-    borderStyle: {
-      default: null,
-      '@media (forced-colors: active)': 'solid',
-    },
-    borderColor: {
-      default: null,
-      '@media (forced-colors: active)': 'CanvasText',
-    },
+    // Its forced-colors edge comes with the focus ring
+    // (surfaceEdgeStyles.edgeWithFocusRing).
   },
   // An open popover whose separate anchor resolves to nothing shows no
   // surface until it does: an unanchored layer would sit at the page origin.
@@ -185,6 +233,8 @@ export interface UsePopoverOptions {
    * External ref to use as the popover anchor. When provided, the popover
    * sits on this element instead of the trigger. The trigger keeps its toggle
    * and ARIA attributes; the anchor gets neither, and it is never a trigger.
+   * While the popover is open, a press does not scale a Button or a selector
+   * trigger that is the anchor or holds it, so the popover does not move.
    *
    * Any element with a CSS box works (an HTML element or an `<svg>` element;
    * a shape inside an `<svg>` warns in development). The ref is read when the
@@ -326,8 +376,8 @@ export interface UsePopoverOptions {
   tabBehavior?: 'contain' | 'pageOrder';
 
   /**
-   * Whether to apply the default popover surface (background, border-radius,
-   * box-shadow) to the content wrapper.
+   * Whether to apply the default popover surface (background, text color,
+   * border-radius, box-shadow) to the content wrapper.
    *
    * Set to false when the popover content provides its own surface styling
    * (e.g., mega menus with custom layouts). If you find yourself opting out,
@@ -488,6 +538,22 @@ export interface InternalPopoverOptions extends UsePopoverOptions {
   writesEntranceSide?: boolean;
   /** Called after a scroll stop places the popover afresh (`useLayerInternal`'s `onPlacedAfresh`). */
   onPlacedAfresh?: () => void;
+  /**
+   * Attributes for the surface element, for a component whose surface is
+   * its own root. They carry a role, a name that the content gives, and the
+   * component's host attributes. `className` and `style` here are dropped.
+   * Pass them as the options of those names.
+   */
+  surfaceProps?: React.HTMLAttributes<HTMLDivElement>;
+  /** The component's own ref to the surface element. */
+  surfaceRef?: React.Ref<HTMLDivElement>;
+  /**
+   * Chooses the element that a `'pageOrder'` popover follows in the focus
+   * order, each time the popover shows. `own` is this hook's choice: the
+   * trigger, or an anchor that takes focus. Null: the popover follows no
+   * element and keeps its DOM place.
+   */
+  getInvoker?: (own: HTMLElement | null) => HTMLElement | null;
 }
 
 /**
@@ -532,7 +598,7 @@ export interface InternalPopoverOptions extends UsePopoverOptions {
  */
 function usePopoverImplementation(
   options: InternalPopoverOptions = {},
-): UsePopoverReturn {
+): UsePopoverInternalReturn {
   const {
     anchorRef,
     onShow,
@@ -560,6 +626,9 @@ function usePopoverImplementation(
     getOpener,
     ownsOutsidePan = false,
     onOpenPendingChange,
+    surfaceProps: hostSurfaceProps,
+    surfaceRef,
+    getInvoker: chooseInvoker,
   } = options;
 
   // A popover that Tab passes through is never modal.
@@ -650,14 +719,22 @@ function usePopoverImplementation(
   // trigger it follows an anchor that takes focus. Otherwise it keeps its DOM
   // place. A trigger that wraps its control passes the control: browsers
   // place the popover before a control inside the invoker.
+  const chooseInvokerRef = useCommittedRef(chooseInvoker);
   const getInvoker = useCallback((): HTMLElement | null => {
     const trigger = triggerElementRef.current;
-    if (trigger != null) {
-      return focusableWithin(trigger) ?? trigger;
-    }
-    const anchor = boundAnchorRef.current;
-    return isHTMLElement(anchor) && anchor.tabIndex >= 0 ? anchor : null;
-  }, []);
+    // Read from the caller's ref, not from the last bind. A layer element
+    // that mounts again while open shows before this commit binds the anchor.
+    const option = anchorOptionRef.current;
+    const anchorElement = option == null ? null : resolvePopoverAnchor(option);
+    const own =
+      trigger != null
+        ? (focusableWithin(trigger) ?? trigger)
+        : isHTMLElement(anchorElement) && anchorElement.tabIndex >= 0
+          ? anchorElement
+          : null;
+    const choose = chooseInvokerRef.current;
+    return choose == null ? own : choose(own);
+  }, [anchorOptionRef, chooseInvokerRef]);
   const announcesOpenRef = useRef(false);
   const layer = useLayerInternal({
     mode: 'context',
@@ -846,26 +923,39 @@ function usePopoverImplementation(
     }
   }, [anchorOptionRef, layerRef]);
 
+  const anchorHoldRef = useRef<{
+    anchor: Element;
+    release: () => void;
+  } | null>(null);
+  const isLayerOpen = layer.isOpen;
   // Syncs the layer's CSS anchor with the element the caller's `anchorRef`
-  // holds. The ref changes with no event here, so this reads it after every
-  // commit.
+  // holds. While the popover is open, it also holds that element's control
+  // at rest. The ref changes with no event here, so this reads it after
+  // every commit.
   useIsomorphicLayoutEffect(() => {
     if (anchorRef != null) {
       bindAnchor();
-      return;
-    }
-    if (boundAnchorRef.current !== undefined) {
+    } else if (boundAnchorRef.current !== undefined) {
       // The caller dropped its anchor: the trigger anchors again.
       boundAnchorRef.current = undefined;
       setIsAnchorMissing(false);
       layerRef(triggerElementRef.current);
     }
+    const anchor = isLayerOpen ? (boundAnchorRef.current ?? null) : null;
+    const hold = anchorHoldRef.current;
+    if ((hold?.anchor ?? null) !== anchor) {
+      hold?.release();
+      anchorHoldRef.current =
+        anchor == null ? null : {anchor, release: holdAnchorAtRest(anchor)};
+    }
   });
   // React detaches a trigger's ref when the popover unmounts. The anchor is
-  // the caller's element, so this hook takes its anchor name off. Effects
-  // that run again bind the anchor again.
+  // the caller's element, so this hook takes its anchor name and its hold
+  // off. Effects that run again bind and hold the anchor again.
   useIsomorphicLayoutEffect(
     () => () => {
+      anchorHoldRef.current?.release();
+      anchorHoldRef.current = null;
       if (boundAnchorRef.current !== undefined) {
         layerRef(null);
         boundAnchorRef.current = undefined;
@@ -963,6 +1053,7 @@ function usePopoverImplementation(
   );
 
   const isDialogShown = role === 'dialog' && layer.isOpen;
+  const surfaceRefs = useMergedRefs(contentRef, surfaceRef);
   // Wrapped render function that includes surface styles and optional hidden close button
   const render = useCallback(
     (children: ReactNode, props?: ContextRenderProps): ReactNode => {
@@ -978,16 +1069,17 @@ function usePopoverImplementation(
       return layer.render(
         <LayerDepthProvider>
           <div
-            ref={contentRef}
+            ref={surfaceRefs}
             // A closed surface stays mounted but hidden. It carries no dialog
             // role or name, so selectors find no hidden dialog.
             role={isDialogShown ? 'dialog' : undefined}
             aria-modal={isDialogShown && isModal ? true : undefined}
             aria-label={isDialogShown ? dialogLabel : undefined}
             tabIndex={role === 'dialog' ? -1 : undefined}
+            {...hostSurfaceProps}
             {...mergeProps(
               {...surfaceProps, className: surfaceClassName},
-              focusOutlineProps.focusVisible(
+              (hasSurface ? surfaceEdgeProps : focusOutlineProps.focusVisible)(
                 styles.contentWrapper,
                 hasSurface && styles.surface,
                 padding != null && paddingStyles[padding],
@@ -1028,7 +1120,8 @@ function usePopoverImplementation(
       className,
       style,
       closeButtonLabel,
-      contentRef,
+      surfaceRefs,
+      hostSurfaceProps,
       dialogLabel,
       isDialogShown,
       role,
@@ -1049,7 +1142,19 @@ function usePopoverImplementation(
     id: layer.id,
     render,
     triggerProps,
+    isFocusInScope,
   };
+}
+
+/**
+ * @internal What a Core composition reads beyond the public return.
+ */
+export interface UsePopoverInternalReturn extends UsePopoverReturn {
+  /**
+   * Whether focus is in the popover's Escape scope: inside `surface`, or on
+   * or inside its anchor or trigger.
+   */
+  isFocusInScope: (surface: Element | null) => boolean;
 }
 
 export function usePopover<
@@ -1062,7 +1167,9 @@ export function usePopover<
     isModal?: [TabBehavior] extends ['pageOrder'] ? false : boolean;
   },
 ): UsePopoverReturn {
-  return usePopoverImplementation(options ?? {});
+  const {isFocusInScope: _isFocusInScope, ...popover} =
+    usePopoverImplementation(options ?? {});
+  return popover;
 }
 
 /**
@@ -1070,6 +1177,6 @@ export function usePopover<
  */
 export function usePopoverInternal(
   options: InternalPopoverOptions = {},
-): UsePopoverReturn {
+): UsePopoverInternalReturn {
   return usePopoverImplementation(options);
 }

@@ -36,6 +36,17 @@ affects_consumer_docs: [theme, AppShell]
 }
 ```
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": [
+    "packages/core/src/theme/breakpoints.ts",
+    "packages/core/src/theme/themeAdaptations.ts"
+  ]
+}
+```
+
 ## Intent
 
 Themes should express opt-in token and component adaptations for environmental

@@ -8,10 +8,13 @@
  */
 
 import * as path from 'node:path';
-import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {
   addMatchingCore,
+  APP_ROOT_LAYOUT_FILES,
+  nextFontFix,
+  parseAppModule as parseModule,
+  rootLayoutImportsNextFont,
   collectUnloadedFonts,
   fontPackagesInstallLine,
   discoverDoctorThemes,
@@ -165,14 +168,6 @@ function refreshThemeCommand(projectDir, run, available, slug, owner) {
       ? `${run} ${by.replace(/^astryx\s+/, '')}; ${run} theme add ${slug}`
       : `Rebuild ${projectPath(path.dirname(source))}/ with ${by}, then run ${run} theme add ${slug}`;
   return `${run} theme build ${source}; ${run} theme add ${slug}`;
-}
-
-/** @param {string} source */
-function parseModule(source) {
-  return parse(source, {
-    sourceType: 'unambiguous',
-    plugins: ['typescript', 'jsx', 'decorators-legacy', 'importAttributes'],
-  });
 }
 
 /** @param {unknown} value @param {(node: any) => void} visit */
@@ -446,12 +441,8 @@ const PAGE_HEAD_FILES = [
   'index.html',
   'public/index.html',
   'src/index.html',
-  ...[
-    'app/layout',
-    'src/app/layout',
-    'pages/_document',
-    'src/pages/_document',
-  ].flatMap(file =>
+  ...APP_ROOT_LAYOUT_FILES,
+  ...['pages/_document', 'src/pages/_document'].flatMap(file =>
     ['.tsx', '.jsx', '.js', '.mjs', '.ts'].map(ext => `${file}${ext}`),
   ),
 ];
@@ -2194,6 +2185,12 @@ export async function checkAppThemes(cwd) {
   // A font service stylesheet the app links in its page head (the setup a
   // theme's README gives) loads its families for every added theme.
   const pageFonts = pageFontLinks(state.projectDir);
+  // In a next/font app, the app's own (local) theme points its family at the
+  // font's CSS variable. A package theme's family is not the app's to change,
+  // so its fixes stay as they are.
+  const nextFontRecipe = rootLayoutImportsNextFont(state.projectDir)
+    ? nextFontFix(`${run} docs font-setup`)
+    : null;
   for (const family of pageFonts.families) moduleLoaded.add(family);
   for (const theme of resolved) {
     const availableTheme = available.find(
@@ -2267,7 +2264,9 @@ export async function checkAppThemes(cwd) {
     const packageWarnings = missingFontWarnings.filter(
       problem => problem.theme.source !== 'local',
     );
-    if (localWarnings.length > 0) {
+    if (localWarnings.length > 0 && nextFontRecipe) {
+      fontWarningFixes.push(`${nextFontRecipe}.`);
+    } else if (localWarnings.length > 0) {
       fontWarningFixes.push(
         `Add <slug>.fonts.css beside each built local theme output, then ${localWarnings
           .map(problem => `${run} theme add ${problem.theme.slug}`)
@@ -2332,7 +2331,7 @@ export async function checkAppThemes(cwd) {
             message: `Named font families have no proven loader (${fontFailures
               .map(problem => `${problem.theme.slug}: ${problem.message}`)
               .join('; ')}).`,
-            fix: `${
+            fix: `${nextFontRecipe && fontFailures.some(problem => problem.theme.source === 'local') ? `${nextFontRecipe}. Otherwise: ` : ''}${
               fontInstall.line &&
               fontInstall.coversAll &&
               fontFailures.every(f => f.missing)

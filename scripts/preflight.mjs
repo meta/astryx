@@ -7,7 +7,8 @@
  * @input The committed change (`HEAD` against its merge base with `--base
  *   <ref>`, default `origin/main`), `--browser`, `--quick` (the
  *   changed packages, files and tests alone; not CI's scope; a typecheck
- *   that fails only on missing workspace builds reports SKIP), and `--wrap
+ *   that fails only on missing workspace builds fails with a hint to build),
+ *   and `--wrap
  *   <command>` (or `PREFLIGHT_WRAP`): a command that runs each heavy step as
  *   `<command> <build|test|knowledge> <step command...>`, such as a machine's
  *   job limiter. A working tree with uncommitted changes stops the run.
@@ -53,6 +54,8 @@ const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
  * arguments the command does not run (`emptyMeans` says why). `argsAfter`
  * goes after them: an option such as Playwright's `--project`, which takes
  * every value that follows it, must come last.
+ * `explain(output)` reads a failing command's `stdout` file and gives the
+ * note its failure prints in place of the exit code, or null.
  * @param {{scope: ReturnType<typeof classify>, mergeBase: string, changed: string[], browser: boolean, tmp: string, chromiumScope?: string}} input
  */
 export function planChecks({
@@ -387,10 +390,11 @@ function present(files) {
 
 /**
  * `--quick`: the typecheck of the changed packages alone (their dependencies'
- * build from an earlier `pnpm build`), ESLint on the changed files, the
- * changed test files alone, `check:knowledge` and `check:changesets`. It is
- * not CI's scope: no build, no dependent package, no test the change reaches
- * through an import, and no guard.
+ * build from an earlier `pnpm build`), ESLint on the changed files, the CLI
+ * structure check when the change touches `packages/cli/`, the changed test
+ * files alone, `check:knowledge` and `check:changesets`. It is not CI's
+ * scope: no build, no dependent package, no test the change reaches through
+ * an import, and no guard.
  */
 function quickChecks({scope, mergeBase, changed, tmp}) {
   const specOnly = scope.specOnly || scope.timesOnly;
@@ -420,11 +424,11 @@ function quickChecks({scope, mergeBase, changed, tmp}) {
                 'typecheck',
               ],
               // Without a build, a package that reads a workspace package's
-              // build output fails to typecheck: that is not this change's
-              // error, so the check reports it as skipped.
+              // build output fails to typecheck, and the types it reads are
+              // unchecked, so the check fails and says to build first.
               stdout: path.join(tmp, 'typecheck.log'),
               tee: true,
-              skipWhen: missingBuilds,
+              explain: missingBuilds,
             },
           ],
         }
@@ -447,6 +451,13 @@ function quickChecks({scope, mergeBase, changed, tmp}) {
           ],
         }
       : skip('lint', 'no changed file to lint'),
+    // CI runs this check in its node tests (check-cli-structure.test.mjs).
+    changed.some(file => file.startsWith('packages/cli/'))
+      ? {
+          id: 'cli structure',
+          commands: [{kind: 'light', argv: ['pnpm', 'check:cli-structure']}],
+        }
+      : skip('cli structure', 'no change under packages/cli'),
     tests.length
       ? {
           id: 'changed tests',
@@ -477,7 +488,7 @@ function quickChecks({scope, mergeBase, changed, tmp}) {
 }
 
 const MISSING_BUILDS =
-  'skipped, workspace builds missing; run `pnpm build` first';
+  'typecheck needs built packages: run `pnpm build` (or `pnpm preflight` without --quick)';
 
 /** An unresolved module and its specifier. */
 const UNRESOLVED = /error TS2307: Cannot find module '([^']+)'/;
@@ -561,7 +572,7 @@ export function workspaceExports(root = ROOT) {
 let defaultExports;
 
 /**
- * Why a failed typecheck is skipped, or null: every TypeScript error is a
+ * Why a failed typecheck checked nothing, or null: every TypeScript error is a
  * missing build output, or an implicit-any error (TS7006, TS7031) in a file
  * that also has a missing build output. A missing build output is an
  * unresolved import that a workspace package's `exports` declares and whose
@@ -651,27 +662,19 @@ export function runChecks(checks, {exec, wrap = [], now = Date.now} = {}) {
         stdout: command.stdout,
         tee: command.tee,
       });
-      const skipped =
-        code !== 0 && command.skipWhen && command.stdout
-          ? command.skipWhen(
+      const explained =
+        code !== 0 && command.explain && command.stdout
+          ? command.explain(
               fs.existsSync(command.stdout)
                 ? fs.readFileSync(command.stdout, 'utf8')
                 : '',
             )
           : null;
-      if (skipped)
-        return {
-          id: check.id,
-          result: 'SKIP',
-          note: skipped,
-          failed: null,
-          seconds: Math.round((now() - started) / 1000),
-        };
       if (code !== 0)
         return {
           id: check.id,
           result: 'FAIL',
-          note: `exit ${code}`,
+          note: explained ?? `exit ${code}`,
           failed: argv.join(' '),
           seconds: Math.round((now() - started) / 1000),
         };
@@ -703,20 +706,13 @@ export function formatTable(rows, {quick = false} = {}) {
     lines.push('', 'Failing commands:');
     for (const row of failed) lines.push(`  ${row.id}: ${row.failed}`);
   }
-  // A typecheck skipped for missing builds checked nothing, so the verdict
-  // says so instead of reading as a pass.
-  const unbuilt = rows.filter(
-    row => row.result === 'SKIP' && row.note === MISSING_BUILDS,
-  );
   lines.push(
     '',
     failed.length
       ? `not ready: ${failed.length}`
-      : unbuilt.length
-        ? `not checked: ${unbuilt.map(row => row.id).join(', ')} (workspace builds missing); run \`pnpm build\`, then run again before you flip`
-        : quick
-          ? 'quick checks pass; run `pnpm preflight` before you flip'
-          : 'ready to flip',
+      : quick
+        ? 'quick checks pass; run `pnpm preflight` before you flip'
+        : 'ready to flip',
     quick
       ? 'Quick mode is not CI-equivalent: it skips the build, dependent packages, the tests the change reaches and the guards.'
       : NOT_RUN,

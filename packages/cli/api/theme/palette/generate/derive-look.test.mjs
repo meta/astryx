@@ -18,6 +18,7 @@ import {
   CHART_SERIES,
   HUE_SEEDS,
   cvdClashes,
+  deriveCodeColors,
   deriveLookColors,
   deriveStatusColors,
   isLookFamily,
@@ -525,5 +526,59 @@ describe("code colors on the theme's own code background", () => {
     const keyword = tokens['--color-syntax-keyword'];
     expect(keyword).toBeDefined();
     expect(contrastRatio(keyword.dark.color, dark)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('a derivation asked for one mode', () => {
+  // A derived token types both modes as present, so a mode the caller does
+  // not draw takes the drawn mode's stop.
+  const white = {stop: 100, color: '#ffffff', family: 'white'};
+  const black = {stop: 0, color: '#000000', family: 'black'};
+
+  it('fills both modes of every code color from the drawn mode', () => {
+    const {palette, stops} = grow(lookSeeds('#5b3cc4'));
+    for (const mode of ['light', 'dark']) {
+      const {tokens} = deriveCodeColors({
+        palette,
+        stops,
+        modes: [mode],
+        grounds: m => page[m],
+        codeGround: () => null,
+      });
+      expect(Object.keys(tokens).length).toBeGreaterThan(0);
+      for (const token of Object.values(tokens)) {
+        expect(token[mode]).toBeDefined();
+        expect(token.light).toEqual(token.dark);
+      }
+    }
+  });
+
+  it('fills both modes of every status color from the drawn mode', () => {
+    const seeds = statusSeeds(
+      {
+        info: '#0074e2',
+        success: '#198100',
+        warning: '#ffce2f',
+        danger: '#c9303a',
+      },
+      '#0052cc',
+    );
+    const {palette, stops} = grow(seeds);
+    for (const mode of ['light', 'dark']) {
+      const {tokens} = deriveStatusColors({
+        palette,
+        stops,
+        modes: [mode],
+        roles: ['info', 'success', 'warning', 'danger'],
+        grounds: m => page[m],
+        inks: () => [white, black],
+        accent: () => '#0052cc',
+      });
+      expect(tokens['--color-on-warning']).toBeDefined();
+      for (const token of Object.values(tokens)) {
+        expect(token[mode]).toBeDefined();
+        expect(token.light).toEqual(token.dark);
+      }
+    }
   });
 });

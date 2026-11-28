@@ -1666,7 +1666,11 @@ describe('Toast native motion contract', () => {
     expect(normalizeCssList(toastStyle.transitionProperty)).toBe(
       'opacity, transform',
     );
-    expect(toastStyle.transitionDuration).toBe('var(--duration-fast)');
+    // The transform lands at once under a theme that reduces motion for
+    // everyone; the 0.01s keeps its transitionend.
+    expect(toastStyle.transitionDuration).toBe(
+      'calc(var(--duration-fast) * (1 - var(--_astryx-reduced-motion, 0)) + 0.01s * var(--_astryx-reduced-motion, 0))',
+    );
     expect(toastStyle.transitionTimingFunction).toBe('var(--ease-standard)');
     expect(normalizeCssList(wrapperStyle.transitionProperty)).toBe(
       'grid-template-rows, padding',
@@ -3215,6 +3219,21 @@ describe('toast announcements via singleton live regions', () => {
     );
     // Status toasts never touch the assertive region.
     expect(assertiveRegion()).toHaveTextContent('');
+  });
+
+  it('announces a plain-text body by its words as they read', async () => {
+    renderViewport(
+      <ShowToastButton
+        options={{body: [42, '% uploaded']}}
+        triggerLabel="Show"
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+    await waitFor(() => {
+      expect(announceSpy).toHaveBeenCalledWith('42% uploaded', 'polite');
+    });
   });
 
   it('announces an error toast assertively', async () => {

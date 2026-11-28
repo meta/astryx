@@ -11,7 +11,14 @@
  */
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
@@ -19,6 +26,7 @@ import {TestIcon} from '../__tests__/TestIcon';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 import {InputGroup} from '../InputGroup';
 import {TextInput} from './TextInput';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
 const RING = stylex
@@ -1203,17 +1211,20 @@ describe('TextInput', () => {
 
       const input = screen.getByRole('textbox');
       const container = input.parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        );
       });
     });
 
@@ -1229,11 +1240,10 @@ describe('TextInput', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('textbox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
     });
 
@@ -1283,7 +1293,7 @@ describe('TextInput', () => {
         />,
       );
       const input = screen.getByRole('textbox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -1375,7 +1385,7 @@ describe('TextInput statusVariant forwarding', () => {
         statusVariant="tooltip"
       />,
     );
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent('Invalid email');
   });
 
@@ -1390,7 +1400,7 @@ describe('TextInput statusVariant forwarding', () => {
       />,
     );
     const input = screen.getByRole('textbox');
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 
@@ -1422,12 +1432,11 @@ describe('TextInput statusVariant forwarding', () => {
         statusVariant="tooltip"
       />,
     );
-    const tooltip = screen.getByRole('tooltip', h);
     // Tab from the input to the status button; keyboard focus reveals the tip.
     await user.tab();
     await user.tab();
     await waitFor(() => {
-      expect(tooltip).toHaveAttribute('popover-open');
+      expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
     });
   });
 
@@ -1442,7 +1451,7 @@ describe('TextInput statusVariant forwarding', () => {
       />,
     );
     const statusButton = screen.getByRole('button', {name: /error details/i});
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 });
@@ -1567,7 +1576,7 @@ describe('TextInput in a narrow row', () => {
     expect(getComputedStyle(root).minWidth).toBe('0');
   });
 
-  it('keeps the written order of a tooltip-placement status message under right-to-left', () => {
+  it('keeps the written order of a tooltip-placement status message under right-to-left', async () => {
     render(
       <div dir="rtl">
         <TextInput
@@ -1579,7 +1588,13 @@ describe('TextInput in a narrow row', () => {
         />
       </div>,
     );
-    expect(screen.getByText('Prefix https://')).toHaveAttribute('dir', 'ltr');
+    // The tooltip mounts on the first hover; its text keeps the written order.
+    await userEvent.hover(screen.getByRole('button', {name: /error details/i}));
+    const tooltip = await screen.findByRole('tooltip', {hidden: true});
+    expect(within(tooltip).getByText('Prefix https://')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
     expect(
       screen.getByRole('textbox', {name: 'Website'}),
     ).toHaveAccessibleDescription('Prefix https://');

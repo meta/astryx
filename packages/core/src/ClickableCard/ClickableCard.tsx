@@ -327,7 +327,9 @@ export interface ClickableCardProps extends BaseProps {
  *
  * A visually-hidden <button> or <a> inside the card provides the
  * accessible role and label. The card surface is a plain <div> —
- * no role or tabIndex on the container.
+ * no role or tabIndex on the container. The `aria-current`,
+ * `aria-describedby`, `aria-expanded` and `aria-pressed` given to the card
+ * apply to that hidden control.
  *
  * @compositionHint Use for cards that navigate to a detail page or trigger an action.
  * For toggle selection cards, use SelectableCard instead.
@@ -368,6 +370,10 @@ export function ClickableCard({
   xstyle: xstyleProp,
   className: classNameProp,
   style,
+  'aria-current': ariaCurrent,
+  'aria-describedby': ariaDescribedBy,
+  'aria-expanded': ariaExpanded,
+  'aria-pressed': ariaPressed,
   ...props
 }: ClickableCardProps) {
   const pressable = usePressFeedback();
@@ -436,6 +442,16 @@ export function ClickableCard({
   // it here so the hover overlay covers the full box with no untinted ring.
   const hasBorder = variant === 'default';
 
+  // Assistive technology reads the current, expanded and pressed states and
+  // the description on the focused element. That element is the hidden link
+  // or button. The root has no role.
+  const controlAriaProps = {
+    'aria-current': ariaCurrent,
+    'aria-describedby': ariaDescribedBy,
+    'aria-expanded': ariaExpanded,
+    'aria-pressed': ariaPressed,
+  };
+
   return (
     <Card
       ref={useMergedRefs(ref, containerRef)}
@@ -478,6 +494,7 @@ export function ClickableCard({
       {isLink ? (
         <LinkRoot
           ref={setInteractiveRef}
+          {...controlAriaProps}
           href={isDisabled ? undefined : href}
           target={isDisabled ? undefined : target}
           role={isDisabled ? 'link' : undefined}
@@ -492,6 +509,7 @@ export function ClickableCard({
       ) : (
         <button
           ref={setInteractiveRef}
+          {...controlAriaProps}
           type="button"
           aria-label={label}
           aria-disabled={isDisabled || undefined}

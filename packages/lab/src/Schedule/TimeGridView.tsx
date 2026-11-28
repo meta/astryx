@@ -145,6 +145,9 @@ export function TimeGridView({
       label: `${label} time grid`,
       role: 'region',
     },
+    // The viewport scrolls from its first frame, so the initial position
+    // does not wait for the measured scroll state.
+    stickyContainment: 'always',
   });
 
   // Initial position (component:Schedule FR4–FR6): once per rendered range,
@@ -194,7 +197,7 @@ export function TimeGridView({
   const hasClock = currentTime !== 0;
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
-    if (viewport == null || !isBlockScrollable || !hasClock) {
+    if (viewport == null || !hasClock) {
       return;
     }
     const memory = scrollMemory.current;
@@ -208,11 +211,21 @@ export function TimeGridView({
       }
       return;
     }
+    // The measured scroll state renders after the first frame paints, and
+    // the viewport must open before that frame. So this one read measures
+    // it here. A viewport with no box yet opens when the state arrives.
+    const {scrollHeight, clientHeight} = viewport;
+    if (!isBlockScrollable && scrollHeight <= clientHeight) {
+      return;
+    }
     const offset = getInitialTimeGridOffset({
       ...positioning.current,
+      // The clock's first snapshot can be old: its subscription, which
+      // refreshes it, starts after this effect.
+      currentTime: Date.now(),
       timezoneID,
-      scrollHeight: viewport.scrollHeight,
-      clientHeight: viewport.clientHeight,
+      scrollHeight,
+      clientHeight,
     });
     viewport.scrollTop = offset;
     if (memory != null) {

@@ -15,7 +15,7 @@ import {Section} from '@astryxdesign/core/Section';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {ToggleButton, ToggleButtonGroup} from '@astryxdesign/core/ToggleButton';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
-import type {BlogPost, BlogPostType} from '../../lib/blog/schema';
+import type {BlogPostMeta, BlogPostType} from '../../lib/blog/schema';
 import {POST_TYPE_LABELS} from '../../lib/blog/schema';
 import {BlogCard} from './BlogCard';
 
@@ -35,7 +35,7 @@ const styles = stylex.create({
 });
 
 export interface BlogIndexProps {
-  posts: BlogPost[];
+  posts: BlogPostMeta[];
   availableTypes: BlogPostType[];
 }
 

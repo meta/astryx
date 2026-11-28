@@ -26,6 +26,8 @@ import {
   getTouches,
   getLastMousePoint,
   getLastPointerType,
+  holdMouseMoves,
+  isMouseMove,
   subscribeInput,
 } from './inputStream';
 import {installPressFeedback} from './pressFeedback';
@@ -74,6 +76,21 @@ function pointerDown(target: EventTarget): Event {
 }
 
 describe('inputStream', () => {
+  it('holds one pointermove subscription per window for many hover targets, and ends it with the last release', () => {
+    const {added, removed} = spyRegistrations();
+    const releases = Array.from({length: 3}, () => holdMouseMoves(window));
+    unsubscribers.push(...releases);
+    expect(added.map(r => r.type)).toEqual(['pointermove']);
+    // An untrusted move counts as a move.
+    expect(isMouseMove(new MouseEvent('pointermove'))).toBe(true);
+    releases[0]();
+    releases[1]();
+    expect(removed).toEqual([]);
+    releases[2]();
+    expect(removed.map(r => r.type)).toEqual(['pointermove']);
+    unsubscribers.splice(0);
+  });
+
   it('registers one capture listener per event type, however many subscribe, and removes it with the last', () => {
     const {added, removed} = spyRegistrations();
     const first = subscribe(window, 'pointerdown', () => {});

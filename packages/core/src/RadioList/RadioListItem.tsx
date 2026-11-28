@@ -203,7 +203,7 @@ export interface RadioListItemProps extends BaseProps<HTMLDivElement> {
    */
   isDisabled?: boolean;
   /**
-   * Content to render before the radio circle.
+   * Content to render after the radio circle, before the label.
    */
   startContent?: ReactNode;
   /**
@@ -213,7 +213,7 @@ export interface RadioListItemProps extends BaseProps<HTMLDivElement> {
 }
 
 /**
- * An individual radio item within an RadioList.
+ * An individual radio item within a RadioList.
  *
  * @example
  * ```
@@ -249,19 +249,17 @@ export function RadioListItem({
   const context = use(RadioListContext);
   const disabledReasonID = use(RadioListReasonContext);
   if (!context) {
-    throw new Error('RadioListItem must be used within an RadioList');
+    throw new Error('RadioListItem must be used within a RadioList');
   }
 
   const id = useId();
   const labelID = useId();
   const descriptionID = useId();
   const isDisabled = context.isDisabled || isItemDisabled;
-  // When the whole group is disabled with a disabledMessage, radios stay
-  // focusable via aria-disabled (instead of native `disabled`) so the group's
-  // reason tooltip is keyboard-discoverable. Per-item disabling is unaffected
-  // and always uses the native disabled attribute.
-  const keepsFocusableForMessage =
-    context.hasDisabledMessage && !isItemDisabled;
+  // A radio of a disabled group stays focusable through aria-disabled, with or
+  // without a disabledMessage, so it keeps its place in the tab order. A
+  // disabled item uses the native disabled attribute.
+  const keepsFocusableWhileDisabled = context.isDisabled && !isItemDisabled;
   const isChecked = context.value === value;
   // One predicate for both the rendered element and the aria-describedby that
   // points at it. A ReactNode description can be `false` or `''`, which render
@@ -313,12 +311,12 @@ export function RadioListItem({
         name={context.name}
         value={value}
         checked={isChecked}
-        disabled={isDisabled && !keepsFocusableForMessage}
-        aria-disabled={keepsFocusableForMessage ? 'true' : undefined}
+        disabled={isDisabled && !keepsFocusableWhileDisabled}
+        aria-disabled={keepsFocusableWhileDisabled ? 'true' : undefined}
         // A focusable-disabled radio is not natively disabled, so detach it
         // from the form instead: it keeps its name (grouping) but is excluded
         // from submission, matching a natively disabled control.
-        form={keepsFocusableForMessage ? '' : undefined}
+        form={keepsFocusableWhileDisabled ? '' : undefined}
         required={context.isRequired}
         // Chromium reports an unanswered native-required radio invalid before
         // any interaction; the invalid state follows the group's status

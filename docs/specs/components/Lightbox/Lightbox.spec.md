@@ -92,7 +92,7 @@ the requirement it misses and the person it affects.
 - **Zoom announcement (AR4).** A zoom change announces "zoomed in" or "zoomed
   out" without the zoom level.
 - **Fine-pointer gestures (FR11).** FR11's drag paging (FR7) and drag to
-  close (FR8) are not built for a mouse, a pen or a trackpad: a drag on a
+  close (FR8) do not respond to a mouse, a pen or a trackpad: a drag on a
   fitted photo does nothing.
   On a desktop, a click in the viewer outside the photo and a band holding a caption closes it.
   With zoom, a double-click on a caption zooms the photo, and a mouse does not select the caption's text, for one photo or a gallery.

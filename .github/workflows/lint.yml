@@ -251,8 +251,10 @@ jobs:
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true'
         run: echo "Lightweight documentation PR — skipping full lint"
 
+      # The docs lane installs too: it lints the docsite files that it changes.
       - uses: ./.github/actions/setup
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        id: setup
+        if: steps.scope.outputs.spec_only != 'true'
 
       - name: Clear ESLint cache
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
@@ -307,7 +309,8 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           MERGE_SHA: ${{ github.sha }}
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=6144 --import=${{ github.workspace }}/.github/scripts/lint-heap-peak.mjs'
+          LINT_HEAP_PEAK_FILE: ${{ runner.temp }}/lint-heap-peaks.jsonl
         run: |
           set -eu
           # Skip only on the helper's explicit answer: an empty list, an
@@ -376,13 +379,48 @@ jobs:
           fi
           echo 'Every changed file is formatted.'
 
-      # The full pass, type-aware rules over packages/core/src included, needs
-      # about 1.9 GB of heap on main. Node's default limit on this 16 GB runner
-      # is about 2 GB, so a pull request that adds a few percent of source can
-      # run it out of memory. 4 GB keeps the pass under half the runner's RAM
-      # (3.3 GB peak RSS measured) and spends less time in GC.
+      # The full pass, type-aware rules over packages/core/src included, ran
+      # out of a 4 GB heap on main after a cache wipe (about 3.9 GB in use when
+      # it stopped). 6 GB leaves room on this 16 GB runner and spends less time
+      # in GC. It bounds memory only and loosens no rule.
       - name: Run ESLint
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=6144 --import=${{ github.workspace }}/.github/scripts/lint-heap-peak.mjs'
+          LINT_HEAP_PEAK_FILE: ${{ runner.temp }}/lint-heap-peaks.jsonl
         run: pnpm lint
+
+      # The root ESLint config lints the docsite, and the docsite has no lint
+      # step of its own. The docs lane skips the full pass, so it lints the
+      # docsite files that the pull request adds, changes or renames. It uses
+      # the same config, strict tier and heap as the full pass. A file that the
+      # config ignores stays ignored, as in the full pass.
+      - name: Run ESLint on changed docsite files
+        if: steps.scope.outputs.docsite_only == 'true'
+        env:
+          MERGE_SHA: ${{ github.sha }}
+          NODE_OPTIONS: '--max-old-space-size=6144 --import=${{ github.workspace }}/.github/scripts/lint-heap-peak.mjs'
+          LINT_HEAP_PEAK_FILE: ${{ runner.temp }}/lint-heap-peaks.jsonl
+        run: |
+          set -eu
+          git diff --name-only --diff-filter=ACMR -z "$MERGE_SHA^1" "$MERGE_SHA" -- \
+            'apps/docsite/*.ts' 'apps/docsite/*.tsx' 'apps/docsite/*.mts' 'apps/docsite/*.cts' \
+            'apps/docsite/*.js' 'apps/docsite/*.jsx' 'apps/docsite/*.mjs' 'apps/docsite/*.cjs' \
+            > "$RUNNER_TEMP/changed-docsite-files"
+          if [ ! -s "$RUNNER_TEMP/changed-docsite-files" ]; then
+            echo 'No changed docsite file that ESLint lints.'
+            exit 0
+          fi
+          xargs -0 -r pnpm exec eslint --max-warnings=-1 --no-warn-ignored \
+            < "$RUNNER_TEMP/changed-docsite-files"
+
+      # Each Node process of the two type-aware steps, or of the docs lane's
+      # ESLint step, recorded its live heap.
+      # The report names the one nearest its limit, or one that did not
+      # finish, and warns at 80%, before core's TypeScript program outgrows
+      # the heap. It runs after a failed lint wherever setup ran, and it
+      # never fails the job.
+      - name: Report the lint heap peak
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        continue-on-error: true
+        run: node .github/scripts/lint-heap-peak.mjs report "$RUNNER_TEMP/lint-heap-peaks.jsonl"

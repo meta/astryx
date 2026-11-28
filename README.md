@@ -11,7 +11,7 @@ An open source design system that's fully customizable and built for how we buil
 **Currently in Beta** · Built on [React 19+](https://react.dev) and [StyleX](https://stylexjs.com)
 
 [![npm version](https://img.shields.io/npm/v/@astryxdesign/core?label=npm&color=cb3837&logo=npm)](https://www.npmjs.com/package/@astryxdesign/core)
-[![license MIT](https://img.shields.io/npm/l/@astryxdesign/core?color=blue)](LICENSE)
+[![license MIT](https://img.shields.io/github/license/meta/astryx?color=blue)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/meta/astryx/wiki/Contributing)
 
 [![Docs](https://img.shields.io/badge/Docs-astryx.atmeta.com-6741d9?logo=readthedocs&logoColor=white)](https://astryx.atmeta.com)

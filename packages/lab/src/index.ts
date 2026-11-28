@@ -111,15 +111,13 @@ export {
   type DialogHeroHeaderMediaMode,
 } from './DialogHeroHeader';
 
-// Tour — guided product-tour / NUX walkthrough (meta/astryx#4239)
+// Tour — guided product tour with steps as data (meta/astryx#4239)
 export {
   Tour,
   type TourProps,
-  TourStep,
-  type TourStepProps,
-  useTour,
-  type UseTourReturn,
-  type TourDismissSource,
+  type TourStep,
+  type TourEndReason,
+  type TourMissingAnchorBehavior,
 } from './Tour';
 
 // Stat — experimental KPI/metric display
@@ -340,6 +338,8 @@ export * from './CircularProgress';
 
 // ListInput — compact editor for short collections of simple records
 export * from './ListInput';
+
+export {useTableInfinityVirtualization} from './TableInfinity/useTableInfinityVirtualization';
 
 // LogStream — experimental streaming log viewer
 export {
