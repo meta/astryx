@@ -868,27 +868,59 @@ cases.push({
   direction: 'ltr',
   viewport: NARROW,
   run: async (page, check, frame) => {
-    // The story frame fixes a 300 px column inside Storybook's centered
-    // padding, so the page scroll is the fixture's. The field must fill that
-    // column without overflowing it, and its popup must match its box.
-    const scroll = await page.evaluate(() => ({
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }));
     const combobox = page.getByRole('combobox', {name: 'Columns'});
+    // The story decorator fixes a 300 px column inside Storybook's padding
+    // and the theme decorator's gutter. Remove them from the column up to the
+    // page, so the field takes the whole 320 px viewport and the case
+    // measures the control's own reflow. The walk starts at the column, so the
+    // control's own padding stays part of what is measured.
+    await combobox.evaluate(el => {
+      const column = el.closest<HTMLElement>('[style*="width: 300px"]');
+      if (column == null) {
+        throw new Error('no story column');
+      }
+      column.style.width = '100vw';
+      for (
+        let node: HTMLElement | null = column;
+        node != null;
+        node = node.parentElement
+      ) {
+        node.style.padding = '0';
+        node.style.margin = '0';
+        if (node !== column) {
+          node.style.width = '100vw';
+        }
+      }
+    });
+    await settle(page);
     const c = await readCombobox(combobox);
     checkRest(check, 'Columns', c);
-    const column = await combobox.evaluate(el => {
-      const field = el.closest('.astryx-field') ?? el;
-      const parent = field.parentElement ?? field;
+    const reflow = await combobox.evaluate(el => {
+      const field = (el.closest('.astryx-field') ?? el) as HTMLElement;
+      const box = field.getBoundingClientRect();
       return {
-        field: field.getBoundingClientRect().width,
-        parent: parent.getBoundingClientRect().width,
+        viewport: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        fieldLeft: box.left,
+        fieldRight: box.right,
+        trigger: {scrollWidth: el.scrollWidth, clientWidth: el.clientWidth},
       };
     });
     check(
-      column.field <= column.parent + EDGE_TOLERANCE_PX,
-      `field ${column.field}px overflows its ${column.parent}px column`,
+      reflow.fieldRight - reflow.fieldLeft >=
+        reflow.viewport - EDGE_TOLERANCE_PX,
+      `field ${reflow.fieldLeft}..${reflow.fieldRight} does not fill the ${reflow.viewport}px viewport`,
+    );
+    check(
+      reflow.fieldLeft >= -EDGE_TOLERANCE_PX &&
+        reflow.fieldRight <= reflow.viewport + EDGE_TOLERANCE_PX &&
+        reflow.scrollWidth <= reflow.viewport,
+      `field ${reflow.fieldLeft}..${reflow.fieldRight} overflows the ${reflow.viewport}px viewport (page scrollWidth ${reflow.scrollWidth})`,
+    );
+    check(
+      reflow.trigger.scrollWidth <=
+        reflow.trigger.clientWidth + EDGE_TOLERANCE_PX,
+      `trigger content ${reflow.trigger.scrollWidth}px overflows its ${reflow.trigger.clientWidth}px box`,
     );
     await combobox.click();
     await expect(combobox).toHaveAttribute('aria-expanded', 'true');
@@ -900,7 +932,13 @@ cases.push({
           open.trigger.right - open.trigger.left + EDGE_TOLERANCE_PX,
       `popup ${JSON.stringify(open.popup)} is wider than the control ${JSON.stringify(open.trigger)}`,
     );
-    await frame('open', {scroll, column, c, open});
+    check(
+      open.popup != null &&
+        open.popup.left >= -EDGE_TOLERANCE_PX &&
+        open.popup.right <= reflow.viewport + EDGE_TOLERANCE_PX,
+      `popup ${JSON.stringify(open.popup)} leaves the ${reflow.viewport}px viewport`,
+    );
+    await frame('open', {reflow, c, open});
     await page.keyboard.press('Escape');
   },
 });
