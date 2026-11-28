@@ -19,7 +19,8 @@ export const doc = {
     'Compiles defineTheme() sources through the same theme pipeline into scoped CSS, ' +
     'standard ESM, and type declarations. Ordinary mode writes one complete set per ' +
     'theme, named for the theme, beside its source unless --out names the CSS path ' +
-    '(the .js and .d.ts follow it). When a theme is named for its source file ' +
+    '(the .js and .d.ts go beside it, still named for the theme). When a theme ' +
+    'is named for its source file ' +
     '(ocean.ts holding the theme ocean), the built ocean.js lands beside ocean.ts; ' +
     'in an app whose bundler resolves a .js import to a .ts source first (webpack ' +
     "or Next.js extensionAlias with '.ts' before '.js'), an import of ocean.js " +
