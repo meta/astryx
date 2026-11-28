@@ -856,7 +856,6 @@ export function Button({
   const contentRef = useFocusAcrossSwap<HTMLSpanElement>(undefined, {
     getFocusTarget: getButtonFocusTarget,
   });
-  const callerProps = withholdCallerHandlers(props, buttonDisabled);
 
   // Render as link when href is provided and the button is not TRULY
   // disabled. Disabled links are an accessibility anti-pattern, so a
@@ -1125,24 +1124,19 @@ export function Button({
   let element: ReactNode;
 
   if (renderAsLink) {
-    // Busy links bypass routers that require a live destination.
-    const Element = buttonDisabled ? 'a' : LinkComponent;
     element = (
-      <Element
+      <LinkComponent
         ref={mergedButtonRef as React.Ref<HTMLAnchorElement>}
-        href={buttonDisabled ? undefined : href}
-        target={buttonDisabled ? undefined : target}
-        rel={buttonDisabled ? undefined : rel}
+        href={href}
+        target={target}
+        rel={rel}
         {...(inputGroup != null && buttonGroup == null
           ? inputGroupItemProps
           : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
         {...groupItemProps}
-        {...callerProps}
-        {...(buttonDisabled
-          ? {role: props.role ?? 'link', tabIndex: props.tabIndex ?? 0}
-          : null)}
+        {...props}
         {...ariaLabelProp}
         {...describedByProp}
         {...edgeCompAttr}
@@ -1151,7 +1145,7 @@ export function Button({
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
         onPointerDown={composeEventHandlers(
-          callerProps.onPointerDown,
+          props.onPointerDown,
           cutLabel.onPointerDown,
         )}
         onFocus={composeEventHandlers(props.onFocus, cutLabel.onFocus)}
@@ -1159,9 +1153,10 @@ export function Button({
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
-      </Element>
+      </LinkComponent>
     );
   } else {
+    const callerProps = withholdCallerHandlers(props, isTrueDisabled);
     element = (
       <button
         ref={mergedButtonRef}

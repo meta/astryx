@@ -837,7 +837,15 @@ describe('Button', () => {
   it('suppresses activation keys but passes other keys while aria-disabled via isLoading', async () => {
     const user = userEvent.setup();
     const handleKeyDown = vi.fn();
-    render(<Button label="Save" isLoading onKeyDown={handleKeyDown} />);
+    const handleKeyUpCapture = vi.fn();
+    render(
+      <Button
+        label="Save"
+        isLoading
+        onKeyDown={handleKeyDown}
+        onKeyUpCapture={handleKeyUpCapture}
+      />,
+    );
     const button = screen.getByRole('button');
     button.focus();
     await user.keyboard('{Enter}');
@@ -845,6 +853,9 @@ describe('Button', () => {
 
     await user.keyboard('{Escape}');
     expect(handleKeyDown).toHaveBeenCalledTimes(1);
+    expect(handleKeyUpCapture).toHaveBeenCalledWith(
+      expect.objectContaining({key: 'Escape'}),
+    );
   });
 
   it('suppresses activation keys but passes other keys on a busy-only anchor Button', async () => {
@@ -1119,7 +1130,7 @@ describe('Button', () => {
     render(<Button label="Docs" href="https://example.com" isLoading />);
     const link = screen.getByRole('link', {name: 'Docs'});
     expect(link.tagName).toBe('A');
-    expect(link).not.toHaveAttribute('href');
+    expect(link).toHaveAttribute('href', 'https://example.com');
     expect(link).toHaveAttribute('aria-busy', 'true');
     expect(link).toHaveAttribute('aria-disabled', 'true');
     expect(link).not.toHaveAttribute('disabled');
@@ -1218,46 +1229,32 @@ describe('Button', () => {
     expect(clickAction).toHaveBeenCalledOnce();
   });
 
-  it('bypasses an as router while busy and restores the current destination and ref', () => {
-    const ref = createRef<HTMLButtonElement>();
-    const router = vi.fn(({href, ...props}: ComponentPropsWithRef<'a'>) => {
-      if (href == null) {
-        throw new Error('Router requires an href');
-      }
-      return <a {...props} href={href} />;
-    });
-    const view = (isLoading: boolean, href: string) => (
+  it('keeps the focused router link and its destination while busy', () => {
+    const Router = ({
+      to,
+      ...props
+    }: ComponentPropsWithRef<'a'> & {to?: string}) => (
+      <a {...props} data-destination={to} />
+    );
+    const view = (isLoading: boolean) => (
       <Button
-        ref={ref}
         label="Docs"
-        href={href}
-        as={router}
+        href="#docs"
+        as={Router}
         target="_blank"
         rel="external"
         isLoading={isLoading}
       />
     );
-    const {rerender} = render(view(false, '#first'));
-    act(() => screen.getByRole('link').focus());
-    router.mockClear();
-    rerender(view(true, '#first'));
-    const busy = screen.getByRole('link');
-    expect(busy).toHaveFocus();
-    expect(ref.current).toBe(busy);
-    expect(busy).toHaveAttribute('aria-busy', 'true');
-    expect(busy).not.toHaveAttribute('href');
-    expect(busy).not.toHaveAttribute('target');
-    expect(busy).not.toHaveAttribute('rel');
-    expect(router).not.toHaveBeenCalled();
-    rerender(view(true, '#second'));
-    expect(screen.getByRole('link')).toBe(busy);
-    rerender(view(false, '#second'));
-    const enabled = screen.getByRole('link');
-    expect(enabled).toHaveFocus();
-    expect(ref.current).toBe(enabled);
-    expect(enabled).toHaveAttribute('href', '#second');
-    expect(enabled).toHaveAttribute('target', '_blank');
-    expect(enabled).toHaveAttribute('rel', 'external');
+    const {rerender} = render(view(false));
+    const link = screen.getByRole('link', {name: 'Docs'});
+    act(() => link.focus());
+    rerender(view(true));
+    expect(link).toHaveFocus();
+    expect(link).toHaveAttribute('data-destination', '#docs');
+    expect(link).toHaveAttribute('href', '#docs');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'external');
   });
 
   it('withholds disabled activation callbacks but preserves focus and non-activation key handling', () => {
