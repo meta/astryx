@@ -730,6 +730,75 @@ describe('SegmentedControl disabled state', () => {
     expect(grid).toHaveAttribute('aria-checked', 'true');
   });
 
+  it('runs only a caller onFocus and onBlur on the radiogroup while disabled (spec:AST-085 FR2)', () => {
+    const handlers = {
+      onClick: vi.fn(),
+      onKeyDown: vi.fn(),
+      onKeyUp: vi.fn(),
+      onPaste: vi.fn(),
+      onPointerDown: vi.fn(),
+      onFocus: vi.fn(),
+      onBlur: vi.fn(),
+    };
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={() => {}}
+        label="View mode"
+        isDisabled
+        {...handlers}>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>,
+    );
+    const grid = screen.getByRole('radio', {name: 'Grid'});
+    fireEvent.focus(grid);
+    fireEvent.pointerDown(grid);
+    fireEvent.click(grid);
+    fireEvent.keyDown(grid, {key: 'a'});
+    fireEvent.keyUp(grid, {key: 'a'});
+    fireEvent.paste(grid);
+    fireEvent.blur(grid);
+    expect(handlers.onClick).not.toHaveBeenCalled();
+    expect(handlers.onKeyDown).not.toHaveBeenCalled();
+    expect(handlers.onKeyUp).not.toHaveBeenCalled();
+    expect(handlers.onPaste).not.toHaveBeenCalled();
+    expect(handlers.onPointerDown).not.toHaveBeenCalled();
+    expect(handlers.onFocus).toHaveBeenCalledOnce();
+    expect(handlers.onBlur).toHaveBeenCalledOnce();
+  });
+
+  it('runs every caller handler on the radiogroup while enabled', () => {
+    const handlers = {
+      onClick: vi.fn(),
+      onKeyDown: vi.fn(),
+      onKeyUp: vi.fn(),
+      onPaste: vi.fn(),
+      onPointerDown: vi.fn(),
+    };
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={() => {}}
+        label="View mode"
+        {...handlers}>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>,
+    );
+    const grid = screen.getByRole('radio', {name: 'Grid'});
+    fireEvent.pointerDown(grid);
+    fireEvent.click(grid);
+    fireEvent.keyDown(grid, {key: 'a'});
+    fireEvent.keyUp(grid, {key: 'a'});
+    fireEvent.paste(grid);
+    expect(handlers.onClick).toHaveBeenCalledOnce();
+    expect(handlers.onKeyDown).toHaveBeenCalledOnce();
+    expect(handlers.onKeyUp).toHaveBeenCalledOnce();
+    expect(handlers.onPaste).toHaveBeenCalledOnce();
+    expect(handlers.onPointerDown).toHaveBeenCalledOnce();
+  });
+
   it('disables individual items', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();

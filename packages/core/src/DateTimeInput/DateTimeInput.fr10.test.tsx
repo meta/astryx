@@ -318,3 +318,69 @@ describe('DateTimeInput FR10 handler composition', () => {
     expect(onBlur).toHaveBeenCalledOnce();
   });
 });
+
+describe('DateTimeInput caller handlers while disabled (spec:AST-085 FR2)', () => {
+  for (const [surface, presentation, selector] of SURFACES) {
+    it(`runs only a caller onFocus and onBlur on the disabled ${surface} field`, () => {
+      const handlers = {
+        onClick: vi.fn(),
+        onKeyDown: vi.fn(),
+        onKeyUp: vi.fn(),
+        onPaste: vi.fn(),
+        onPointerDown: vi.fn(),
+        onFocus: vi.fn(),
+        onBlur: vi.fn(),
+      };
+      render(
+        <DateTimeInput
+          onChange={noop}
+          label="Due"
+          presentation={presentation}
+          isDisabled
+          {...handlers}
+        />,
+      );
+      const input = control(selector);
+      fireEvent.focus(input);
+      fireEvent.pointerDown(input);
+      fireEvent.click(input);
+      fireEvent.keyDown(input, {key: 'a'});
+      fireEvent.keyUp(input, {key: 'a'});
+      fireEvent.paste(input);
+      fireEvent.blur(input);
+      expect(handlers.onClick).not.toHaveBeenCalled();
+      expect(handlers.onKeyDown).not.toHaveBeenCalled();
+      expect(handlers.onKeyUp).not.toHaveBeenCalled();
+      expect(handlers.onPaste).not.toHaveBeenCalled();
+      expect(handlers.onPointerDown).not.toHaveBeenCalled();
+      expect(handlers.onFocus).toHaveBeenCalledOnce();
+      expect(handlers.onBlur).toHaveBeenCalledOnce();
+    });
+
+    it(`runs a caller onKeyDown, onKeyUp, onPaste and onPointerDown on the enabled ${surface} field`, () => {
+      const handlers = {
+        onKeyDown: vi.fn(),
+        onKeyUp: vi.fn(),
+        onPaste: vi.fn(),
+        onPointerDown: vi.fn(),
+      };
+      render(
+        <DateTimeInput
+          onChange={noop}
+          label="Due"
+          presentation={presentation}
+          {...handlers}
+        />,
+      );
+      const input = control(selector);
+      fireEvent.pointerDown(input);
+      fireEvent.keyDown(input, {key: 'a'});
+      fireEvent.keyUp(input, {key: 'a'});
+      fireEvent.paste(input);
+      expect(handlers.onKeyDown).toHaveBeenCalledOnce();
+      expect(handlers.onKeyUp).toHaveBeenCalledOnce();
+      expect(handlers.onPaste).toHaveBeenCalledOnce();
+      expect(handlers.onPointerDown).toHaveBeenCalledOnce();
+    });
+  }
+});

@@ -87,6 +87,7 @@ import {
   isFocusDetached,
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {joinAriaIDs} from '../utils/inputAria';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
@@ -739,6 +740,7 @@ function PointerDateTimeField({
     containerClassName,
     containerStyle,
   });
+  // A disabled field runs no caller handler except focus and blur.
   const {
     id: idProp,
     'aria-describedby': ariaDescribedByProp,
@@ -748,7 +750,7 @@ function PointerDateTimeField({
     onFocus: onFocusProp,
     onKeyDown: onKeyDownProp,
     ...controlProps
-  } = rest;
+  } = withholdCallerHandlers(rest, isDisabled);
   // Form attributes pass through untyped, as other input attributes do.
   const formControl = controlProps as typeof controlProps & {
     name?: string;

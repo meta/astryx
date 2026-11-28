@@ -124,6 +124,7 @@ import {
 } from '../utils/calendarSystem';
 import {formatCalendarDateText} from '../utils/calendarDateParser';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
@@ -612,6 +613,7 @@ export function TouchDateField({
     containerClassName,
     containerStyle,
   });
+  // A disabled field runs no caller handler except focus and blur.
   const {
     id: idProp,
     'aria-describedby': ariaDescribedByProp,
@@ -619,7 +621,7 @@ export function TouchDateField({
     onClick: onClickProp,
     onKeyDown: onKeyDownProp,
     ...controlProps
-  } = rest;
+  } = withholdCallerHandlers(rest, isDisabled);
   const pressable = usePressFeedback();
   const t = useComponentTranslator();
   const locale = useLocale();
