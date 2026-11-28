@@ -166,8 +166,7 @@ function holdAnchorAtRest(anchor: Element): () => void {
 }
 
 const styles = stylex.create({
-  // Default popover surface — background, text color, radius, shadow.
-  // Applied automatically unless hasSurface is false.
+  // Default popover surface. Applied automatically unless hasSurface is false.
   // Consumers that need a raw positioned layer should use useLayer instead.
   surface: {
     backgroundColor: colorVars['--color-background-popover'],
