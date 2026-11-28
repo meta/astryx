@@ -63,9 +63,13 @@ beforeAll(() => {
   );
 }, 120_000);
 
+// A loaded machine can still be writing a CLI child's last files when the
+// cleanup starts, so a directory can be not yet empty: retry it.
+const CLEANUP = {recursive: true, force: true, maxRetries: 5, retryDelay: 200};
+
 afterAll(() => {
-  if (work) fs.rmSync(work, {recursive: true, force: true});
-  if (outside) fs.rmSync(outside, {recursive: true, force: true});
+  if (work) fs.rmSync(work, CLEANUP);
+  if (outside) fs.rmSync(outside, CLEANUP);
 });
 
 /**
