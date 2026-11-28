@@ -42,17 +42,26 @@ import {
 } from './MediaPlayerControls';
 import {MediaPlayerElement} from './MediaPlayerElement';
 
-const FROSTED_SURFACE = `color-mix(in srgb, ${colorVars['--color-background-surface']} 80%, transparent)`;
-const FROSTED_SURFACE_HIGH_CONTRAST = `color-mix(in srgb, ${colorVars['--color-background-surface']} 95%, transparent)`;
+/**
+ * The frost is the on-media backing that the Lightbox draws under its
+ * controls. The on-light color is dark in both color schemes, so the
+ * on-media controls read on it in every host. A host surface color becomes
+ * dark only when the host declares it as a light-dark pair.
+ */
+const FROSTED_SURFACE = `color-mix(in srgb, ${colorVars['--color-on-light']} 75%, transparent)`;
+const FROSTED_SURFACE_HIGH_CONTRAST = `color-mix(in srgb, ${colorVars['--color-on-light']} 90%, transparent)`;
 const BAR_RADIUS = radiusVars['--radius-container'];
 const PLAYER_RADIUS = radiusVars['--radius-element'];
 /** A player this narrow, such as a small attachment tile, gets a compact bar. */
 const COMPACT_PLAYER = '@container (max-width: 360px)';
 /**
  * The theme's track color can match the dark frosted bar. So the bar paints
- * the empty part of its timeline with a tint of its own accent color.
+ * the empty part of its timeline with a tint of its own accent color. At 45
+ * percent it keeps 3:1 against the frost over a white or a black picture.
+ * The buffered range takes 70 percent, between the empty and played parts.
  */
-const FROSTED_TRACK = `color-mix(in srgb, ${colorVars['--color-accent']} 24%, transparent)`;
+const FROSTED_TRACK = `color-mix(in srgb, ${colorVars['--color-accent']} 45%, transparent)`;
+const FROSTED_BUFFERED = `color-mix(in srgb, ${colorVars['--color-accent']} 70%, transparent)`;
 
 const styles = stylex.create({
   root: {
@@ -89,7 +98,7 @@ const styles = stylex.create({
       default: FROSTED_SURFACE,
       '@media (prefers-contrast: more)': FROSTED_SURFACE_HIGH_CONTRAST,
       '@media (prefers-reduced-transparency: reduce)':
-        colorVars['--color-background-surface'],
+        colorVars['--color-on-light'],
     },
     backdropFilter: {
       default: 'blur(12px)',
@@ -116,6 +125,7 @@ const styles = stylex.create({
     insetInlineEnd: 'var(--_media-bar-inset)',
     insetBlockEnd: 'var(--_media-bar-inset)',
     '--_media-timeline-track': FROSTED_TRACK,
+    '--_media-timeline-buffered': FROSTED_BUFFERED,
     display: 'flex',
     alignItems: 'center',
     gap: {

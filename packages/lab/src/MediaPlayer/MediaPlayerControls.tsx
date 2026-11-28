@@ -164,7 +164,8 @@ const styles = stylex.create({
     insetBlock: 0,
     insetInlineStart: 0,
     width,
-    backgroundColor: `color-mix(in srgb, ${colorVars['--color-accent']} 40%, transparent)`,
+    // A frosted surface sets its own buffered tint, as it does the track.
+    backgroundColor: `var(--_media-timeline-buffered, color-mix(in srgb, ${colorVars['--color-accent']} 40%, transparent))`,
   }),
   played: (width: number) => ({
     position: 'absolute',
