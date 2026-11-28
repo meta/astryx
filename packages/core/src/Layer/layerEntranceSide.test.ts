@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {LAYER_SIDE_CASES} from './__tests__/layerEntranceSide.fixture';
 import {
   LAYER_ENTER_GAP_PROPERTY,
@@ -9,6 +9,7 @@ import {
   LAYER_ENTER_Y_PROPERTY,
   layerEntranceSide,
   readLayerEntranceSide,
+  registerLayerEntranceProperties,
   writeLayerEntranceSide,
 } from './layerEntranceSide';
 
@@ -129,5 +130,76 @@ describe('readLayerEntranceSide and writeLayerEntranceSide', () => {
     }
     layer.remove();
     anchor.remove();
+  });
+
+  it('writes the side on the direct child of a layer in another window', () => {
+    // An element from another window fails `instanceof HTMLElement` here.
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const otherDocument = frame.contentDocument!;
+    const layer = otherDocument.createElement('div');
+    const surface = otherDocument.createElement('div');
+    layer.append(surface);
+    otherDocument.body.append(layer);
+    writeLayerEntranceSide(layer, {
+      x: 0,
+      y: 1,
+      originX: 50,
+      originY: 0,
+      gap: 4,
+    });
+    expect(surface.style.getPropertyValue(LAYER_ENTER_Y_PROPERTY)).toBe('1');
+    expect(surface.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe(
+      '4px',
+    );
+    frame.remove();
+  });
+});
+
+describe('registerLayerEntranceProperties', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('registers the four side properties as not inherited', () => {
+    const registerProperty = vi.fn<(definition: PropertyDefinition) => void>();
+    vi.stubGlobal('CSS', {registerProperty});
+    registerLayerEntranceProperties();
+    expect(
+      registerProperty.mock.calls.map(([definition]) => definition),
+    ).toEqual(
+      [
+        LAYER_ENTER_X_PROPERTY,
+        LAYER_ENTER_Y_PROPERTY,
+        LAYER_ENTER_ORIGIN_PROPERTY,
+        LAYER_ENTER_GAP_PROPERTY,
+      ].map(name => ({name, syntax: '*', inherits: false})),
+    );
+  });
+
+  it('does nothing without CSS or CSS.registerProperty (a server, an older browser)', () => {
+    vi.stubGlobal('CSS', undefined);
+    expect(() => registerLayerEntranceProperties()).not.toThrow();
+    vi.stubGlobal('CSS', {});
+    expect(() => registerLayerEntranceProperties()).not.toThrow();
+  });
+
+  it('never throws: a second copy finds them registered, and any other failure warns', () => {
+    vi.stubGlobal('CSS', {
+      registerProperty: () => {
+        throw new DOMException('registered', 'InvalidModificationError');
+      },
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => registerLayerEntranceProperties()).not.toThrow();
+    expect(warn).not.toHaveBeenCalled();
+    vi.stubGlobal('CSS', {
+      registerProperty: () => {
+        throw new TypeError('unexpected');
+      },
+    });
+    expect(() => registerLayerEntranceProperties()).not.toThrow();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
