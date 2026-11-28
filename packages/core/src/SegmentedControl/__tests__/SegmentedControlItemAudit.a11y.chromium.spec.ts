@@ -294,7 +294,7 @@ function targetSizeFailures(state: Segments) {
       .map(segment => ({group: group.name, segment})),
   );
   const undersized = (box: Segment['box']) =>
-    box.width < 24 - 0.5 || box.height < 24 - 0.5;
+    box.width < 24 - 0.01 || box.height < 24 - 0.01;
   const center = (box: Segment['box']) => ({
     x: (box.left + box.right) / 2,
     y: (box.top + box.bottom) / 2,
@@ -421,6 +421,7 @@ for (const mode of ['light', 'dark'] as const) {
     viewport: DESKTOP,
     run: async (page, check, frame) => {
       const rest = await readSegments(page);
+      semantics(check, rest);
       await page.getByRole('radio', {name: 'List'}).hover();
       await settle(page);
       const hovered = await readSegments(page);
@@ -445,7 +446,12 @@ for (const mode of ['light', 'dark'] as const) {
           selectedOver?.shadow === selectedRest?.shadow,
         `the selected segment changed paint on hover: ${selectedRest?.background} -> ${selectedOver?.background}`,
       );
-      await frame('hover-selected', {selectedRest, selectedOver});
+      const hoverAxe = await checkAxe(page, check);
+      await frame('hover-selected', {
+        selectedRest,
+        selectedOver,
+        axe: hoverAxe,
+      });
     },
   });
 
@@ -634,7 +640,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
 
 // A container narrower than the segments' labels: every size truncates. A
 // labelled `sm` segment pads 8 px a side, so it can shrink under 24 px (the
-// AR2 gap, recorded, not asserted); `md` and `lg` pad 12 px a side.
+// narrow `sm` gap, recorded, not asserted); `md` and `lg` pad 12 px a side.
 cases.push({
   key: 'sizes__neutral__light__ltr__squeezed',
   group: 'narrow',
@@ -660,7 +666,7 @@ cases.push({
     for (const size of ['md', 'lg']) {
       const widths: number[] = bySize[size] ?? [];
       check(
-        widths.length > 0 && widths.every(width => width >= 24 - 0.5),
+        widths.length > 0 && widths.every(width => width >= 24 - 0.01),
         `${size} segment widths ${widths.join(' ')}`,
       );
     }
@@ -668,7 +674,8 @@ cases.push({
       ...state,
       groups: state.groups.filter(g => g.size === 'sm'),
     });
-    await frame('squeezed', {bySize, smallFailures, state});
+    const squeezedAxe = await checkAxe(page, check);
+    await frame('squeezed', {bySize, smallFailures, state, axe: squeezedAxe});
   },
 });
 
@@ -683,6 +690,7 @@ cases.push({
   forcedColors: true,
   run: async (page, check, frame) => {
     const state = await readSegments(page);
+    semantics(check, state);
     const highlight = await page.evaluate(() => {
       const probe = document.createElement('div');
       probe.style.backgroundColor = 'Highlight';
@@ -705,7 +713,8 @@ cases.push({
       others.every(other => other.background !== grid?.background),
       `an unselected segment paints the selected color`,
     );
-    await frame('rest', {state, highlight});
+    const forcedAxe = await checkAxe(page, check);
+    await frame('rest', {state, highlight, axe: forcedAxe});
   },
 });
 
