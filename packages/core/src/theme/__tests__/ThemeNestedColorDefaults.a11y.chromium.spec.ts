@@ -12,7 +12,8 @@
  *   Tooltip in the dark pane keeps 4.5:1 text, and a theme with no accent of
  *   its own draws a focus ring that contrasts with its surface and pairs
  *   Core's accent with Core's on-accent color; and that a theme's own token
- *   value still applies over the defaults
+ *   value still applies over the defaults, and that a theme that sets no
+ *   color token keeps the page theme's colors
  * @position Run with `pnpm test:a11y-contract`. Which color mode a custom
  *   property resolves in needs a real engine.
  */
@@ -62,7 +63,7 @@ function lower(css: string): string {
 const THEME_TEXT = 'rgb(1, 2, 3)';
 
 let storybook: StaticServer;
-let stories: Record<'matrix' | 'codeTheme', string>;
+let stories: Record<'matrix' | 'codeTheme' | 'partsOnly', string>;
 test.beforeAll(async () => {
   storybook = await serveStorybook(
     process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR,
@@ -81,6 +82,7 @@ test.beforeAll(async () => {
   stories = {
     matrix: find('listinput--theme-matrix'),
     codeTheme: find('codetheme--theme-with-syntax-defaults'),
+    partsOnly: find('selector--indicator-space-popover-narrow-start'),
   };
 });
 test.afterAll(async () => {
@@ -238,6 +240,28 @@ for (const lowered of [false, true]) {
       return result;
     });
     expect(contrast(pair.label, pair.fill)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test(`in ${build}, a Theme whose theme sets no color token keeps the page theme's colors`, async ({
+    page,
+  }) => {
+    // The story wraps itself in a theme that only sizes the selector popup.
+    await openStory(page, stories.partsOnly, {lowered});
+    const accents = await page.evaluate(() =>
+      Array.from(
+        document.querySelectorAll('#storybook-root [data-astryx-theme]'),
+        wrapper => {
+          const probe = document.createElement('span');
+          probe.style.color = 'var(--color-accent)';
+          wrapper.append(probe);
+          const color = getComputedStyle(probe).color;
+          probe.remove();
+          return color;
+        },
+      ),
+    );
+    expect(accents.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(accents).size).toBe(1);
   });
 
   test(`in ${build}, a theme's own token value still applies over the defaults`, async ({

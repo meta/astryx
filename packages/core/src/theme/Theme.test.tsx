@@ -193,6 +193,44 @@ describe('Theme', () => {
     }
   });
 
+  it('declares no color default on a wrapper whose theme sets no Core color token, so it keeps the colors around it', () => {
+    const partsOnly = defineTheme({
+      name: 'parts-only',
+      components: {card: {base: {padding: '4px'}}},
+    });
+    const extendsColors = defineTheme({
+      name: 'extends-colors',
+      extends: testTheme,
+    });
+    const {container} = render(
+      <Theme theme={testTheme}>
+        <Theme theme={partsOnly}>
+          <span>parts</span>
+        </Theme>
+        <Theme theme={extendsColors}>
+          <span>extends</span>
+        </Theme>
+      </Theme>,
+    );
+    const parts = container.querySelector('[data-astryx-theme="parts-only"]')!;
+    expect(
+      Object.keys(colorDefaults).filter(
+        name => declaredByClass(parts, name) != null,
+      ),
+    ).toEqual([]);
+    expect(declaredValue(parts, '--focus-outline-color')).toMatch(
+      /var\(--color-accent\)/,
+    );
+    const inherited = container.querySelector(
+      '[data-astryx-theme="extends-colors"]',
+    )!;
+    expect(
+      Object.keys(colorDefaults).filter(
+        name => declaredByClass(inherited, name) == null,
+      ),
+    ).toEqual([]);
+  });
+
   it('declares no focus color and no color default on a wrapper that applies no theme', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {

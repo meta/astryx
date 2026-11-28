@@ -52,6 +52,7 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import type {ThemeMode} from './types';
 import {
+  colorDefaults,
   colorVars,
   focusVars,
   typeScaleVars,
@@ -103,6 +104,15 @@ interface ThemeProps {
 // So each default follows this wrapper's mode and tokens. The rule is in
 // Core's base layer, so the theme's own rules still win.
 const coreColorDefaults = stylex.createTheme(colorVars, {});
+
+// A theme that sets no Core color token keeps the colors around it, so only a
+// theme that sets one declares the defaults again.
+function setsCoreColors(theme: DefinedTheme | null): boolean {
+  return (
+    theme != null &&
+    Object.keys(theme.tokens).some(name => Object.hasOwn(colorDefaults, name))
+  );
+}
 
 /**
  * Styles for the theme wrapper
@@ -521,7 +531,7 @@ export function Theme({
         {...stylex.props(
           wrapperStyles.base,
           colorSchemeStyle,
-          applied != null && coreColorDefaults,
+          setsCoreColors(applied) && coreColorDefaults,
           applied != null && wrapperStyles.themedFocus,
           reducesMotion && wrapperStyles.reducedMotion,
         )}
