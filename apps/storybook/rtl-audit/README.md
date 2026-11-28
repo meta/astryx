@@ -286,8 +286,8 @@ The report rolls every public component in the canonical component-package
 registry into one of three states. Package roots, layouts, story prefixes, and
 public component names come from `scripts/component-packages.cjs`; Storybook
 titles project onto that canonical roster across Core, Lab, Charts, Rich Text,
-and Vega, including one-to-many grouped titles such as
-`Charts/Chrome/Axes & Grids`. Curated targets remain the exact alias when a title
+and Vega, including one-to-many grouped titles whose final segment joins several
+components with `&` or `and`. Curated targets remain the exact alias when a title
 cannot name its owner. An entry with an empty `dims` array is route-only: it
 binds a public owner to a story that renders it for universal D1/D5/D6 scanning
 without inventing a curated measurement.
@@ -320,6 +320,19 @@ Add a declaration only after reading the component's source and every story:
 
 An all-N/A scorecard without such a checked-in reason means **unmeasured**, not
 RTL-ready.
+
+### Receipts and receipt drift
+
+A declaration may also carry `evidence`: each repository file the reason was
+reviewed against, mapped to the `sha256:` of its bytes at that review. The
+audit report's `receiptDrift` section, and the scorecard's **Receipt drift
+(informational)** table, list every in-scope declaration whose recorded files
+changed, went missing, or carry a malformed receipt. Drift changes no coverage
+status and fails nothing: it tells a reviewer to re-read the component's source
+and stories and refresh the receipts.
+
+`pnpm rtl:audit:verify-na` prints the same drift for the whole registry without
+a Storybook build; `--component <package/Name>` checks one declaration.
 
 ## Why relationship-based, not pixel baselines
 

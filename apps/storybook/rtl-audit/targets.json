@@ -465,6 +465,11 @@
     "selectors": {"overlay": "[popover]:popover-open", "overlayRoot": "body"}
   },
   {
+    "component": "LayerProvider",
+    "storyId": "core-layer--provider",
+    "dims": []
+  },
+  {
     "component": "Layout",
     "storyId": "core-layout--content-width-with-start-panel",
     "dims": []
@@ -546,7 +551,7 @@
     "dims": ["D4"],
     "setup": {"click": "button[aria-label=\"Open Navigation\"]"},
     "selectors": {
-      "overlay": "[class*=\"astryx-mobile-nav\"] > div:first-child",
+      "overlay": ".astryx-mobile-nav-drawer",
       "overlayRoot": "body"
     }
   },
@@ -578,6 +583,16 @@
   {
     "component": "NavHeadingMenu",
     "storyId": "core-navmenu--with-icons",
+    "dims": ["D2"],
+    "setup": {"click": "button[aria-haspopup][aria-label^=\"Workspace\"]"},
+    "selectors": {
+      "prev": ".astryx-nav-heading-menu-item svg.astryx-icon >> nth=0",
+      "next": ".astryx-nav-heading-menu-item span.astryx-text:text-is(\"Profile\")"
+    }
+  },
+  {
+    "component": "NavHeadingMenuItem",
+    "storyId": "core-navheadingmenuitem--states",
     "dims": ["D2"],
     "selectors": {
       "prev": ".astryx-nav-heading-menu-item svg.astryx-icon >> nth=0",
@@ -618,6 +633,15 @@
     "selectors": {
       "overlay": ".astryx-overlay-scrim .astryx-stack",
       "overlayRoot": ".astryx-overlay"
+    }
+  },
+  {
+    "component": "Pagination",
+    "storyId": "core-pagination--many-pages",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "nav.astryx-pagination [aria-label=\"Go to previous page\"]",
+      "next": "nav.astryx-pagination [aria-label=\"Go to next page\"]"
     }
   },
   {
@@ -720,6 +744,14 @@
     "selectors": {
       "scroller": "[data-rtl-scroll-probe]",
       "nextButton": "[data-rtl-scroll-button]"
+    }
+  },
+  {
+    "component": "Section",
+    "storyId": "core-section--asymmetric-padding",
+    "dims": ["D8"],
+    "selectors": {
+      "subject": "[data-evidence=\"padding-per-edge\"] > .astryx-section"
     }
   },
   {
@@ -1079,7 +1111,7 @@
   },
   {
     "component": "Tour",
-    "storyId": "lab-tour--showcase",
+    "storyId": "lab-tour--default",
     "dims": ["D4"],
     "setup": {"click": "button:has-text(\"Start tour\")"},
     "selectors": {
@@ -1088,8 +1120,8 @@
     }
   },
   {
-    "component": "TourStep",
-    "storyId": "lab-tour--showcase",
+    "component": "Tour",
+    "storyId": "lab-tour--default",
     "dims": ["D2"],
     "setup": {"click": "button:has-text(\"Start tour\")"},
     "selectors": {

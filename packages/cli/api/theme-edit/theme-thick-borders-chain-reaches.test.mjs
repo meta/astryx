@@ -3,8 +3,10 @@
 /**
  * @file The thick borders chain reaches the parts that draw a box only when
  * selected and the indicator lines, read in the compiled stylesheet; and
- * squaring the pills leaves a radio round: by a pin on a Core that draws its
- * circle with the pill token, by Core itself on one that draws it at 50%.
+ * squaring the pills leaves a radio round. On the installed Core, which draws
+ * the circle at 50%, Core itself keeps it round and the build pins nothing. On
+ * a Core that draws it with the pill token, the editor finds the radio marks
+ * to pin, read from the census with that radius in place of 50%.
  */
 
 import * as fs from 'node:fs';
@@ -12,6 +14,8 @@ import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {context} from './_context.mjs';
+import {pillDrawnRadios, pillParts} from './_check.mjs';
+import {radioMark} from './_settings.mjs';
 import {splitCommand} from './_vet.mjs';
 import {
   makeLinkedFixture,
@@ -90,28 +94,68 @@ describe('no rounding anywhere', () => {
         {},
     ).map(String);
 
-  it('on a Core that draws the radio with the pill token, keeps the radio marks round', async ({
-    skip,
-  }) => {
-    await themeEditNew('r0', {cwd});
-    if (!(await radioRadius()).some(v => /--radius-full/.test(v))) skip();
-    const css = await follow('r0', 'no rounding anywhere');
-    expect(css).toMatch(/--radius-full:\s*0px/);
-    expect(rule(css, '.astryx-radio-indicator')).toMatch(
-      /--radius-full:\s*9999px/,
+  it('on a Core that draws the radio with the pill token, finds its radio marks to keep round, and no pill among them', async () => {
+    const C = (await context(cwd)).C;
+    // The installed Core draws each radio mark at 50%.
+    const marks = Object.keys(C.MAP).filter(
+      part =>
+        radioMark(C, part) &&
+        Object.values(C.MAP[part]?.at?.['border-radius'] ?? {}).includes('50%'),
     );
-    expect(rule(css, '.astryx-dropdown-menu-radio')).toMatch(
-      /--radius-full:\s*9999px/,
+    expect(marks).toEqual(
+      expect.arrayContaining(['radio-indicator', 'dropdown-menu-radio']),
     );
+    expect(pillDrawnRadios(C)).toEqual([]);
+    // A pill-token Core draws each mark, and the dot inside it, with
+    // `var(--radius-full)`: its census records that radius in the part map
+    // and a `--radius-full` read in each part's corners.
+    const drawnWithPill = new Set(
+      marks.flatMap(mark => [mark, ...(C.MAP[mark]?.contains ?? [])]),
+    );
+    const pillToken = Object.assign(Object.create(C), {
+      MAP: Object.fromEntries(
+        Object.entries(C.MAP).map(([part, entry]) => {
+          if (!marks.includes(part)) return [part, entry];
+          const radius = Object.fromEntries(
+            Object.entries(entry.at['border-radius']).map(([at, value]) => [
+              at,
+              value === '50%' ? 'var(--radius-full)' : value,
+            ]),
+          );
+          return [part, {...entry, at: {...entry.at, 'border-radius': radius}}];
+        }),
+      ),
+      /** @param {string} part @param {string | null} group */
+      partReads: (part, group) => {
+        const reads = C.partReads(part, group) ?? [];
+        if (!drawnWithPill.has(part) || (group != null && group !== 'corners'))
+          return reads;
+        return [
+          ...reads,
+          {
+            token: '--radius-full',
+            props: new Set(['border-radius']),
+            when: new Set(),
+          },
+        ];
+      },
+    });
+    expect(pillDrawnRadios(pillToken)).toEqual(
+      expect.arrayContaining(['radio-indicator', 'dropdown-menu-radio']),
+    );
+    // The marks and their dots read the pill token, yet none is a pill.
+    const pills = pillParts(pillToken);
+    for (const part of drawnWithPill) expect(pills, part).not.toContain(part);
   }, 240_000);
 
-  it('on a Core that draws the radio at 50%, squares the pills with no radio pin', async ({
+  it('on a Core that draws the radio at 50%, squares every pill and circle, with no radio pin', async ({
     skip,
   }) => {
     await themeEditNew('r1', {cwd});
     const radius = await radioRadius();
     if (radius.some(v => /--radius-full/.test(v))) skip();
     const css = await follow('r1', 'no rounding anywhere');
+    // (The pill token goes square too, so the circles that read it do.)
     expect(css).toMatch(/--radius-full:\s*0px/);
     expect(radius).toContain('50%');
     expect(css).not.toMatch(/\.astryx-radio-indicator\s*\{/);

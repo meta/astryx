@@ -369,6 +369,7 @@ describe('two variants and elided clauses', () => {
       const r = await answer('white text on primary, black text on secondary');
       expect(r.commands).toEqual(
         expect.arrayContaining([
+          // (Each written as said, as main writes it.)
           "set q color '#ffffff' --on button --when variant:primary",
           "set q color '#000000' --on button --when variant:secondary",
         ]),
@@ -471,7 +472,7 @@ describe('"like" and "as" compare only in comparison forms', () => {
       ],
       [
         'use navy as the card background',
-        "set q background-color '#1e3a8a' --on card",
+        "set q background-color '#1e3a8a' --on card --when variant:default",
       ],
       ['use 8px as the button radius', 'set q border-radius 8px --on button'],
       ['use 12px as the card padding', 'set q padding 12px --on card'],

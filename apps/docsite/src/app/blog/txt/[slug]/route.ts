@@ -16,6 +16,7 @@
 
 import {blogFixturePosts, blogPosts} from '../../../../generated/blogRegistry';
 import {toStaticLiveBlocks} from '../../../../lib/blog/liveBlocks.mjs';
+import {withBody} from '../../../../lib/blog/postBodies';
 
 export function generateStaticParams() {
   return [...blogPosts, ...blogFixturePosts].map(p => ({slug: p.slug}));
@@ -53,7 +54,7 @@ export async function GET(
 
   // A live example cannot run here: its source shows as an ordinary code
   // block instead (spec:AST-033 FR22).
-  return new Response(header + toStaticLiveBlocks(post.body) + '\n', {
+  return new Response(header + toStaticLiveBlocks(withBody(post).body) + '\n', {
     headers: {'content-type': 'text/plain; charset=utf-8'},
   });
 }

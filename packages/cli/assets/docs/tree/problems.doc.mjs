@@ -62,7 +62,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "The project's own CLI cannot start, so Astryx is installing the CLI version equal to its Core into its cache once. The second line means another run is installing it; this one waits, up to 15 minutes. To avoid the wait, install the project's dependencies.",
+          text: "Astryx is installing that CLI version, with its Core, into its cache. This happens once. In a project whose own CLI cannot start, it installs the version that matches the project's Core. To avoid the wait, install the project's dependencies. Outside a project, or in a fresh clone with nothing installed, it installs the version of the astryx command you started. Commands that read components use that version's Core, which is not downloaded yet (`astryx docs global/problems core-offline`). The second line means that another run is installing it. This run waits for up to 15 minutes.",
         },
       ],
     },
@@ -103,7 +103,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'text',
-          code: "astryx: could not get Astryx 0.6.8 to match this project's Core (the registry could not be reached); answering with CLI 0.7.2 instead\nastryx: could not get Astryx 0.6.8 to match this project's Core (the registry does not have it); answering with CLI 0.7.2 instead\nastryx: could not get Astryx 0.6.8 to match this project's Core (the release cache /home/me/.cache/astryx/releases cannot be written (EACCES)); answering with CLI 0.7.2 instead",
+          code: "astryx: could not get Astryx 0.6.8 to match this project's Core (the registry https://registry.npmjs.org/ could not be reached); answering with CLI 0.7.2 instead\nastryx: could not get Astryx 0.6.8 to match this project's Core (the registry https://registry.npmjs.org/ does not have it); answering with CLI 0.7.2 instead\nastryx: could not get Astryx 0.6.8 to match this project's Core (the release cache /home/me/.cache/astryx/releases cannot be written (EACCES)); answering with CLI 0.7.2 instead",
         },
         {
           type: 'prose',
@@ -113,7 +113,7 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            "The registry could not be reached: you are offline, or a proxy blocks it. Astryx installs with npm, so set npm's `proxy`, `https-proxy`, or `registry` in your `.npmrc`, or add the CLI to the project and install its dependencies.",
+            "The registry could not be reached: you are offline, or a proxy blocks it. Astryx installs with npm, so set npm's `proxy`, `https-proxy`, or `registry` in your `.npmrc`, or add the CLI to the project and install its dependencies. A failed install waits 2 minutes before the next try (10 after a second failure in a row), but the next run tries again at once when npm's `registry` or `@astryxdesign:registry` changed.",
             "The registry does not have it: a private registry without the Astryx packages. Point npm's registry for `@astryxdesign` at one that has them.",
             'The cache cannot be written: a read-only home folder, as in some containers. Point `XDG_CACHE_HOME` at a writable folder: {@link generic:ci-and-containers}.',
           ],

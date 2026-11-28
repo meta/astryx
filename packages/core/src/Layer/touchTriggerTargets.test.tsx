@@ -94,8 +94,9 @@ function tap(element: HTMLElement) {
 function layerOf(text: string): HTMLElement | null {
   return (
     screen
-      .queryByText(text, {exact: false})
-      ?.closest<HTMLElement>('[popover]') ?? null
+      .queryAllByText(text, {exact: false})
+      .map(element => element.closest<HTMLElement>('[popover]'))
+      .find(layer => layer != null) ?? null
   );
 }
 
@@ -106,21 +107,19 @@ function isOpen(text: string): boolean {
 
 /**
  * The control a disabled reason describes: the element whose
- * `aria-describedby` names the reason's tooltip, which is what a finger taps.
+ * `aria-describedby` names an element holding the reason, which is what a
+ * finger taps.
  */
 function controlDescribedBy(reason: string): HTMLElement {
-  const layer = layerOf(reason);
-  const id = layer?.id;
-  if (id == null || id === '') {
-    throw new Error(`no tooltip with an id holds "${reason}"`);
-  }
   const control = Array.from(
     document.querySelectorAll<HTMLElement>('[aria-describedby]'),
   ).find(element =>
-    (element.getAttribute('aria-describedby') ?? '').split(/\s+/).includes(id),
+    (element.getAttribute('aria-describedby') ?? '')
+      .split(/\s+/)
+      .some(id => document.getElementById(id)?.textContent?.includes(reason)),
   );
   if (control == null) {
-    throw new Error(`nothing is described by the tooltip holding "${reason}"`);
+    throw new Error(`nothing is described by the reason "${reason}"`);
   }
   return control;
 }

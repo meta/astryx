@@ -39,6 +39,7 @@ import {TableScrollRegionPlugin} from './internal/TableScrollRegionPlugin';
 import {TableColumnFloorPlugin} from './internal/TableColumnFloorPlugin';
 import {CodeBlockHeaderPlugin} from './internal/CodeBlockHeaderPlugin';
 import {CodeSyntaxPlugin} from './internal/CodeSyntaxPlugin';
+import {BlockDirectionPlugin} from './internal/BlockDirectionPlugin';
 import {MarkdownExtensionsPlugin} from './internal/MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
@@ -56,6 +57,10 @@ import {DEFAULT_NODES} from './editorNodes';
 
 const styles = stylex.create({
   root: {
+    // The document's own direction, read where the surface sits. A block
+    // whose text decides nothing reads this rather than inheriting, so a
+    // list or table that reads the other way cannot change it.
+    '--_richtext-document-direction': {default: 'ltr', ':dir(rtl)': 'rtl'},
     width: '100%',
     // Holds the code block headers and task checkboxes drawn over the
     // content.
@@ -180,10 +185,10 @@ export interface RichTextViewProps extends BaseProps {
  */
 function SyncValuePlugin({value}: {value: string}): null {
   const [editor] = useLexicalComposerContext();
-  const isFirstRun = useRef(true);
+  const isFirstRunRef = useRef(true);
   useEffect(() => {
-    if (isFirstRun.current) {
-      isFirstRun.current = false;
+    if (isFirstRunRef.current) {
+      isFirstRunRef.current = false;
       return;
     }
     editor.setEditorState(editor.parseEditorState(value));
@@ -335,6 +340,7 @@ export function RichTextView({
             in tab order. */}
         <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
         <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+        <BlockDirectionPlugin />
         {markdownExtensions != null && markdownExtensions.length > 0 ? (
           <MarkdownExtensionsPlugin
             extensions={markdownExtensions}

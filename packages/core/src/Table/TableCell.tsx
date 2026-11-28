@@ -75,18 +75,21 @@ const densityStyles = stylex.create({
     paddingBlock: spacingVars['--spacing-1'],
     paddingInline: spacingVars['--spacing-2'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
   balanced: {
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-3'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
   spacious: {
     paddingBlock: spacingVars['--spacing-3'],
     paddingInline: spacingVars['--spacing-4'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
 });
@@ -99,14 +102,17 @@ const densityStyles = stylex.create({
 const densityTextStyles = stylex.create({
   compact: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
   balanced: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
   spacious: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     boxSizing: 'border-box',
   },
 });
@@ -152,11 +158,14 @@ const dividerRowStyles = stylex.create({
     // The width this cell's divider draws, for a pinned cell's own divider
     // to match (plugins/stickyColumns). Private plumbing, not a theme API.
     '--_table-row-divider-width': {
-      default: borderVars['--border-width'],
+      default: `var(--_table-open-row-divider-width, ${borderVars['--border-width']})`,
       [stylex.when.ancestor(':last-child', tableRowMarker)]: '0px',
     },
     borderBottomWidth: {
-      default: borderVars['--border-width'],
+      // An open row expansion sets --_table-open-row-divider-width to 0 on
+      // its row: its panel carries the divider below the row
+      // (plugins/rowExpansion), so the row and its panel read as one unit.
+      default: `var(--_table-open-row-divider-width, ${borderVars['--border-width']})`,
       // Skip border on cells in the last body row to avoid a
       // redundant line at the bottom of the table.
       // Scoped to tableRowMarker so only the parent <tr> is checked —

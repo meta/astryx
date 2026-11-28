@@ -52,7 +52,7 @@ describe('InputGroup', () => {
     const group = screen.getByRole('group', {name: 'Price'});
     expect(group).toBeInTheDocument();
     expect(group).not.toHaveAttribute('aria-label');
-    const label = screen.getByText('Price');
+    const label = screen.getByText('Price').parentElement!;
     expect(label.tagName).toBe('SPAN');
     expect(label.closest('label')).toBeNull();
     expect(label).not.toHaveAttribute('for');

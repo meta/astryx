@@ -24,7 +24,8 @@ export default defineConfig({
       // Use production mode with CSS extraction
       dev: false,
       useCSSLayers: true,
-      styleResolution: 'application-order',
+      // No styleResolution: Storybook resolves style merges the way the
+      // published CSS does, so a story shows what npm users get.
       aliases: {
         '@astryxdesign/core/*': [path.join(rootDir, 'packages/core/src/*')],
         '@astryxdesign/core': [path.join(rootDir, 'packages/core/src')],

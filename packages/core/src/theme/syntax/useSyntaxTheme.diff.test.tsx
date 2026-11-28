@@ -15,7 +15,9 @@ import {parseColor} from '../../utils/color';
 
 function Probe({onTokens}: {onTokens: (t: Record<string, string>) => void}) {
   const syntax = useSyntaxTheme();
-  if (syntax) onTokens(syntax.tokens);
+  if (syntax) {
+    onTokens(syntax.tokens);
+  }
   return null;
 }
 

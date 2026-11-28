@@ -17,6 +17,7 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {collectThemingTargets} from '../packages/cli/foundation/discovery/theming-targets.mjs';
 import {readObjects} from './lib/git-objects.mjs';
+import {parseKnowledgeFrontmatter} from './lib/knowledge-frontmatter.mjs';
 import {
   findStatusPhrases,
   isStatusCheckedPath,
@@ -69,65 +70,16 @@ function expectedTemplateSections(kind, requiredSections) {
 }
 
 export function parseKnowledgeDocument(content, filePath = '<document>') {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  if (!match) {
+  const {hasFrontmatter, frontmatter, problems} = parseKnowledgeFrontmatter(
+    content,
+    filePath,
+  );
+  if (!hasFrontmatter) {
     return {
       frontmatter: new Map(),
       sections: [],
       problems: [`${filePath}: missing frontmatter.`],
     };
-  }
-
-  function parseScalar(raw) {
-    let value = raw.trim();
-    if (value === 'null' || value === '~') return null;
-    if (/^\[.*\]$/.test(value)) {
-      const inner = value.slice(1, -1).trim();
-      return inner
-        ? inner
-            .split(',')
-            .map(item => item.trim())
-            .filter(Boolean)
-            .map(item => item.replace(/^['"]|['"]$/g, ''))
-        : [];
-    }
-    if (/^[0-9]+$/.test(value)) return Number(value);
-    return value.replace(/^['"]|['"]$/g, '');
-  }
-
-  const frontmatter = new Map();
-  const problems = [];
-  const lines = match[1].split(/\r?\n/);
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (
-      /^\s/.test(line) ||
-      line.trim() === '' ||
-      line.trimStart().startsWith('#')
-    )
-      continue;
-    const field = line.match(/^([a-z][a-z0-9_]*):\s*(.*)$/);
-    if (!field) continue;
-    let raw = field[2].trim();
-    if (raw === '') {
-      const block = [];
-      while (index + 1 < lines.length && /^\s/.test(lines[index + 1])) {
-        block.push(lines[index + 1].trim());
-        index += 1;
-      }
-      if (block.length === 1 && /^\[.*\]$/.test(block[0])) {
-        raw = block[0];
-      } else if (block[0] === '[' && block.at(-1) === ']') {
-        raw = `[${block.slice(1, -1).join('')}]`;
-      } else if (block.every(item => item.startsWith('- '))) {
-        raw = `[${block.map(item => item.slice(2)).join(',')}]`;
-      }
-    }
-    if (frontmatter.has(field[1])) {
-      problems.push(`${filePath}: duplicate frontmatter field ${field[1]}.`);
-      continue;
-    }
-    frontmatter.set(field[1], parseScalar(raw));
   }
 
   try {

@@ -121,7 +121,7 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     const official = step('test-node', 'Lab-only: CLI official-packages check');
     expect(official.if).toBe(`matrix.shard == 1 && ${LAB_TRUE}`);
     expect(official.run).toBe(
-      'pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1',
+      'pnpm exec vitest run packages/cli/scripts/generate-official-packages.test.mjs --maxWorkers=1',
     );
     for (const s of steps('test-node').filter(s => s !== official)) {
       expect(String(s.if ?? ''), s.name ?? s.uses ?? s.run).not.toContain(
@@ -257,7 +257,7 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     );
     expect(decide.env.LAB_ONLY).toBe('${{ steps.scope.outputs.lab_only }}');
     expect(decide.run).toContain(
-      'if [ "$SPEC_ONLY" = true ] || [ "$LAB_ONLY" = true ]; then',
+      'if [ "$SPEC_ONLY" = true ] || [ "$LAB_ONLY" = true ] || [ "$RELEASE_CRITICAL" = true ] || [ "$REVIEW_PASSES" = true ]; then',
     );
   });
 

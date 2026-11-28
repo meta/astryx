@@ -11,7 +11,7 @@ import {Section} from '@astryxdesign/core/Section';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
-import {SquaresPlusIcon, CheckCircleIcon} from '@heroicons/react/24/outline';
+import {AppsIcon, SuccessIcon} from '@astryxdesign/template-icons';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Button} from '@astryxdesign/core/Button';
 import {useToast} from '@astryxdesign/core/Toast';
@@ -96,7 +96,7 @@ export default function LoginTwoColumn() {
   };
 
   return (
-    <Center axis="both" padding={6} style={pageStyle}>
+    <Center role="main" axis="both" padding={6} style={pageStyle}>
       <style>{LOGIN_SPLIT_CSS}</style>
       <VStack gap={4} width="100%">
         <div style={cardWrap}>
@@ -110,7 +110,7 @@ export default function LoginTwoColumn() {
               <Section variant="transparent" padding={0} height="100%">
                 <VStack gap={4} height="100%">
                   <HStack gap={2} vAlign="center">
-                    <Icon icon={SquaresPlusIcon} />
+                    <Icon icon={AppsIcon} />
                     <Text type="body" weight="bold">
                       Product Inc.
                     </Text>
@@ -120,14 +120,15 @@ export default function LoginTwoColumn() {
                     <Center axis="vertical" height="100%">
                       {isSuccess ? (
                         <EmptyState
+                          headingLevel={1}
                           title="You're signed in"
                           description="Redirecting to your dashboard…"
-                          icon={<Icon icon={CheckCircleIcon} size="lg" />}
+                          icon={<Icon icon={SuccessIcon} size="lg" />}
                         />
                       ) : (
                         <VStack gap={4} hAlign="stretch" width="100%">
                           <VStack gap={1}>
-                            <Text type="display-1" as="h2">
+                            <Text type="display-1" as="h1">
                               Welcome back
                             </Text>
                             <Text type="body" color="secondary" size="sm">

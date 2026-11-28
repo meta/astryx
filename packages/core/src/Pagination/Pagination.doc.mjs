@@ -9,6 +9,12 @@ const anatomy = [
       'Navigation landmark containing the current paging controls and optional page-size selector.',
   },
   {
+    name: 'Control row',
+    required: true,
+    description:
+      'The row that holds the previous/next, first/last and page-number buttons and the readout between them.',
+  },
+  {
     name: 'Page-size selector',
     required: false,
     description: 'Optional Selector for choosing how many items appear per page.',
@@ -114,13 +120,13 @@ export const docs = {
       name: 'totalItems',
       type: 'number',
       description:
-        'Total number of items. Used to calculate page count. Takes precedence over totalPages if both provided.',
+        'Total number of items. Used to calculate the page count when totalPages is not given.',
     },
     {
       name: 'totalPages',
       type: 'number',
       description:
-        'Total number of pages. Use when you know page count but not item count.',
+        'Total number of pages. Use when you know page count but not item count. Takes precedence over totalItems if both are given.',
     },
     {
       name: 'hasMore',
@@ -208,6 +214,9 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-pagination', visualProps: ['size', 'variant']},
+      {className: 'astryx-pagination-list', visualProps: ['size', 'variant']},
+      {className: 'astryx-pagination-item', states: ['selected', 'first', 'last']},
+      {className: 'astryx-pagination-ellipsis'},
       {className: 'astryx-pagination-dot', visualProps: ['size'], states: ['active']},
       {className: 'astryx-pagination-input-label', visualProps: ['size']},
       {className: 'astryx-pagination-input-total', visualProps: ['size']},
@@ -232,6 +241,7 @@ export const docs = {
       { guidance: true, description: 'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.' },
       { guidance: true, description: 'Pass totalItems when the total is known so users can see how much content remains.' },
       { guidance: true, description: 'Pass getPageHref when each page has its own URL, so a page opens in a new tab and its address can be copied.' },
+      { guidance: true, description: 'Give each Pagination a distinct label when a page has more than one, so screen-reader users can tell the navigation landmarks apart.' },
       { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
       { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
       { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
@@ -280,13 +290,13 @@ export const docsZh = {
       name: 'totalItems',
       type: 'number',
       description:
-        '总项目数。用于计算页数。同时提供时优先于 totalPages。',
+        '总项目数。未提供 totalPages 时用于计算页数。',
     },
     {
       name: 'totalPages',
       type: 'number',
       description:
-        '总页数。当你知道页数但不知道项目数时使用。',
+        '总页数。当你知道页数但不知道项目数时使用。同时提供时优先于 totalItems。',
     },
     {
       name: 'hasMore',
@@ -374,6 +384,9 @@ export const docsZh = {
   theming: {
     targets: [
       {className: 'astryx-pagination', visualProps: ['size', 'variant']},
+      {className: 'astryx-pagination-list', visualProps: ['size', 'variant']},
+      {className: 'astryx-pagination-item', states: ['selected', 'first', 'last']},
+      {className: 'astryx-pagination-ellipsis'},
       {className: 'astryx-pagination-dot', visualProps: ['size'], states: ['active']},
       {className: 'astryx-pagination-input-label', visualProps: ['size']},
       {className: 'astryx-pagination-input-total', visualProps: ['size']},
@@ -390,6 +403,7 @@ export const docsZh = {
       { guidance: true, description: 'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.' },
       { guidance: true, description: 'Pass totalItems when the total is known so users can see how much content remains.' },
       { guidance: true, description: 'Pass getPageHref when each page has its own URL, so a page opens in a new tab and its address can be copied.' },
+      { guidance: true, description: 'Give each Pagination a distinct label when a page has more than one, so screen-reader users can tell the navigation landmarks apart.' },
       { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
       { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
       { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
@@ -413,6 +427,7 @@ export const docsDense = {
       { guidance: true, description: 'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.' },
       { guidance: true, description: 'Pass totalItems when the total is known so users can see how much content remains.' },
       { guidance: true, description: 'Pass getPageHref when each page has its own URL, so a page opens in a new tab and its address can be copied.' },
+      { guidance: true, description: 'Give each Pagination a distinct label when a page has more than one, so screen-reader users can tell the navigation landmarks apart.' },
       { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
       { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
       { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
@@ -428,8 +443,8 @@ export const docsDense = {
     getPageHref:
       'URL of a page. Page number/prev/next/first/last render as links; onChange still runs on activation. pageSize = current size when pageSize or pageSizeOptions set. Dots, page box + page-size selector are not links. Page-size choice: navigate in onPageSizeChange, not in the onChange(1) that follows. If onChange navigates for dots/page box, leave unset in dots + input variants (arrow links would navigate twice). Cursor pagination: map the page before/after current to the cursor URL.',
     as: 'Custom link component for getPageHref links (e.g. Next.js Link). Overrides LinkProvider.',
-    totalItems: 'Total items. Calculates page count. Precedence over totalPages.',
-    totalPages: 'Total pages. Use when page count known but not item count.',
+    totalItems: 'Total items. Calculates page count when totalPages is unset.',
+    totalPages: 'Total pages. Use when page count known but not item count. Wins over totalItems.',
     hasMore: 'More pages exist after current. For cursor-based pagination.',
     pageSize: 'Items per page; coerced to positive integer, non-finite falls back to default',
     pageSizeOptions: 'Page size options. Shows selector dropdown when provided.',

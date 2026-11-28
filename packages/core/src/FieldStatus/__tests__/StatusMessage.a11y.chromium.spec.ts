@@ -110,6 +110,13 @@ async function bindSubject(
   }, BOUND_SUBJECT_ATTRIBUTE);
 }
 
+// Matches an element whose whole text is `text`, so another label that
+// contains it does not count.
+function exactText(text: string): RegExp {
+  const escaped = text.replace(/[.*+?^$|()[\]{}\\]/g, '\\$&');
+  return new RegExp(`^${escaped}$`);
+}
+
 async function mountState(
   page: Page,
   state: CoreStatusMessageBindingState,
@@ -120,11 +127,15 @@ async function mountState(
   await bindSubject(page, state);
   await subjectFor(page).waitFor({state: 'attached'});
   await expect(subjectFor(page)).toHaveCount(1);
-  if ('focusSelector' in state) {
-    await expect(page.locator(state.focusSelector)).toHaveAttribute(
-      'aria-describedby',
-      /\S+/,
-    );
+  if ('focusLabel' in state) {
+    // The mark Tooltip loads lazily. Its hidden text copy shows that the
+    // trigger has replaced the Suspense fallback.
+    await expect(
+      page
+        .locator('[hidden]')
+        .filter({hasText: exactText(state.focusLabel)})
+        .first(),
+    ).toBeAttached();
   }
 }
 

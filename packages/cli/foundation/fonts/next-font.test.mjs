@@ -1,0 +1,161 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {nextFontFix, rootLayoutImportsNextFont} from './next-font.mjs';
+
+let dir;
+beforeEach(() => {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-next-font-'));
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name": "app"}\n');
+});
+afterEach(() => {
+  fs.rmSync(dir, {recursive: true, force: true});
+});
+
+/** @param {string} name @param {string} source */
+function write(name, source) {
+  const file = path.join(dir, name);
+  fs.mkdirSync(path.dirname(file), {recursive: true});
+  fs.writeFileSync(file, source);
+}
+
+const layout = from =>
+  `import {Geist} from '${from}';\nconst geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n`;
+
+describe('rootLayoutImportsNextFont', () => {
+  it('is true when app/layout imports next/font/google', () => {
+    write('app/layout.tsx', layout('next/font/google'));
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it('is true when src/app/layout imports next/font/local', () => {
+    write(
+      'src/app/layout.js',
+      "import localFont from 'next/font/local';\nconst geist = localFont({src: './Geist.woff2', variable: '--font-geist-sans'});\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it("is true when the root layout imports one of the geist package's next/font entries", () => {
+    write(
+      'app/layout.tsx',
+      layout('geist/font/sans').replace('{Geist}', '{GeistSans}'),
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it("reads the project's root layout from a folder inside the project", () => {
+    write('app/layout.tsx', layout('next/font/google'));
+    fs.mkdirSync(path.join(dir, 'src/themes'), {recursive: true});
+    expect(rootLayoutImportsNextFont(path.join(dir, 'src/themes'))).toBe(true);
+  });
+
+  it('is true when a Pages Router app loads next/font in pages/_app', () => {
+    write(
+      'pages/_app.tsx',
+      "import {Geist} from 'next/font/google';\nconst geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\nexport default function App({Component, pageProps}) {\n  return <main className={geist.variable}><Component {...pageProps} /></main>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it('is true when src/pages/_app loads next/font', () => {
+    write(
+      'src/pages/_app.js',
+      "import localFont from 'next/font/local';\nconst brand = localFont({src: './Brand.woff2', variable: '--font-brand'});\nexport default function App({Component, pageProps}) {\n  return <main className={brand.variable}><Component {...pageProps} /></main>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it('is true when the root layout imports its fonts from a module that loads next/font', () => {
+    write(
+      'app/fonts.ts',
+      "import {Geist} from 'next/font/google';\nexport const geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\n",
+    );
+    write(
+      'app/layout.tsx',
+      "import {geist} from './fonts';\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it("is true when the root layout imports its font module through the app's tsconfig paths alias", () => {
+    write(
+      'tsconfig.json',
+      JSON.stringify({
+        compilerOptions: {baseUrl: '.', paths: {'@/*': ['./*']}},
+      }),
+    );
+    write(
+      'app/fonts.ts',
+      "import {Geist} from 'next/font/google';\nexport const geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\n",
+    );
+    write(
+      'app/layout.tsx',
+      "import {geist} from '@/app/fonts';\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it('is true for a font module imported as ./fonts.js that is written as fonts.ts', () => {
+    write(
+      'app/fonts.ts',
+      "import {Geist} from 'next/font/google';\nexport const geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\n",
+    );
+    write(
+      'app/layout.tsx',
+      "import {geist} from './fonts.js';\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it('is true when the font module the layout imports re-exports a next/font entry', () => {
+    write('app/fonts.ts', "export {GeistSans} from 'geist/font/sans';\n");
+    write(
+      'app/layout.tsx',
+      "import {GeistSans} from './fonts';\nexport default function RootLayout({children}) {\n  return <html className={GeistSans.variable}><body>{children}</body></html>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it('is false when a module the layout imports does not load next/font', () => {
+    write('app/fonts.ts', "export const fontClass = 'font-sans';\n");
+    write(
+      'app/layout.tsx',
+      "import {fontClass} from './fonts';\nexport default function RootLayout({children}) {\n  return <html className={fontClass}><body>{children}</body></html>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(false);
+  });
+
+  it('is false for a mention in a comment or a string', () => {
+    write(
+      'app/layout.tsx',
+      "// import {Geist} from 'next/font/google';\nconst note = 'next/font/local';\nexport default function RootLayout({children}) {\n  return <html><body>{children}</body></html>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(false);
+  });
+
+  it('is false for another next module, and with no root layout', () => {
+    expect(rootLayoutImportsNextFont(dir)).toBe(false);
+    write(
+      'app/layout.tsx',
+      'import Link from \'next/link\';\nexport default function RootLayout({children}) {\n  return <html><body><Link href="/">Home</Link>{children}</body></html>;\n}\n',
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(false);
+  });
+
+  it('is false for a layout that does not parse', () => {
+    write('app/layout.tsx', `${layout('next/font/google')}\n<<<`);
+    expect(rootLayoutImportsNextFont(dir)).toBe(false);
+  });
+});
+
+describe('nextFontFix', () => {
+  it('names the CSS variable fix and the recipe', () => {
+    expect(nextFontFix('astryx docs font-setup')).toBe(
+      "This app loads fonts with next/font, which loads each family under a name of its own: set the theme's font family to the font's CSS variable, for example family: 'var(--font-geist-sans)' (recipe: astryx docs font-setup)",
+    );
+  });
+});

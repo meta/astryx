@@ -34,6 +34,17 @@
 // when a drill-in has put another row under the finger. When the menu names
 // the touch by its identifier, another finger's `touchend` passes; a touch it
 // could not name keeps the old rule, and the next `touchend` is cancelled.
+// It also listens on the node the touch began on. A pick that closes the menu
+// takes that node out of the document. Its `touchend` then never reaches the
+// window.
+//
+// In a Home Screen web app, WebKit can still send the `mousedown`, `mouseup`
+// and click after a cancelled `touchend`, where the touch began. It does so
+// whether or not the touch's `touchstart` was cancelable. So the menu press
+// model's arm stays armed after that `touchend` and takes them, as at a
+// claimed touch's lift. Its window then starts again at that `touchend`.
+// From then on it takes only the browser's own events: a page's
+// `dispatchEvent` or `click()` has no tracked gesture behind it, and it acts.
 //
 // Some clicks always pass:
 // - a click with `detail` 0: a keyboard's, a screen reader's, or one that the
@@ -45,6 +56,20 @@ import {isHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
 import {subscribeInput} from './inputStream';
 import {realmValue, sharedKey} from './sharedRealm';
 import {markTouchEndCancelled} from './touchEndMark';
+
+const readIsTrusted = (event: Event): boolean => event.isTrusted;
+
+// The guard's one trust read, registered like its state. jsdom never sends a
+// trusted event, so the unit tests name the events that stand in for the
+// browser's own.
+const trust = realmValue(sharedKey('click-guard-trust', 1), () => ({
+  read: readIsTrusted,
+}));
+
+/** Whether the browser sent `event`, not a page's `dispatchEvent` or `click()`. */
+function isUserAgentEvent(event: Event): boolean {
+  return trust.read(event);
+}
 
 /**
  * How long after a release the browser's click is still swallowed, in ms.
@@ -81,11 +106,28 @@ export interface ClickGuardOptions {
    * the next `touchend` counts as this touch's own.
    */
   readonly touchIdentifier?: number;
+  /**
+   * With `cancelsTouchEnd`: the node the touch began on (the touchstart's
+   * target). The guard also cancels the touch's `touchend` there, so it
+   * still cancels it after a pick takes that node out of the document.
+   */
+  readonly touchTarget?: EventTarget;
+  /**
+   * With `cancelsTouchEnd`: stay armed after the cancelled `touchend` for
+   * the late `mousedown`, `mouseup` and click that WebKit can still send.
+   * @default false
+   */
+  readonly staysArmedAfterTouchEnd?: boolean;
 }
 
 interface Guard {
   readonly unsubscribers: (() => void)[];
   timer: ReturnType<typeof setTimeout> | null;
+  /**
+   * After a cancelled touchend, the guard takes only the browser's own late
+   * events: a page's dispatched click still acts.
+   */
+  fromBrowserOnly: boolean;
 }
 
 /**
@@ -107,7 +149,13 @@ function listenForClicks(view: Window): () => void {
     'click',
     event => {
       const doc = view.document;
-      if (!guards.has(doc) || isExempt(event)) {
+      const guard = guards.get(doc);
+      if (guard == null || isExempt(event)) {
+        return;
+      }
+      if (guard.fromBrowserOnly && !isUserAgentEvent(event)) {
+        // A page's own click after a cancelled touchend: no tracked gesture
+        // is behind it, so it acts.
         return;
       }
       event.preventDefault();
@@ -126,6 +174,8 @@ export function armClickGuard(
     takesLateMouse = false,
     cancelsTouchEnd = false,
     touchIdentifier,
+    touchTarget,
+    staysArmedAfterTouchEnd = false,
   }: ClickGuardOptions = {},
 ): void {
   const view = doc.defaultView;
@@ -133,7 +183,7 @@ export function armClickGuard(
     return;
   }
   disarmClickGuard(doc);
-  const guard: Guard = {unsubscribers: [], timer: null};
+  const guard: Guard = {unsubscribers: [], timer: null, fromBrowserOnly: false};
   if (staysInstalled && !stayingClickListeners.has(view)) {
     stayingClickListeners.set(view, listenForClicks(view));
   }
@@ -146,12 +196,34 @@ export function armClickGuard(
     // The next press is a new gesture: its click must never be eaten.
     subscribeInput(view, 'pointerdown', () => disarmClickGuard(doc)),
   );
-  if (takesLateMouse) {
+  const restartWindow = () => {
+    if (guard.timer != null) {
+      clearTimeout(guard.timer);
+    }
+    guard.timer = setTimeout(
+      () => disarmClickGuard(doc),
+      CLICK_GUARD_WINDOW_MS,
+    );
+  };
+  const takeLateMouse = () => {
     for (const type of ['mousedown', 'mouseup'] as const) {
       guard.unsubscribers.push(
-        subscribeInput(view, type, swallowLateMouse, {cancels: true}),
+        subscribeInput(
+          view,
+          type,
+          event => {
+            if (guard.fromBrowserOnly && !isUserAgentEvent(event)) {
+              return;
+            }
+            swallowLateMouse(event);
+          },
+          {cancels: true},
+        ),
       );
     }
+  };
+  if (takesLateMouse) {
+    takeLateMouse();
   }
   if (cancelsTouchEnd) {
     // The release of the gesture in flight then brings no light dismiss.
@@ -159,28 +231,51 @@ export function armClickGuard(
     // A touch sends its pointerup before its touchend, so without an
     // identifier the next touchend counts as that touch's own. The next
     // pointerdown disarms the guard first.
-    const stopTouchEnd = subscribeInput(
-      view,
-      'touchend',
-      event => {
-        if (touchIdentifier != null && !endsTouch(event, touchIdentifier)) {
-          // Another finger lifted: leave its touchend.
-          return;
-        }
-        stopTouchEnd();
-        // A touchend that the browser took for a scroll is not cancelable.
-        // The guard stays armed for a click that may follow it.
-        if (event.cancelable) {
-          event.preventDefault();
+    const listeners: (() => void)[] = [];
+    const stopTouchEnd = () => {
+      for (const stop of listeners.splice(0)) {
+        stop();
+      }
+    };
+    const onTouchEnd = (event: Event) => {
+      if (touchIdentifier != null && !endsTouch(event, touchIdentifier)) {
+        // Another finger lifted: leave its touchend.
+        return;
+      }
+      stopTouchEnd();
+      // A touchend that the browser took for a scroll is not cancelable.
+      // The guard stays armed for a click that may follow it.
+      if (event.cancelable) {
+        event.preventDefault();
+        if (!staysArmedAfterTouchEnd) {
           // No click follows a cancelled touchend.
           disarmClickGuard(doc);
+          return;
         }
-      },
-      {cancels: true},
+        // The late mouse events and click can still come: see the file
+        // header. Only the browser's own are the pick's.
+        guard.fromBrowserOnly = true;
+        if (!takesLateMouse) {
+          takeLateMouse();
+        }
+        restartWindow();
+      }
+    };
+    listeners.push(
+      subscribeInput(view, 'touchend', onTouchEnd, {cancels: true}),
     );
+    if (touchTarget != null) {
+      // The browser sends the touchend to the node the touch began on, also
+      // after a pick took that node out of the document. The window does not
+      // receive it then.
+      touchTarget.addEventListener('touchend', onTouchEnd, {passive: false});
+      listeners.push(() =>
+        touchTarget.removeEventListener('touchend', onTouchEnd),
+      );
+    }
     guard.unsubscribers.push(stopTouchEnd);
   }
-  guard.timer = setTimeout(() => disarmClickGuard(doc), CLICK_GUARD_WINDOW_MS);
+  restartWindow();
 }
 
 /**
@@ -227,6 +322,16 @@ export function withoutClickGuard<T>(dispatch: () => T): T {
   } finally {
     guardState.unguardedDepth--;
   }
+}
+
+/**
+ * Tests only: names the events that stand in for the browser's own; `null`
+ * restores the real read.
+ */
+export function __setEventTrustForTest(
+  read: ((event: Event) => boolean) | null,
+): void {
+  trust.read = read ?? readIsTrusted;
 }
 
 /**

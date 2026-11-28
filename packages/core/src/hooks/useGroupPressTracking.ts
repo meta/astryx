@@ -7,8 +7,9 @@
  * @input A group's root ref and whether the group tracks presses: under the
  *   touch presentation only
  * @output useGroupPressTracking: the press tracking that ButtonGroup and
- *   ToggleButtonGroup share; GROUP_PRESS_POINTERS, the pointers it follows
- * @position Internal hook, not exported from the hooks entry. It drives
+ *   ToggleButtonGroup share; GROUP_PRESS_POINTERS, the pointers it follows,
+ *   re-exported from pressGroupContext
+ * @position Internal hook. Core's internal/touch entry exposes it to Lab. It drives
  *   useActionGroupTracking and the shared touch hit area (useTouchHitArea)
  *   for a group's members. Each group's root applies
  *   touchHitAreaStyles.layerBelowChildren. AlertDialog's tracking follows
@@ -21,6 +22,7 @@
 import type {RefCallback, RefObject} from 'react';
 import type {GestureTouch} from '../gestures/types';
 import {isPressGroupItem} from '../privateAttributes/pressGroupItem.stylex';
+import {GROUP_PRESS_POINTERS} from './pressGroupContext';
 import {groupGrowth} from '../utils/hitArea';
 import {useTouchHitArea, type TouchHitAreaOptions} from '../utils/touchHitArea';
 import {
@@ -120,8 +122,7 @@ export interface GroupPressTracking {
   readonly hitAreaRef: RefCallback<HTMLElement>;
 }
 
-/** The pointers a group's press slides for: a finger and a pen. */
-export const GROUP_PRESS_POINTERS = ['touch', 'pen'] as const;
+export {GROUP_PRESS_POINTERS};
 
 /**
  * Track a held finger or pen across the marked members of the group behind

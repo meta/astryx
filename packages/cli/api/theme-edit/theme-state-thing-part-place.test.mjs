@@ -68,21 +68,21 @@ const follow = async lines => {
 };
 
 describe('a state of an element in a part', () => {
-  it('the current page in pagination is its current button, never the page', async () => {
+  it('the current page in pagination is its selected cell, never the page', async () => {
     await themeEditNew('p1', {cwd, like: 'neutral'});
     for (const ask of [
       'make the current page in pagination blue',
       'make the current page of the pagination blue',
     ]) {
       const rs = await how('p1', ask);
-      const lines = writes(rs);
+      // (Beside it, the readable-text line the fill's own check adds.)
+      const lines = writes(
+        rs.filter(r => !/^readable text on that fill/.test(r.text)),
+      );
       expect(lines, ask).toEqual([
-        "set p1 background-color '#2563eb' --on button --state current",
+        "set p1 background-color '#2563eb' --on pagination-item --state selected",
       ]);
       expect(lines.join('\n')).not.toMatch(/--color-background-body|app-shell/);
-      expect(rs.map(r => r.text).join('\n')).toMatch(
-        /cannot keep pagination apart/,
-      );
     }
     await follow(
       writes(await how('p1', 'make the current page in pagination blue')),

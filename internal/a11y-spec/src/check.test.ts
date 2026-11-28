@@ -39,9 +39,13 @@ interface Facts {
 
 const subject = {} as Subject;
 
-function harness(observes: readonly EvidenceLayer[]): Harness {
+function harness(
+  observes: readonly EvidenceLayer[],
+  version?: string,
+): Harness {
   return {
     name: 'stub',
+    ...(version == null ? {} : {version}),
     observes,
     subject: async () => subject,
     related: async () => subject,
@@ -124,6 +128,7 @@ async function run(
     facts?: Facts;
     knownFailures?: readonly KnownFailure[];
     observes?: readonly EvidenceLayer[];
+    version?: string;
     state?: string;
     initialFocusEntry?: () => Promise<{readonly subjectWasModal: boolean}>;
     transition?: (name: string) => Promise<void> | void;
@@ -134,7 +139,8 @@ async function run(
     binding: 'Stub',
     state: options.state ?? 'default',
     facts: options.facts ?? {applicable: true},
-    mount: async () => harness(options.observes ?? ['unit', 'dom']),
+    mount: async () =>
+      harness(options.observes ?? ['unit', 'dom'], options.version),
     knownFailures: options.knownFailures,
     initialFocusEntry: options.initialFocusEntry,
     transition: options.transition,
@@ -408,6 +414,63 @@ describe('checkAccessibilitySpec', () => {
       expect(unmatchedKnownFailures([orphan], [result])).toEqual([
         expect.stringContaining('matched 0 results'),
       ]);
+    });
+
+    describe('scoped to an engine build', () => {
+      const scoped = knownFailure({
+        engine: {harness: 'stub', fromVersion: '151.0.7889.0'},
+      });
+
+      it('records the exact failure as debt from the first failing build on', async () => {
+        for (const version of ['151.0.7889.0', '155.0.8059.84']) {
+          const result = await run(contractThat(missing), {
+            knownFailures: [scoped],
+            version,
+          });
+          expect(result.results[0]?.status).toBe('known-failure');
+          expect(unmatchedKnownFailures([scoped], [result])).toEqual([]);
+        }
+      });
+
+      it('fails on an earlier build, and does not count the record there', async () => {
+        const result = await run(contractThat(missing), {
+          knownFailures: [scoped],
+          version: '151.0.7888.0',
+        });
+        expect(result.results[0]?.status).toBe('fail');
+        expect(result.results[0]?.knownFailure).toBeUndefined();
+        expect(unmatchedKnownFailures([scoped], [result])).toEqual([]);
+      });
+
+      it('fails on another harness or one that reports no build', async () => {
+        for (const record of [
+          knownFailure({engine: {harness: 'other', fromVersion: '1'}}),
+          scoped,
+        ]) {
+          const result = await run(contractThat(missing), {
+            knownFailures: [record],
+          });
+          expect(result.results[0]?.status).toBe('fail');
+        }
+      });
+
+      it('reports an unexpected pass when an in-range build stops failing', async () => {
+        const result = await run(
+          contractThat(() => {}),
+          {knownFailures: [scoped], version: '155.0.8059.84'},
+        );
+        expect(result.results[0]?.status).toBe('unexpected-pass');
+      });
+
+      it('still fails on a different failure in range', async () => {
+        const result = await run(
+          contractThat(() => {
+            throw new Error('a different failure');
+          }),
+          {knownFailures: [scoped], version: '155.0.8059.84'},
+        );
+        expect(result.results[0]?.status).toBe('fail');
+      });
     });
 
     it('reports an unexpected pass when the recorded failure stops happening', async () => {

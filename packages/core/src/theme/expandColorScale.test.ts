@@ -530,6 +530,43 @@ describe('expandColorScale WCAG contrast guarantees', () => {
     );
 
     it.each(modes)(
+      'secondary text meets 4.5:1 on the default palette tints over the surface and body (%s)',
+      (_label, mode) => {
+        const textSecondary = resolveToken(
+          tokens,
+          '--color-text-secondary',
+          mode,
+        );
+        // The hue tints are not generated: they fall through to colorDefaults
+        // and paint over the generated surface or body.
+        const tints = Object.keys(colorDefaults).filter(name =>
+          /^--color-background-(blue|cyan|gray|green|orange|pink|purple|red|teal|yellow)$/.test(
+            name,
+          ),
+        );
+        expect(tints).toHaveLength(10);
+        for (const backdropName of [
+          '--color-background-surface',
+          '--color-background-body',
+        ]) {
+          const backdrop = resolveToken(tokens, backdropName, mode);
+          for (const tint of tints) {
+            const painted = resolveComposited(
+              colorDefaults,
+              tint,
+              backdrop,
+              mode,
+            );
+            expect(
+              contrastRatio(textSecondary, painted),
+              `${tint} over ${backdropName}`,
+            ).toBeGreaterThanOrEqual(4.5);
+          }
+        }
+      },
+    );
+
+    it.each(modes)(
       'non-text UI tokens meet 3:1 against the surface (%s)',
       (_label, mode) => {
         const surface = resolveToken(

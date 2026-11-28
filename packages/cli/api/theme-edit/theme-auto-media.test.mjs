@@ -25,6 +25,11 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read the drawn pages, their pictures or what a drawing
+// reports: drawn for real.)
+realRenders(true);
 
 const T = 400_000;
 /** @type {string} */
@@ -101,7 +106,7 @@ describe("a toast's text", () => {
         on: 'toast',
       });
       const p = await toastProblems('g');
-      expect(p.map(x => x.problem).join('\n')).toMatch(/3\.95:1 in dark/);
+      expect(p.map(x => x.problem).join('\n')).toMatch(/3\.94:1 in dark/);
       expect(p[0].fix).toMatch(/set g color '#000000' --on toast --mode dark/);
       expect(new Set(toastSides('g'))).toEqual(new Set(['off']));
     },

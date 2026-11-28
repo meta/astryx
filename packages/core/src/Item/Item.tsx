@@ -6,7 +6,7 @@
  * @file Item.tsx
  * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer,
  *   the shared press overlays and the compositor press layer, and a row's
- *   trailing control (ItemTrailingContext)
+ *   control a row adds at one edge of the slots (ItemTrailingContext)
  * @output Exports Item component, ItemProps type; publishes the shared inline inset.
  *   Only numbered composing rows keep their start/label/end slots in one flex
  *   group, through Item's private exact-marker scope; other marked rows keep
@@ -61,10 +61,12 @@ import {ItemListRowContext} from './ItemListRowContext';
 import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
 import {ItemTrailingContext} from './ItemTrailingContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {
   cancelNestedPress,
+  pressBelongsToControl,
   PRESSABLE_CONTAINER_ATTRIBUTE,
   useClickableContainerProxy,
 } from '../hooks/useClickableContainer';
@@ -231,7 +233,9 @@ export interface ItemProps extends BaseProps<HTMLElement> {
    * control itself, and on any other nested interactive element, are left to
    * that element. Mutually exclusive with `onClick`/`href` — when
    * `interactiveRef` is set those are ignored (the nested control is the sole
-   * action).
+   * action). While the row is selected, it writes `aria-current` on the
+   * control unless the control has its own marker; a control should not set
+   * the row's value itself, because the row removes it when deselected.
    */
   interactiveRef?: React.RefObject<HTMLElement | null>;
 
@@ -265,7 +269,9 @@ export interface ItemProps extends BaseProps<HTMLElement> {
    * the state is exposed as `aria-selected`; otherwise (e.g. a listitem or a
    * bare div, where `aria-selected` is invalid ARIA) it falls back to
    * `aria-current="true"` so assistive tech is still told which item is
-   * selected. A consumer-provided `aria-current` always wins.
+   * selected. A consumer-provided `aria-current` always wins. On an
+   * interactive row (`onClick`, `href` or `interactiveRef`) the marker sits on
+   * the element that takes focus, so a screen reader announces it there.
    * @default false
    */
   isSelected?: boolean;
@@ -411,6 +417,9 @@ const styles = stylex.create({
     // derived var registry, keeping padding and compensation in sync.
     '--_item-inset-inline': spacingVars['--spacing-2'],
     paddingInline: 'var(--_item-inset-inline)',
+    // Room after a list marker for a control the row's neighbours put there.
+    // Every row resets it, so a nested row never takes its parent's room.
+    '--_item-marker-room': '0px',
     position: 'relative',
     boxSizing: 'border-box',
     textAlign: 'start',
@@ -426,6 +435,7 @@ const styles = stylex.create({
     alignItems: 'inherit',
     alignSelf: 'stretch',
     gap: 'inherit',
+    paddingInlineStart: 'var(--_item-marker-room)',
   },
   markerContentFirstLine: {
     // A tall start/end slot moves the first text baseline down. The marker
@@ -774,6 +784,42 @@ export function Item({
   // (axe: aria-allowed-attr), so selection stays visual-only there — callers
   // that need selection semantics pass a permitted role.
   const allowsAriaSelected = role != null && ARIA_SELECTED_ROLES.has(role);
+  const ariaCurrent =
+    restProps['aria-current'] ??
+    (isSelected && !allowsAriaSelected ? true : undefined);
+  // A screen reader announces the marker on the element that takes focus. On
+  // an interactive row that is the row's own button or link, or the control
+  // it delegates to. A row whose root takes focus (a parent role, a link
+  // root) keeps the marker on the root.
+  const currentOnFocusTarget =
+    !hasParentRole &&
+    !isLinkRoot &&
+    (isDelegate || href != null || onClick != null);
+  const controlCurrent =
+    ariaCurrent === false || ariaCurrent === 'false' ? undefined : ariaCurrent;
+  // Syncs `aria-current` on the caller's delegated control, a DOM node the row
+  // does not render and cannot see mount or change. On each commit the row
+  // marks it while it has no marker. Cleanup removes only the value the row
+  // wrote.
+  useIsomorphicLayoutEffect(() => {
+    const control = interactiveRef?.current;
+    if (
+      !isDelegate ||
+      !currentOnFocusTarget ||
+      control == null ||
+      controlCurrent === undefined ||
+      control.hasAttribute('aria-current')
+    ) {
+      return;
+    }
+    const written = String(controlCurrent);
+    control.setAttribute('aria-current', written);
+    return () => {
+      if (control.getAttribute('aria-current') === written) {
+        control.removeAttribute('aria-current');
+      }
+    };
+  });
 
   // The description element's id, published through ItemDescriptionContext so a
   // control Item renders in a slot can point at it with `aria-describedby`.
@@ -854,7 +900,12 @@ export function Item({
       return;
     }
     const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, select, textarea')) {
+    if (
+      // React bubbles a click through a portal the caller renders from the
+      // row (its own `createPortal`), but its target is not in the row.
+      !e.currentTarget.contains(target) ||
+      pressBelongsToControl(target, e.currentTarget)
+    ) {
       return;
     }
     if (isLinkRow) {
@@ -879,12 +930,15 @@ export function Item({
     onClick?.(e);
   };
 
-  // A control a row adds after the slots, unwrapped (ItemTrailingContext):
-  // a List row's reorder handle when the row has no end content.
-  const trailing = use(ItemTrailingContext);
+  // A control a row adds before or after the slots, unwrapped
+  // (ItemTrailingContext): a List row's reorder handle.
+  const edgeControl = use(ItemTrailingContext);
+  const leading = edgeControl?.edge === 'start' ? edgeControl.control : null;
+  const trailing = edgeControl?.edge === 'end' ? edgeControl.control : null;
 
   const content = (
     <>
+      {leading}
       {isRenderable(startContent) && (
         <span
           {...stylex.props(
@@ -913,6 +967,7 @@ export function Item({
           {...(isDisabled
             ? {role: 'link', 'aria-disabled': true, tabIndex: 0}
             : {href, target, rel})}
+          aria-current={ariaCurrent}
           {...focusOwnerProps}
           {...stylex.props(
             styles.invisibleAnchor,
@@ -926,6 +981,7 @@ export function Item({
           ref={actionButtonRef}
           type="button"
           onClick={onClick}
+          aria-current={ariaCurrent}
           aria-disabled={isDisabled || undefined}
           {...(isDisabled
             ? disabledInteractionProps<HTMLButtonElement>()
@@ -1014,11 +1070,9 @@ export function Item({
       // aria-selected is invalid on roles that don't permit it (listitem, a
       // bare div, etc.). For those, convey selection via aria-current — valid
       // on any element — so the state still reaches AT. Written after
-      // {...restProps} so it must defer to a consumer-provided aria-current.
-      aria-current={
-        restProps['aria-current'] ??
-        (isSelected && !allowsAriaSelected ? true : undefined)
-      }
+      // {...restProps}: an interactive row moves the marker, a caller's
+      // included, to the element that takes focus.
+      aria-current={currentOnFocusTarget ? undefined : ariaCurrent}
       aria-disabled={isDisabled || undefined}
       {...(isInteractive ? pressable : undefined)}
       {...mergeProps(

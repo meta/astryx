@@ -68,25 +68,20 @@ const cssOf = slug =>
   fs.readFileSync(path.join(cwd, 'themes', slug, `${slug}.css`), 'utf8');
 
 describe('a state Core paints from an ARIA attribute', () => {
-  it("names a pagination's current page and an open menu button as states, and builds them", async ctx => {
+  it("names an open menu button as a state, and a pagination's current page as its cell's", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('a', {cwd, like: 'neutral'});
     const {data} = await themeEditHow('button', {cwd, theme: 'a'});
     expect(data.states).toEqual(
-      expect.arrayContaining(['current', 'pressed', 'expanded']),
+      expect.arrayContaining(['pressed', 'expanded']),
     );
-    const when = Object.values(
-      /** @type {Record<string, Array<{when: string[]}>>} */ (data.reads),
-    )
-      .flat()
-      .flatMap(r => r.when)
-      .join(' ');
-    expect(when).toMatch(/--when variant:ghost --state current/);
-    expect(when).not.toMatch(/aria-current=page \(not settable/);
+    // The current page is a part of its own, in its own state.
+    const cell = await themeEditHow('pagination-item', {cwd, theme: 'a'});
+    expect(cell.data.states).toContain('selected');
     await themeEditSet('a', 'background-color', '#ff0000', {
       cwd,
-      on: 'button',
-      state: 'current',
+      on: 'pagination-item',
+      state: 'selected',
     });
     await themeEditSet('a', 'background-color', '#0000ff', {
       cwd,
@@ -95,7 +90,7 @@ describe('a state Core paints from an ARIA attribute', () => {
     });
     const css = cssOf('a');
     expect(css).toMatch(
-      /\.astryx-button:is\(\[aria-current\]:not\(\[aria-current="false"\]\)\)\s*\{\s*background-color: #ff0000/,
+      /\.astryx-pagination-item\[data-selected="selected"\]\s*\{\s*background-color: #ff0000/,
     );
     expect(css).toMatch(
       /\.astryx-button:is\(\[aria-expanded="true"\]\)\s*\{\s*background-color: #0000ff/,
@@ -125,11 +120,11 @@ describe('several states at once', () => {
       themeEditSet('c', 'background-color', '#999999', {
         cwd,
         on: 'button',
-        state: 'current+pressed',
+        state: 'expanded+disabled',
       }),
     );
     expect(r.code).toBe('ERR_THEME_UNKNOWN_STATE');
-    expect(r.message).toMatch(/never paints button current and pressed/);
+    expect(r.message).toMatch(/never paints button disabled and expanded/);
   }, 240_000);
 });
 
