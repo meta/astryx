@@ -3965,6 +3965,25 @@ describe('SideNavHeading hover/click guard', () => {
     );
     expect(container.querySelector('[popovertarget]')).toBeNull();
   });
+
+  it('stays closed when layout moves SideNavHeading under a stationary pointer (#13610)', () => {
+    vi.useFakeTimers();
+    render(<SideNavHeading heading="My App" menu={menuItems} />);
+    const trigger = screen.getByRole('button', {name: /Open menu/});
+
+    // Pointer was parked before the layout shift.
+    fireEvent.pointerMove(window, {clientX: 154, clientY: 134});
+
+    // The layout change places the heading under the stationary pointer.
+    fireEvent.mouseEnter(trigger, {clientX: 154, clientY: 134});
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    // Deliberate movement over the heading opens the menu.
+    fireEvent.pointerMove(trigger, {clientX: 155, clientY: 134});
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    vi.useRealTimers();
+  });
 });
 
 // =============================================================================

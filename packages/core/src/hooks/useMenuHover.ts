@@ -4,7 +4,7 @@
 
 /**
  * @file useMenuHover.ts
- * @input React hooks, useListFocus, useMediaQuery
+ * @input React hooks, useListFocus, useMediaQuery, subscribeInput
  * @output useMenuHover hook
  * @position Internal hook for nav heading components, TopNavMenu,
  *   TopNavMegaMenu and DropdownMenuSubMenu
@@ -33,6 +33,7 @@ import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {useListFocus} from './useListFocus';
 import {useMediaQuery} from './useMediaQuery';
 import {focusForLastInput} from '../utils/focusReturn';
+import {subscribeInput} from '../utils/inputStream';
 
 const DEFAULT_CLICK_GUARD_MS = 500;
 
@@ -53,6 +54,44 @@ const SAFE_TRIANGLE_PADDING_PX = 8;
 interface Point {
   x: number;
   y: number;
+}
+
+interface PointerRecord {
+  x: number;
+  y: number;
+  pressure?: number;
+  tiltX?: number;
+  tiltY?: number;
+}
+
+const lastWindowPointers = new WeakMap<Window, PointerRecord>();
+const windowPointerListeners = new WeakSet<Window>();
+
+function ensurePointerListener(view: Window): void {
+  if (windowPointerListeners.has(view)) {
+    return;
+  }
+  windowPointerListeners.add(view);
+  const onMove = (e: Event) => {
+    const pe = e as PointerEvent;
+    lastWindowPointers.set(view, {
+      x: pe.clientX,
+      y: pe.clientY,
+      pressure: pe.pressure,
+      tiltX: pe.tiltX,
+      tiltY: pe.tiltY,
+    });
+  };
+  subscribeInput(view, 'pointermove', onMove);
+  subscribeInput(view, 'mousemove', onMove);
+}
+
+export function __resetPointerForTest(view?: Window): void {
+  const targetView =
+    view ?? (typeof window !== 'undefined' ? window : undefined);
+  if (targetView) {
+    lastWindowPointers.delete(targetView);
+  }
 }
 
 interface EdgeRect {
@@ -152,7 +191,7 @@ export interface UseMenuHoverOptions {
 export interface UseMenuHoverReturn<T extends HTMLElement = HTMLElement> {
   triggerProps: {
     onClick: (event?: React.MouseEvent) => void;
-    onMouseEnter: () => void;
+    onMouseEnter: (event?: React.MouseEvent) => void;
     /**
      * Pass the event through: the pointer's position when it leaves the
      * trigger is the apex of the safe triangle toward the flyout.
@@ -213,6 +252,8 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
   const triggerElRef = useRef<HTMLElement | null>(null);
   /** Removes the document pointer listener that watches the safe triangle. */
   const safeTriangleCleanupRef = useRef<(() => void) | null>(null);
+  /** Removes the document listener that waits for deliberate movement under a stationary pointer. */
+  const stationaryCleanupRef = useRef<(() => void) | null>(null);
   /** Menu was hover-opened, so mouseleave may close it. */
   const hoverModeRef = useRef(false);
   const closedAtRef = useRef(0);
@@ -231,6 +272,8 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     }
     safeTriangleCleanupRef.current?.();
     safeTriangleCleanupRef.current = null;
+    stationaryCleanupRef.current?.();
+    stationaryCleanupRef.current = null;
   }, []);
 
   // Catches every close, whatever caused it. A layout effect, not render: it
@@ -399,23 +442,7 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     ],
   );
 
-  const handleMouseEnter = useCallback(() => {
-    if (!hasHover) {
-      return;
-    }
-    if (
-      closedAtRef.current > 0 &&
-      Date.now() - closedAtRef.current < REOPEN_SUPPRESS_MS
-    ) {
-      return;
-    }
-    // Re-entering an open menu's trigger must not un-pin it or re-arm the
-    // guard, which would make the next deliberate click another "confirm" and
-    // leave the menu undismissable.
-    if (isOpen) {
-      clearTimeouts();
-      return;
-    }
+  const startHoverOpen = useCallback(() => {
     hoverModeRef.current = true;
     clearTimeouts();
     const openByHover = () => {
@@ -427,13 +454,90 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     } else {
       openByHover();
     }
-  }, [hasHover, isOpen, clearTimeouts, show, showDelay]);
+  }, [clearTimeouts, show, showDelay]);
+
+  const handleMouseEnter = useCallback(
+    (event?: React.MouseEvent) => {
+      if (!hasHover) {
+        return;
+      }
+      if (
+        closedAtRef.current > 0 &&
+        Date.now() - closedAtRef.current < REOPEN_SUPPRESS_MS
+      ) {
+        return;
+      }
+      // Re-entering an open menu's trigger must not un-pin it or re-arm the
+      // guard, which would make the next deliberate click another "confirm" and
+      // leave the menu undismissable.
+      if (isOpen) {
+        clearTimeouts();
+        return;
+      }
+
+      stationaryCleanupRef.current?.();
+      stationaryCleanupRef.current = null;
+
+      // Pointer Events allows a layout change to dispatch a boundary event
+      // under a stationary pointer. Hover activation requires coordinate
+      // movement or explicit activation, so layout shifts do not open menus.
+      if (
+        event &&
+        typeof event.clientX === 'number' &&
+        typeof event.clientY === 'number' &&
+        (event.clientX !== 0 || event.clientY !== 0)
+      ) {
+        const targetEl =
+          (event.currentTarget as HTMLElement | null) ?? triggerElRef.current;
+        const view =
+          targetEl?.ownerDocument?.defaultView ??
+          (typeof window !== 'undefined' ? window : null);
+        if (view) {
+          ensurePointerListener(view);
+          const last = lastWindowPointers.get(view);
+          if (
+            last != null &&
+            last.x === event.clientX &&
+            last.y === event.clientY
+          ) {
+            const onMove = (moveEvent: Event) => {
+              stationaryCleanupRef.current?.();
+              stationaryCleanupRef.current = null;
+              const currentTrigger = triggerElRef.current ?? targetEl;
+              const moveTarget = moveEvent.target as Node | null;
+              if (
+                currentTrigger &&
+                moveTarget &&
+                (currentTrigger.contains(moveTarget) ||
+                  currentTrigger === moveTarget)
+              ) {
+                startHoverOpen();
+              }
+            };
+
+            const unsubPointer = subscribeInput(view, 'pointermove', onMove);
+            const unsubMouse = subscribeInput(view, 'mousemove', onMove);
+            stationaryCleanupRef.current = () => {
+              unsubPointer();
+              unsubMouse();
+            };
+            return;
+          }
+        }
+      }
+
+      startHoverOpen();
+    },
+    [hasHover, isOpen, clearTimeouts, startHoverOpen],
+  );
 
   const handleMouseLeave = useCallback(
     (event?: React.MouseEvent) => {
       // A real leave ends the stationary-pointer case the suppression window
       // exists for, so the next enter is deliberate whenever it arrives.
       closedAtRef.current = 0;
+      stationaryCleanupRef.current?.();
+      stationaryCleanupRef.current = null;
       if (!hoverModeRef.current) {
         return;
       }
@@ -503,6 +607,12 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
 
   const setTriggerRef = useCallback((el: HTMLElement | null) => {
     triggerElRef.current = el;
+    const view =
+      el?.ownerDocument?.defaultView ??
+      (typeof window !== 'undefined' ? window : null);
+    if (view) {
+      ensurePointerListener(view);
+    }
   }, []);
 
   const noop = useCallback(() => {}, []);
