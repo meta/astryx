@@ -193,9 +193,10 @@ function markNestedPress(container: HTMLElement): void {
 
 /**
  * The press half of a container's press rule. A press that starts on a nested
- * interactive element other than the container's own action does not activate
- * the container, so the container shows no press for it: for a mouse, a pen,
- * or a finger where the primary pointer is coarse. The press controller's paint on `container` ends. For a mouse or a pen, the
+ * interactive element, other than the container's own action, does not
+ * activate the container. So the container shows no press for it: a mouse, a
+ * pen, or a finger where the primary pointer is coarse. The press
+ * controller's paint on `container` ends. For a mouse or a pen, the
  * container's `:active` paint also stays off until the press ends. A press on
  * the container's surface or on `ownAction` is left alone. `belongsToControl`
  * is the container's own test for a press that is not its own, so the press
