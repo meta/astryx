@@ -167,11 +167,27 @@
   },
   {
     "component": "core/LayoutFooter",
-    "reason": "LayoutFooter is a block-axis band below the Layout's middle row. Its inner wrapper uses logical padding with the same value on both inline edges, its width is capped at the content width, and it centers inside the footer with marginInline auto. Its only line is on the block-start edge. It owns no directional glyph, physical inline offset or transform, inline ordering, scrolling, dragging, overlay, or keyboard behavior. Caller content follows the document direction."
+    "reason": "LayoutFooter is a block-axis band below the Layout's middle row. Its inner wrapper uses logical padding with the same value on both inline edges, its width is capped at the content width, and it centers inside the footer with marginInline auto. Its only line is on the block-start edge. It owns no directional glyph, physical inline offset or transform, inline ordering, scrolling, dragging, overlay, or keyboard behavior. Caller content follows the document direction.",
+    "evidence": {
+      "apps/storybook/stories/Layout.stories.tsx": "sha256:78f0b034fc42ffdc527e8263a0b3a71d4969a418e70faf71206cf902c70e2305",
+      "packages/core/src/Layout/LayoutFooter.tsx": "sha256:e75feba0174ca45db3ad1099d7979554c51cfb91d06d5bef34694ff2129dfda7",
+      "packages/core/src/Layout/LayoutDividerContext.ts": "sha256:cd00419235117ed95d6d9b4d3e58644b545f10a9844fe5157ffceaa0fa182fee",
+      "packages/core/src/Layout/padding.stylex.ts": "sha256:6b9cdef4c750de68207366461a16bd4ec0a40ab2df39e0a64b0cb5d7653042da",
+      "packages/core/src/Layout/layoutEdges.stylex.ts": "sha256:dedbaa62a25fffe4f44ed487613f5c52c5394c7b63d01f75d6dda062e6f90997",
+      "packages/core/src/Layout/containerBlockBleed.stylex.ts": "sha256:7847e4f2e4c12fe412da869a02700d61f868d45f5674611375a8d22203f0149a"
+    }
   },
   {
     "component": "core/LayoutHeader",
-    "reason": "LayoutHeader is a block-axis band above the Layout's middle row. Its inner wrapper uses logical padding with the same value on both inline edges; its width is capped at the content width, and it centers inside the header with marginInline auto. The only per-edge override, paddingBlockEnd, is on the block axis, and its only line is on the block-end edge. It owns no directional glyph, physical inline offset or transform, inline ordering, scrolling, dragging, overlay, or keyboard behavior. Caller content follows the document direction."
+    "reason": "LayoutHeader is a block-axis band above the Layout's middle row. Its inner wrapper uses logical padding with the same value on both inline edges; its width is capped at the content width, and it centers inside the header with marginInline auto. The only per-edge override, paddingBlockEnd, is on the block axis, and its only line is on the block-end edge. It owns no directional glyph, physical inline offset or transform, inline ordering, scrolling, dragging, overlay, or keyboard behavior. Caller content follows the document direction.",
+    "evidence": {
+      "apps/storybook/stories/Layout.stories.tsx": "sha256:78f0b034fc42ffdc527e8263a0b3a71d4969a418e70faf71206cf902c70e2305",
+      "packages/core/src/Layout/LayoutHeader.tsx": "sha256:25ccf3ec0a5b2c4508546c65b914b0902ef92339a9d1ec59bdea9a1fcdfa336a",
+      "packages/core/src/Layout/LayoutDividerContext.ts": "sha256:cd00419235117ed95d6d9b4d3e58644b545f10a9844fe5157ffceaa0fa182fee",
+      "packages/core/src/Layout/padding.stylex.ts": "sha256:6b9cdef4c750de68207366461a16bd4ec0a40ab2df39e0a64b0cb5d7653042da",
+      "packages/core/src/Layout/layoutEdges.stylex.ts": "sha256:dedbaa62a25fffe4f44ed487613f5c52c5394c7b63d01f75d6dda062e6f90997",
+      "packages/core/src/Layout/containerBlockBleed.stylex.ts": "sha256:7847e4f2e4c12fe412da869a02700d61f868d45f5674611375a8d22203f0149a"
+    }
   },
   {
     "component": "core/Item",
