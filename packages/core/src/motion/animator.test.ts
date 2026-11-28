@@ -2327,6 +2327,52 @@ describe('promotion: a compositing layer while it moves', () => {
     expect(element.style.willChange).toBe('');
   });
 
+  it('keeps the layer while the animation plays its curve on a clock behind the page clock, and ends it after the animation retires', async () => {
+    const {animator, element} = setup();
+    animator.animate({x: 120}, {spring: springs.settle});
+    const [animation] = live('translate');
+    await commitFrame(clock);
+    const start = animation.startTime as number;
+    const curve = Number(animation.options.duration) - END_HOLD_MS;
+    // The animation's own clock runs at a quarter of the page clock's speed,
+    // as a timeline that keeps a late frame's time runs behind it.
+    Object.defineProperty(animation, 'currentTime', {
+      configurable: true,
+      get: () => (clock - start) / 4,
+    });
+    Object.defineProperty(animation, 'effect', {
+      configurable: true,
+      value: {getTiming: () => ({duration: animation.options.duration})},
+    });
+    // The page clock is past the curve's end and the linger, and the
+    // animation still plays its curve.
+    await advance(curve + PROMOTION_LINGER_MS + 10);
+    expect(live('translate')).toContain(animation);
+    expect(element.style.willChange).toBe('translate');
+    // Its own clock reaches the curve's end: it retires, and the layer ends
+    // after the linger.
+    await advance(3 * curve + 2 * PROMOTION_LINGER_MS);
+    expect(live('translate')).not.toContain(animation);
+    expect(element.style.willChange).toBe('');
+  });
+
+  it('keeps the layer while a sampler holds the animation paused, and ends it after the animation stops', async () => {
+    const {animator, element} = setup();
+    animator.animate({x: 120}, {spring: springs.quickChange});
+    const [animation] = live('translate');
+    await commitFrame(clock);
+    const curve = Number(animation.options.duration) - END_HOLD_MS;
+    // A paused animation never reaches its curve's end, so it never retires.
+    animation.paused = true;
+    await advance(curve + PROMOTION_LINGER_MS + 10);
+    expect(animation.cancelled).toBe(false);
+    expect(element.style.willChange).toBe('translate');
+    // Stopped, nothing waits to retire, and the layer ends after the linger.
+    animator.stop();
+    await advance(PROMOTION_LINGER_MS + 10);
+    expect(element.style.willChange).toBe('');
+  });
+
   it('keeps the element’s own will-change', async () => {
     const {animator, element} = setup();
     element.style.willChange = 'contents';
