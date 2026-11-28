@@ -789,10 +789,14 @@ describe('Selector', () => {
       act(() => {
         document.dispatchEvent(new Event('scrollend'));
       });
-      // The margin for a list above its anchor ends at the keyboard's term.
+      // The margin for a list above its anchor ends at the keyboard's term,
+      // and its flipped cap keeps both gutters when no keyboard is up.
       await waitFor(() => {
         expect(popover?.getAttribute('style')).toContain(
-          'var(--_layer-keyboard-inset-block-end, 0px))))',
+          '+ var(--_layer-keyboard-inset-block-end, 0px)))',
+        );
+        expect(screen.getByRole('listbox', h).style.maxHeight).toBe(
+          'min(300px, calc(200px - var(--_layer-keyboard-inset-block-end, 16px) - 16px))',
         );
       });
     } finally {

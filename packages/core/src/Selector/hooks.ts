@@ -17,7 +17,7 @@
  * - /packages/core/src/Selector/useCombobox.doc.mjs
  */
 
-import {useCallback, useState} from 'react';
+import {useCallback, useRef, useState} from 'react';
 import {flushSync} from 'react-dom';
 import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
@@ -237,6 +237,7 @@ export function useSelectedItemOffset({
 
 interface SelectedItemOverlayMargin {
   marginBlockStart: string | undefined;
+  maxHeight: string | undefined;
   isPositioned: boolean;
   /**
    * Measures the margin again. The layer runtime calls it after a scroll stop
@@ -259,8 +260,10 @@ export function useSelectedItemOverlayMargin({
   anchorRef,
 }: UseSelectedItemOffsetOptions): SelectedItemOverlayMargin {
   const [marginBlockStart, setMarginBlockStart] = useState<string>();
+  const [maxHeight, setMaxHeight] = useState<string>();
   const [isPositioned, setIsPositioned] = useState(false);
   const [listboxResizes, setListboxResizes] = useState(0);
+  const hasMarginRef = useRef(false);
   // A flip changes which margin applies, and the next frame must not show the
   // old one.
   const remeasure = useCallback(() => {
@@ -299,6 +302,7 @@ export function useSelectedItemOverlayMargin({
       : null;
     let belowAnchor: string | undefined;
     let aboveAnchor: string | undefined;
+    let flippedMaxHeight: string | undefined;
     if (placement != null) {
       const {offset, anchorTop, anchorBottom, listboxHeight, gutter} =
         placement;
@@ -310,11 +314,12 @@ export function useSelectedItemOverlayMargin({
       belowAnchor = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
       // A flip swaps the block margins, so this margin sets the list's end
       // from the anchor's top. It puts the list's top at the clamped top, or
-      // lifts the list's end above a software keyboard. The list's top stays
-      // below the gutter.
+      // lifts the list's end above a software keyboard. With no keyboard up,
+      // the inset falls back to the second gutter so both viewport gutters hold.
       const flipped = anchorTop - placement.clampedTop - listboxHeight;
       const keyboardEnd = anchorTop - viewport;
-      aboveAnchor = `min(${anchorTop - listboxHeight - gutter}px, max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px))))`;
+      aboveAnchor = `max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px)))`;
+      flippedMaxHeight = `min(300px, calc(${viewport}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${gutter}px) - ${gutter}px))`;
     }
     // At the open, the browser picks the layer's side after this margin
     // applies. The margin below the anchor always fits there, so the layer
@@ -322,9 +327,15 @@ export function useSelectedItemOverlayMargin({
     // layer that the browser flips while the list is open stays flipped, so
     // it gets the flipped margin.
     const isFlippedWhileOpen = placement?.isAboveAnchor === true;
+    const hadMargin = hasMarginRef.current;
+    const nextMargin =
+      hadMargin && isFlippedWhileOpen ? aboveAnchor : belowAnchor;
+    hasMarginRef.current = nextMargin != null;
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
-    setMarginBlockStart(previous =>
-      previous != null && isFlippedWhileOpen ? aboveAnchor : belowAnchor,
+    setMarginBlockStart(nextMargin);
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
+    setMaxHeight(
+      isOpen && hadMargin && isFlippedWhileOpen ? flippedMaxHeight : undefined,
     );
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
     setIsPositioned(isOpen);
@@ -348,7 +359,7 @@ export function useSelectedItemOverlayMargin({
     }
   }, [isOpen, isPositioned, listboxRef, anchorRef]);
 
-  return {marginBlockStart, isPositioned, remeasure};
+  return {marginBlockStart, maxHeight, isPositioned, remeasure};
 }
 
 // =============================================================================
