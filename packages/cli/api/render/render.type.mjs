@@ -67,6 +67,7 @@
  * @property {string[]} [data.notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back: a name that reads as a tool's configuration, a file a test or story runner would run, a file outside the carried folder (imported by a relative path or a path alias), an image it cannot carry, or a Sass or Less stylesheet, which a render does not compile. Each also has a warning. Present only when there are some.
  * @property {number} data.scriptBytes - Size of the page's script, which `bytes` includes.
  * @property {number} data.scriptModules - How many modules the page's script holds (the page's own, its packages', React's).
+ * @property {{build: 'esbuild' | 'esbuild-wasm', version: string | null, reason: string}} [data.esbuild] - Which esbuild built the page's script, and why: a native esbuild in the CLI's esbuild-wasm range (the project's own first, then one beside the CLI), else esbuild-wasm, which builds the same script about twice as slowly.
  * @property {RenderPictures} [data.pictures] - With `pictures`: the pictures taken of the written file, or why there are none.
  * @property {object} data.checks - Checks run on the written file.
  * @property {string[]} data.checks.outside - Every reference the file's markup and stylesheets load from outside the file when it opens (a remote address, or a file beside it the render did not carry); empty when the file stands alone.

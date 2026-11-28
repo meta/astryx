@@ -41,7 +41,7 @@ import {aliasClasses} from './class-alias.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
 import {LINK_OUT, ROOT_ID, compactSource, imageSinks} from './client-bundle.mjs';
 import {remoteImages} from './remote-images.mjs';
-import {ESBUILD_MISSING, findEsbuild} from './esbuild-dependency.mjs';
+import {chooseEsbuild, esbuildMissing} from './esbuild-dependency.mjs';
 import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {scanHtml, VOID} from './html-reader.mjs';
 import {removeOnStop} from '../fs/stop-cleanup.mjs';
@@ -108,6 +108,7 @@ export function pageOutputWarnings(logs) {
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
+ * @property {{build: 'esbuild' | 'esbuild-wasm', version: string | null, reason: string}} [esbuild] - Which esbuild built the page's script, and why; none in a markup-only render.
  * @property {{fetched: string[], failed: {url: string, reason: string}[]}} [remoteImages] - The https images the page names: each address fetched into the file, and each one left as the page wrote it, with why. Present when the page names a remote image and the render writes a file.
  */
 
@@ -2006,9 +2007,11 @@ function schemeCssFor(mode) {
  *   carries the page's script (client-bundle.mjs): it draws the page over
  *   its markup in the browser, so the page's controls work. The markup sits
  *   in one element the script draws into, and the stylesheet keeps the rules
- *   any of the page's modules can use, not only the markup's. esbuild, a
- *   dependency of the CLI, builds the script (`esbuildFrom`: the folder it
- *   resolves from); a page whose script cannot be built fails the render.
+ *   any of the page's modules can use, not only the markup's. esbuild builds
+ *   the script: the project's own, else one beside the CLI, when its version
+ *   satisfies the CLI's esbuild-wasm range; else the CLI's esbuild-wasm
+ *   (`esbuildFrom`: the CLI's folder, where its packages resolve from);
+ *   a page whose script cannot be built fails the render.
  *   `keepClassNames` keeps every class of the first paint as written,
  *   for a caller that styles the markup with its own copy of the styles.
  *   `markupOnly` renders the markup and its styles without the script, for a
@@ -2034,12 +2037,15 @@ export async function renderPage(entry, options = {}) {
   const warnings = [];
   /** @type {string | undefined} */
   let esbuild;
+  /** @type {import('./esbuild-dependency.mjs').EsbuildChoice | null} */
+  let esbuildChoice = null;
   if (!options.markupOnly) {
-    esbuild = findEsbuild(options.esbuildFrom) ?? undefined;
+    esbuildChoice = chooseEsbuild(options.esbuildFrom, root);
+    esbuild = esbuildChoice?.entry;
     if (!esbuild) {
       throw new RenderError(
         'ERR_RENDER_MISSING_DEPENDENCY',
-        `The render builds the page's script, but ${ESBUILD_MISSING}; nothing was written.`,
+        `The render builds the page's script, but ${esbuildMissing(options.esbuildFrom, root)}; nothing was written.`,
       );
     }
   }
@@ -2941,6 +2947,7 @@ export async function renderPage(entry, options = {}) {
     logs: message.logs ?? [],
     fromSet: message.fromSet ?? [],
     ...(pageScript ? {scriptBytes: Buffer.byteLength(pageScript), scriptModules: message.scriptModules ?? 0} : {}),
+    ...(pageScript && esbuildChoice ? {esbuild: {build: esbuildChoice.build, version: esbuildChoice.version, reason: esbuildChoice.reason}} : {}),
     ...(remoteSummary && remoteSummary.fetched.length + remoteSummary.failed.length > 0 ? {remoteImages: remoteSummary} : {}),
   };
 }

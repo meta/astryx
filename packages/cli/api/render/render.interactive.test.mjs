@@ -13,6 +13,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {JSDOM, VirtualConsole} from 'jsdom';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {parse as parseYaml} from 'yaml';
 import {render} from './render.mjs';
 import {doctor} from '../doctor/doctor.mjs';
 import {
@@ -21,10 +22,7 @@ import {
   SOURCE_TYPE,
 } from '../../foundation/render/source-block.mjs';
 import {ROOT_ID, scriptSafe} from '../../foundation/render/client-bundle.mjs';
-import {
-  ESBUILD_MISSING,
-  findEsbuild,
-} from '../../foundation/render/esbuild-dependency.mjs';
+import {findEsbuild} from '../../foundation/render/esbuild-dependency.mjs';
 import {CARRY_ATTR, RenderError, renderPage} from '../../foundation/render/render-page.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
@@ -109,11 +107,16 @@ afterAll(() => {
 });
 
 describe("a render, which carries the page's script", () => {
-  it('reports the script it carried', () => {
+  it('reports the script it carried, and which esbuild built it', () => {
     expect(result.type).toBe('render.page');
     expect(result.data.scriptBytes).toBeGreaterThan(10_000);
     expect(result.data.scriptModules).toBeGreaterThan(3);
     expect(result.data.bytes).toBe(Buffer.byteLength(html));
+    expect(result.data.esbuild).toEqual({
+      build: expect.stringMatching(/^esbuild(-wasm)?$/),
+      version: expect.stringMatching(/^0\.28\.\d+$/),
+      reason: expect.any(String),
+    });
   });
 
   it('puts the markup in the element the script draws into, and the script after the embedded source', () => {
@@ -1953,16 +1956,28 @@ import '@astryxdesign/core/astryx.css';
   }, 120_000);
 });
 
-describe('esbuild, the dependency that builds the script', () => {
-  it('is a dependency of the CLI, not a peer, and resolves beside it', () => {
+describe('esbuild, which builds the script', () => {
+  it('ships as esbuild-wasm, a dependency pinned from the catalog, and never pulls the native esbuild in', () => {
     const pkg = JSON.parse(
       fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
     );
-    expect(pkg.dependencies.esbuild).toBeDefined();
-    expect(pkg.peerDependencies.esbuild).toBeUndefined();
+    expect(pkg.dependencies['esbuild-wasm']).toBe('catalog:');
+    expect(pkg.dependencies.esbuild).toBeUndefined();
+    expect(pkg.optionalDependencies?.esbuild).toBeUndefined();
+    expect(pkg.peerDependencies?.esbuild).toBeUndefined();
     const entry = findEsbuild();
     expect(entry).not.toBeNull();
     expect(fs.existsSync(/** @type {string} */ (entry))).toBe(true);
+  });
+
+  it("pins the CLI's esbuild-wasm to the same range as the repository's own esbuild", () => {
+    const {catalog} = parseYaml(
+      fs.readFileSync(
+        new URL('../../../../pnpm-workspace.yaml', import.meta.url),
+        'utf8',
+      ),
+    );
+    expect(catalog['esbuild-wasm']).toBe(catalog.esbuild);
   });
 
   it('refuses before it runs the page when the install left esbuild out', async () => {
@@ -1979,11 +1994,67 @@ describe('esbuild, the dependency that builds the script', () => {
       expect(error).toBeInstanceOf(RenderError);
       expect(error.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
       expect(error.message).toBe(
-        `The render builds the page's script, but ${ESBUILD_MISSING}; nothing was written.`,
+        "The render builds the page's script, but the CLI\u2019s install is missing its esbuild-wasm; install the CLI again; nothing was written.",
       );
       expect(fs.existsSync(path.join(dir, 'never.html'))).toBe(false);
     } finally {
       fs.rmSync(empty, {recursive: true, force: true});
+    }
+  });
+
+  it("names both fixes when the CLI's install lost its esbuild-wasm and its manifest gives the range", async () => {
+    const cliDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-no-wasm-'));
+    try {
+      fs.writeFileSync(
+        path.join(cliDir, 'package.json'),
+        JSON.stringify({dependencies: {'esbuild-wasm': '^0.28.2'}}),
+      );
+      expect(findEsbuild(cliDir)).toBeNull();
+      const error = await errorOf(() =>
+        renderPage(path.join(dir, 'src/counter.tsx'), {
+          esbuildFrom: cliDir,
+          output: path.join(dir, 'never.html'),
+          cwd: dir,
+        }),
+      );
+      expect(error).toBeInstanceOf(RenderError);
+      expect(error.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+      expect(error.message).toBe(
+        "The render builds the page's script, but the CLI\u2019s install is missing its esbuild-wasm; install the CLI again, or add or upgrade esbuild to ^0.28.2 in your project\u2019s dev dependencies; nothing was written.",
+      );
+      expect(fs.existsSync(path.join(dir, 'never.html'))).toBe(false);
+    } finally {
+      fs.rmSync(cliDir, {recursive: true, force: true});
+    }
+  });
+
+  it("names the esbuild it passed over when the CLI's install lost its esbuild-wasm", async () => {
+    const cliDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-no-wasm-'));
+    try {
+      fs.writeFileSync(
+        path.join(cliDir, 'package.json'),
+        JSON.stringify({dependencies: {'esbuild-wasm': '^0.28.2'}}),
+      );
+      const native = path.join(cliDir, 'node_modules', 'esbuild');
+      fs.mkdirSync(path.join(native, 'lib'), {recursive: true});
+      fs.writeFileSync(
+        path.join(native, 'package.json'),
+        JSON.stringify({name: 'esbuild', version: '0.25.12', main: 'lib/main.js'}),
+      );
+      fs.writeFileSync(path.join(native, 'lib', 'main.js'), '');
+      const error = await errorOf(() =>
+        renderPage(path.join(dir, 'src/counter.tsx'), {
+          esbuildFrom: cliDir,
+          output: path.join(dir, 'never.html'),
+          cwd: dir,
+        }),
+      );
+      expect(error.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+      expect(error.message).toBe(
+        "The render builds the page's script, but the CLI\u2019s install is missing its esbuild-wasm, and the esbuild beside the CLI 0.25.12 is outside ^0.28.2; install the CLI again, or add or upgrade esbuild to ^0.28.2 in your project\u2019s dev dependencies; nothing was written.",
+      );
+    } finally {
+      fs.rmSync(cliDir, {recursive: true, force: true});
     }
   });
 

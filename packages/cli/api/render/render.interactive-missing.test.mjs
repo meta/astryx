@@ -19,6 +19,7 @@ vi.mock(
   '../../foundation/render/esbuild-dependency.mjs',
   async importOriginal => ({
     .../** @type {object} */ (await importOriginal()),
+    chooseEsbuild: () => null,
     findEsbuild: () => null,
   }),
 );

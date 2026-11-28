@@ -335,7 +335,7 @@ export const doc = {
       value: 'ERR_RENDER_MISSING_DEPENDENCY',
       stability: 'experimental',
       description:
-        "The page imports a package that is not installed where the page is, or the esbuild the CLI depends on to build the page's script is missing from the CLI's install (install the CLI again). Nothing was written. For a package the page imports, the suggestion is the install command. Raised only by the experimental export command.",
+        "The page imports a package that is not installed where the page is, or the CLI's install is missing the esbuild-wasm it builds the page's script with and no native esbuild satisfies the CLI's esbuild-wasm range (install the CLI again, or add or upgrade esbuild to that range in the project's dev dependencies). Nothing was written. For a package the page imports, the suggestion is the install command. Raised only by the experimental export command.",
     },
     {
       value: 'ERR_RENDER_BROWSER_API',
