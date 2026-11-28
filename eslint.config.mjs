@@ -1097,7 +1097,6 @@ export default defineConfig(
     files: ['packages/richtext/src/**/*.{ts,tsx}'],
     rules: {
       // React 19 ref-in-props migration for the editor's public props.
-      '@astryx/require-ref-prop': 'warn',
       '@eslint-react/no-forward-ref': 'warn',
       // Public API shape, settled with the package's stable-API decision.
       '@astryx/boolean-prop-naming': 'warn',

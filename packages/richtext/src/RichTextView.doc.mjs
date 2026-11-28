@@ -71,6 +71,12 @@ export const docs = {
       type: 'StyleXStyles',
       description: 'StyleX styles for the view root.',
     },
+    {
+      name: 'ref',
+      type: 'Ref<HTMLDivElement>',
+      description:
+        "Ref to the view's root element, also while it shows errorFallback.",
+    },
   ],
   usage: {
     description:

@@ -167,6 +167,9 @@ reflows no line; only editing affordances appear or disappear.
   renderer parity: for the same list, theme, density, and available measure,
   Markdown and the RichText surfaces retain matching text starts and nested
   insets, and FR9's reading/editing geometry and reflow requirements still hold.
+- **FR12 — The view's `ref` reaches its root.** `RichTextView` takes
+  `BaseProps` and a `ref` that reaches the view's root element, including while
+  it shows its error fallback (`architecture:public-component-api` INV8).
 
 ### Platform support
 
@@ -261,6 +264,7 @@ characters (`component:Markdown` FR29), while RichText keeps the whole first wor
 | FR5, FR11  | Real-browser counter line boxes, sibling text starts, and nested-list insets on Markdown and RichText       | Short and wide-counter lists at the same depth; decimal 9–10 and 99–100; alpha z–aa; roman vi–viii; adjacent parents whose child lists have different widest counters; phone/desktop; LTR/RTL; light/dark; read/edit                                                                       | A split, clipped, or overlapping counter, a text shift between items that read the same way, a nested-list anchor displaced from its own item's text-start line, or a cross-renderer/read-edit inset mismatch fails |
 | FR8        | Real-browser code block header geometry in both modes                                                       | Fenced code with an info string; a one-line fence with a language; a long fence with no language                                                                                                                                                                                           | A header or corner cluster present in only one mode, a control over the code in either mode, or a line that wraps differently between modes fails                                                                   |
 | FR9–FR10   | Real-browser read/edit switch of the parity fixture and a long document                                     | Short document at the top; long document halfway down                                                                                                                                                                                                                                      | A per-block shift beyond the constant offset, or an anchor block leaving the top of the view, fails                                                                                                                 |
+| FR12       | `RichTextView.ref.test.tsx`                                                                                 | Rendered content; the error fallback                                                                                                                                                                                                                                                       | A ref that is not the view's root element, or none while the fallback shows, fails                                                                                                                                  |
 
 ## Decision log
 

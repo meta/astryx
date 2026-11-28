@@ -18,7 +18,7 @@
  * - /apps/storybook/stories/RichTextEditor.stories.tsx
  */
 
-import {useEffect, useRef, useState, type ReactNode} from 'react';
+import {useEffect, useRef, useState, type ReactNode, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {sharedEditorTheme} from './editorTheme';
 import type {BaseProps} from '@astryxdesign/core';
@@ -106,6 +106,8 @@ const VIEW_CONTENT_EDITABLE_PROPS = {
 const NO_TRANSFORMERS: ReadonlyArray<never> = [];
 
 export interface RichTextViewProps extends BaseProps {
+  /** Ref to the view's root element. */
+  ref?: Ref<HTMLDivElement>;
   /**
    * Serialized editor state to render (a JSON string produced by
    * `JSON.stringify(editorState.toJSON())`).
@@ -224,6 +226,7 @@ export function RichTextView({
   xstyle,
   className,
   style,
+  ref,
   ...rest
 }: RichTextViewProps) {
   const themeRef = useRef<EditorThemeClasses | null>(null);
@@ -290,6 +293,7 @@ export function RichTextView({
     extensionRef.current = null;
     return (
       <div
+        ref={ref}
         {...mergeProps(stylex.props(styles.root, xstyle), className, style)}
         {...rest}>
         {errorFallback}
@@ -315,6 +319,7 @@ export function RichTextView({
 
   return (
     <div
+      ref={ref}
       {...mergeProps(stylex.props(styles.root, xstyle), className, style)}
       {...rest}>
       <LexicalExtensionComposer
