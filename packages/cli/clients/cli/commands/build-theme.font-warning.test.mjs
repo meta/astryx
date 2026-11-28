@@ -217,6 +217,27 @@ describe('theme build font-loading warning', () => {
     expect(result.stdout).toContain('This app loads fonts with next/font');
   });
 
+  it('prints the next/font fix once under --detail full', async () => {
+    const project = path.join(tmpDir, 'project');
+    writeNextFontApp(project);
+    const fonty = writeTheme(project, 'fonty', FONTY);
+
+    const result = await runCli(
+      ['--detail', 'full', 'theme', 'build', path.relative(project, fonty)],
+      project,
+    );
+    expect(result.code).toBe(0);
+    expect(
+      result.stdout.split('This app loads fonts with next/font').length - 1,
+    ).toBe(1);
+    expect(result.stdout).toContain(
+      'Font "Space Grotesk" is named by this theme but not loaded.',
+    );
+    expect(result.stdout).toContain(
+      'Font "JetBrains Mono" is named by this theme but not loaded.',
+    );
+  });
+
   it('keeps --json stdout one valid envelope: notices inside, snippet suppressed', async () => {
     const project = path.join(tmpDir, 'project');
     const themeFile = writeTheme(

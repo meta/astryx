@@ -6401,8 +6401,10 @@ async function themeBuildInternal(
   // named only inside one needs the same notice as one named at the root.
   // The result names the recipe's command bare, as every machine-read
   // command is; the printed note starts it the way this project runs the CLI.
-  // A next/font app loads each family under a generated name, so its fix is
-  // the font's CSS variable, not a <link> or @font-face.
+  // A next/font app loads each family under a name of its own, so its fix is
+  // the font's CSS variable, not a <link> or @font-face. Its printed notes
+  // name each family alone; the recipe printed after them carries the fix
+  // once. The --json notices keep the fix in each one.
   const nextFont =
     !handOff.fontHelp && unloadedFonts.length > 0
       ? rootLayoutImportsNextFont(cwd)
@@ -6418,7 +6420,11 @@ async function themeBuildInternal(
   const fontNotices = [];
   for (const family of unloadedFonts) {
     noticeMessages.push(fontNotice(family, `astryx ${recipeTopic}`));
-    fontNotices.push(fontNotice(family, formatCliCommand(recipeTopic, cwd)));
+    fontNotices.push(
+      nextFont
+        ? `Font "${family}" is named by this theme but not loaded.`
+        : fontNotice(family, formatCliCommand(recipeTopic, cwd)),
+    );
   }
 
   /** @type {ThemeBuildTrailer} */
@@ -7364,10 +7370,18 @@ Or load the same stylesheet natively:
       familyNotice(family, `astryx ${recipeTopic}`),
     ),
   ];
+  // In a next/font app each note names the family alone, and the fix prints
+  // once after them.
   for (const family of unloadedFonts)
     logger.log(
-      `  note: ${familyNotice(family, formatCliCommand(recipeTopic, cwd))}`,
+      `  note: ${
+        nextFont
+          ? `Font "${family}" is named by this theme family but not loaded.`
+          : familyNotice(family, formatCliCommand(recipeTopic, cwd))
+      }`,
     );
+  if (nextFont && unloadedFonts.length > 0)
+    logger.log(`  note: ${nextFontFix(formatCliCommand(recipeTopic, cwd))}.`);
   return {
     type: 'theme.build',
     data: {
