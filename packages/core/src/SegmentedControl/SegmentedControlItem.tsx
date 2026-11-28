@@ -13,6 +13,7 @@
  * - /packages/core/src/SegmentedControl/SegmentedControl.doc.mjs
  * - /packages/core/src/SegmentedControl/index.ts
  * - /packages/core/src/SegmentedControl/SegmentedControl.test.tsx
+ * - /packages/core/src/SegmentedControl/SegmentedControlItem.test.tsx
  * - /packages/cli/assets/templates/blocks/components/SegmentedControl/ (showcase blocks)
  */
 

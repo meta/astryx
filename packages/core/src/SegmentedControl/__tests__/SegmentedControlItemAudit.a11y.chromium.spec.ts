@@ -248,7 +248,12 @@ function raised(
 }
 
 function semantics(check: Check, state: Segments) {
+  check(state.groups.length > 0, 'no radiogroup on the page');
   for (const group of state.groups) {
+    check(
+      group.segments.length >= 2,
+      `${group.name}: ${group.segments.length} segments`,
+    );
     const checked = group.segments.filter(s => s.checked === 'true');
     check(checked.length <= 1, `${group.name}: ${checked.length} checked`);
     for (const segment of group.segments) {
@@ -279,9 +284,10 @@ function semantics(check: Check, state: Segments) {
 /**
  * WCAG 2.5.8 (AA): an enabled segment holds a 24 by 24 CSS px square, or
  * passes the spacing exception: a 24 px circle on its center meets no other
- * target and no other undersized target's circle.
+ * target and no other undersized target's circle. A disabled segment is not
+ * a target, so it is neither checked nor counted as a neighbor.
  */
-function targetSize(check: Check, state: Segments) {
+function targetSizeFailures(state: Segments) {
   const targets = state.groups.flatMap(group =>
     group.segments
       .filter(segment => segment.disabled !== 'true')
@@ -293,6 +299,7 @@ function targetSize(check: Check, state: Segments) {
     x: (box.left + box.right) / 2,
     y: (box.top + box.bottom) / 2,
   });
+  const failures: string[] = [];
   for (const {group, segment} of targets) {
     if (!undersized(segment.box)) {
       continue;
@@ -314,10 +321,18 @@ function targetSize(check: Check, state: Segments) {
       }
       return true;
     });
-    check(
-      clear,
-      `${group} ${segment.value}: target ${segment.box.width.toFixed(1)}x${segment.box.height.toFixed(1)} fails WCAG 2.5.8 and its spacing exception`,
-    );
+    if (!clear) {
+      failures.push(
+        `${group} ${segment.value}: target ${segment.box.width.toFixed(1)}x${segment.box.height.toFixed(1)} fails WCAG 2.5.8 and its spacing exception`,
+      );
+    }
+  }
+  return failures;
+}
+
+function targetSize(check: Check, state: Segments) {
+  for (const failure of targetSizeFailures(state)) {
+    check(false, failure);
   }
 }
 
@@ -463,7 +478,7 @@ for (const mode of ['light', 'dark'] as const) {
             check(
               Math.abs(icon.width - 16) < 0.5 &&
                 Math.abs(icon.height - 16) < 0.5,
-              `${segment.value}: md icon ${icon.width}x${icon.height}`,
+              `${segment.value}: md icon box ${icon.width}x${icon.height}`,
             );
           }
         }
@@ -491,7 +506,7 @@ for (const mode of ['light', 'dark'] as const) {
         );
         check(
           segment.icon != null && Math.abs(segment.icon.width - 14) < 0.5,
-          `${segment.value}: sm icon ${segment.icon?.width}`,
+          `${segment.value}: sm icon box ${segment.icon?.width}`,
         );
       }
       targetSize(check, state);
@@ -609,12 +624,53 @@ for (const direction of ['ltr', 'rtl'] as const) {
         const cut = state.groups.flatMap(g =>
           g.segments.filter(s => s.labelCut).map(s => s.value),
         );
+        check(cut.length > 0, 'no label is cut at this width');
         const axe = await checkAxe(page, check);
         await frame('rest', {state, cut, axe});
       },
     });
   }
 }
+
+// A container narrower than the segments' labels: every size truncates. A
+// labelled `sm` segment pads 8 px a side, so it can shrink under 24 px (the
+// AR2 gap, recorded, not asserted); `md` and `lg` pad 12 px a side.
+cases.push({
+  key: 'sizes__neutral__light__ltr__squeezed',
+  group: 'narrow',
+  story: SIZES_STORY,
+  mode: 'light',
+  theme: 'neutral',
+  direction: 'ltr',
+  viewport: DESKTOP,
+  run: async (page, check, frame) => {
+    await page.evaluate(() => {
+      for (const group of document.querySelectorAll<HTMLElement>(
+        '#storybook-root [role="radiogroup"]',
+      )) {
+        (group.parentElement as HTMLElement).style.width = '60px';
+      }
+    });
+    await settle(page);
+    const state = await readSegments(page);
+    semantics(check, state);
+    const bySize = Object.fromEntries(
+      state.groups.map(g => [g.size, g.segments.map(s => s.box.width)]),
+    );
+    for (const size of ['md', 'lg']) {
+      const widths: number[] = bySize[size] ?? [];
+      check(
+        widths.length > 0 && widths.every(width => width >= 24 - 0.5),
+        `${size} segment widths ${widths.join(' ')}`,
+      );
+    }
+    const smallFailures = targetSizeFailures({
+      ...state,
+      groups: state.groups.filter(g => g.size === 'sm'),
+    });
+    await frame('squeezed', {bySize, smallFailures, state});
+  },
+});
 
 cases.push({
   key: 'default__light__ltr__forced-colors',
@@ -709,8 +765,8 @@ async function runCase(page: Page, item: AuditCase) {
     sha256: string;
   }[] = [];
   const frame: FrameSink = async (state, observed) => {
-    // The hint and the reason tooltip render in the top layer below the
-    // control, outside the story root, so the frame covers both.
+    // An open popover layer renders outside the story root, so the frame
+    // covers it too.
     const clip = await page.evaluate(() => {
       const boxes = [
         document.querySelector('#storybook-root'),
