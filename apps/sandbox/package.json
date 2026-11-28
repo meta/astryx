@@ -15,7 +15,7 @@
     "dev": "pnpm generate && (node ../../scripts/sync-templates.js --watch & vite)",
     "build": "pnpm generate && vite build && node scripts/prerender.mjs && node scripts/verify-export.mjs",
     "start": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "pnpm generate:motion-audit && tsc --noEmit",
     "postinstall": "astryx init --features agents"
   },
   "dependencies": {

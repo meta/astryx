@@ -30,6 +30,8 @@ export const NODE_TEST_INCLUDE = [
   'apps/sandbox/src/**/*.test.{ts,tsx,mjs}',
   // The docs site's MCP-folder install pins (a pure module, no DOM).
   'apps/docsite/scripts/lockfile-overrides.test.mjs',
+  // The Sandbox score ledger's snapshot reader (a pure module, no DOM).
+  'apps/sandbox/scripts/score-ledger-snapshot.test.mjs',
 ];
 
 // Beside Vitest's own default excludes.

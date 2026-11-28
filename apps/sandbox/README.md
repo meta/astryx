@@ -39,3 +39,4 @@ Add `src/app/(sandbox)/pages/<slug>/page.tsx` for a sidebar-framed page, `(fulls
 - `src/app/providers.tsx`: theme and mode state (including embed sync).
 - `scripts/route-manifest.mjs`, `scripts/prerender.mjs`, `scripts/verify-export.mjs`, `src/route-manifest.test.ts`: exact-path export contract and 404 behavior.
 - `src/generated/`, `src/app/(fullscreen)/templates/`, `public/template-assets/`: generated registries, wrappers and mirrored public images (ignored by git).
+- `src/app/(sandbox)/pages/motion-lab/__generated__/motionAudit.ts`: the Motion Lab's audit of core and Lab motion, written from their sources by `pnpm generate:motion-audit`, which `build`, `dev` and `typecheck` run first (ignored by git).
