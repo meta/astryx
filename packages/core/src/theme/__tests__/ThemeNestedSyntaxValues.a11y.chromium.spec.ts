@@ -7,9 +7,10 @@
  *   Chromium, with stylesheets served as built and as a CSS build that lowers
  *   `light-dark()` serves them
  * @output Real-engine proof that code inside a nested Theme whose theme sets
- *   Core color tokens takes that Theme's syntax colors, and that a
- *   components-only nested theme, a SyntaxTheme inside a Theme, and a
- *   SyntaxTheme around a Theme keep theirs
+ *   Core color tokens takes that Theme's syntax colors, that a nested theme's
+ *   own syntax palette still wins on its wrapper, and that a components-only
+ *   nested theme, a SyntaxTheme inside a Theme, and a SyntaxTheme around a
+ *   Theme keep theirs
  * @position Run with `pnpm test:a11y-contract`. Where a custom property
  *   resolves needs a real engine.
  */
@@ -167,6 +168,24 @@ for (const lowered of [false, true]) {
         KEYWORD,
       ),
     ).toBe('rgb(250, 200, 0)');
+  });
+
+  test(`in ${build}, a nested theme's own syntax palette wins over the built-in tokens on its wrapper`, async ({
+    page,
+  }) => {
+    await openStory(page, lowered);
+    expect(
+      await colorIn(page, 'Nested theme with its own syntax palette', KEYWORD),
+    ).toBe(DRACULA_KEYWORD);
+  });
+
+  test(`in ${build}, a color-setting theme inside a theme with a syntax palette takes its own colors`, async ({
+    page,
+  }) => {
+    await openStory(page, lowered);
+    expect(
+      await colorIn(page, 'Color-setting theme inside dark-dev', KEYWORD),
+    ).toBe('rgb(200, 0, 100)');
   });
 
   test(`in ${build}, a components-only theme keeps the syntax colors of the theme around it`, async ({

@@ -401,6 +401,22 @@ export const NestedThemes: StoryObj = {
         />
       </Theme>
       <Theme theme={darkDevTheme} mode="dark">
+        <CodeBlock
+          code={nestedCode}
+          language="typescript"
+          title="Nested theme with its own syntax palette"
+        />
+      </Theme>
+      <Theme theme={darkDevTheme} mode="dark">
+        <Theme theme={accentTheme}>
+          <CodeBlock
+            code={nestedCode}
+            language="typescript"
+            title="Color-setting theme inside dark-dev"
+          />
+        </Theme>
+      </Theme>
+      <Theme theme={darkDevTheme} mode="dark">
         <Theme theme={componentsOnlyTheme}>
           <CodeBlock
             code={nestedCode}
