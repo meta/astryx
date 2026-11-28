@@ -808,6 +808,27 @@ describe("Text size overrides and a theme's own size rule", () => {
     expect(lastFontSize(css, XSM)).toBe('var(--font-size-xs)');
   });
 
+  it("keeps Core's token under a size font size the browser drops", () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'size-not-css',
+        components: {
+          text: {
+            'type:supporting': {fontSize: '20px'},
+            'size:xsm': {fontSize: '9xp'},
+          },
+        },
+      }),
+    ).join('\n');
+    const typeAt = css.indexOf('.astryx-text[data-type="supporting"]');
+    // The token rule follows the type rule, so when the browser drops the
+    // authored value, the size still beats the type.
+    expect(
+      css.lastIndexOf(`${XSM} { font-size: var(--font-size-xs); }`),
+    ).toBeGreaterThan(typeAt);
+    expect(lastFontSize(css, XSM)).toBe('9xp');
+  });
+
   it("re-emits only a size rule's font size, so the type keeps its line height", () => {
     const css = generateThemeRules(
       defineTheme({
