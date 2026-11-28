@@ -313,6 +313,10 @@ Every record is either:
   individual run inventories. Accepted visual baselines, reusable stories and
   test fixtures, shipped documentation media, and repository-owned receipts
   explicitly permitted by their current owner remain versioned with the code.
+  A device or emulator clip that a verification row needs is kept by the
+  maintainers who checked it; the pull request states it in text (device or
+  emulator, browser, head, animation scale or slow-device profile, result) and
+  does not attach or link it.
 - **INV23 — Cleanup preserves historical evidence.** Removing disposable assets
   from the current tree MUST NOT rewrite history or break existing commit-pinned
   evidence links. Before deletion, every removed file has a verified public
@@ -325,7 +329,9 @@ Every record is either:
   the remote anchor, exact bytes, and existing links before removing source files.
 - **INV24 — Storage does not change proof or authority.** The pull request's text
   states the claim, tested build, relevant state, observed result, and evidence
-  links; an image or expiring artifact is not the only record of the conclusion.
+  links (none for a device or emulator clip that INV22 keeps with the
+  maintainers); an image or expiring artifact is not the only record of the
+  conclusion.
   Attachments remain evidence under INV16, not authority. Owner-specific receipt
   requirements, operational audit stores, and CI artifact lifetimes remain with
   their current owners. [AST-009](../specs/AST-009/spec.md) owns real-AT receipts;

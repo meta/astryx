@@ -99,9 +99,14 @@ A new visual representation, subjective direction, or interaction model remains 
 [Knowledge contracts: review evidence placement](../architecture/knowledge-contracts.md#review-evidence-placement)
 owns where one-off evidence lives and how cleanup preserves historical links.
 Attach manual screenshots and their receipts to the pull request, or link a
-public retained copy outside the implementation branch. Keep reusable fixtures,
-accepted baselines, and media used by public documentation in their owning source
-paths. Evidence storage does not relax the matching template's evidence bar.
+public retained copy outside the implementation branch. A device or emulator
+clip that a verification row needs is kept by the maintainers who checked it;
+the pull request states it in text (device or emulator, browser, head, animation
+scale or slow-device profile, result) and does not attach or link it
+(`architecture:knowledge-contracts` INV22). A public video, when one is needed,
+comes from CI's own artifacts. Keep reusable fixtures, accepted baselines, and
+media used by public documentation in their owning source paths. Evidence
+storage does not relax the matching template's evidence bar.
 
 ## Review your change before you ask for review
 
