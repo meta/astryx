@@ -182,6 +182,7 @@ async function readCards(page: Page) {
         dataSelected: card.getAttribute('data-selected'),
         dataVariant: card.getAttribute('data-variant'),
         dataDisabled: card.getAttribute('data-disabled') === 'disabled',
+        hasDisabledAttribute: card.hasAttribute('data-disabled'),
         opacity: style.opacity,
         shadow: style.boxShadow,
         borderColor: style.borderTopColor,
@@ -482,8 +483,8 @@ for (const mode of ['light', 'dark'] as const) {
         );
       }
       check(
-        enabled?.dataDisabled === false && enabled.opacity === '1',
-        `enabled card: data-disabled ${enabled?.dataDisabled} opacity ${enabled?.opacity}`,
+        enabled?.hasDisabledAttribute === false && enabled.opacity === '1',
+        `enabled card: data-disabled present ${enabled?.hasDisabledAttribute} opacity ${enabled?.opacity}`,
       );
       const axe = await checkAxe(page, check);
       await frame('rest', {rest, axe});
