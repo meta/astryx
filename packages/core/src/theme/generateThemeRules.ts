@@ -1076,12 +1076,13 @@ export function generateThemeRules(
   // source passed in directly can still hold undefined. Read it as every
   // layer does: an undefined value is not set.
   const components = withoutUnsetComponents(theme.components);
+  const rootDarkPageSides = darkPageSides(
+    resolveModes({...theme.localTokens, ...theme.tokens}),
+  );
   if (components) {
     generateComponentRules(components, parts, {
       sink,
-      darkPageSides: darkPageSides(
-        resolveModes({...theme.localTokens, ...theme.tokens}),
-      ),
+      darkPageSides: rootDarkPageSides,
     });
   }
 
@@ -1093,7 +1094,9 @@ export function generateThemeRules(
 
   // 5. Text `size`-prop font-size overrides (so an explicit size beats a
   //    themed type's font-size across the astryx-base → astryx-theme layers)
-  generateSizeOverrides(components || {}, parts);
+  generateSizeOverrides(components || {}, parts, {
+    rules: {darkPageSides: rootDarkPageSides},
+  });
 
   // 6. Heading `weight`-prop overrides. These are emitted after authored type
   //    rules in the same layer so an explicit prop remains an override even
@@ -1752,6 +1755,32 @@ const TEXT_SIZE_TOKEN_MAP: Record<string, string> = {
 };
 
 /**
+ * The font declarations (`font`, `fontSize`) of a theme's own Text rule for a
+ * `size`, or null when that rule sets no font size.
+ */
+function authoredSizeFont(
+  components: Record<string, unknown> | undefined,
+  sizeName: string,
+): StyleOverrides | null {
+  const text = components?.text as Record<string, unknown> | undefined;
+  const rule = text?.[`size:${sizeName}`];
+  if (rule == null || typeof rule !== 'object') {
+    return null;
+  }
+  const font: Record<string, unknown> = {};
+  for (const prop of ['font', 'fontSize']) {
+    const value = (rule as Record<string, unknown>)[prop];
+    if (value !== undefined) {
+      font[prop] = value;
+    }
+  }
+  return Object.keys(font).length > 0 ? (font as StyleOverrides) : null;
+}
+
+/** A sink for a re-emitted declaration: its first emission already reported it. */
+const SILENT_SINK: DiagnosticSink = () => {};
+
+/**
  * Generate `size`-prop font-size overrides for the Text component.
  *
  * The `size` prop is documented as a font-size override that wins over the
@@ -1761,6 +1790,13 @@ const TEXT_SIZE_TOKEN_MAP: Record<string, string> = {
  * `size` for any `type` the theme styled. Re-emitting the size classes here —
  * same layer as the type rules, same `.astryx-text.<x>` specificity, later in
  * source — restores `size` as a real override.
+ *
+ * A size the theme styles itself keeps the theme's font size: its rule's
+ * `font` and `fontSize` are emitted again here, through the same lowering,
+ * instead of Core's token, so that rule wins over the type rules in whatever
+ * order the theme wrote them (component:Text ORD2, AV1). On a media surface or
+ * in an adaptation, `inherited` (the root theme's components) gives that value
+ * when the surface or adaptation does not style the size itself.
  *
  * Only `font-size` is overridden; line-height and other type properties are
  * intentionally preserved, matching the prop's documented contract.
@@ -1772,12 +1808,31 @@ const TEXT_SIZE_TOKEN_MAP: Record<string, string> = {
 function generateSizeOverrides(
   components: Record<string, unknown>,
   parts: string[],
-  surface?: MediaSurface,
+  {
+    surface,
+    inherited,
+    rules = {},
+  }: {
+    surface?: MediaSurface;
+    inherited?: Record<string, unknown>;
+    rules?: ComponentRuleOptions;
+  } = {},
 ): void {
   if (!('text' in components)) {
     return;
   }
   for (const [sizeName, sizeValue] of Object.entries(TEXT_SIZE_TOKEN_MAP)) {
+    const authored =
+      authoredSizeFont(components, sizeName) ??
+      authoredSizeFont(inherited, sizeName);
+    if (authored) {
+      generateComponentRules({text: {[`size:${sizeName}`]: authored}}, parts, {
+        ...rules,
+        surface,
+        sink: SILENT_SINK,
+      });
+      continue;
+    }
     const suffix = parseStyleKey(`size:${sizeName}`);
     parts.push(
       `  ${componentSelector('text', suffix, surface)} { font-size: ${sizeValue}; }`,
@@ -1913,7 +1968,11 @@ export function generateOnMediaCSS(
         location,
       });
       generateColorOverrides(onMedia.components, out, surface);
-      generateSizeOverrides(onMedia.components, out, surface);
+      generateSizeOverrides(onMedia.components, out, {
+        surface,
+        inherited: theme.components,
+        rules: {resetInheritedPaddingSpecificity: true, location},
+      });
 
       // Apply the effective explicit Heading weight after media-specific type
       // rules. A surface-authored target wins, followed by the inherited main
@@ -2041,6 +2100,7 @@ function generateAdaptationRuleRules(
   sink: DiagnosticSink,
   statusRoleDefaults: [string, string][],
   themeDarkPageSides: ReadonlySet<MediaSide>,
+  themeComponents?: Record<string, unknown>,
 ): string[] {
   const parts: string[] = [];
   const tokens = tokenBlock(
@@ -2064,7 +2124,14 @@ function generateAdaptationRuleRules(
       darkPageSides: themeDarkPageSides,
     });
     generateColorOverrides(rule.components, parts);
-    generateSizeOverrides(rule.components, parts);
+    generateSizeOverrides(rule.components, parts, {
+      inherited: themeComponents,
+      rules: {
+        resetInheritedPaddingSpecificity: true,
+        location,
+        darkPageSides: themeDarkPageSides,
+      },
+    });
   }
   return parts;
 }
@@ -2136,6 +2203,7 @@ export function generateAdaptationCSS(
       sink,
       statusRoleDefaults[index],
       themeDarkPageSides,
+      theme.components,
     );
     if (parts.length === 0) {
       continue;
