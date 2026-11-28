@@ -345,6 +345,19 @@ const SLOT_HELPERS = {
   sharedForReact: 'react/',
   createLayerScopedContext: 'context/',
 };
+/**
+ * Registered keys without a version that a release already shipped, matched
+ * exactly (never by prefix). A new key must end in a version (`/v1`). A key
+ * here keeps its released spelling: a swizzled copy made from that release
+ * reads the key as written, so adding a version now would split the copy
+ * from the package. Each is still a slot, so a second use fails as a repeat.
+ */
+const UNVERSIONED_RELEASED_KEYS = new Set([
+  // Swipe's host on each Swipe value (packages/core/src/Swipe/swipeHost.ts),
+  // shipped with createSwipe in @astryxdesign/core 0.7.17.
+  '@astryxdesign/core/swipe/host',
+]);
+
 /** Files that define a slot helper, where the name is the caller's parameter. */
 const HELPER_FILES = new Set([
   'packages/core/src/utils/sharedRealm.ts',
@@ -357,7 +370,8 @@ const HELPER_FILES = new Set([
  * Every call that names a shared slot. A slot's name and version are its
  * identity, so each call must spell both as literals.
  * @returns {Array<{file: string, line: number, helper: string, slot: string|null}>}
- *   `slot` is `<prefix><name>/v<version>`, or null when either is not a literal
+ *   `slot` is the registered key, `@astryxdesign/core/<prefix><name>/v<version>`
+ *   for a helper call, or null when either part is not a literal
  */
 export function sharedSlots() {
   /** @type {Array<{file: string, line: number, helper: string, slot: string|null}>} */
@@ -366,7 +380,9 @@ export function sharedSlots() {
     if (HELPER_FILES.has(file)) continue;
     const code = fs.readFileSync(path.join(REPO, file), 'utf8');
     if (
-      !/\b(?:shared[A-Z]\w*|create(?:Shared|LayerScoped)Context)\b/.test(code)
+      !/\b(?:shared[A-Z]\w*|create(?:Shared|LayerScoped)Context)\b|Symbol\.for\(\s*['"`]@astryxdesign\//.test(
+        code,
+      )
     ) {
       continue;
     }
@@ -395,8 +411,30 @@ export function sharedSlots() {
           line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
           helper,
           slot: literal
-            ? `${SLOT_HELPERS[helper]}${name.text}/v${version.text}`
+            ? `@astryxdesign/core/${SLOT_HELPERS[helper]}${name.text}/v${version.text}`
             : null,
+        });
+      } else if (
+        ts.isCallExpression(node) &&
+        node.expression.getText(source) === 'Symbol.for' &&
+        node.arguments[0] != null &&
+        (ts.isStringLiteral(node.arguments[0]) ||
+          ts.isNoSubstitutionTemplateLiteral(node.arguments[0])) &&
+        node.arguments[0].text.startsWith('@astryxdesign/')
+      ) {
+        // A registered key written out, for a package that cannot use Core's
+        // helpers: the literal is the slot.
+        slots.push({
+          file,
+          line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+          helper: 'Symbol.for',
+          // Versioned like a helper slot, or a released key written before
+          // versions; otherwise null, so the check reports it.
+          slot:
+            /\/v\d+$/.test(node.arguments[0].text) ||
+            UNVERSIONED_RELEASED_KEYS.has(node.arguments[0].text)
+              ? node.arguments[0].text
+              : null,
         });
       }
       ts.forEachChild(node, visit);
