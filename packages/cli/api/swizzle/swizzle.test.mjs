@@ -12,9 +12,9 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 
 /**
  * The module specifiers a file imports or re-exports, read from its import and
- * export declarations as TypeScript parses them, so comments never count: a
- * header comment can quote an import (`export * from './utils'`) that the file
- * does not make.
+ * export declarations as TypeScript parses them, at the top level and inside
+ * `declare module` blocks, so comments never count: a header comment can quote
+ * an import (`export * from './utils'`) that the file does not make.
  */
 function importSpecifiers(content, fileName = 'file.tsx') {
   const source = ts.createSourceFile(
@@ -24,15 +24,26 @@ function importSpecifiers(content, fileName = 'file.tsx') {
     false,
     fileName.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
-  return source.statements
-    .filter(
-      statement =>
+  const specifiers = [];
+  const read = statements => {
+    for (const statement of statements) {
+      if (
         (ts.isImportDeclaration(statement) ||
           ts.isExportDeclaration(statement)) &&
         statement.moduleSpecifier != null &&
-        ts.isStringLiteral(statement.moduleSpecifier),
-    )
-    .map(statement => statement.moduleSpecifier.text);
+        ts.isStringLiteral(statement.moduleSpecifier)
+      ) {
+        specifiers.push(statement.moduleSpecifier.text);
+      } else if (ts.isModuleDeclaration(statement)) {
+        // `declare module 'a.b' {…}` can nest as `module a { module b {…} }`.
+        let body = statement.body;
+        while (body != null && ts.isModuleDeclaration(body)) body = body.body;
+        if (body != null && ts.isModuleBlock(body)) read(body.statements);
+      }
+    }
+  };
+  read(source.statements);
+  return specifiers;
 }
 
 describe('importSpecifiers', () => {
@@ -49,6 +60,9 @@ describe('importSpecifiers', () => {
       "export {d} from '@astryxdesign/core/d';",
       "export * as ns from './e';",
       "export type * as types from './f';",
+      "declare module '*.doc.mjs' {",
+      "  import type {Doc} from '@astryxdesign/cli/authoring';",
+      '}',
     ].join('\n');
     expect(importSpecifiers(content)).toEqual([
       './a',
@@ -57,6 +71,7 @@ describe('importSpecifiers', () => {
       '@astryxdesign/core/d',
       './e',
       './f',
+      '@astryxdesign/cli/authoring',
     ]);
   });
 });
