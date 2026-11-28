@@ -41,6 +41,7 @@ import {
   claimContextMenuPress,
   currentGesture,
   currentGestureHasClicked,
+  isPressInFlight,
   isReleaseInFlight,
   listenForGestures,
 } from './gestureCounter';
@@ -2353,14 +2354,54 @@ function useLayerImplementation(
     if (currentGestureHasClicked()) {
       return;
     }
-    dismissedByGestureRef.current = currentGesture();
+    const gesture = currentGesture();
+    dismissedByGestureRef.current = gesture;
     dismissedTriggerRef.current = triggerRef.current;
     const view = doc.defaultView;
     let forgetTimer: number | null = null;
+    let releaseTimer: number | null = null;
+    // A dismissing press that composes no click (a drag off the layer, a
+    // cancelled touch) never reaches scheduleForget. So its end also forgets
+    // the dismissal: a cancelled pointer at once, a release that brings no
+    // click at the next task, as for the release in gestureCounter.
+    const forgetWithoutClick = () => {
+      if (
+        forgetDismissalRef.current === forget &&
+        currentGesture() === gesture &&
+        !currentGestureHasClicked()
+      ) {
+        forget();
+      }
+    };
+    const forgetAfterRelease = () => {
+      if (view) {
+        releaseTimer = view.setTimeout(() => {
+          releaseTimer = null;
+          forgetWithoutClick();
+        }, 0);
+      }
+    };
+    const onPressEnd = (event: PointerEvent) => {
+      stopPressEnd();
+      if (event.type === 'pointercancel') {
+        forgetWithoutClick();
+      } else {
+        forgetAfterRelease();
+      }
+    };
+    const stopPressEnd = () => {
+      view?.removeEventListener('pointerup', onPressEnd, true);
+      view?.removeEventListener('pointercancel', onPressEnd, true);
+    };
     const forget = () => {
       dismissedByGestureRef.current = null;
       dismissedTriggerRef.current = null;
       doc.removeEventListener('click', scheduleForget, true);
+      stopPressEnd();
+      if (releaseTimer !== null) {
+        view?.clearTimeout(releaseTimer);
+        releaseTimer = null;
+      }
       if (forgetTimer !== null) {
         view?.clearTimeout(forgetTimer);
         forgetTimer = null;
@@ -2384,6 +2425,14 @@ function useLayerImplementation(
       }
     };
     doc.addEventListener('click', scheduleForget, true);
+    // A dismissal after the press ended, with its click not yet come (the
+    // engines that close before the click), stays until that click.
+    if (isPressInFlight()) {
+      view?.addEventListener('pointerup', onPressEnd, true);
+      view?.addEventListener('pointercancel', onPressEnd, true);
+    } else if (isReleaseInFlight()) {
+      forgetAfterRelease();
+    }
     forgetDismissalRef.current = forget;
   }, []);
   // A press outside is absorbed as the browser's own light dismiss is: the
