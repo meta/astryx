@@ -45,6 +45,7 @@ import {
 import {useKeepLayerOpenProps} from '../Layer/useLayer';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {Divider} from '../Divider';
 import {Spinner} from '../Spinner';
 import {PanelSearchInput} from '../Field/PanelSearchInput';
@@ -54,10 +55,8 @@ import {Badge} from '../Badge';
 import {
   colorVars,
   focusVars,
-  sizeVars,
   spacingVars,
   radiusVars,
-  borderVars,
   durationVars,
   easeVars,
   typographyVars,
@@ -116,7 +115,10 @@ import {VisuallyHidden} from '../VisuallyHidden';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
-import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
+import {
+  selectorPresentationStyles,
+  selectorTriggerLineBoxStyles,
+} from '../Selector/selectorPresentation.stylex';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -546,36 +548,11 @@ const styles = stylex.create({
   },
 });
 
-// The trigger height follows the size token and the text size only: it is the
-// token, or one line box and the borders when a larger set text size makes
-// that taller. Its content, such as badges that wrap, never sets it. The line
-// box is `--spacing-5`, floored at 20px and 1rem, and capped at what the token
-// holds inside its borders, but never below 1.5em of the trigger's own font.
-// The padding is what is left of the token, so the line box stays centred.
-// Ghost and grouped triggers keep the uncapped line box.
-// Keep these calculations inline: StyleX must evaluate them as constants, and
-// a shared helper can reach StyleX as a function a consumer's Babel preset
-// lowered, which StyleX cannot evaluate.
-// SYNC: the line box and padding equal Selector's `sizeStyles`
-// (/packages/core/src/Selector/Selector.tsx); Selector's height follows its
-// content instead.
-const sizeStyles = stylex.create({
-  sm: {
-    height: `max(${sizeVars['--size-element-sm']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
-    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
-    paddingBlock: `calc((${sizeVars['--size-element-sm']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
-  },
-  md: {
-    height: `max(${sizeVars['--size-element-md']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
-    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
-    paddingBlock: `calc((${sizeVars['--size-element-md']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
-  },
-  lg: {
-    height: `max(${sizeVars['--size-element-lg']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
-    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
-    paddingBlock: `calc((${sizeVars['--size-element-lg']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
-  },
-});
+// The trigger height is the text field row (`inputRowSizeStyles`): the size
+// token, or one bordered text line when a larger set text size makes that
+// taller. Its content, such as badges that wrap, never sets it. The line box
+// and padding are Selector's (`selectorTriggerLineBoxStyles`), so the value
+// sits where a Selector's does.
 
 const itemSizeStyles = stylex.create({
   sm: {
@@ -2798,7 +2775,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           stylex.props(
             inputWrapperStyles.base,
             styles.triggerContainer,
-            sizeStyles[size],
+            inputRowSizeStyles[size],
+            selectorTriggerLineBoxStyles[size],
             variant === 'secondary' && styles.triggerSecondary,
             variant === 'ghost' && styles.triggerGhost,
             variant !== 'input' && interactionOverlayStyles.backgroundImage,
