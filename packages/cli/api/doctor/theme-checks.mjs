@@ -11,6 +11,10 @@ import * as path from 'node:path';
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {
   addMatchingCore,
+  APP_ROOT_LAYOUT_FILES,
+  nextFontFix,
+  parseAppModule as parseModule,
+  rootLayoutImportsNextFont,
   collectUnloadedFonts,
   fontPackagesInstallLine,
   discoverDoctorThemes,
@@ -63,14 +67,6 @@ import {
 } from '../../foundation/env/package-manager.mjs';
 import {logger} from '../logger.mjs';
 import {stylesheetLinkHrefs} from './built-checks.mjs';
-import {
-  nextFontFix,
-  rootLayoutImportsNextFont,
-} from '../../foundation/fonts/next-font.mjs';
-import {
-  APP_ROOT_LAYOUT_FILES,
-  parseAppModule as parseModule,
-} from '../../foundation/discovery/app-layout.mjs';
 
 /** @typedef {import('./doctor.mjs').DoctorCheck} DoctorCheck */
 /** @typedef {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} DiscoveredTheme */
