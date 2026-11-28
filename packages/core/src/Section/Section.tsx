@@ -97,9 +97,10 @@ const minHeightFillStyles = stylex.create({
   },
   inner: {
     flexGrow: 1,
-    // A flex item's minimum height is its content height by default. Without
-    // it, a caller's maximum height on the wrapper also caps the painted
-    // container, so taller content overflows instead of growing past it.
+    // With no set `height`, the painted container's automatic minimum is its
+    // content height, which a caller's `max-height` on the wrapper does not
+    // cap. A zero minimum lets that maximum cap the painted container, so
+    // taller content overflows instead of growing past the wrapper.
     minHeight: 0,
   },
 });
