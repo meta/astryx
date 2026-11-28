@@ -119,14 +119,14 @@ const centerOf = (box: typeof A): Point => ({
 });
 
 const paintOf = (element: Element) => element.getAttribute('data-astryx-press');
-const hitLayer = (
-  stylex.props(touchHitAreaStyles.layerBelowChildren).className ?? ''
-)
+const bandClasses = (stylex.props(touchHitAreaStyles.band).className ?? '')
   .split(' ')
-  .filter(Boolean);
-/** The hit layer's atomic classes that `group` carries. */
-const hitLayerOn = (group: Element) =>
-  hitLayer.filter(name => group.classList.contains(name));
+  .filter(name => name !== '' && !name.startsWith('touchHitArea__'));
+/** Whether `element`, or an element inside it, carries the touch band. */
+const drawsBand = (element: Element) =>
+  [element, ...element.querySelectorAll('*')].some(node =>
+    bandClasses.every(name => node.classList.contains(name)),
+  );
 
 function mount({
   isDisabled = false,
@@ -211,70 +211,12 @@ describe('ButtonGroup tracks a held pointer across its buttons (family:action-gr
     }
   });
 
-  it('gives the root no hit layer under a fine primary pointer, so a desktop root keeps its stacking', () => {
-    finePrimaryPointer();
-    const {group} = mount();
-    expect(hitLayerOn(group)).toEqual([]);
-  });
-
-  it("keeps its hit layer, and reads the page no more, when a parent's re-render hands it a new inline ref", () => {
-    let rerenderPage = () => {};
-    function Page() {
-      const [, setTick] = useState(0);
-      rerenderPage = () => setTick(tick => tick + 1);
-      return (
-        <>
-          <ButtonGroup
-            label="Edit"
-            data-testid="group"
-            // A new callback on every render, as a caller's inline ref is.
-            ref={(node: HTMLDivElement | null) => {
-              void node;
-            }}>
-            <Button label="Cut" onClick={() => {}} data-testid="a" />
-            <Button label="Copy" onClick={() => {}} data-testid="b" />
-            <Button label="More" onClick={() => {}} data-testid="c" />
-          </ButtonGroup>
-          <button type="button" data-testid="outside">
-            Outside
-          </button>
-        </>
-      );
-    }
-    const view = render(<Page />);
-    const group = view.getByTestId('group');
-    place(group, GROUP);
-    place(view.getByTestId('a'), A);
-    place(view.getByTestId('b'), B);
-    place(view.getByTestId('c'), C);
-    // A control elsewhere on the page. A measure pass reads its box.
-    const outside = view.getByTestId('outside');
-    const outsideBox = DOMRect.fromRect({x: 0, y: 300, width: 80, height: 32});
-    let outsideReads = 0;
-    outside.getBoundingClientRect = () => {
-      outsideReads += 1;
-      return outsideBox;
-    };
-    act(() => {
-      vi.advanceTimersToNextFrame();
-    });
-    const inset = (side: string) =>
-      group.style.getPropertyValue(`--astryx-hit-inset-${side}`);
-    expect(inset('top')).toBe('6px');
-    expect(outsideReads).toBeGreaterThan(0);
-    const classes = group.className;
-    const reads = outsideReads;
-    act(() => {
-      rerenderPage();
-    });
-    // The root keeps its classes, so its hit layer never drops.
-    expect(group.className).toBe(classes);
-    act(() => {
-      vi.advanceTimersToNextFrame();
-    });
-    // The watch held: no new measure pass reads the page.
-    expect(outsideReads).toBe(reads);
-    expect(inset('top')).toBe('6px');
+  it('draws no band on the root: each enabled button draws its own, so the root keeps its stacking', () => {
+    const {group, a, b, c} = mount({isBDisabled: true});
+    expect(bandClasses.every(name => group.classList.contains(name))).toBe(
+      false,
+    );
+    expect([a, b, c].map(drawsBand)).toEqual([true, false, true]);
   });
 
   for (const primary of ['fine', 'coarse'] as const) {
@@ -311,7 +253,7 @@ describe('ButtonGroup tracks a held pointer across its buttons (family:action-gr
     expect(paintOf(a)).not.toBe('on');
   });
 
-  it("grows the end buttons' targets past the group under a finger, as far as each would grow alone, and a hidden member grows and runs nothing (spec:AST-094 FR42, family:action-groups FR2, FR3)", () => {
+  it('a hidden member runs nothing (family:action-groups FR2, FR3)', () => {
     const onGone = vi.fn();
     const view = render(
       <ButtonGroup label="Format" data-testid="group">
@@ -341,16 +283,6 @@ describe('ButtonGroup tracks a held pointer across its buttons (family:action-gr
     act(() => {
       vi.advanceTimersToNextFrame();
     });
-    const inset = (side: string) =>
-      group.style.getPropertyValue(`--astryx-hit-inset-${side}`);
-    expect(['top', 'right', 'bottom', 'left'].map(inset)).toEqual([
-      '6px',
-      '6px',
-      '6px',
-      '6px',
-    ]);
-    // The root carries the hit layer while it tracks presses.
-    expect(hitLayerOn(group)).toEqual(hitLayer);
     // A finger slid to the hidden member's corner lights and runs nothing.
     const f = finger();
     f.down(view.getByTestId('a'), {x: 16, y: 116});
@@ -366,15 +298,6 @@ describe('ButtonGroup tracks a held pointer across its buttons (family:action-gr
     const {group, onA, onB, onC} = mount({
       groupBox: {left: 0, top: 100, width: 400, height: 32},
     });
-    const inset = (side: string) =>
-      group.style.getPropertyValue(`--astryx-hit-inset-${side}`);
-    // The hit layer ends at the last button's edge.
-    expect(['top', 'right', 'bottom', 'left'].map(inset)).toEqual([
-      '6px',
-      '-160px',
-      '6px',
-      '0px',
-    ]);
     for (const point of [
       {x: 320, y: 116},
       {x: 320, y: 135},

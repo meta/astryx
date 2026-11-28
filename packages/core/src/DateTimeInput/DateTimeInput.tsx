@@ -164,6 +164,7 @@ export type {
   InputStatus as DateTimeInputStatus,
   InputStatusType as DateTimeInputStatusType,
 } from '../Field';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 // Two 196px segments plus the 8px gap fit at exactly 400px. Below that,
 // flex wrapping moves each growing segment onto its own full-width row.
@@ -1776,6 +1777,7 @@ function PointerDateTimeField({
         )}>
         {/* Date input */}
         <div
+          {...fieldFrameProps}
           ref={usesNativePicker ? undefined : popover.triggerRef}
           {...mergeProps(
             themeProps('date-time-input-date-segment', {
@@ -1935,6 +1937,7 @@ function PointerDateTimeField({
 
         {/* Time input */}
         <div
+          {...fieldFrameProps}
           ref={timeContainerRef}
           onClick={usesNativeTimePicker ? undefined : handleTimeWrapperClick}
           onMouseUp={

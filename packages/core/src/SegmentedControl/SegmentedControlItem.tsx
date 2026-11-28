@@ -282,6 +282,7 @@ export function SegmentedControlItem({
             interactionOverlayStyles.backgroundColor,
           isItemDisabled && styles.disabled,
           hasHitArea && touchHitAreaStyles.layer,
+          hasHitArea && touchHitAreaStyles.member,
           ctx.isTouchPresentation === true && styles.touchPresentation,
           xstyle,
         ),

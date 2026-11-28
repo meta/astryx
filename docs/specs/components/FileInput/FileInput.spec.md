@@ -53,6 +53,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The visible file-selection surface and its input/dropzone mode.
 - Whether, where, and at what default size the upload affordance appears.
 - Reflecting FileInput's mode on its locally owned theme targets.
+- Marking its drop zone, whose click opens the file chooser for the touch press check. FileInput writes the private
+  attribute `data-astryx-field-frame` only through its owner module,
+  `packages/core/src/privateAttributes/fieldFrame.stylex.ts`
+  (`architecture:public-component-api` INV23). The press check reads the mark
+  and gives a tap on the drop zone to the drop zone's own click (`spec:AST-094` FR42).
 
 **Does not own / non-goals**
 

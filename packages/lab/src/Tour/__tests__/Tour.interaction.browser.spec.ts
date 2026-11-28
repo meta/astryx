@@ -913,16 +913,6 @@ test('under a coarse pointer the close control has a touch target 44 pixels high
     () => matchMedia('(pointer: coarse)').matches,
   );
   test.skip(!isCoarse, 'the hit area grows only under a coarse pointer');
-  // The hit area writes its insets after its first measurement.
-  await expect
-    .poll(async () =>
-      close.evaluate(button =>
-        (button as HTMLElement).style.getPropertyValue(
-          '--astryx-hit-inset-top',
-        ),
-      ),
-    )
-    .not.toBe('');
   // A point 21 pixels above the button's center is inside a 44-pixel target
   // and outside the 28-pixel button.
   const hitsClose = await close.evaluate(button => {

@@ -78,6 +78,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TextArea/TextArea.generated';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {useDevWarning} from '../hooks/useDevWarning';
 
@@ -641,6 +642,7 @@ export function TextArea({
         }}
         onClick={handleWrapperClick}
         onMouseUp={handleWrapperMouseUp}
+        {...fieldFrameProps}
         {...mergeProps(
           themeProps('text-area', {
             size,

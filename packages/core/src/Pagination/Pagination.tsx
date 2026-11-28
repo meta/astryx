@@ -569,8 +569,6 @@ export function Pagination({
   // The click's focus takes the ring of the dots' own document's last input.
   const {ref: modalityRef} = useInteractionModalityTracking();
   const dotsRef = useMergedRefs(dotsListRef, modalityRef);
-  // Under a coarse pointer each dot's target grows toward 44 px, clamped to
-  // half the gap to its neighbours. One ref watches every dot.
   const dotHitAreaRef = useTouchHitArea(variant === 'dots' && !isDisabled);
 
   const computedTotalPages =
@@ -804,7 +802,10 @@ export function Pagination({
         return (
           <div
             ref={dotsRef}
-            {...stylex.props(styles.dotsContainer)}
+            {...stylex.props(
+              styles.dotsContainer,
+              touchHitAreaStyles.inlineGroupSpacing1,
+            )}
             // The dots already behave as an APG radio group (one Tab stop,
             // arrows, Home/End, selection follows focus), so they expose its
             // roles: a reader announces "Page 3, 3 of 7".
@@ -847,6 +848,7 @@ export function Pagination({
                     focusOutlineProps.focusVisible(
                       styles.dot,
                       !isDisabled && touchHitAreaStyles.layer,
+                      !isDisabled && touchHitAreaStyles.member,
                       isSm && styles.dotSm,
                       isActive && styles.dotActive,
                       isDisabled && styles.dotDisabled,

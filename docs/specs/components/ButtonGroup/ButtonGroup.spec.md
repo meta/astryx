@@ -62,9 +62,7 @@ size and disabled state, and the group's single-Tab-stop keyboard model, as
 - Compatibility class: no public prop, default, or export change; under the
   touch presentation the DOM gains the action-group item marker on each
   tracked button, the gesture host's `data-astryx-touch-action` marker on the
-  group root and the hit layer's inset properties, and an enabled group's root
-  is also `position: relative`, so absolutely positioned descendants resolve
-  against it there
+  group root
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 

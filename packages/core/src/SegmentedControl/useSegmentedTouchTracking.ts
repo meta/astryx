@@ -29,7 +29,8 @@ import {
 import {lockSelection} from '../gestures/selectionLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {awaitBrowserClick, clickForLift} from '../utils/browserClickWait';
-import {HIT_INSET_PROPERTIES, type HitInsets} from '../utils/hitArea';
+import {isCoarsePointer} from '../utils/coarsePointer';
+import {distanceTo, touchTargetRect} from '../utils/hitArea';
 import {armClickGuard} from '../utils/clickGuard';
 import {cancelPress} from '../utils/pressFeedback';
 import {
@@ -69,8 +70,12 @@ export interface SegmentSpan {
   readonly band?: ControlBounds;
 }
 
-/** Every segment of `track`, disabled ones included, measured once. */
+/**
+ * Every segment of `track`, disabled ones included, measured once. Under a
+ * coarse pointer each also has its touch band: its box grown toward 44 px.
+ */
 export function measureSegments(track: HTMLElement): SegmentSpan[] {
+  const hasBands = isCoarsePointer(track.ownerDocument.defaultView);
   return Array.from(
     track.querySelectorAll<HTMLElement>(SEGMENT_SELECTOR),
     element => {
@@ -81,12 +86,7 @@ export function measureSegments(track: HTMLElement): SegmentSpan[] {
         right: rect.right,
         top: rect.top,
         bottom: rect.bottom,
-        band: {
-          left: rect.left - hitInset(element, 'left'),
-          top: rect.top - hitInset(element, 'top'),
-          right: rect.right + hitInset(element, 'right'),
-          bottom: rect.bottom + hitInset(element, 'bottom'),
-        },
+        band: hasBands ? touchTargetRect(rect) : undefined,
       };
     },
   );
@@ -129,6 +129,30 @@ export function segmentTargetAt(
   return best != null && !isDisabled(best.element) ? best.element : null;
 }
 
+/** Of the segments whose touch band holds `finger`, the one nearest it. */
+function nearestBandHolding(
+  finger: {x: number; y: number},
+  segments: ReadonlyArray<SegmentSpan>,
+): SegmentSpan | undefined {
+  let nearest: SegmentSpan | undefined;
+  let nearestDistance = Infinity;
+  for (const segment of segments) {
+    const {band, left, right, top, bottom} = segment;
+    if (band == null || top == null || bottom == null) {
+      continue;
+    }
+    if (distanceTo(band, finger.x, finger.y) > 0) {
+      continue;
+    }
+    const distance = distanceTo({left, top, right, bottom}, finger.x, finger.y);
+    if (distance < nearestDistance) {
+      nearest = segment;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
 /**
  * The segment a lift at viewport (`x`, `y`) commits: inside any box of the
  * control's lift `area`, the segment whose own box, else whose touch band,
@@ -159,12 +183,13 @@ export function liftTargetAt(
     finger.y >= box.top &&
     finger.y <= box.bottom;
   // A segment's own box first, then its touch band, so a band never takes a
-  // press that lands on a neighbor.
+  // press that lands on a neighbor. Where bands overlap, the segment whose box
+  // is nearest the finger takes it: the gap splits at its middle.
   const under =
     segments.find(
       ({left, right, top, bottom}) =>
         top != null && bottom != null && holds({left, right, top, bottom}),
-    ) ?? segments.find(({band}) => band != null && holds(band));
+    ) ?? nearestBandHolding(finger, segments);
   if (under != null) {
     return isDisabled(under.element) ? null : under.element;
   }
@@ -193,37 +218,26 @@ export function createSegmentLiftTarget(
   };
 }
 
-/** A measured hit inset on `element`, px (0 when none is written). */
-function hitInset(element: HTMLElement, side: keyof HitInsets): number {
-  const value = Number.parseFloat(
-    element.style.getPropertyValue(HIT_INSET_PROPERTIES[side]),
-  );
-  return Number.isFinite(value) ? value : 0;
-}
-
 /**
- * The boxes a lift may commit in: the control's own box, and each segment's
- * box grown by its own touch hit band (utils/hitArea), so a tap on a band
- * selects its segment. Each band is kept apart: a band a neighbor clamped
- * stays clamped, though another segment's band reaches further. Under a fine
- * pointer no band is written, and the segments sit inside the control's box.
+ * The boxes a lift may commit in: the control's own box, and under a coarse
+ * pointer each segment's box grown toward 44 px, as its touch band grows, so
+ * a tap on a band selects its segment. Between segments the grown boxes
+ * overlap inside the control's box, where `segmentTargetAt` splits the gap.
+ * Under a fine pointer the segments sit inside the control's box.
  */
 export function measureLiftArea(
   track: HTMLElement,
   segments: ReadonlyArray<SegmentSpan>,
 ): ReadonlyArray<ControlBounds> {
   const {left, top, right, bottom} = track.getBoundingClientRect();
+  if (!isCoarsePointer(track.ownerDocument.defaultView)) {
+    return [{left, top, right, bottom}];
+  }
   return [
     {left, top, right, bottom},
-    ...segments.map(({element}) => {
-      const box = element.getBoundingClientRect();
-      return {
-        left: box.left - hitInset(element, 'left'),
-        top: box.top - hitInset(element, 'top'),
-        right: box.right + hitInset(element, 'right'),
-        bottom: box.bottom + hitInset(element, 'bottom'),
-      };
-    }),
+    ...segments.map(({element}) =>
+      touchTargetRect(element.getBoundingClientRect()),
+    ),
   ];
 }
 

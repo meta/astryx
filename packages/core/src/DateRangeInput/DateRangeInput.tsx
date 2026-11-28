@@ -126,6 +126,7 @@ export type {
   InputStatus as DateRangeInputStatus,
   InputStatusType as DateRangeInputStatusType,
 } from '../Field';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 const styles = stylex.create({
   trigger: {
@@ -883,6 +884,7 @@ export function DateRangeInput({
       labelTooltip={labelTooltip}
       width={width}>
       <div
+        {...fieldFrameProps}
         ref={el => {
           fieldRef.current = el;
           popover.triggerRef(el);

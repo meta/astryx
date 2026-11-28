@@ -70,6 +70,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/FileInput/FileInput.generated';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 registerEnglishFallback(english);
 function formatFileSize(bytes: number, t: TranslatorFn): string {
@@ -962,6 +963,7 @@ export function FileInput({
         }}
         onClick={!isSelectionDisabled ? onContainerClick : undefined}
         onMouseUp={!isSelectionDisabled ? onContainerMouseUp : undefined}
+        {...fieldFrameProps}
         {...dragDropProps}
         {...mergeProps(
           themeProps('file-input', {mode, status: status?.type ?? null}),

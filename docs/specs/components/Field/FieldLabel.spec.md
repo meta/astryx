@@ -71,6 +71,11 @@ This table is a review projection; the body below is authoritative.
 - Safe description-click forwarding for one associated control.
 - The `field-label` theme target and composition of caller props, styles, and ref on the label element.
 - Whether the optional tooltip trigger is reachable and named for every input modality and assistive-technology path.
+- Marking a description that focuses its control on a click for the touch press check. FieldLabel writes the private
+  attribute `data-astryx-field-frame` only through its owner module,
+  `packages/core/src/privateAttributes/fieldFrame.stylex.ts`
+  (`architecture:public-component-api` INV23). The press check reads the mark
+  and gives a tap on the description to the description's own click (`spec:AST-094` FR42).
 
 **Does not own / non-goals**
 

@@ -433,7 +433,7 @@ test('a fine pointer: a row is as it was, with no press layer and no stacking co
   }
 });
 
-test('a radio row under a finger paints its circle’s press, and keeps its bare look: no row layer', async ({
+test('a radio row under a finger paints its circle’s press, and keeps its bare look: no row layer, and the stacking context its touch band needs', async ({
   page,
   browserName,
 }) => {
@@ -481,13 +481,14 @@ test('a radio row under a finger paints its circle’s press, and keeps its bare
   expect(look.circle).not.toMatch(
     /^linear-gradient\(rgba\(0, 0, 0, 0\), rgba\(0, 0, 0, 0\)\)$/,
   );
-  // Only the circle paints, as with a mouse: the row has no layer and is no
-  // stacking context.
+  // Only the circle paints, as with a mouse: the row has no layer. Under a
+  // finger an interactive row isolates, so its touch band sits below its
+  // content (component:List FR11).
   expect(look.layer).toBe('none');
-  expect(look.isolation).toBe('auto');
+  expect(look.isolation).toBe('isolate');
 });
 
-test('under a finger, a row at rest is as it was: its own ::before keeps its look and it is no stacking context; the press layer takes the ::before only while pressed', async ({
+test('under a finger, a row at rest keeps its own ::before look and isolates for its touch band; the press layer takes the ::before only while pressed', async ({
   page,
   browserName,
 }) => {
@@ -522,13 +523,15 @@ test('under a finger, a row at rest is as it was: its own ::before keeps its loo
     document.head.append(style);
     el.setAttribute('data-test-own', '');
   });
+  // Under a finger an interactive row isolates, so its touch band sits below
+  // its content (component:List FR11). A mouse keeps "auto".
   const own = {
     content: '"•"',
     opacity: '1',
     position: 'static',
     zIndex: 'auto',
     pointerEvents: 'auto',
-    isolation: 'auto',
+    isolation: 'isolate',
   };
   expect(await look()).toEqual(own);
   // A press: the layer takes the `::before`, in its own stacking context.

@@ -226,14 +226,30 @@ describe('InputClearButton', () => {
   });
 
   it("takes Button's shared touch band under a finger, and its own 24px target only under a fine pointer", () => {
-    // Under a finger the clear button's target grows toward 44 px where its
-    // neighbors leave room, through Button's band (AST-094 FR42). Under a fine
-    // pointer its own ::after grows it to 24 px (WCAG 2.5.8), away from the
-    // text; it is off under a coarse pointer, so each pointer type has one hit
-    // area.
+    // Under a finger the clear button's target grows toward 44 px through
+    // Button's band (AST-094 FR42), and reaches only 2 px toward the field's
+    // other parts. Under a fine pointer its own ::after grows it to 24 px
+    // (WCAG 2.5.8), away from the text; it is off under a coarse pointer, so
+    // each pointer type has one hit area.
     render(<InputClearButton label="Clear" onClick={() => {}} />);
     const button = screen.getByRole('button', {name: 'Clear'});
-    const bandClasses = (stylex.props(touchHitAreaStyles.layer).className ?? '')
+    const roomToward = new Set<string>();
+    for (const sheet of Array.from(document.styleSheets)) {
+      for (const rule of Array.from(sheet.cssRules)) {
+        if (
+          rule instanceof CSSStyleRule &&
+          [...button.classList].some(name =>
+            rule.selectorText.startsWith(`.${name}`),
+          )
+        ) {
+          roomToward.add(
+            rule.style.getPropertyValue('--_hit-room-inline-start').trim(),
+          );
+        }
+      }
+    }
+    expect(roomToward).toContain('2px');
+    const bandClasses = (stylex.props(touchHitAreaStyles.band).className ?? '')
       .split(/\s+/)
       .filter(Boolean);
     expect(bandClasses.length).toBeGreaterThan(0);

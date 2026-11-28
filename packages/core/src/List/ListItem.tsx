@@ -51,7 +51,7 @@ import {ListContext, type ListMarker} from './ListContext';
 import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
 import {mergeProps} from '../utils/mergeProps';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
-import {Item, servesSwipeActions} from '../Item/Item';
+import {Item} from '../Item/Item';
 import {ItemListRowContext} from '../Item/ItemListRowContext';
 import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import {ItemLabelNeededContext} from '../Item/ItemLabelContext';
@@ -251,14 +251,6 @@ const styles = stylex.create({
       ':last-child': 'var(--_list-corner-end-end, 0px)',
     },
   },
-  // Under a finger, the row's touch band rises above the rows after it. A
-  // later row is positioned with no z-index, so it would paint and hit-test
-  // over the band. Only inside a List (isInList).
-  bandRaised: {
-    '::after': {
-      zIndex: {default: null, '@media (pointer: coarse)': 1},
-    },
-  },
   withDivider: {
     borderBlockEndWidth: borderVars['--border-width'],
     borderBlockEndStyle: 'solid',
@@ -270,11 +262,11 @@ const styles = stylex.create({
     ':last-child': {
       borderBlockEndWidth: 0,
     },
-    // The touch hit layer's band starts past the divider, the edge of the box
-    // its insets are measured from (internal/touchHitArea.stylex.ts). The width
-    // sits on the layer itself, so content inside the row never inherits it.
+    // The touch band grows from the row's border box, past the divider
+    // (internal/touchHitArea.stylex.ts). The width sits on the band itself,
+    // so content inside the row never inherits it.
     '::after': {
-      '--_hit-border-bottom': {
+      '--_hit-border-block-end': {
         default: borderVars['--border-width'],
         ':last-child': '0px',
       },
@@ -486,9 +478,7 @@ export function ListItem({
   );
   // The row's element, which a row without a handle names for the reorder.
   const rowRef = useRef<HTMLLIElement | null>(null);
-  // A List isolates its rows, so what a row raises stays below a page-level
-  // sticky header. Outside a List nothing bounds a raise, so a row raises
-  // nothing there.
+  // In a List, a row's touch band takes the List's room between rows.
   const isInList = ctx != null;
   // In a reorderable List: a trailing handle, or a row that stays put.
   const reorder = ctx?.reorder;
@@ -566,20 +556,6 @@ export function ListItem({
     hitAreaRef,
     keepPresentationOnDetach,
   );
-  // A row that Item serves swipe actions on is a stacking context at rest. So
-  // its band's own z-index orders only inside it, and under a finger the row
-  // raises itself. Its root is its `<li>`, never a link.
-  const isRaisedSwipeRow =
-    isInList &&
-    isTouchTarget &&
-    servesSwipeActions({
-      swipe: restProps.swipe,
-      swipeActions: restProps.swipeActions,
-      isDisabled,
-      isDelegate: interactiveRef != null,
-      isLinkRoot: false,
-      role: restProps.role,
-    });
   const density = ctx?.density ?? 'balanced';
   const hasDividers = ctx?.hasDividers ?? false;
   const edge = ctx?.edge ?? 'padded';
@@ -681,8 +657,7 @@ export function ListItem({
           hasDividers && embeddedStyles.noRadius,
           hasDividers && isTouchTarget && rowPressLayerStyles.overDividers,
           isTouchTarget && touchHitAreaStyles.layer,
-          isTouchTarget && isInList && styles.bandRaised,
-          isRaisedSwipeRow && travellingStyles.raisedSwipeRow,
+          isTouchTarget && isInList && touchHitAreaStyles.member,
           edge === 'flush' && styles.edgeFlush,
           edge === 'outset' && styles.edgeOutset,
           edge === 'bleed' && styles.edgeBleed,

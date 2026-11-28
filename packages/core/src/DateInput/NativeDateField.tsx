@@ -90,6 +90,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/DateInput/NativeDateField.generated';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 registerEnglishFallback(english);
 
@@ -628,6 +629,7 @@ export function NativeDateField({
       ref={el => {
         disabledMessageTooltip.ref(el);
       }}
+      {...fieldFrameProps}
       {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('date-input', {

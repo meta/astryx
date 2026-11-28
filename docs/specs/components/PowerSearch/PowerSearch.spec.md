@@ -221,6 +221,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Which rows a typed query offers in the typeahead and in the sheet's content
   search, how they order, and the filter each row commits
   (FR27–FR30).
+- Marking its frame for the touch press check. PowerSearch writes the private
+  attribute `data-astryx-field-frame` only through its owner module,
+  `packages/core/src/privateAttributes/fieldFrame.stylex.ts`
+  (`architecture:public-component-api` INV23). The press check reads the mark
+  and measures the frame as the entry's visible box (`spec:AST-094` FR42).
 
 **Does not own / non-goals**
 

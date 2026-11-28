@@ -445,10 +445,9 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // properties a theme author sets on the component.
   '--_thumbnail-hit-inset',
   '--_power-search-sheet-hit-inset',
-  // The border width a host draws where its touch hit layer reaches past,
-  // such as a divided ListItem's divider (0 on the last row).
-  // The ::after layer adds it to its offset, so the band starts past the
-  // border. It is the layer's geometry, not a property a theme author sets. A
+  // The border width a host draws where its touch band reaches past, such as
+  // a divided ListItem's divider (0 on the last row). The band grows from
+  // past it. It is the band's geometry, not a property a theme author sets. A
   // theme changes the divider through `--border-width`, which this follows.
   // A reorderable list's values for its rows' handle room: whether the
   // handles take a place, their targets' reach, and a bleeding list's start
@@ -460,7 +459,7 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // handles: a reorderable List row that stays put sets it, and Item pads the
   // content after the marker by it.
   '--_item-marker-room',
-  '--_hit-border-bottom',
+  '--_hit-border-block-end',
   // The interaction overlay's colour on the ::after layer of the cards:
   // written by the component's own hover and mouse `:active` arms, never a
   // value a theme author sets; the overlay colours themselves are the shared

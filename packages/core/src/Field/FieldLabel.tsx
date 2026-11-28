@@ -40,6 +40,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Field/FieldLabel.generated';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 registerEnglishFallback(english);
 
@@ -387,6 +388,7 @@ export function FieldLabel({
         ref={forwardsDescriptionClick ? descriptionRef : undefined}
         id={descriptionID}
         {...(forwardsDescriptionClick ? descriptionClickProps : undefined)}
+        {...(forwardsDescriptionClick ? fieldFrameProps : undefined)}
         {...stylex.props(
           styles.description,
           forwardsDescriptionClick && styles.descriptionClickable,

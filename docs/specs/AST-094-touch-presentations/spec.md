@@ -827,13 +827,39 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   16 px reading base:
   the 16 px mobile reading base (`design:mobile-typography` DR1, DR3) and the
   16 px text-entry floor (`family:input-fields` FR9) are unaffected.
-  Under a coarse pointer, the touch target grows toward 44 × 44 px, up to halfway to a neighboring target, and is never smaller than the control's own box (owner decision, 2026-11-04; `spec:AST-094` FR42).
-  It grows through an invisible hit area. A
-  hit-area expansion never overlaps a neighboring interactive element's own
-  target: where neighbors are closer than 44 px, the expansion is clamped to
-  half the gap, or skipped, so each element stays reachable; an expansion a
-  component or module record sets on purpose, such as `component:Thumbnail` AR4's, is
-  unaffected. Mobile size increases belong to theme adaptations (DEC-20).
+  Under a coarse pointer, the touch target grows toward 44 × 44 px and is never smaller than the control's own box (owner decision, 2026-11-04; `spec:AST-094` FR42).
+  It grows through an invisible band in CSS: each side grows toward 44 px,
+  centered on the control, and no further than that side's room. A group
+  whose members sit closer than 44 px sets half its gap as the room between
+  them, and its end members keep their room outward, so a tap in the gap goes
+  to the nearer member. A control that sits in running text, such as InfoTip
+  or StatusDot, has no room sideways. In a row's end slot, a control's band
+  does not grow on the block axis: the row's edge is the boundary, and the
+  row takes the taps above and below the control. Nothing reads layout for
+  hit areas before a press. A visible box under the finger wins; the band
+  only claims empty space. A target marked as a grown hit input, such as a
+  switch's, shows its parent's box. While the primary pointer is coarse, at
+  the click of a finger's, a pen's or a mouse's tap, a press-time check reads
+  the pressed control's box, and only when the finger landed on its band outside
+  that box, the elements under the finger within the control's container, in
+  one read. Where the finger is on another target's visible box, that target
+  takes the tap, as it does without the band. In empty space where bands
+  overlap, the target whose box is nearest the finger takes the tap. A target
+  that takes a tap this way takes it as a native tap does: it takes the
+  focus, so a text field raises the keyboard, and a picker opens. A field's
+  marked box is the field's: the frame around its entry, where the entry
+  renders as a field (a text, date, time or colour entry, or a select), takes
+  the tap for its entry, and a box whose own click forwards to the field,
+  such as its description or a file input's drop zone, takes the tap itself.
+  A label tied to the field is a target and focuses the field, as it does
+  without the band. A field's status message and the space beside its frame
+  are empty space (owner
+  decision, 2026-11-10; DEC-33). A hit area a component or module
+  record sets on purpose, such as `component:Thumbnail` AR4's, is unaffected.
+  Mobile size increases belong to theme adaptations (DEC-20). Implementation
+  gap: a tap that the press check hands to another target gets that target's
+  activation, focus, keyboard and picker, but not caret placement at the tap
+  point, native text selection, or the long-press callout.
 - **FR43 — Gestures work on the web.** Gestures attach for every pointer, a
   mouse, a pen, and a finger, not only a coarse primary pointer. A part that
   follows a pointer's drag, such as a switch's or a slider's thumb, a sheet, a
@@ -846,8 +872,8 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   row (`spec:AST-057` AR2, DEC-7); a
   pinch under a pen; the screen-edge pan under a mouse, a trackpad, or a pen;
   the slide across an action group under a mouse, and under any pointer
-  outside the touch presentation (`family:action-groups` FR1); and the 44 px coarse-pointer touch target, which stays coarse-only and never overlaps a
-  neighbor's target. On the web, a pan takes a trackpad's two-finger scroll
+  outside the touch presentation (`family:action-groups` FR1); and the 44 px coarse-pointer touch target, which stays coarse-only and never
+  takes a tap from another target's visible box (FR42). On the web, a pan takes a trackpad's two-finger scroll
   where its record allows it, and never a mouse wheel's notches. A scroll is a
   trackpad's only when it carries Chromium's and WebKit's trackpad signature:
   pixel deltas whose `wheelDelta` is three times the delta, with no whole tick
@@ -998,8 +1024,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   that slides across sibling actions acts on the action it lifts on
   (FR26–FR28), under the touch presentation (`family:action-groups` FR1).
 - Every component under a coarse pointer: no box grows for touch, and a
-  touch target reaches 44 px only through an invisible hit area clamped by
-  its neighbors, unless a component or module record sets its own (FR42).
+  touch target reaches 44 px only through an invisible band that never takes
+  a tap from another target's visible box, unless a component or module
+  record sets its own (FR42).
 - `component:DropdownMenu`, `component:ContextMenu` and `component:Popover`:
   under a finger they follow FR26–FR35 as each applies. Popover's input hold
   (FR35) starts on the first frame after the open, so a touch that lands
@@ -1151,7 +1178,7 @@ Motion that FR45 moves, by component. Each component's record carries its own li
 | FR36–FR40       | Release tests on synthetic touch streams with explicit timestamps, per use                                                                                                                                                                                                           | below and past each commit point; a flick that projects past it; a slow drag past it; a release moving back; Reduce Motion; keyboard and mouse paths                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a decision that changes mid-settle, a release moving back that commits, a settle that does not start at the release velocity (a paging release starts its settle per FR6's paging paragraph, DEC-25), or an action with no keyboard or mouse path fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | FR41            | Browser tests with real touch input (`spec:AST-013` FR10)                                                                                                                                                                                                                            | a tap; a long press on a ContextMenu trigger, a DropdownMenu trigger the caller renders, a row with a context menu, and a slider thumb; a long press on a checkbox row's label and on plain text; a cancelled press; mouse and keyboard selection; a pen long press; a mouse long press, which makes no context request; a mouse drag a recognizer claims, with and without a page selection; a mouse drag that starts on selectable text                                                                                                                                                                                                                                                                                                                                                                                                  | a tap that selects, a hold with an action that starts a selection or callout, a label or plain text whose long press does not select natively, a suppression that outlives the press, a change to native selection elsewhere, to keyboard or assistive-technology selection, or to mouse selection outside a drag a recognizer claims, a claimed drag that takes a new selection or after which an existing one does not survive, or a drag starting on text that does not select text fails                                                                                                                                                                                                                                                                                                                                            |
 | FR41 (box)      | Browser tests with real touch input (`spec:AST-013` FR10), and Mobile Safari on an iOS simulator                                                                                                                                                                                     | a finger held on the box of a checkbox, a CheckboxList row, a radio option and a switch, then lifted still; the same hold on the label beside it; a tap on the box; a hold that moves away; a mouse press on the box                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a hold on a box that starts a selection or the callout, a still lift that does not activate the control exactly once, a label whose long press does not select natively, a suppression that outlives the press, or a change to a mouse press fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| FR42            | Default-theme geometry tests under a coarse and a fine pointer, and hit-testing between adjacent targets                                                                                                                                                                             | every component at phone width with a finger and with a mouse; a dense toolbar; a chip and its remove button; a Switch beside a label link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a default-theme box that grows under touch or at phone width other than with its text, or, where no component or module record sets the hit area, a touch target under 44 px where neighbors allow it or a hit area that overlaps a neighbor's target, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| FR42            | Default-theme geometry tests under a coarse and a fine pointer, real-browser hit-testing between adjacent targets, and resource counts before a press                                                                                                                                | every component at phone width with a finger and with a mouse; a 24 px button tapped 10 and 11 px past its edge; a 4 px gap in a group; a link just before an InfoTip; a dense toolbar; a chip and its remove button; a Switch beside a label link; a Switch end control in a 33 px List row; a button 4 px under a List; two loose 24 px buttons 4 px apart; a page of controls before and during a press                                                                                                                                                                                                                                                                                                                                                                                                                                 | a default-theme box that grows under touch or at phone width other than with its text; where no component or module record sets the hit area, a touch target under 44 px where its room allows it; a tap on another target's visible box that acts on a band's control instead, or on nothing; or a layout read, observer or element listener for hit areas before a press, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | FR43            | Browser tests with a mouse, a trackpad, a pen, a finger, and the keyboard, and resource counts                                                                                                                                                                                       | a pan by drag and by wheel; a slider's thumb under a wheel and a trackpad scroll; a ctrl-wheel pinch; a long press, a right click, and Shift+F10; a mouse press; a handle drag; a row swipe with a mouse and a trackpad; a component with no gesture                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a gesture missing under a mouse or pen, a mouse-drag swipe action, a pen pinch, an edge pan under a mouse, a trackpad, or a pen, a press delay under a fine pointer, a wheel or trackpad scroll that changes a thumb's value or does not reach the scroll under it, an idle listener in a component with no gesture, or added stylesheet bytes, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | FR43 trackpad   | Unit tests on timed wheel streams; WebKit browser tests with trackpad streams (Chromium's driver wheels read as a mouse wheel)                                                                                                                                                       | a form and a required sheet pulled 30 to 240 px by a finger and by a trackpad; mouse lines, notches, ticks and accelerated deltas over a sheet, a pager and a row; ten swipes each starting mid-momentum, ten whose momentum ends, and a slow drag with 150 ms pauses; a trackpad flick and a slow stopped drag on an info sheet; a fling, a slow 60 px swipe, a 42 px spike and back-to-back swipes on a pager; a row opened and swiped back within one gesture, and a long fast swipe; a pinch ending; a trackpad pan through a window blur and through a hidden page                                                                                                                                                                                                                                                                    | a trackpad stretch that differs from a finger's for the same travel (120 px gives 54 px on the reference sheet), a mouse wheel that moves a sheet, a pager or a row, splitter counts other than ten, ten and one, momentum that moves a surface, a flick released with no velocity, a pager that travels past one page or pages on a spike, an info sheet a flick leaves open or a slow stopped drag closes, an open row that reveals its other side within one gesture, a trackpad pan a window blur or a hidden page leaves mid-gesture, or a pinch that ends after 100 ms fails                                                                                                                                                                                                                                                      |
 | FR44            | Unit tests of a pen press a window blur ends, on a Switch, a Slider and the host, under a coarse and a fine pointer                                                                                                                                                                  | a pen press on a Switch and on a Slider, blur mid-press: nothing toggles or commits; a pen whose contact ends in `pointercancel`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | with the host keeping no note of a blur-cancelled pen, the Switch toggles at the pen's click                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -1391,9 +1418,10 @@ Rejected: keeping gestures and press tracking touch-only.
 
 Sizes do not grow on phones or under touch in the default look, so a product
 looks the same everywhere unless its theme chooses otherwise; shrinking to fit
-a compact screen is fine. Touch reach comes from invisible hit areas, clamped
-so two close neighbors both stay reachable. Themes own mobile size increases
-through their adaptations.
+a compact screen is fine. Touch reach comes from invisible hit areas. Where two
+neighbors sit close, a group's room splits the gap, and a visible box under
+the finger wins over a band, so both stay reachable (FR42). Themes own mobile
+size increases through their adaptations.
 
 Rejected: touch-only row heights and control sizes in the default look.
 
@@ -1623,6 +1651,37 @@ lead. No spring follows the finger; the release's settle keeps its measured
 roles. The owners' words: "…If im dragging a portion of the listitem undermy
 finger i expect that to stay under my finger the entire duration of the
 gesture until i release".
+
+### DEC-33 — Touch hit areas are checked at press, not watched
+
+**Reference:** `spec:AST-094/DEC-33`
+**Decider:** `cixzhang`, `2026-11-10`
+
+A phone visitor pays for no page-wide measuring. Four rules hold: no
+hit-target logic runs before a press begins; nothing observes DOM mutations,
+and no page registry is kept; only the pressed control and its neighbors are
+measured, at the press's click; and the check never reacts to layers or
+animations. The band's size is CSS, with room per side (FR42). Where a band
+lies over another target's visible box, the visible box wins: that target
+takes the tap, as it does without the band, and the band only claims empty
+space. In empty space where bands overlap, the target whose box is nearest the
+finger takes the tap. A tap that works without the band works the same with
+it.
+
+The press check shares five internal exports across component folders; they
+replace the page-watch exports, because `useTouchHitArea` and
+`touchHitAreaStyles` give their callers no group state, no box geometry, no
+option values and no tap choice: `HitAreaGroupContext`, the group flag that a
+Button in a toggle group reads; `touchTargetRect`, the box reader that grows a
+box toward 44 px; `distanceTo`, the distance from the finger to a box;
+`BAND_ON_DESCENDANT`, the band option for a host whose band is on a
+descendant; and `targetUnderFinger`, the press check's choice. A group that
+takes its members' presses runs it before it claims one, so a member's band
+takes no tap on a control outside the group. The group reuses the lone
+Button's check rather than its own, so both paths make the same hand-off
+decision (`architecture:knowledge-contracts` DEC-22).
+
+Rejected: a measured, page-wide watch of every control's neighbors.
 
 ## Open questions
 

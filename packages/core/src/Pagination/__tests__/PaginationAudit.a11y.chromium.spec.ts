@@ -457,22 +457,6 @@ addCase({
   pointer: 'coarse',
   reducedMotion: 'reduce',
   run: async (page, check, frame) => {
-    // The shared hit area measures after layout settles; wait for its inset.
-    await page.waitForFunction(
-      () => {
-        const dot = document.querySelectorAll<HTMLElement>(
-          '#storybook-root [role="radio"]',
-        )[2];
-        return (
-          dot != null &&
-          parseFloat(
-            getComputedStyle(dot).getPropertyValue('--astryx-hit-inset-top'),
-          ) > 0
-        );
-      },
-      undefined,
-      {timeout: 5000},
-    );
     const rest = await dots(page);
     const above = await dotAt(page, 2, 0, -12);
     const below = await dotAt(page, 2, 0, 12);

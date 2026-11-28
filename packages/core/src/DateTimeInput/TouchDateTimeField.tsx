@@ -133,6 +133,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import {InternationalizationContext} from '../i18n/InternationalizationContext';
 import english from '../i18n/generated-english/DateTimeInput/TouchDateTimeField.generated';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 // The month math needs a date before today is known (server render,
 // hydration). The sheet's content, which shows the month, waits for today.
@@ -1305,6 +1306,7 @@ export function TouchDateTimeField({
           controlStyle,
         )}>
         <div
+          {...fieldFrameProps}
           onClick={event => {
             if (event.target === event.currentTarget) {
               openSheet('date');
@@ -1399,6 +1401,7 @@ export function TouchDateTimeField({
         </div>
 
         <div
+          {...fieldFrameProps}
           onClick={event => {
             if (event.target === event.currentTarget) {
               openSheet('time');

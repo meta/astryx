@@ -8,9 +8,8 @@
  * @position Testing for /packages/core/src/SegmentedControl/useSegmentedTouchTracking.ts
  */
 
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {createActionGroupTracker} from '../hooks/actionGroupTracker';
-import {HIT_INSET_PROPERTIES} from '../utils/hitArea';
 import {SEGMENT_SELECTOR} from './useSegmentedSelectionMotion';
 import {
   createSegmentLiftTarget,
@@ -162,15 +161,23 @@ describe('a lift through the tracker, when a caller wraps the segments', () => {
     document.body.append(track);
     return track;
   }
-  /** Gives each segment a touch band of `inset` px on every side. */
-  function withBands(track: HTMLElement, inset: number): HTMLElement {
-    for (const segment of track.querySelectorAll<HTMLElement>(
-      '[role="radio"]',
-    )) {
-      for (const property of Object.values(HIT_INSET_PROPERTIES)) {
-        segment.style.setProperty(property, `${inset}px`);
-      }
-    }
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  /**
+   * Makes the primary pointer coarse, so each 36 px tall segment has a touch
+   * band that grows it 4 px up and down, toward 44 px.
+   */
+  function withBands(track: HTMLElement): HTMLElement {
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      media =>
+        ({
+          media,
+          matches: media.includes('pointer: coarse'),
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
     return track;
   }
   function liftAt(track: HTMLElement, x: number, y: number): string | null {
@@ -213,9 +220,12 @@ describe('a lift through the tracker, when a caller wraps the segments', () => {
       ['d', 'e'],
     ];
     // 2 px below E (its box ends at 98), inside E's 4 px band and the control.
-    expect(liftAt(withBands(wrappedTrack(rows), 4), 160, 100)).toBe('e');
-    // On the 4 px gap between B and E, B's own band holds the lift first.
-    expect(liftAt(withBands(wrappedTrack(rows), 4), 160, 59)).toBe('b');
+    expect(liftAt(withBands(wrappedTrack(rows)), 160, 100)).toBe('e');
+    // On the 4 px gap between B and E, both bands hold the lift, and B's box
+    // is nearer.
+    expect(liftAt(withBands(wrappedTrack(rows)), 160, 59)).toBe('b');
+    // 1 px above E, E's box is nearer.
+    expect(liftAt(withBands(wrappedTrack(rows)), 160, 61)).toBe('e');
   });
 
   it('commits the first-row segment a tap lands on in three rows', () => {

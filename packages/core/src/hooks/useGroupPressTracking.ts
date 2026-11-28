@@ -9,22 +9,20 @@
  * @output useGroupPressTracking: the press tracking that ButtonGroup and
  *   ToggleButtonGroup share; GROUP_PRESS_POINTERS, the pointers it follows,
  *   re-exported from pressGroupContext
- * @position Internal hook. Core's internal/touch entry exposes it to Lab. It drives
- *   useActionGroupTracking and the shared touch hit area (useTouchHitArea)
- *   for a group's members. Each group's root applies
- *   touchHitAreaStyles.layerBelowChildren. AlertDialog's tracking follows
+ * @position Internal hook. Core's internal/touch entry exposes it to Lab. It
+ *   drives useActionGroupTracking for a group's members, whose own touch
+ *   bands take a finger just past them. AlertDialog's tracking follows
  *   GROUP_PRESS_POINTERS too.
  *
  * SYNC: When modified, update ButtonGroupTracking.test.tsx and
  * ToggleButtonGroupTracking.test.tsx.
  */
 
-import type {RefCallback, RefObject} from 'react';
+import type {RefObject} from 'react';
 import type {GestureTouch} from '../gestures/types';
 import {isPressGroupItem} from '../privateAttributes/pressGroupItem.stylex';
 import {GROUP_PRESS_POINTERS} from './pressGroupContext';
-import {groupGrowth} from '../utils/hitArea';
-import {useTouchHitArea, type TouchHitAreaOptions} from '../utils/touchHitArea';
+import {targetUnderFinger} from '../utils/touchHitArea';
 import {
   DISABLED_SELECTOR,
   measureActions,
@@ -63,20 +61,10 @@ function trackedTargets(group: HTMLElement): ActionGroupTarget[] {
 }
 
 /**
- * The group's hit area. Each side grows as far as the members on that edge
- * would. The tracker reads the members when a press begins, so a press reads
- * nothing else on the page.
- */
-const GROUP_HIT_AREA: TouchHitAreaOptions = {
-  growth: (box, toLayout, group) =>
-    groupGrowth(box, trackedTargets(group).map(toLayout)),
-  checkAtPress: false,
-};
-
-/**
  * Whether the group takes `touch`'s press. It takes one on an enabled tracked
- * member. A press on a disabled member keeps its click, so its tooltip can
- * open. It takes a finger's press on its own box or hit layer only where a
+ * member, unless the finger is on the member's band over a control outside
+ * the group. A press on a disabled member keeps its click, so its tooltip can
+ * open. It takes a finger's press on its own box only where a
  * member's grown target holds it. Any other press keeps its own click, so a
  * tap beside the members of a wide group reaches the page. A member the group
  * does not track, such as a menu trigger, keeps its own press. A group with
@@ -94,7 +82,14 @@ function takesPress(group: HTMLElement | null, touch: GestureTouch): boolean {
   }
   if (target !== group) {
     const member = (target as Element).closest(MEMBER_ELEMENTS);
-    return member != null && group.contains(member) && isTrackedMember(member);
+    if (member == null || !group.contains(member) || !isTrackedMember(member)) {
+      return false;
+    }
+    // A press on a member's band that lies over a control outside the group,
+    // or nearer one, is that control's tap: the group leaves it, and the
+    // member's press check gives it on.
+    const other = targetUnderFinger(member, touch.startX, touch.startY);
+    return other == null || group.contains(other);
   }
   return (
     touch.pointerType === 'touch' &&
@@ -112,16 +107,6 @@ function takesPress(group: HTMLElement | null, touch: GestureTouch): boolean {
   );
 }
 
-export interface GroupPressTracking {
-  /**
-   * Merge into the group's root: it keeps the hit layer's insets live. While
-   * the group tracks presses, the root applies
-   * `touchHitAreaStyles.layerBelowChildren` and is positioned, as the layer's
-   * containing block.
-   */
-  readonly hitAreaRef: RefCallback<HTMLElement>;
-}
-
 export {GROUP_PRESS_POINTERS};
 
 /**
@@ -133,7 +118,7 @@ export {GROUP_PRESS_POINTERS};
 export function useGroupPressTracking(
   ref: RefObject<HTMLElement | null>,
   isEnabled: boolean,
-): GroupPressTracking {
+): void {
   useActionGroupTracking(ref, {
     itemSelector: MEMBER_ELEMENTS,
     // A disabled member is the tracker's neighbour. A hidden member has no box,
@@ -147,10 +132,4 @@ export function useGroupPressTracking(
     shouldTrack: touch => takesPress(ref.current, touch),
     isEnabled,
   });
-  // A finger's target grows toward 44 px through the hit layer, not the
-  // members. A finger just past a small member lands on the layer, and the
-  // tracker picks that member. The shared watch grows a target only under a
-  // coarse primary pointer.
-  const hitAreaRef = useTouchHitArea(isEnabled, GROUP_HIT_AREA);
-  return {hitAreaRef};
 }
