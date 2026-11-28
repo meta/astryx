@@ -209,8 +209,6 @@ export function SegmentedControlItem({
   isDisabled = false,
   onClick: onClickProp,
   xstyle,
-  className,
-  style,
   'aria-describedby': ariaDescribedByProp,
   ...rest
 }: SegmentedControlItemProps) {
@@ -287,8 +285,6 @@ export function SegmentedControlItem({
           ctx.isTouchPresentation === true && styles.touchPresentation,
           xstyle,
         ),
-        className,
-        style,
       )}>
       {iconElement}
       {!isLabelHidden && (
