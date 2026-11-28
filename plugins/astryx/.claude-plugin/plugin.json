@@ -1,10 +1,23 @@
 {
   "name": "astryx",
-  "version": "0.1.0",
-  "description": "Tells coding agents that Astryx is available through the astryx command, when to use it, and where to start.",
-  "author": {"name": "Astryx"},
-  "homepage": "https://github.com/meta/astryx",
+  "version": "0.1.1",
+  "displayName": "Astryx",
+  "description": "Teaches coding agents that Astryx is available through the astryx command, when to use it, and where to start. Use when building or changing UI, choosing components, layout, styling or theming, or working with @astryxdesign packages.",
+  "author": {
+    "name": "Astryx",
+    "url": "https://astryx.atmeta.com"
+  },
+  "homepage": "https://astryx.atmeta.com",
   "repository": "https://github.com/meta/astryx",
   "license": "MIT",
-  "keywords": ["astryx", "design-system", "ui"]
+  "keywords": [
+    "astryx",
+    "design-system",
+    "ui",
+    "components",
+    "cli",
+    "stylex",
+    "coding-agents"
+  ],
+  "icon": "./assets/logo.svg"
 }
