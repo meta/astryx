@@ -13,6 +13,7 @@ import {act} from '@testing-library/react';
 import {GestureHost} from '../gestures/GestureHost';
 import {layerRootProps} from '../privateAttributes/layerRoot.stylex';
 import {subscribeInput} from '../utils/inputStream';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 import {
   holdInput,
   holdsTouch,
@@ -380,6 +381,237 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     // case rather than lingering into it.
     pointer(document.body, 'pointerdown', 'mouse');
     pointer(document.body, 'pointerup', 'mouse');
+  });
+
+  /**
+   * The animator's shared curve ends (motion/curveEnds.ts), read by its key
+   * as another copy of Core would.
+   */
+  const curveEndsByKey = () =>
+    realmValue(
+      sharedKey('motion/curve-ends/curve-ends', 1),
+      () => new WeakMap<object, number>(),
+    );
+
+  /**
+   * Gives `layer` the running animations `entrances` lists. A case moves an
+   * entrance's end by setting its `endTime`.
+   */
+  function entering(
+    layer: Element,
+    entrances: {startTime: number | null; endTime: number}[],
+  ) {
+    const animations = entrances.map(({startTime, endTime}) => {
+      const animation = {
+        startTime,
+        endTime,
+        playbackRate: 1,
+        ready: Promise.resolve(),
+        effect: {getComputedTiming: () => ({endTime: animation.endTime})},
+      };
+      return animation;
+    });
+    Object.defineProperty(layer, 'getAnimations', {
+      configurable: true,
+      value: () => animations,
+    });
+    return animations;
+  }
+
+  /**
+   * The Web Animations API that the entrance's end marker uses, faked on
+   * `clock`. `finishMarkers` runs each marker whose end the clock has reached,
+   * as the frame at that time would.
+   */
+  function fakeMarkers(clock: {time: number}) {
+    interface Marker {
+      effect: {timing: {delay: number}};
+      startTime: number | null;
+      onfinish: (() => void) | null;
+    }
+    const markers: Marker[] = [];
+    vi.stubGlobal(
+      'KeyframeEffect',
+      class {
+        constructor(
+          readonly target: null,
+          readonly frames: null,
+          readonly timing: {delay: number},
+        ) {}
+      },
+    );
+    vi.stubGlobal(
+      'Animation',
+      class {
+        startTime: number | null = null;
+        onfinish: (() => void) | null = null;
+        constructor(readonly effect: {timing: {delay: number}}) {}
+        play() {
+          markers.push(this);
+        }
+      },
+    );
+    const timeline = {
+      get currentTime() {
+        return clock.time;
+      },
+    };
+    Object.defineProperty(document, 'timeline', {
+      configurable: true,
+      value: timeline,
+    });
+    const finishMarkers = () => {
+      for (const marker of [...markers]) {
+        const end = (marker.startTime ?? Infinity) + marker.effect.timing.delay;
+        if (clock.time >= end) {
+          markers.splice(markers.indexOf(marker), 1);
+          marker.onfinish?.();
+        }
+      }
+    };
+    const restore = () => {
+      vi.unstubAllGlobals();
+      delete (document as {timeline?: unknown}).timeline;
+    };
+    return {finishMarkers, restore};
+  }
+
+  /** Lets the hold's readiness promises settle. */
+  const settle = async () => {
+    for (let index = 0; index < 4; index += 1) {
+      await Promise.resolve();
+    }
+  };
+
+  it("keeps a presenting hold past its entrance's first end when the entrance moves its end later, and ends it in the frame that reaches the new end (spec:AST-094 FR35)", async () => {
+    const clock = clockAt(0);
+    const {finishMarkers, restore} = fakeMarkers(clock);
+    try {
+      const {layer} = mountLayer();
+      const [entrance] = entering(layer, [{startTime: 0, endTime: 300}]);
+      hold(layer);
+      await settle();
+      // A retarget moves the entrance's end later, before its first end.
+      entrance.endTime = 500;
+      clock.time = 300;
+      finishMarkers();
+      const below = recorder();
+      const during = pointer(below.button, 'pointerdown', 'touch', 1, 1, 350);
+      expect(during.defaultPrevented).toBe(true);
+      expect(below.reached).toEqual([]);
+      pointer(below.button, 'pointerup', 'touch', 1, 0, 360);
+      clock.time = 500;
+      finishMarkers();
+      expect(layer.querySelector('[aria-hidden="true"]')).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it('ends no later hold on the layer with the end marker of an entrance that a close cancelled: a marker ends only the hold it was armed for (spec:AST-094 FR35)', async () => {
+    const clock = clockAt(0);
+    const {finishMarkers, restore} = fakeMarkers(clock);
+    try {
+      const {layer} = mountLayer();
+      entering(layer, [{startTime: 0, endTime: 300}]);
+      let cancel = () => {};
+      releases.push(
+        holdInput(layer, {
+          until: new Promise<void>(resolve => {
+            cancel = resolve;
+          }),
+          scope: 'viewport',
+        }),
+      );
+      await settle();
+      // A close during the entrance cancels it. Its hold ends, and the shield
+      // goes with it.
+      clock.time = 100;
+      cancel();
+      await settle();
+      expect(layer.querySelector('[aria-hidden="true"]')).toBeNull();
+      // The menu opens again, with an entrance from 150 to 450.
+      clock.time = 150;
+      entering(layer, [{startTime: 150, endTime: 450}]);
+      hold(layer);
+      await settle();
+      // The first entrance's marker comes due while the new one runs.
+      clock.time = 300;
+      finishMarkers();
+      const below = recorder();
+      const during = pointer(below.button, 'pointerdown', 'touch', 1, 1, 320);
+      expect(during.defaultPrevented).toBe(true);
+      expect(below.reached).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
+  it("ends a presenting hold at a press stamped after the layer's entrance ended on screen, though the hold's own release has not run: the press reaches the page (spec:AST-094 FR35)", () => {
+    clockAt(1000);
+    const {layer} = mountLayer();
+    // An entrance from 0 to 300 on the page's clock; the hold's release waits
+    // on a promise a busy main thread has not settled.
+    entering(layer, [{startTime: 0, endTime: 300}]);
+    hold(layer);
+    const below = recorder();
+    // While it enters, a press is held.
+    const during = pointer(below.button, 'pointerdown', 'touch', 1, 1, 200);
+    expect(during.defaultPrevented).toBe(true);
+    expect(below.reached).toEqual([]);
+    pointer(below.button, 'pointerup', 'touch', 1, 0, 210);
+    // After it, a press is the page's, and the shield is gone.
+    const after = pointer(below.button, 'pointerdown', 'touch', 2, 1, 400);
+    expect(after.defaultPrevented).toBe(false);
+    expect(below.reached).toContain('pointerdown');
+    expect(layer.querySelector('[aria-hidden="true"]')).toBeNull();
+  });
+
+  it("reads an animator run's entrance end from the animator's curve end, not from the end-value tail its effect plays on past it (spec:AST-094 FR35)", () => {
+    clockAt(1000);
+    const {layer} = mountLayer();
+    // An animator run: its effect ends a minute after its curve.
+    const [run] = entering(layer, [{startTime: 0, endTime: 60_300}]);
+    curveEndsByKey().set(run, 300);
+    hold(layer);
+    const below = recorder();
+    const after = pointer(below.button, 'pointerdown', 'touch', 1, 1, 400);
+    expect(after.defaultPrevented).toBe(false);
+    expect(below.reached).toContain('pointerdown');
+  });
+
+  it("ends a presenting hold on an animator handle at a press stamped after the handle's curves end, with no animation left on the layer (spec:AST-094 FR35)", () => {
+    clockAt(1000);
+    const {layer} = mountLayer();
+    const handle = {finished: new Promise<boolean>(() => {})};
+    curveEndsByKey().set(handle, 300);
+    releases.push(holdInput(layer, {until: handle, scope: 'viewport'}));
+    const below = recorder();
+    const after = pointer(below.button, 'pointerdown', 'touch', 1, 1, 400);
+    expect(after.defaultPrevented).toBe(false);
+    expect(below.reached).toContain('pointerdown');
+  });
+
+  it('keeps a presenting hold at a press while the entrance on the layer has not started: the browser has not given its start (spec:AST-094 FR35)', () => {
+    clockAt(1000);
+    const {layer} = mountLayer();
+    entering(layer, [{startTime: null, endTime: 300}]);
+    hold(layer);
+    const below = recorder();
+    const after = pointer(below.button, 'pointerdown', 'touch', 1, 1, 400);
+    expect(after.defaultPrevented).toBe(true);
+    expect(below.reached).toEqual([]);
+  });
+
+  it('keeps a presenting hold at a press while an animation on the layer has no end it can read: its release decides (spec:AST-094 FR35)', () => {
+    clockAt(1000);
+    const {layer} = mountLayer();
+    entering(layer, [{startTime: 0, endTime: Infinity}]);
+    hold(layer);
+    const below = recorder();
+    const after = pointer(below.button, 'pointerdown', 'touch', 1, 1, 400);
+    expect(after.defaultPrevented).toBe(true);
+    expect(below.reached).toEqual([]);
   });
 
   /** A button that records every event that reaches it. */

@@ -205,6 +205,7 @@ import {
 import {planReducedMotion, type ReducedMotionView} from './reducedMotionPlan';
 import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {devWarn} from '../utils/devWarning';
+import {curveEnds} from './curveEnds';
 
 declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
@@ -2300,6 +2301,7 @@ export function createMotionEngine(
       releaseIdentity(channel);
       flushReleases();
     };
+    curveEnds.set(animation, end);
     retireTimers.set(channel, setTimeout(retire, Math.max(0, end - now())));
     if (requestFrame != null) {
       // Frames start looking a frame before the end, so the frame that
@@ -3356,6 +3358,16 @@ export function createMotionEngine(
           ),
         ),
     };
+    if (!settlesWithLanding && end > time) {
+      // Read from the start the browser gives: a block before the first frame
+      // moves it later.
+      void handle.started.then(
+        start => {
+          curveEnds.set(handle, start + (end - time));
+        },
+        () => {},
+      );
+    }
     return handle;
   };
 

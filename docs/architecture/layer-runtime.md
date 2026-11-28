@@ -693,7 +693,10 @@ layers use Layer rendering without joining Escape/platform dismissal.
   shared input hold, `holdInput` (`Layer/inputHold.ts`), that keeps input away
   from a layer while its presentation runs under a finger. Layers that enter
   through CSS (Dialog, Drawer, MobileNav, DropdownMenu) take it through `holdEntranceInput`
-  (`Layer/holdEntranceInput.ts`). While a layer presents (`spec:AST-094`
+  (`Layer/holdEntranceInput.ts`). A presenting hold ends where its entrance
+  ends on screen. The motion animator publishes each run's curve end through
+  `motion/curveEnds.ts`, and the hold judges a press against it
+  (`spec:AST-094` FR35). While a layer presents (`spec:AST-094`
   FR35), the hold takes pointer input only: a shield catches taps and presses,
   a pinch still zooms the page, and keys and assistive technology stay live.
   While a layer dismisses, the hold also makes the layer's content inert. A
