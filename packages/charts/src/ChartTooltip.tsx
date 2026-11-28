@@ -29,7 +29,6 @@
 'use client';
 
 import {
-  memo,
   useState,
   useEffect,
   useMemo,
@@ -37,23 +36,16 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
-import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
-import {
-  colorVars,
-  radiusVars,
-  shadowVars,
-  spacingVars,
-} from '@astryxdesign/core/theme/tokens.stylex';
-import {HStack, Text, useLayer, VStack} from '@astryxdesign/core';
+import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {useChart} from './ChartContext';
-import {ChartSwatch, swatchVariantForType} from './ChartSwatch';
 import {
   deriveTooltipSeriesValues,
   hasMultiplePrimarySeries,
   shouldRenderHoverDot,
   type TooltipSeriesValue,
 } from './tooltip';
+import {DefaultTooltipContent, useTooltipCard} from './tooltipCard';
 import type {SeriesDef, ChartPointerEvent} from './types';
 import {isBandScale, xPixel} from './utils';
 
@@ -94,65 +86,10 @@ export interface ChartTooltipProps {
 }
 
 const styles = stylex.create({
-  // Visual card chrome is applied to the Layer host. useLayer owns its fixed
-  // positioning and browser top-layer promotion.
-  card: {
-    backgroundColor: colorVars['--color-background-popover'],
-    borderWidth: '1px',
-    borderStyle: 'solid',
-    borderColor: colorVars['--color-border'],
-    borderRadius: radiusVars['--radius-container'],
-    // Longhands match the Layer host's padding reset, so the card padding
-    // still wins when each package ships its own prebuilt stylesheet.
-    paddingBlockStart: spacingVars['--spacing-2'],
-    paddingBlockEnd: spacingVars['--spacing-2'],
-    paddingInlineStart: spacingVars['--spacing-3'],
-    paddingInlineEnd: spacingVars['--spacing-3'],
-    boxShadow: shadowVars['--shadow-med'],
-    pointerEvents: 'none',
-    whiteSpace: 'nowrap',
-  },
   crosshair: {
     stroke: colorVars['--color-text-primary'],
     strokeWidth: 1,
   },
-});
-
-/** Default tooltip body — used when `render` is not provided. */
-const DefaultTooltipContent = memo(function DefaultTooltipContent({
-  xValue,
-  rows,
-  labelRows,
-}: {
-  xValue: unknown;
-  rows: TooltipSeriesValue[];
-  labelRows: boolean;
-}) {
-  return (
-    <VStack gap={1}>
-      <Text type="body" weight="semibold">
-        {String(xValue)}
-      </Text>
-      {rows.length === 1 && !labelRows ? (
-        <Text type="supporting">{String(rows[0].value)}</Text>
-      ) : (
-        <VStack gap={1}>
-          {rows.map((row, i) => (
-            <HStack key={`${row.key}-${i}`} gap={2} vAlign="center">
-              <ChartSwatch
-                color={row.color}
-                variant={swatchVariantForType(row.type)}
-              />
-              <Text type="supporting">{row.label}</Text>
-              <Text type="supporting" weight="semibold">
-                {String(row.value)}
-              </Text>
-            </HStack>
-          ))}
-        </VStack>
-      )}
-    </VStack>
-  );
 });
 
 /**
@@ -181,32 +118,20 @@ export function ChartTooltip({
     height,
   } = useChart();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [cardPosition, setCardPosition] = useState({x: 0, y: 0});
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
   const lastPointerEventRef = useRef<ChartPointerEvent | null>(null);
   const {
+    cardRef,
     hide: hideLayer,
-    isOpen: isLayerOpen,
-    render: renderLayer,
+    place: placeCard,
+    renderCard,
     show: showLayer,
-  } = useLayer({
-    mode: 'fixed',
-  });
+  } = useTooltipCard();
   // Whether the card is currently suppressed (no content, or a custom `render`
   // opted out by returning null). Start closed; once present content opens the
   // Layer, a content-bearing index change keeps it open while React swaps the
   // content. positionCard also reads this so a same-index pointer move cannot
   // re-reveal a suppressed card before the visibility effect confirms content.
   const cardHiddenRef = useRef(true);
-
-  // The Layer host must remain in the chart's nearest HTML subtree so nested
-  // Theme and MediaTheme scopes keep applying. The portal crosses only the SVG
-  // boundary; browser top-layer promotion remains Layer's responsibility.
-  useEffect(() => {
-    const nextTarget = svgRef.current?.parentElement ?? null;
-    setPortalTarget(current => (current === nextTarget ? current : nextTarget));
-  }, [svgRef, width]);
 
   // Stable Set of resolved series keys — used by deriveTooltipSeriesValues.
   // Recomputed only when the resolved map identity changes (per layout pass).
@@ -218,64 +143,19 @@ export function ChartTooltip({
   // not force a React commit.
   const positionCard = useCallback(
     (e: ChartPointerEvent) => {
-      const card = cardRef.current;
-      const svg = svgRef.current;
-      if (!card) {
+      if (!cardRef.current) {
         return;
       }
-      if (!svg || !e.nearest || cardHiddenRef.current) {
+      if (!svgRef.current || !e.nearest || cardHiddenRef.current) {
         hideLayer();
         return;
       }
 
       showLayer();
-      const layerHost = card.parentElement;
-      if (!layerHost) {
-        return;
-      }
-
-      const svgRect = svg.getBoundingClientRect();
-      const screenX = svgRect.left + margin.left + e.nearest.px;
-      const screenY = svgRect.top + margin.top;
-      const cardWidth = layerHost.offsetWidth;
-      const cardHeight = layerHost.offsetHeight;
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const gap = 8;
-
-      let x: number;
-      let y = screenY;
-      switch (placement) {
-        case 'left':
-          x = screenX - cardWidth - gap;
-          break;
-        case 'right':
-          x = screenX + gap;
-          break;
-        case 'top':
-          x = screenX - cardWidth / 2;
-          y = screenY - cardHeight - gap;
-          break;
-        case 'auto':
-        default: {
-          const rightX = screenX + gap;
-          x =
-            rightX + cardWidth > viewportWidth
-              ? screenX - cardWidth - gap
-              : rightX;
-        }
-      }
-
-      // Clamp the card coordinates to the viewport. Oversized custom content
-      // keeps its caller-owned dimensions and may extend past the far edge.
-      x = Math.max(gap, Math.min(x, viewportWidth - cardWidth - gap));
-      y = Math.max(gap, Math.min(y, viewportHeight - cardHeight - gap));
-
-      setCardPosition(current =>
-        current.x === x && current.y === y ? current : {x, y},
-      );
+      // The card top is at the plot's top edge, beside the hovered x.
+      placeCard({px: e.nearest.px, py: 0}, {placement});
     },
-    [svgRef, margin, placement, hideLayer, showLayer],
+    [cardRef, svgRef, placement, hideLayer, showLayer, placeCard],
   );
 
   // ─── Subscribe to pointer events ───────────────────────────────────────
@@ -432,11 +312,6 @@ export function ChartTooltip({
     hoveredIndex == null ||
     datum == null ||
     (render != null && cardContent == null);
-  const hasNativePopover =
-    typeof HTMLElement !== 'undefined' &&
-    typeof HTMLElement.prototype.showPopover === 'function';
-  const shouldHideLayerHost =
-    isCardHidden || (!hasNativePopover && !isLayerOpen);
 
   // Synchronize the shared Layer's native Popover state after React commits the
   // new card body. The second positioning pass measures that final body; later
@@ -477,25 +352,7 @@ export function ChartTooltip({
     <>
       {hoverIndicatorElement}
       {dots}
-      {portalTarget
-        ? createPortal(
-            renderLayer(
-              <div ref={cardRef} role="tooltip">
-                {cardContent}
-              </div>,
-              {
-                x: cardPosition.x,
-                y: cardPosition.y,
-                // Native Popover keeps a closed host out of layout itself, so
-                // remove our guard before showPopover() measures it. Layer's
-                // reduced fallback needs the explicit closed display state.
-                style: shouldHideLayerHost ? {display: 'none'} : undefined,
-                xstyle: styles.card,
-              },
-            ),
-            portalTarget,
-          )
-        : null}
+      {renderCard(cardContent, isCardHidden)}
     </>
   );
 }

@@ -129,6 +129,15 @@ const TARGETS = [
       'leaving the plot closes it',
   },
   {
+    component: 'dotGLInteractive',
+    story: 'charts-marks-webgl--interactive-scatter',
+    guards:
+      'mouse and pen pointer moves over 20 dots spread ' +
+      'across the WebGL scatter reach the chart pointer layer and open the ' +
+      "point card with each dot's own x and y; near the right and top plot " +
+      'edges the card stays whole in the top layer, and leaving closes it',
+  },
+  {
     component: 'ChartTheming',
     story: 'lab-charttheming-colorpicker--end-user-choices',
     guards:
