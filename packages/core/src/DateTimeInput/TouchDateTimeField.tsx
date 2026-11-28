@@ -38,7 +38,8 @@ import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
-import {useCalendarConstraints, type ISODateString} from '../Calendar';
+import type {ISODateString} from '../Calendar';
+import {useCalendarConstraints} from '../Calendar/hooks/useCalendarConstraints';
 import {
   Field,
   InputClearButton,

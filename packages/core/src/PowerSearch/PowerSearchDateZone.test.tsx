@@ -22,11 +22,11 @@ import type {
   PowerSearchFilter,
   PowerSearchTokenProps,
 } from './types';
-import {loadDateRangeCalendar} from '../DateRangeInput/DateRangeCalendar';
+import {loadCalendar} from '../Calendar/LazyCalendar';
 // DateRangeInput loads its Calendar on the first intent. Loading it up front
 // lets these cases find the calendar's days right after the open.
 beforeAll(async () => {
-  await loadDateRangeCalendar();
+  await loadCalendar();
 });
 
 const originalMatches = HTMLElement.prototype.matches;

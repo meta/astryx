@@ -162,7 +162,6 @@
     "../utils"
   ],
   "packages/core/src/DateTimeInput/DateTimeInput.tsx": [
-    "../Calendar",
     "../Calendar/hooks",
     "../Field",
     "../Icon",
@@ -188,7 +187,6 @@
   "packages/core/src/DateTimeInput/TouchDateTimeField.tsx": [
     "../BottomSheet",
     "../Button",
-    "../Calendar",
     "../Field",
     "../Icon",
     "../IconButton",

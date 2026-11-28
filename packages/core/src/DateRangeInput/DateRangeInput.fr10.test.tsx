@@ -15,12 +15,12 @@ import {DateRangeInput, type DateRangeInputProps} from './DateRangeInput';
 import {FormLayout} from '../FormLayout';
 import {expectFieldInputProps} from '../Field/fieldInputFamily.testing';
 import {describeFieldInputParts} from '../Field/fieldInputFamily.render-testing';
-import {loadDateRangeCalendar} from './DateRangeCalendar';
+import {loadCalendar} from '../Calendar/LazyCalendar';
 // Calendar loads on the trigger's first intent. Loading it up front lets these
 // cases open the popover synchronously; DateRangeInput.calendarLoad*.test.tsx
 // covers the load itself.
 beforeAll(async () => {
-  await loadDateRangeCalendar();
+  await loadCalendar();
 });
 
 // The range trigger is the field's semantic control: it carries the value,

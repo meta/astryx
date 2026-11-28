@@ -7,7 +7,7 @@
  * @output Tests that the Calendar loads on the trigger's first intent, not
  *   with the field, and that the first open shows the popover only with its
  *   Calendar
- * @position Testing for DateRangeCalendar.tsx
+ * @position Testing for LazyCalendar.tsx
  */
 
 import {

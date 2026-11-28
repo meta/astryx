@@ -10,7 +10,15 @@
  */
 
 import {useState} from 'react';
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import {createRoot} from 'react-dom/client';
 import {
   act,
@@ -33,6 +41,14 @@ import {generateThemeCSS} from '../theme/generateThemeRules';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {getTooltip} from '../__tests__/tooltipDescription';
+import {loadCalendar} from '../Calendar/LazyCalendar';
+
+// Calendar loads on the field's first intent. Loading it up front lets these
+// cases open the popover synchronously, in any order;
+// Calendar/lazyCalendarFields.test.tsx covers the load itself.
+beforeAll(async () => {
+  await loadCalendar();
+});
 
 function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');

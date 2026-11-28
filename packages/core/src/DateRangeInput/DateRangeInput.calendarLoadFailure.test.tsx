@@ -6,7 +6,7 @@
  *   module mocked to fail once
  * @output Tests that a failed Calendar load leaves the field working and
  *   closed, warns once, and that the next open loads the Calendar
- * @position Testing for DateRangeCalendar.tsx
+ * @position Testing for LazyCalendar.tsx
  */
 
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';

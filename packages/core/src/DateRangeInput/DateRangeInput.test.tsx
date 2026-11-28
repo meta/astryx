@@ -40,12 +40,12 @@ import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {InternationalizationProvider} from '../i18n';
 import {getTooltip} from '../__tests__/tooltipDescription';
-import {loadDateRangeCalendar} from './DateRangeCalendar';
+import {loadCalendar} from '../Calendar/LazyCalendar';
 // Calendar loads on the trigger's first intent. Loading it up front lets these
 // cases open the popover synchronously; DateRangeInput.calendarLoad*.test.tsx
 // covers the load itself.
 beforeAll(async () => {
-  await loadDateRangeCalendar();
+  await loadCalendar();
 });
 
 describe('DateRangeInput', () => {

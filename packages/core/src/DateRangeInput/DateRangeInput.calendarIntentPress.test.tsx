@@ -5,7 +5,7 @@
  * @input vitest (jsdom), Testing Library, DateRangeInput with its Calendar
  *   module counted
  * @output Tests that a pointer down on the trigger starts loading the Calendar
- * @position Testing for DateRangeCalendar.tsx
+ * @position Testing for LazyCalendar.tsx
  */
 
 import {act, fireEvent, render} from '@testing-library/react';
