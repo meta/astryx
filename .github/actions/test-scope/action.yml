@@ -68,6 +68,13 @@ outputs:
       The PR changes only spec records, or only the recorded Node test times
       (times_only): the knowledge lane.
     value: ${{ steps.scope.outputs.spec_only }}
+  docs_only:
+    description: >-
+      The PR changes no package or docsite code: only root Markdown, the
+      license, docs/ and Changesets, with or without spec records. It also
+      reports spec_only, so it takes the knowledge lane, and the required
+      joins say it is not affected.
+    value: ${{ steps.scope.outputs.docs_only }}
   times_only:
     description: >-
       The PR changes only the recorded Node test times. It takes the knowledge
@@ -166,6 +173,7 @@ runs:
 
           const everything = {
             spec_only: 'false',
+            docs_only: 'false',
             times_only: 'false',
             docsite_only: 'false',
             tooling_only: 'false',

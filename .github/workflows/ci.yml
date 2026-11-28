@@ -747,7 +747,7 @@ jobs:
   # required checks fail with the reason until review passes: at the first
   # head whose review and spec gates pass, ci-review-pass.yml runs the run
   # again in full, and so does merge-guard before merge (any later attempt
-  # runs everything). A spec-only or Lab-only change is never deferred, nor a
+  # runs everything). A spec-only, docs-only or Lab-only change is never deferred, nor a
   # release merge-back, a release-branch pull request or a pull request whose
   # release-critical label someone with write access applied last.
   # Every other run skips this job at once, so it delays nothing; every job
@@ -845,7 +845,7 @@ jobs:
             }
             core.setOutput('passes', String(passes));
 
-      - name: Defer the heavy suites unless the change is spec-only or Lab-only
+      - name: Defer the heavy suites unless the change is spec-only, docs-only or Lab-only
         id: decide
         env:
           SPEC_ONLY: ${{ steps.scope.outputs.spec_only }}
@@ -853,6 +853,7 @@ jobs:
           RELEASE_CRITICAL: ${{ steps.release.outputs.counts }}
           REVIEW_PASSES: ${{ steps.gate.outputs.passes }}
         run: |
+          # A docs-only change arrives as spec-only: it builds and tests nothing.
           # A Lab-only change runs only fast work, so nothing is deferred (FR26).
           # Nor is a pull request whose release-critical label counts (DEC-30),
           # or a head whose review gate already passes (DEC-32).
@@ -881,6 +882,9 @@ jobs:
       NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: https://probe.example.test
     outputs:
       lab_only: ${{ steps.scope.outputs.lab_only }}
+      # No package or docsite code changed: the required join says it is not
+      # affected. This job runs in every attempt, a re-run included.
+      docs_only: ${{ steps.scope.outputs.docs_only }}
       # The browser contracts apply: the docsite was built, and the change is
       # shared infrastructure or more than component tests, stories, spec
       # records and changesets.
@@ -1206,6 +1210,15 @@ jobs:
         run: |
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1
+
+      # No package or docsite code changed (spec:AST-030 FR2): nothing here
+      # has work, so the check passes at once and says why. This is its own
+      # success, never the deferral path below.
+      - name: 'Not affected: no package or docsite changes'
+        if: needs.docsite-build.outputs.docs_only == 'true'
+        run: |
+          echo "::notice title=Not affected::Not affected: no package or docsite changes: this change touches only documentation, records or release notes, so there is nothing to build or test."
+          echo "Not affected: no package or docsite changes. This change touches only documentation, records or release notes, so there is nothing to build or test." >> "$GITHUB_STEP_SUMMARY"
 
       # A push defers the heavy suites until review passes (spec:AST-030 FR20): the
       # required check fails with the reason, never passes as skipped.
@@ -2537,6 +2550,15 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
+      # No package or docsite code changed (spec:AST-030 FR2): nothing here
+      # has work, so the check passes at once and says why. This is its own
+      # success, never the deferral path below.
+      - name: 'Not affected: no package or docsite changes'
+        if: steps.scope.outputs.docs_only == 'true'
+        run: |
+          echo "::notice title=Not affected::Not affected: no package or docsite changes: this change touches only documentation, records or release notes, so there is nothing to build or test."
+          echo "Not affected: no package or docsite changes. This change touches only documentation, records or release notes, so there is nothing to build or test." >> "$GITHUB_STEP_SUMMARY"
+
       - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'
         run: |
@@ -2548,26 +2570,26 @@ jobs:
       # plan's check, which fails test-node, is the check that gates it.
       - name: Check out the repository
         id: checkout_3
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true' || steps.scope.outputs.docs_only == 'true'
         uses: actions/checkout@v7
         timeout-minutes: 5
         continue-on-error: true
 
       - name: Check out the repository (second try)
         id: checkout_3_again
-        if: (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
+        if: (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true' || steps.scope.outputs.docs_only == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
         uses: actions/checkout@v7
         timeout-minutes: 5
         continue-on-error: true
 
       - name: Stop when the checkout failed twice
-        if: (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
+        if: (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true' || steps.scope.outputs.docs_only == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
         run: |
           echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
           exit 1
 
       - name: Require expected test-owner outcomes
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true' || steps.scope.outputs.docs_only == 'true'
         env:
           RELEASE_BUMP: ${{ steps.scope.outputs.release_bump }}
           RELEASE_BUMP_RESULT: ${{ needs.release-bump.result }}
@@ -2658,6 +2680,9 @@ jobs:
       short_hash: ${{ steps.release.outputs.short_hash || steps.urls.outputs.short_hash }}
       pr_number: ${{ steps.urls.outputs.pr_number }}
       lab_only: ${{ steps.scope.outputs.lab_only }}
+      # No package or docsite code changed: the required join says it is not
+      # affected. This job runs in every attempt, a re-run included.
+      docs_only: ${{ steps.scope.outputs.docs_only }}
     env:
       # A release interaction check compares a release candidate with
       # release/interaction-check-base, a throwaway cut far behind main: an
@@ -3331,6 +3356,15 @@ jobs:
         run: |
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1
+
+      # No package or docsite code changed (spec:AST-030 FR2): nothing here
+      # has work, so the check passes at once and says why. This is its own
+      # success, never the deferral path below.
+      - name: 'Not affected: no package or docsite changes'
+        if: needs.build-storybook.outputs.docs_only == 'true'
+        run: |
+          echo "::notice title=Not affected::Not affected: no package or docsite changes: this change touches only documentation, records or release notes, so there is nothing to build or test."
+          echo "Not affected: no package or docsite changes. This change touches only documentation, records or release notes, so there is nothing to build or test." >> "$GITHUB_STEP_SUMMARY"
 
       # A push defers the heavy suites until review passes (spec:AST-030 FR20): the
       # required check fails with the reason, never passes as skipped.

@@ -181,6 +181,67 @@ describe('scopedExtraTests on this repository (contract)', () => {
   });
 });
 
+describe('specReaderTests: the tests a docs-only change runs', () => {
+  const sources = {
+    // Reads the root README by its path from the repository root.
+    'packages/cli/api/docs/react-version.test.mjs':
+      "import fs from 'node:fs';\nconst readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');",
+    // Reads AGENTS.md through a relative path.
+    'scripts/agents.test.mjs':
+      "import fs from 'node:fs';\nconst text = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8');",
+    // Reads a guidance folder under docs/.
+    'scripts/guides.test.mjs':
+      "import fs from 'node:fs';\nconst guides = fs.readdirSync('docs/contributing');",
+    // Names README.md only in prose.
+    'scripts/prose.test.mjs':
+      "import fs from 'node:fs';\n// See README.md.\nfs.readFileSync('package.json');",
+  };
+  const files = [
+    ...Object.keys(sources),
+    'README.md',
+    'AGENTS.md',
+    'docs/contributing/pull-requests.md',
+    'package.json',
+  ];
+  const read = file => sources[file] ?? '';
+
+  it('runs the tests that read a changed root document or docs folder, and no others', () => {
+    expect(specReaderTests(files, read, ['README.md'])).toEqual([
+      'packages/cli/api/docs/react-version.test.mjs',
+    ]);
+    expect(specReaderTests(files, read, ['AGENTS.md'])).toEqual([
+      'scripts/agents.test.mjs',
+    ]);
+    expect(
+      specReaderTests(files, read, ['docs/contributing/pull-requests.md']),
+    ).toEqual(['scripts/guides.test.mjs']);
+    expect(specReaderTests(files, read, ['LICENSE'])).toEqual([]);
+  });
+});
+
+describe('specReaderTests over this repository', () => {
+  const tracked = execFileSync('git', ['ls-files', '-z'], {
+    cwd: path.resolve(import.meta.dirname, '../..'),
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+    .split('\0')
+    .filter(Boolean);
+  const readTracked = file =>
+    fs.readFileSync(
+      path.join(path.resolve(import.meta.dirname, '../..'), file),
+      'utf8',
+    );
+
+  it.each([
+    ['README.md', 'packages/cli/test/docs-topic-refs.test.mjs'],
+    ['AGENTS.md', 'packages/cli/test/docs-graph.test.mjs'],
+    ['.changeset/a-new-note.md', 'packages/cli/test/docs-topic-refs.test.mjs'],
+  ])('runs the test that reads %s', (changed, reader) => {
+    expect(specReaderTests(tracked, readTracked, [changed])).toContain(reader);
+  });
+});
+
 describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)', () => {
   const sources = {
     // Reads one record by a path relative to itself.

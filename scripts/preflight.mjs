@@ -70,7 +70,7 @@ export function planChecks({
   if (quick) return quickChecks({scope, mergeBase, changed, tmp});
   const at = name => path.join(tmp, name);
   const checks = [];
-  const specOnly = scope.specOnly || scope.timesOnly;
+  const specOnly = (scope.specLane ?? scope.specOnly) || scope.timesOnly;
   const noBuild = specOnly || scope.docsiteOnly;
   // CI's typecheck job skips these lanes; the others build every package
   // first, since a package's types read its dependencies' build.
@@ -397,7 +397,7 @@ function present(files) {
  * an import, and no guard.
  */
 function quickChecks({scope, mergeBase, changed, tmp}) {
-  const specOnly = scope.specOnly || scope.timesOnly;
+  const specOnly = (scope.specLane ?? scope.specOnly) || scope.timesOnly;
   const typechecks = !specOnly && !scope.docsiteOnly && !scope.toolingOnly;
   const linted = present(changed.filter(file => LINTED.test(file)));
   const tests = present(changed.filter(file => TEST_FILE.test(file)));

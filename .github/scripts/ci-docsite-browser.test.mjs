@@ -315,7 +315,7 @@ describe('docsite-test, the required join', () => {
     );
     expect(
       withoutCheckoutRetries(join.steps)
-        .slice(0, 6)
+        .slice(0, 7)
         .map(s => s.name),
     ).toEqual([
       'Require a branch in this repository or the ci:run label',
@@ -323,6 +323,7 @@ describe('docsite-test, the required join', () => {
       'Check out the superseded-runs action',
       "Check the pull request's head",
       'Stop for a superseded head',
+      'Not affected: no package or docsite changes',
       'Heavy CI deferred',
     ]);
     expect(join['runs-on']).toBe('ubuntu-slim');

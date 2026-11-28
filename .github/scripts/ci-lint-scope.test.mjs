@@ -582,7 +582,11 @@ describe('ESLint on the docs lane', () => {
   });
 
   it('installs dependencies on the docs lane, and only the spec lane skips setup', () => {
-    expect(setup.if).toBe("steps.scope.outputs.spec_only != 'true'");
+    // A docs-only change (spec_only is true for it) also installs, for the
+    // repository guardrails.
+    expect(setup.if).toBe(
+      "steps.scope.outputs.spec_only != 'true' || (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.docs_only == 'true')",
+    );
   });
 
   it('lints on the docs lane after setup, with the heap of the full pass', () => {

@@ -109,7 +109,9 @@ jobs:
             core.setOutput('run_id', String(identity.sourceRunId));
             core.setOutput('run_attempt', String(identity.sourceRunAttempt));
             core.setOutput('source_conclusion', identity.sourceConclusion);
-            core.setOutput('spec_only', String(changeScope.specOnly));
+            // CI's spec-only lane; a base classifier from before specLane
+            // reports specOnly alone.
+            core.setOutput('spec_only', String(changeScope.specLane ?? changeScope.specOnly));
             core.setOutput('tooling_only', String(changeScope.toolingOnly));
 
   spec-only-reconcile:

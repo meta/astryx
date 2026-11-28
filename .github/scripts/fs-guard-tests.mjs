@@ -204,6 +204,9 @@ const RECORD_ROOTS = [
   'docs/specs/',
   'docs/families/',
   'docs/design/',
+  // Every other document a docs-only change may touch (change-scope.cjs's
+  // docs surface): the rest of docs/, and below, Markdown at the root.
+  'docs/',
   'packages/themes/',
   // Only the recorded test times: RECORD_LITERAL names no other path under
   // scripts/ or .github/.
@@ -212,14 +215,31 @@ const RECORD_ROOTS = [
 ];
 /** A path literal into a record root, relative (`../…/docs/specs/…`) or from the root. */
 const RECORD_LITERAL =
-  /(['"`])((?:\.\.?\/)*(?:docs\/(?:specs|families|design)|packages\/themes|scripts\/vitest-node-durations[^/'"`\n]*\.json|\.github\/playwright-leg-durations\.json)(?:\/[^'"`\n]*)?)\1/g;
+  /(['"`])((?:\.\.?\/)*(?:docs(?=\/)|packages\/themes|scripts\/vitest-node-durations[^/'"`\n]*\.json|\.github\/playwright-leg-durations\.json)(?:\/[^'"`\n]*)?)\1/g;
+/**
+ * A Markdown file or the license at the repository root: a relative path
+ * (`'../../README.md'`, `new URL('../AGENTS.md', import.meta.url)`) or a name
+ * joined to some folder (`path.join(REPO, 'README.md')`,
+ * `path.join(CLI, '..', '..', 'AGENTS.md')`). The folder is not resolved, so
+ * a fixture's own README counts too: that runs one more test, never one fewer.
+ * A bare name alone (`'README.md'`) does not count.
+ */
+const ROOT_DOC_RELATIVE =
+  /(['"`])((?:\.\.\/)+(?:[A-Za-z][\w.-]*\.md|LICENSE))\1/g;
+const ROOT_DOC_JOINED = /,\s*(['"`])([A-Za-z][\w.-]*\.md|LICENSE)\1/g;
+/** The Changesets folder, by name or a path into it. */
+const CHANGESET_LITERAL = /(['"`])(?:\.\.\/)*\.changeset(?:\/[^'"`\n]*)?\1/;
+const ROOT_DOC = /^(?:[^/]+\.md|LICENSE)$/;
 /** `path.join(root, 'docs', 'specs', …)` and the like: the whole root. */
 const RECORD_SEGMENTS =
   /(['"])(docs|packages)\1\s*,\s*(['"])(specs|families|design|themes)\3/g;
+/** `path.join(root, 'docs', …)`, outside the record folders above: the whole docs/ tree. */
+const DOCS_SEGMENT =
+  /\b(?:root|ROOT|repoRoot|REPO_ROOT|repositoryRoot|REPOSITORY_ROOT)\s*,\s*(['"])docs\1(?!\s*,\s*(['"])(?:specs|families|design)\2)/;
 // A changed record: a spec record, or the recorded test times, whose readers
 // run for a change only to them (spec:AST-030 FR13).
 const RECORD_PATH =
-  /^(?:docs\/(?:specs|families|design)\/|packages\/themes\/[^/]+\/[^/]+\.spec\.md$|scripts\/vitest-node-durations[^/]*\.json$|\.github\/playwright-leg-durations\.json$)/;
+  /^(?:docs\/|\.changeset\/|packages\/themes\/[^/]+\/[^/]+\.spec\.md$|scripts\/vitest-node-durations[^/]*\.json$|\.github\/playwright-leg-durations\.json$|[^/]+\.md$|LICENSE$)/;
 
 /** The source without block comments and whole-line `//` comments, where prose names records. */
 function code(source) {
@@ -265,14 +285,28 @@ function recordPathsIn(file, source, isPath) {
       continue;
     }
     const bare = joined.replace(/\/$/, '');
-    paths.add(
-      isPath(bare) ? joined : joined.slice(0, joined.lastIndexOf('/') + 1),
-    );
+    const named = isPath(bare)
+      ? joined
+      : joined.slice(0, joined.lastIndexOf('/') + 1);
+    // Outside the record folders, `docs/<topic>` is often a CLI docs topic,
+    // not a file: such a literal never names the whole docs/ tree.
+    if (root === 'docs/' && named === 'docs/' && !isPath(bare)) continue;
+    paths.add(named);
   }
   for (const [, , first, , second] of body.matchAll(RECORD_SEGMENTS)) {
     const root = `${first}/${second}/`;
     if (RECORD_ROOTS.includes(root) && counts(root)) paths.add(root);
   }
+  if (DOCS_SEGMENT.test(body)) paths.add('docs/');
+  for (const [, , literal] of body.matchAll(ROOT_DOC_RELATIVE)) {
+    const joined = path.posix.normalize(
+      path.posix.join(path.posix.dirname(file), literal),
+    );
+    if (ROOT_DOC.test(joined) && isPath(joined)) paths.add(joined);
+  }
+  for (const [, , name] of body.matchAll(ROOT_DOC_JOINED))
+    if (isPath(name)) paths.add(name);
+  if (CHANGESET_LITERAL.test(body)) paths.add('.changeset/');
   return paths;
 }
 

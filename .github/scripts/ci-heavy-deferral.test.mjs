@@ -430,13 +430,15 @@ describe('a deferred push', () => {
         "Check the pull request's head",
         'Stop for a superseded head',
       ]);
+      // A docs-only change's notice comes first where the join reads it
+      // from another job; it never fails.
       expect(before.slice(5), id).toEqual(
         id === 'test'
           ? [
               'Record the deferral for the PR report',
               'Upload the deferral for the PR report',
             ]
-          : [],
+          : ['Not affected: no package or docsite changes'],
       );
       expect(step.if).toBe(HEAVY_DEFERRED);
       expect(
