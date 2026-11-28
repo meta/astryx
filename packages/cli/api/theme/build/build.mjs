@@ -6572,8 +6572,13 @@ Or with a <link> tag:
     }
   }
   const fonts = groupUnloadedFonts(trailers);
-  // One caller's recipe serves the batch only when every theme takes it.
-  const help = trailers.every(t => t.fontHelp) ? trailers[0].fontHelp : null;
+  // One caller's recipe serves the batch only when every theme that leaves a
+  // font unloaded takes it.
+  const fontTrailers = trailers.filter(t => t.unloadedFonts.length > 0);
+  const help =
+    fontTrailers.length > 0 && fontTrailers.every(t => t.fontHelp)
+      ? fontTrailers[0].fontHelp
+      : null;
   if (fonts.length > 0)
     logger.log(formatBatchFontLoadingHelp(fonts, help?.recipe));
 }
@@ -6596,7 +6601,9 @@ export function printCompactTrailer(trailers, {hint = false} = {}) {
           : `"${family}"`,
       )
       .join(', ');
-    const nextFont = trailers.every(trailer => trailer.nextFont);
+    const nextFont = trailers
+      .filter(trailer => trailer.unloadedFonts.length > 0)
+      .every(trailer => trailer.nextFont);
     logger.log(
       nextFont
         ? `[note] Fonts named but not loaded: ${named}. ${nextFontFix(formatCliCommand('docs font-setup'))}.`

@@ -2,35 +2,61 @@
 
 /**
  * @file Whether an app loads its fonts with Next.js `next/font`.
- * @input a project directory
- * @output true when its App Router root layout imports `next/font/google` or `next/font/local`
- * @position shared by `doctor`'s theme-fonts check and `theme build`'s font note, so their fix names the recipe a next/font app needs
+ * @input a folder in the project
+ * @output true when the project's App Router root layout imports next/font, directly or through the geist package
+ * @position shared by `doctor`'s theme-fonts check and `theme build`'s font notes, so their fix names the recipe a next/font app needs
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
+import {findThemeProject} from '../config/theme-state.mjs';
+import {
+  APP_ROOT_LAYOUT_FILES,
+  parseAppModule,
+} from '../discovery/app-layout.mjs';
 
 /** The modules that load a font through next/font. */
 const NEXT_FONT_MODULES = new Set(['next/font/google', 'next/font/local']);
 
-/** The App Router root layout files: under the project, or under `src/`. */
-const ROOT_LAYOUT_FILES = ['app/layout', 'src/app/layout'].flatMap(file =>
-  ['.tsx', '.jsx', '.js', '.mjs', '.ts'].map(ext => `${file}${ext}`),
-);
+/**
+ * Whether an import loads its font through next/font: next/font itself, or an
+ * entry of the `geist` package, each of which wraps `next/font/local`.
+ * @param {string} specifier
+ */
+function isNextFontImport(specifier) {
+  return (
+    NEXT_FONT_MODULES.has(specifier) ||
+    specifier === 'geist/font' ||
+    specifier.startsWith('geist/font/')
+  );
+}
 
 /**
- * Whether the project's root layout imports `next/font/google` or
- * `next/font/local`. next/font loads each family under a name of its own
- * and exposes a CSS variable, so a theme that names the family itself does
- * not use the loaded font. The import is read from the syntax tree, so a
- * mention in a comment or a string does not count. A layout that does not
- * parse counts as no import.
- * @param {string} projectDir
+ * The project folder for `dir`: the nearest folder at or above it with a
+ * package.json, as `doctor` finds it, else `dir` itself.
+ * @param {string} dir
+ */
+function projectOf(dir) {
+  try {
+    return findThemeProject(dir).projectDir;
+  } catch {
+    return dir;
+  }
+}
+
+/**
+ * Whether the project's root layout imports `next/font/google`,
+ * `next/font/local`, or a `geist/font` entry. next/font loads each family
+ * under a name of its own and exposes a CSS variable, so a theme that names
+ * the family itself does not use the loaded font. The import is read from the
+ * syntax tree, so a mention in a comment or a string does not count. A layout
+ * that does not parse counts as no import.
+ * @param {string} dir a folder in the project
  * @returns {boolean}
  */
-export function rootLayoutImportsNextFont(projectDir) {
-  for (const name of ROOT_LAYOUT_FILES) {
+export function rootLayoutImportsNextFont(dir) {
+  const projectDir = projectOf(dir);
+  for (const name of APP_ROOT_LAYOUT_FILES) {
     let source;
     try {
       source = fs.readFileSync(path.join(projectDir, name), 'utf8');
@@ -39,25 +65,22 @@ export function rootLayoutImportsNextFont(projectDir) {
     }
     let ast;
     try {
-      ast = parse(source, {
-        sourceType: 'unambiguous',
-        plugins: ['typescript', 'jsx', 'decorators-legacy', 'importAttributes'],
-      });
+      ast = parseAppModule(source);
     } catch {
       return false;
     }
     return ast.program.body.some(
       node =>
         node.type === 'ImportDeclaration' &&
-        NEXT_FONT_MODULES.has(node.source.value),
+        isNextFontImport(node.source.value),
     );
   }
   return false;
 }
 
 /**
- * The fix for a family a next/font app names but does not load: point the
- * theme's family at the font's CSS variable.
+ * The fix for a family a next/font app's own theme names but does not load:
+ * point the theme's family at the font's CSS variable.
  * @param {string} recipe the command that prints the next/font recipe
  * @returns {string}
  */
