@@ -192,7 +192,7 @@ const iconSizeStyles = stylex.create({
 });
 
 /**
- * Individual segment item within an SegmentedControl.
+ * Individual segment item within a SegmentedControl.
  * Renders as a radio button with visual segment styling.
  *
  * @example
@@ -209,6 +209,8 @@ export function SegmentedControlItem({
   isDisabled = false,
   onClick: onClickProp,
   xstyle,
+  className,
+  style,
   'aria-describedby': ariaDescribedByProp,
   ...rest
 }: SegmentedControlItemProps) {
@@ -285,6 +287,8 @@ export function SegmentedControlItem({
           ctx.isTouchPresentation === true && styles.touchPresentation,
           xstyle,
         ),
+        className,
+        style,
       )}>
       {iconElement}
       {!isLabelHidden && (
