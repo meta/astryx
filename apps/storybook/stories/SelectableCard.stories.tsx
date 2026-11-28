@@ -53,7 +53,7 @@ type Story = StoryObj<typeof SelectableCard>;
 export const SingleSelect: Story = {
   name: 'One Selected Card',
   render: () => {
-    const [selected, setSelected] = useState<string | null>('basic');
+    const [selected, setSelected] = useState(new Set(['basic']));
     const plans = [
       {id: 'basic', name: 'Basic', price: '$9/mo'},
       {id: 'pro', name: 'Pro', price: '$29/mo'},
@@ -66,8 +66,18 @@ export const SingleSelect: Story = {
           <SelectableCard
             key={plan.id}
             label={plan.name}
-            isSelected={selected === plan.id}
-            onChange={() => setSelected(plan.id)}
+            isSelected={selected.has(plan.id)}
+            onChange={isNow => {
+              setSelected(prev => {
+                const next = new Set(prev);
+                if (isNow) {
+                  next.add(plan.id);
+                } else {
+                  next.delete(plan.id);
+                }
+                return next;
+              });
+            }}
             width={200}>
             <VStack gap={1}>
               <Text type="body" weight="bold">
@@ -86,7 +96,7 @@ export const SingleSelect: Story = {
     docs: {
       description: {
         story:
-          'One selected card beside unselected ones. Each card is still a checkbox, so assistive technology announces a multi-select group: do not use this pattern for a single choice.',
+          'One selected card beside unselected ones. Each card is a checkbox that toggles on its own, so selecting one does not deselect another, and assistive technology announces a multi-select group. For a single choice, use radio semantics instead.',
       },
     },
   },

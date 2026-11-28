@@ -33,8 +33,8 @@ const NESTED_STORY = 'core-selectablecard--with-nested-button';
 const DISABLED_STORY = 'core-selectablecard--disabled';
 
 type Mode = 'light' | 'dark';
-/** `none` renders base tokens only; `neutral` is the Storybook default. */
-type Theme = 'none' | 'neutral';
+/** Every case runs in the Storybook default theme. */
+type Theme = 'neutral';
 type Direction = 'ltr' | 'rtl';
 type Viewport = {width: number; height: number};
 type Check = (condition: boolean, message: string) => void;
@@ -356,6 +356,12 @@ for (const mode of ['light', 'dark'] as const) {
     viewport: DESKTOP,
     run: async (page, check, frame) => {
       const rest = await readCards(page);
+      semantics(check, rest);
+      check(
+        card(rest, 'React')?.checked === true &&
+          card(rest, 'Angular')?.checked === false,
+        'React is not the selected card, or Angular is',
+      );
       const surface = page.locator('#storybook-root .astryx-selectable-card', {
         hasText: 'Angular',
       });
@@ -521,6 +527,12 @@ cases.push({
   direction: 'ltr',
   viewport: DESKTOP,
   run: async (page, check, frame) => {
+    const rest = await readCards(page);
+    semantics(check, rest);
+    check(
+      rest.cards.length === 1 && rest.cards[0].checked === false,
+      'the nested-button card does not start unselected',
+    );
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await settle(page);

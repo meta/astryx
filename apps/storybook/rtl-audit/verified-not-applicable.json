@@ -123,7 +123,7 @@
     "component": "core/SelectableCard",
     "reason": "SelectableCard renders content in normal flow inside a symmetric Card. Its hover overlay and selected ring cover all four edges equally, its source uses no physical left/right positioning or directional glyphs, and its checkbox interaction uses only pointer, Space, Enter, and Tab rather than inline-direction keys. Every current story therefore has no component-owned visual or behavioral RTL difference for the audit to measure.",
     "evidence": {
-      "apps/storybook/stories/SelectableCard.stories.tsx": "sha256:c3024ff76440ba03f45ddc2ebb7d78cfe61336a274bac0d8a2fc734d5c2f4141",
+      "apps/storybook/stories/SelectableCard.stories.tsx": "sha256:f485a23c69f1838b273830babe8ccdc542ce214e22b4cedca99c114caea6ca6a",
       "packages/core/src/SelectableCard/SelectableCard.tsx": "sha256:085741fdc33371c849e5edd9abf7c52acaefc93ee432eb02f70eae84d793754c",
       "packages/core/src/SelectableCard/index.ts": "sha256:9cf677856807a09ee444ce68b21118bca9729592485f892da7e0bb64ee1d7501"
     }
