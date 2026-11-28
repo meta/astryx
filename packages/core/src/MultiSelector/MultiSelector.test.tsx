@@ -6094,10 +6094,15 @@ describe('MultiSelector caller aria-labelledby', () => {
   });
 });
 
+/** An icon component, which MultiSelector renders through Icon. */
+function StartGlyph(props: ComponentProps<'svg'>) {
+  return <svg data-testid="start-glyph" {...props} />;
+}
+
 describe('MultiSelector delegated theming owners (FR4)', () => {
   const options = ['Apple', {type: 'divider' as const}, 'Banana'];
 
-  it('keeps the Field, clear, checkbox, divider and icon parts on their own owners in the popover', async () => {
+  it('keeps the Field, clear, start icon, checkbox and divider parts on their own owners in the popover', async () => {
     const user = userEvent.setup();
     const {container} = render(
       <MultiSelector
@@ -6106,13 +6111,15 @@ describe('MultiSelector delegated theming owners (FR4)', () => {
         value={['Apple']}
         onChange={vi.fn()}
         hasClear
+        startIcon={StartGlyph}
       />,
     );
     const combobox = screen.getByRole('combobox');
     expect(combobox.closest('.astryx-field')).not.toBeNull();
     expect(container.querySelector('.astryx-input-clear-icon')).not.toBeNull();
+    // An icon component renders through Icon, so it carries the icon target.
     expect(
-      container.querySelector('.astryx-multi-selector .astryx-icon'),
+      screen.getByTestId('start-glyph').closest('.astryx-icon'),
     ).not.toBeNull();
 
     await user.click(combobox);
