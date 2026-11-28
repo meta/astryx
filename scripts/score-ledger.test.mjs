@@ -35,6 +35,7 @@ import {
   buildStats,
   commitMessage,
   compareEntry,
+  ensureWikiClone,
   flatPackageComponents,
   gradeFor,
   isComponentDirectory,
@@ -1313,5 +1314,77 @@ describe('the generated table is gone', () => {
     expect(fs.readdirSync(wiki.clone).filter(f => f !== '.git')).toEqual([
       'component-scores.json',
     ]);
+  });
+});
+
+describe('hardening checks', () => {
+  it('ensureWikiClone clones fresh, reuses an existing clone, and rejects unsafe cache paths', () => {
+    const wiki = makeWiki(ledgerWith());
+    const cacheDir = path.join(wiki.root, 'cache-clone');
+    const remote = `file://${wiki.bare}`;
+
+    ensureWikiClone(cacheDir, remote);
+    expect(fs.existsSync(path.join(cacheDir, 'component-scores.json'))).toBe(true);
+
+    const sentinel = path.join(cacheDir, '.git', 'reuse-sentinel');
+    fs.writeFileSync(sentinel, 'keep');
+    fs.writeFileSync(path.join(cacheDir, 'dirty.txt'), 'leftover');
+    ensureWikiClone(cacheDir, remote);
+    expect(fs.existsSync(path.join(cacheDir, 'dirty.txt'))).toBe(false);
+    expect(fs.existsSync(sentinel)).toBe(true);
+
+    const linkDir = path.join(wiki.root, 'symlink-cache');
+    fs.symlinkSync(cacheDir, linkDir);
+    expect(() => ensureWikiClone(linkDir, remote)).toThrow(/unsafe wiki cache/);
+
+    if (typeof process.getuid === 'function') {
+      fs.chmodSync(cacheDir, 0o777);
+      expect(() => ensureWikiClone(cacheDir, remote)).toThrow(/unsafe wiki cache/);
+    }
+  });
+
+  it('applyScorecard and --file-issues reject non-positive block.issue before invoking gh', () => {
+    expect(() =>
+      applyScorecard(
+        null,
+        scorecard({
+          score: 70,
+          grade: 'C',
+          blocks: {count: 1, open: [{id: 'A8', summary: 'bad issue', issue: 0}]},
+        }),
+        {component: 'Button', pkg: 'core'},
+      ),
+    ).toThrow(/positive integer/);
+
+    const wiki = makeWiki(
+      ledgerWith(
+        entry({
+          score: 70,
+          grade: 'C',
+          blocks: {
+            count: 2,
+            open: [
+              {id: 'A8', summary: 'first unfiled block', issue: null},
+              {id: 'B2', summary: 'invalid issue number', issue: 0},
+            ],
+          },
+        }),
+      ),
+    );
+    const bin = path.join(wiki.root, 'bin');
+    fs.mkdirSync(bin);
+    const marker = path.join(wiki.root, 'gh-called');
+    fs.writeFileSync(
+      path.join(bin, 'gh'),
+      `#!/usr/bin/env bash\ntouch ${JSON.stringify(marker)}\nexit 0\n`,
+      {mode: 0o755},
+    );
+
+    const r = cli(['--file-issues', 'Button', '--ledger', wiki.ledger], {
+      env: {...process.env, PATH: `${bin}:${process.env.PATH}`},
+    });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('invalid issue number on B2: 0');
+    expect(fs.existsSync(marker)).toBe(false);
   });
 });

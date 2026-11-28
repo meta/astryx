@@ -35,6 +35,8 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
+import {currentUid, isPrivateDir} from '../packages/cli/foundation/env/private-dir.mjs';
+import {userCacheDir} from '../packages/cli/foundation/env/user-dirs.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -932,10 +934,26 @@ Only record what you actually measured.`;
 // ---------------------------------------------------------------------------
 
 /** The reused shallow clone. One per user, not one per run. */
-export const WIKI_CACHE_DIR = path.join(
-  os.tmpdir(),
-  'astryx-score-ledger-wiki',
-);
+export const WIKI_CACHE_DIR = path.join(userCacheDir(), 'score-ledger-wiki');
+
+function pathExists(target) {
+  try {
+    fs.lstatSync(target);
+    return true;
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return false;
+    throw e;
+  }
+}
+
+function assertSafeWindowsDir(dir) {
+  const st = fs.lstatSync(dir);
+  if (st.isSymbolicLink() || !st.isDirectory()) {
+    throw new Error(
+      `refusing to use unsafe wiki cache path (symlink or non-directory): ${dir}`,
+    );
+  }
+}
 
 function git(cwd, ...argv) {
   return execFileSync('git', argv, {
@@ -963,21 +981,64 @@ function tryGit(cwd, ...argv) {
  * — the cache is an optimisation, never a state carrier.
  */
 export function ensureWikiClone(dir = WIKI_CACHE_DIR, remote = WIKI_REMOTE) {
-  if (fs.existsSync(path.join(dir, '.git'))) {
-    git(dir, 'remote', 'set-url', 'origin', remote);
-    git(dir, 'fetch', '--depth', '1', 'origin', WIKI_BRANCH);
+  const gitDir = path.join(dir, '.git');
+  if (currentUid() != null) {
+    if (!pathExists(dir)) {
+      fs.mkdirSync(dir, {recursive: true, mode: 0o700});
+    }
+    if (!isPrivateDir(dir)) {
+      throw new Error(
+        `refusing to use unsafe wiki cache directory (must be a private mode-0700 directory owned by current user): ${dir}`,
+      );
+    }
+    if (pathExists(gitDir)) {
+      if (!isPrivateDir(gitDir)) {
+        throw new Error(
+          `refusing to use unsafe wiki cache .git directory: ${gitDir}`,
+        );
+      }
+      git(dir, 'remote', 'set-url', 'origin', remote);
+      git(dir, 'fetch', '--depth', '1', 'origin', WIKI_BRANCH);
+    } else {
+      git(
+        path.dirname(dir),
+        'clone',
+        '--depth',
+        '1',
+        '--branch',
+        WIKI_BRANCH,
+        remote,
+        dir,
+      );
+      fs.chmodSync(gitDir, 0o700);
+      if (!isPrivateDir(gitDir)) {
+        throw new Error(
+          `refusing to use unsafe wiki cache .git directory: ${gitDir}`,
+        );
+      }
+    }
   } else {
-    fs.rmSync(dir, {recursive: true, force: true});
-    git(
-      os.tmpdir(),
-      'clone',
-      '--depth',
-      '1',
-      '--branch',
-      WIKI_BRANCH,
-      remote,
-      dir,
-    );
+    if (pathExists(dir)) {
+      assertSafeWindowsDir(dir);
+    } else {
+      fs.mkdirSync(dir, {recursive: true});
+    }
+    if (pathExists(gitDir)) {
+      assertSafeWindowsDir(gitDir);
+      git(dir, 'remote', 'set-url', 'origin', remote);
+      git(dir, 'fetch', '--depth', '1', 'origin', WIKI_BRANCH);
+    } else {
+      git(
+        path.dirname(dir),
+        'clone',
+        '--depth',
+        '1',
+        '--branch',
+        WIKI_BRANCH,
+        remote,
+        dir,
+      );
+    }
   }
   git(dir, 'checkout', '-B', WIKI_BRANCH, `origin/${WIKI_BRANCH}`);
   git(dir, 'reset', '--hard', `origin/${WIKI_BRANCH}`);
@@ -1200,7 +1261,11 @@ export function isEvidenceItem(item) {
 export function isBlocksShape(blocks) {
   if (!blocks || typeof blocks !== 'object' || Array.isArray(blocks))
     return false;
-  return typeof blocks.count === 'number' && Array.isArray(blocks.open);
+  return (
+    Number.isInteger(blocks.count) &&
+    blocks.count >= 0 &&
+    Array.isArray(blocks.open)
+  );
 }
 
 /**
@@ -1252,8 +1317,15 @@ export function applyScorecard(existing, scorecard, {component, pkg}) {
         'simply has no row. Remove the entry instead.',
     );
   }
-  if (typeof next.score !== 'number') {
-    throw new Error(`${component}: an audited entry needs a numeric score`);
+  if (
+    typeof next.score !== 'number' ||
+    !Number.isFinite(next.score) ||
+    next.score < 0 ||
+    next.score > 100
+  ) {
+    throw new Error(
+      `${component}: an audited entry needs a numeric score between 0 and 100`,
+    );
   }
   const expected = gradeFor(next.score, openBlockCount(next));
   // `grade` is derived from `score`, so it must never be inherited across a
@@ -1298,10 +1370,10 @@ export function applyScorecard(existing, scorecard, {component, pkg}) {
     if (
       b.issue !== undefined &&
       b.issue !== null &&
-      !Number.isInteger(b.issue)
+      (!Number.isInteger(b.issue) || b.issue <= 0)
     ) {
       throw new Error(
-        `${component}: BLOCK ${b.id} issue must be an integer or null`,
+        `${component}: BLOCK ${b.id} issue must be a positive integer or null`,
       );
     }
     if (b.issue === undefined) b.issue = null;
@@ -1941,6 +2013,13 @@ async function cmdFileIssues(args) {
     );
     return 1;
   }
+  const repo = flagValue(args.repo) || DEFAULT_REPO;
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
+    console.error(
+      `score-ledger --file-issues: invalid --repo "${repo}" (expected owner/name).`,
+    );
+    return 1;
+  }
   const push = Boolean(args.push);
   let ledgerPath = flagValue(args.ledger);
   let repoDir = null;
@@ -1986,7 +2065,6 @@ async function cmdFileIssues(args) {
     return 1;
   }
 
-  const repo = flagValue(args.repo) || DEFAULT_REPO;
   const {ledger, error} = await loadLedger(ledgerPath);
   if (!ledger) {
     console.error(`score-ledger: ${error}`);
@@ -2020,6 +2098,20 @@ async function cmdFileIssues(args) {
     return 1;
   }
 
+  const blocks = blockList(entry);
+  for (const block of blocks) {
+    if (
+      block.issue !== undefined &&
+      block.issue !== null &&
+      (!Number.isInteger(block.issue) || block.issue <= 0)
+    ) {
+      console.error(
+        `score-ledger --file-issues: invalid issue number on ${block.id}: ${String(block.issue)}`,
+      );
+      return 1;
+    }
+  }
+
   const gh = (...argv) =>
     execFileSync('gh', argv, {
       encoding: 'utf8',
@@ -2027,8 +2119,8 @@ async function cmdFileIssues(args) {
     }).trim();
 
   const filed = [];
-  for (const block of blockList(entry)) {
-    if (block.issue) {
+  for (const block of blocks) {
+    if (block.issue !== undefined && block.issue !== null) {
       // Idempotent: never re-file. Reopen if the issue was closed while the
       // BLOCK is still on the row.
       if (args['dry-run']) {
@@ -2089,7 +2181,7 @@ async function cmdFileIssues(args) {
       body,
     );
     const number = Number(url.split('/').pop());
-    if (!Number.isInteger(number)) {
+    if (!Number.isInteger(number) || number <= 0) {
       console.error(
         `score-ledger: could not parse an issue number out of "${url}"`,
       );
