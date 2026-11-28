@@ -81,10 +81,11 @@ their implementation modules, while `domainTokenDefaults` makes their names
 available to theme validation and resolution. Built-in syntax tokens resolve
 in each region whose Theme sets Core color tokens (`architecture:theme-application`,
 `component:Theme` FR1); an explicit SyntaxTheme, outer or inner, still applies.
-Gap: in a build that lowers `light-dark()`, a nested Theme keeps the page's
-color mode for the six mode-dependent data tokens (`--color-data-neutral` and
-`--color-data-gray-1` to `--color-data-gray-5`), because no data-visualization
-root declares them again.
+Gap: in a build that lowers `light-dark()`, CSS that reads one of the six
+mode-dependent data tokens (`--color-data-neutral` and `--color-data-gray-1` to
+`--color-data-gray-5`) inside a nested Theme gets the page's color mode, because
+only the page root declares them. Charts resolve data colors in script from the
+nearest Theme and its mode, so they are not affected.
 
 The CLI theme template and generated token documentation are projections of
 this vocabulary. They do not define additional tokens.
