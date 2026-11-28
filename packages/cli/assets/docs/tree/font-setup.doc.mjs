@@ -86,7 +86,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "In a Next.js app, `next/font` (`next/font/google` or `next/font/local`) loads the font files itself, but under a family name of its own (such as `GeistSans`, or a generated `__Geist_…`), so a theme that names the family (`'Geist'`) never gets the loaded font. Give the font a `variable`, put its class on `<html>`, and set the theme's family to that variable. A family written as `var(...)` names no font, so `{@command doctor}` and `{@command theme build}` have nothing to report for it.",
+          text: "In a Next.js app, `next/font` (`next/font/google` or `next/font/local`) loads the font files itself, but under a family name of its own (such as `GeistSans`, or a generated `__Geist_…`), so a theme that names the family (`'Geist'`) never gets the loaded font. Give the font a `variable`, put its class on `<html>`, and set the theme's family to that variable. A `var()` the theme does not set itself, such as next/font's variable, names no font, so `{@command theme build}` has nothing to report for it.",
         },
         {
           type: 'code',

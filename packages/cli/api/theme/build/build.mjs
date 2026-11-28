@@ -6482,7 +6482,7 @@ async function themeBuildInternal(
  * @property {FontHelp | null} [fontHelp] How the caller loads fonts, when it
  *   does, or the next/font recipe when the app's root layout imports next/font.
  * @property {boolean} [nextFont] Whether the app's root layout imports
- *   `next/font/google` or `next/font/local`.
+ *   next/font, directly or through a `geist/font` entry.
  * @property {string | null} [install] How the app takes the theme, when the
  *   caller wires it another way than importing these outputs (the editor's
  *   app copy).
