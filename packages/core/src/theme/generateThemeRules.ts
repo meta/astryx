@@ -1769,7 +1769,6 @@ function authoredSizeFont(
 ): Record<string, unknown> | null {
   const text = components?.text as Record<string, unknown> | undefined;
   const rule = text?.[`size:${sizeName}`];
-  /** @param {unknown} block */
   const sizeOf = (block: unknown): string | undefined => {
     if (block == null || typeof block !== 'object' || Array.isArray(block)) {
       return undefined;
@@ -1843,13 +1842,24 @@ function generateSizeOverrides(
     return;
   }
   for (const [sizeName, sizeValue] of Object.entries(TEXT_SIZE_TOKEN_MAP)) {
-    const authored =
-      authoredSizeFont(components, sizeName) ??
-      authoredSizeFont(inherited, sizeName);
-    if (authored) {
-      // A size with a font size only in a color mode keeps Core's token as
-      // its base, so the type rule never wins in the other mode.
-      const block: Record<string, unknown> = {fontSize: sizeValue, ...authored};
+    const own = authoredSizeFont(components, sizeName);
+    const root = authoredSizeFont(inherited, sizeName);
+    if (own ?? root) {
+      // What this layer's rule leaves unset comes from the root theme's size
+      // rule, then Core's token, so the type rule never wins in either mode.
+      // A base font size of this layer's own covers both modes, as its rule
+      // does in the cascade, so the root's mode sizes fill in only without it.
+      const ownBase = own?.fontSize;
+      const block: Record<string, unknown> = {
+        fontSize: ownBase ?? root?.fontSize ?? sizeValue,
+      };
+      for (const mode of ['@light', '@dark']) {
+        const modeSize =
+          own?.[mode] ?? (ownBase === undefined ? root?.[mode] : undefined);
+        if (modeSize !== undefined) {
+          block[mode] = modeSize;
+        }
+      }
       generateComponentRules(
         {text: {[`size:${sizeName}`]: block as StyleOverrides}},
         parts,
