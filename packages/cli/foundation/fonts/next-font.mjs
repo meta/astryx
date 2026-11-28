@@ -62,15 +62,17 @@ function moduleImports(file) {
     return null;
   }
   try {
-    return parseAppModule(source)
-      .program.body.filter(
-        node =>
-          node.type === 'ImportDeclaration' ||
-          ((node.type === 'ExportNamedDeclaration' ||
-            node.type === 'ExportAllDeclaration') &&
-            node.source != null),
-      )
-      .map(node => node.source.value);
+    return parseAppModule(source).program.body.flatMap(node => {
+      if (node.type === 'ImportDeclaration') return [node.source.value];
+      if (
+        (node.type === 'ExportNamedDeclaration' ||
+          node.type === 'ExportAllDeclaration') &&
+        node.source != null
+      ) {
+        return [node.source.value];
+      }
+      return [];
+    });
   } catch {
     return null;
   }
