@@ -1757,11 +1757,11 @@ const TEXT_SIZE_TOKEN_MAP: Record<string, string> = {
 /**
  * The font sizes of a theme's own Text rule for a `size`: its `fontSize`, and
  * the `fontSize` of its `@light` and `@dark` blocks. It is null when the rule
- * sets none that can stay one declaration. Only the font size is taken: the
- * rule's other declarations, a `font` shorthand among them, would reset the
- * line height, family and weight the type gives, which `size` keeps. A
- * refused value counts as not authored, so the inherited rule or Core's token
- * applies; the refusal is reported where the rule itself is emitted.
+ * sets none that can stay one declaration. Only the font size is taken. A
+ * `font` shorthand or another declaration would reset the type's line height,
+ * family and weight, which `size` keeps. A refused value counts as not
+ * authored, so the inherited rule or Core's token applies; the refusal is
+ * reported where the rule itself is emitted.
  */
 function authoredSizeFont(
   components: Record<string, unknown> | undefined,
@@ -1811,12 +1811,13 @@ const SILENT_SINK: DiagnosticSink = () => {};
  * same layer as the type rules, same `.astryx-text.<x>` specificity, later in
  * source — restores `size` as a real override.
  *
- * A size the theme styles keeps the theme's font size. Its rule's font sizes
- * are emitted again here, after the type rules, so they win in any authored
- * order. Where the rule sets a font size only in a
- * color mode, Core's token stays the size's base. On a media surface or in an
- * adaptation, `inherited` (the root theme's components) gives the value when
- * the surface or adaptation does not style the size itself.
+ * A size the theme styles keeps the theme's font size. Core's token rule comes
+ * first, and the size rule's font sizes follow it, after the type rules. So
+ * they win in any authored order, and a value the browser drops falls back to
+ * the token. At the theme root, a size whose rule sets a font size only in a
+ * color mode keeps Core's token as its base. On a media surface or in an
+ * adaptation, what the layer's own rule leaves unset comes from the root
+ * theme's size rule (`inherited`), then Core's token.
  *
  * Only `font-size` is overridden; line-height and other type properties are
  * intentionally preserved, matching the prop's documented contract.
@@ -1842,38 +1843,40 @@ function generateSizeOverrides(
     return;
   }
   for (const [sizeName, sizeValue] of Object.entries(TEXT_SIZE_TOKEN_MAP)) {
-    const own = authoredSizeFont(components, sizeName);
-    const root = authoredSizeFont(inherited, sizeName);
-    if (own ?? root) {
-      // What this layer's rule leaves unset comes from the root theme's size
-      // rule, then Core's token, so the type rule never wins in either mode.
-      // A base font size of this layer's own covers both modes, as its rule
-      // does in the cascade, so the root's mode sizes fill in only without it.
-      const ownBase = own?.fontSize;
-      const block: Record<string, unknown> = {
-        fontSize: ownBase ?? root?.fontSize ?? sizeValue,
-      };
-      for (const mode of ['@light', '@dark']) {
-        const modeSize =
-          own?.[mode] ?? (ownBase === undefined ? root?.[mode] : undefined);
-        if (modeSize !== undefined) {
-          block[mode] = modeSize;
-        }
-      }
-      generateComponentRules(
-        {text: {[`size:${sizeName}`]: block as StyleOverrides}},
-        parts,
-        {
-          ...rules,
-          surface,
-          sink: SILENT_SINK,
-        },
-      );
-      continue;
-    }
     const suffix = parseStyleKey(`size:${sizeName}`);
     parts.push(
       `  ${componentSelector('text', suffix, surface)} { font-size: ${sizeValue}; }`,
+    );
+    const own = authoredSizeFont(components, sizeName);
+    const root = authoredSizeFont(inherited, sizeName);
+    if (!(own ?? root)) {
+      continue;
+    }
+    // What this layer's rule leaves unset comes from the root theme's size
+    // rule, then the token above. A base font size of this layer's own covers
+    // both modes, as its rule does in the cascade, so the root's mode sizes
+    // fill in only without it.
+    const ownBase = own?.fontSize;
+    const block: Record<string, unknown> = {};
+    const base = ownBase ?? root?.fontSize;
+    if (base !== undefined) {
+      block.fontSize = base;
+    }
+    for (const mode of ['@light', '@dark']) {
+      const modeSize =
+        own?.[mode] ?? (ownBase === undefined ? root?.[mode] : undefined);
+      if (modeSize !== undefined) {
+        block[mode] = modeSize;
+      }
+    }
+    generateComponentRules(
+      {text: {[`size:${sizeName}`]: block as StyleOverrides}},
+      parts,
+      {
+        ...rules,
+        surface,
+        sink: SILENT_SINK,
+      },
     );
   }
 }

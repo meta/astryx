@@ -906,9 +906,11 @@ describe("Text size overrides and a theme's own size rule", () => {
         },
       }),
     ).component;
-    // The adaptation's base is the root theme's 9px, not Core's token.
-    expect(css).not.toContain('var(--font-size-xs)');
-    expect(css).toContain('font-size: 9px');
+    // The adaptation's base is the root theme's 9px, which follows Core's
+    // token, not the token alone.
+    expect(css.lastIndexOf('font-size: 9px')).toBeGreaterThan(
+      css.lastIndexOf('var(--font-size-xs)'),
+    );
     expect(css).toContain('font-size: 11px');
   });
 
