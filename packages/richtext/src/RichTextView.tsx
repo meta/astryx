@@ -134,6 +134,13 @@ export interface RichTextViewProps extends BaseProps {
    */
   codeLanguages?: ReadonlyArray<CodeLanguage>;
   /**
+   * Whether tables keep merged cells (`colSpan`, `rowSpan`). By default the
+   * view splits each merged cell into single cells, with the content in the
+   * first, as `RichTextEditor` does. Pass the value the editor uses.
+   * @default false
+   */
+  hasCellMerge?: boolean;
+  /**
    * Additional read-only plugins to render inside the composer (e.g. hover
    * cards, decorators).
    */
@@ -217,6 +224,7 @@ export function RichTextView({
   nodes,
   markdownExtensions,
   codeLanguages,
+  hasCellMerge = false,
   plugins,
   namespace = 'astryx-view',
   onParseError,
@@ -324,7 +332,7 @@ export function RichTextView({
         {/* Same table configuration as the editor, so a wide table scrolls
             inside its own wrapper instead of widening the page. */}
         <TablePlugin
-          hasCellMerge={false}
+          hasCellMerge={hasCellMerge}
           hasCellBackgroundColor={false}
           hasTabHandler={false}
           hasHorizontalScroll
