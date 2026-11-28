@@ -111,6 +111,15 @@ describe('rootLayoutImportsNextFont', () => {
     expect(rootLayoutImportsNextFont(dir)).toBe(true);
   });
 
+  it('is true when the font module the layout imports re-exports a next/font entry', () => {
+    write('app/fonts.ts', "export {GeistSans} from 'geist/font/sans';\n");
+    write(
+      'app/layout.tsx',
+      "import {GeistSans} from './fonts';\nexport default function RootLayout({children}) {\n  return <html className={GeistSans.variable}><body>{children}</body></html>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
   it('is false when a module the layout imports does not load next/font', () => {
     write('app/fonts.ts', "export const fontClass = 'font-sans';\n");
     write(

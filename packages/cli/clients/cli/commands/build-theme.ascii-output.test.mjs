@@ -199,6 +199,7 @@ describe('theme command human output is plain ASCII', () => {
     expect(
       built.stdout.split('This app loads fonts with next/font').length - 1,
     ).toBe(1);
+    expect(nonAscii(built)).toEqual([]);
   });
 
   it('a family refusal names the member that sets a private var', async () => {
