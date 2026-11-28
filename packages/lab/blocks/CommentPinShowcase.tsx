@@ -4,12 +4,11 @@
 
 /**
  * @input Three caller-positioned comment pins, logical bottom-start anchors,
- *   participant/thread/unread counts, and controlled selected/dimmed state
- *   that may be empty
+ *   participant/thread/unread counts, and one controlled selection that may
+ *   be empty
  * @output A grouped pin with a three-circle participant cap and an unread
- *   dot, a single pin, and an unread margin pin; activating the selected
- *   pin clears the selection, and non-selected pins dim only while another pin
- *   is selected
+ *   dot, a single pin, and an unread margin pin; selecting a pin clears the
+ *   others, and activating the selected pin clears the selection
  * @position CommentPin docsite showcase and copyable Lab block
  */
 
@@ -29,27 +28,27 @@ const PEOPLE = {
   ada: {
     id: 'ada',
     name: 'Ada Lovelace',
-    avatarSrc: 'https://i.pravatar.cc/80?img=47',
+    src: 'https://i.pravatar.cc/80?img=47',
   },
   lin: {
     id: 'lin',
     name: 'Lin Chen',
-    avatarSrc: 'https://i.pravatar.cc/80?img=32',
+    src: 'https://i.pravatar.cc/80?img=32',
   },
   mira: {
     id: 'mira',
     name: 'Mira Patel',
-    avatarSrc: 'https://i.pravatar.cc/80?img=5',
+    src: 'https://i.pravatar.cc/80?img=5',
   },
   noah: {
     id: 'noah',
     name: 'Noah Williams',
-    avatarSrc: 'https://i.pravatar.cc/80?img=12',
+    src: 'https://i.pravatar.cc/80?img=12',
   },
   sam: {
     id: 'sam',
     name: 'Sam Rivera',
-    avatarSrc: 'https://i.pravatar.cc/80?img=15',
+    src: 'https://i.pravatar.cc/80?img=15',
   },
 };
 
@@ -87,7 +86,7 @@ const styles = stylex.create({
     insetBlockStart: '30%',
     transform: 'translateY(-100%)',
   },
-  resolvedMarker: {
+  singleMarker: {
     position: 'absolute',
     insetInlineStart: '66%',
     insetBlockStart: '69%',
@@ -116,13 +115,12 @@ const styles = stylex.create({
   },
 });
 
-type PinId = 'grouped' | 'margin' | 'resolved';
+type PinId = 'grouped' | 'margin' | 'single';
 
 export default function CommentPinShowcase() {
   const [selected, setSelected] = useState<PinId | null>('grouped');
-  // aria-pressed toggle semantics: activating the selected pin clears it.
-  const toggle = (id: PinId) =>
-    setSelected(current => (current === id ? null : id));
+  const select = (id: PinId) => (isSelected: boolean) =>
+    setSelected(isSelected ? id : null);
 
   return (
     <VStack gap={4} xstyle={styles.root}>
@@ -155,17 +153,15 @@ export default function CommentPinShowcase() {
             threadCount={6}
             unreadCount={2}
             isSelected={selected === 'grouped'}
-            isDimmed={selected != null && selected !== 'grouped'}
-            onClick={() => toggle('grouped')}
+            onSelectedChange={select('grouped')}
             xstyle={styles.groupedMarker}
           />
           <CommentPin
             label="Open annotation from Mira"
             participants={[PEOPLE.mira]}
-            isSelected={selected === 'resolved'}
-            isDimmed={selected != null && selected !== 'resolved'}
-            onClick={() => toggle('resolved')}
-            xstyle={styles.resolvedMarker}
+            isSelected={selected === 'single'}
+            onSelectedChange={select('single')}
+            xstyle={styles.singleMarker}
           />
         </div>
 
@@ -176,8 +172,7 @@ export default function CommentPinShowcase() {
             participants={[PEOPLE.mira]}
             unreadCount={1}
             isSelected={selected === 'margin'}
-            isDimmed={selected != null && selected !== 'margin'}
-            onClick={() => toggle('margin')}
+            onSelectedChange={select('margin')}
             xstyle={styles.marginMarker}
           />
         </div>

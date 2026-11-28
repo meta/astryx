@@ -39,22 +39,28 @@ export type CommentStatus = Extract<
   'sending' | 'sent' | 'error'
 >;
 
-/** A person or agent who writes comments, reacts, or acts on the item. */
+/**
+ * A person or agent who writes comments, reacts, or acts on the item. A
+ * CommentPin's participants take the same records.
+ */
 export interface CommentUser {
   /** Stable host-owned id, used for equality ("is this my comment?"). */
   id: string;
   /** Full display name. Never a viewer-relative label such as "You". */
   name: string;
   /**
-   * An agent shows its logo (`avatarUrl`), or square-cornered initials
-   * without one, and an Agent badge beside its name.
+   * An agent shows its logo (`src`), or square-cornered initials without
+   * one, and an Agent badge beside its name.
    * @default 'person'
    */
   kind?: 'person' | 'agent';
   /** Where the author's name links, such as their profile. */
   href?: string;
-  /** Profile picture, or an agent's square logo. Initials without one. */
-  avatarUrl?: string;
+  /**
+   * Profile picture, or an agent's square logo, as Avatar's `src`. Initials
+   * without one.
+   */
+  src?: string;
 }
 
 /** A selectable reaction. */

@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useState} from 'react';
 import {describe, expect, it, vi} from 'vitest';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -91,6 +92,17 @@ describe('CommentPin', () => {
       }
     },
   );
+
+  it("passes each participant's src to its Avatar", () => {
+    const {container} = render(
+      <CommentPin
+        label="Open annotation from Ada"
+        participants={[{...ADA, src: '/ada.png'}]}
+      />,
+    );
+
+    expect(container.querySelector('img')).toHaveAttribute('src', '/ada.png');
+  });
 
   it('sizes a single participant with the pin', () => {
     const {container} = render(
@@ -221,71 +233,137 @@ describe('CommentPin', () => {
     );
   });
 
-  it('reflects selected, resolved, and disabled state on the owning target', () => {
+  it('reflects selected and disabled state on the owning target', () => {
     render(
       <CommentPin
-        label="Resolved selected annotation"
+        label="Selected pending annotation"
         participants={[ADA]}
         isSelected
-        isResolved
         isDisabled
       />,
     );
 
     const marker = screen.getByRole('button', {
-      name: 'Resolved selected annotation',
+      name: 'Selected pending annotation',
     });
     expect(marker).toHaveAttribute('aria-pressed', 'true');
     expect(marker).not.toBeDisabled();
     expect(marker).toHaveAttribute('aria-disabled', 'true');
     expect(marker).toHaveAttribute('data-selected', 'selected');
-    expect(marker).toHaveAttribute('data-resolved', 'resolved');
     expect(marker).toHaveAttribute('data-disabled', 'disabled');
   });
 
-  it('renders nothing for a resolved pin unless it is selected', () => {
-    const {container, rerender} = render(
-      <CommentPin
-        label="Open resolved annotation from Ada"
-        participants={[ADA]}
-        isResolved
-      />,
-    );
-
-    expect(container.querySelector('.astryx-comment-pin')).toBeNull();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
-
-    rerender(
-      <CommentPin
-        label="Open resolved annotation from Ada"
-        participants={[ADA]}
-        isResolved
-        isSelected
-      />,
-    );
-    const pin = screen.getByRole('button', {
-      name: 'Open resolved annotation from Ada',
-    });
-    expect(pin).toHaveAttribute('data-resolved', 'resolved');
-    expect(pin).toHaveAttribute('data-selected', 'selected');
-  });
-
-  it('dims non-selected pins without disabling selection changes', () => {
-    const onClick = vi.fn();
+  it('flips its own selection when isSelected is left out', () => {
+    const onSelectedChange = vi.fn();
     render(
       <CommentPin
-        label="Open another annotation"
-        participants={[LIN]}
-        isDimmed
+        label="Open annotation"
+        participants={[ADA]}
+        onSelectedChange={onSelectedChange}
+      />,
+    );
+
+    const pin = screen.getByRole('button', {name: 'Open annotation'});
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(pin);
+    expect(pin).toHaveAttribute('aria-pressed', 'true');
+    expect(pin).toHaveAttribute('data-selected', 'selected');
+    expect(onSelectedChange).toHaveBeenLastCalledWith(true);
+    fireEvent.click(pin);
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
+    expect(pin).not.toHaveAttribute('data-selected');
+    expect(onSelectedChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('starts selected from defaultIsSelected', () => {
+    render(
+      <CommentPin
+        label="Open annotation"
+        participants={[ADA]}
+        defaultIsSelected
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', {name: 'Open annotation'}),
+    ).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('requests a change but keeps a controlled selection until the host passes it', () => {
+    const onSelectedChange = vi.fn();
+    const onClick = vi.fn();
+    const {rerender} = render(
+      <CommentPin
+        label="Open annotation"
+        participants={[ADA]}
+        isSelected={false}
+        onSelectedChange={onSelectedChange}
         onClick={onClick}
       />,
     );
 
-    const pin = screen.getByRole('button', {name: 'Open another annotation'});
-    expect(pin).toHaveAttribute('data-dimmed', 'dimmed');
-    expect(pin).not.toBeDisabled();
+    const pin = screen.getByRole('button', {name: 'Open annotation'});
     fireEvent.click(pin);
     expect(onClick).toHaveBeenCalledTimes(1);
+    expect(onSelectedChange).toHaveBeenCalledExactlyOnceWith(true);
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
+
+    rerender(
+      <CommentPin
+        label="Open annotation"
+        participants={[ADA]}
+        isSelected
+        onSelectedChange={onSelectedChange}
+        onClick={onClick}
+      />,
+    );
+    expect(pin).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(pin);
+    expect(onSelectedChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('flips its selection from Enter and Space', async () => {
+    const user = userEvent.setup();
+    const onSelectedChange = vi.fn();
+    render(
+      <CommentPin
+        label="Open annotation"
+        participants={[ADA]}
+        onSelectedChange={onSelectedChange}
+      />,
+    );
+
+    const pin = screen.getByRole('button', {name: 'Open annotation'});
+    pin.focus();
+    await user.keyboard('{Enter}');
+    expect(pin).toHaveAttribute('aria-pressed', 'true');
+    await user.keyboard(' ');
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
+    expect(onSelectedChange.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('keeps a focused pin mounted and focused when activation clears its selection', async () => {
+    const user = userEvent.setup();
+    function Host() {
+      const [isSelected, setIsSelected] = useState(true);
+      return (
+        <CommentPin
+          label="Open annotation from Ada"
+          participants={[ADA]}
+          isSelected={isSelected}
+          onSelectedChange={setIsSelected}
+        />
+      );
+    }
+    render(<Host />);
+
+    const pin = screen.getByRole('button', {name: 'Open annotation from Ada'});
+    pin.focus();
+    await user.keyboard('{Enter}');
+
+    expect(pin).toBeInTheDocument();
+    expect(pin).toHaveFocus();
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('calls the forwarded click handler when enabled', () => {
@@ -348,19 +426,24 @@ describe('CommentPin', () => {
     ).toHaveFocus();
   });
 
-  it('does not call the click handler when disabled', () => {
+  it('neither calls its handlers nor flips its selection when disabled', () => {
     const onClick = vi.fn();
+    const onSelectedChange = vi.fn();
     render(
       <CommentPin
         label="Pending annotation"
         participants={[ADA]}
         isDisabled
         onClick={onClick}
+        onSelectedChange={onSelectedChange}
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', {name: 'Pending annotation'}));
+    const pin = screen.getByRole('button', {name: 'Pending annotation'});
+    fireEvent.click(pin);
     expect(onClick).not.toHaveBeenCalled();
+    expect(onSelectedChange).not.toHaveBeenCalled();
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('blocks Enter and Space on a disabled pin (spec:AST-085 FR2)', async () => {

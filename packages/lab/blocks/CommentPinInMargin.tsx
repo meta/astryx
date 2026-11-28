@@ -3,14 +3,12 @@
 'use client';
 
 /**
- * @input A host-positioned CommentPin, its lead commenter, and local
- *   selected state
+ * @input A host-positioned CommentPin and its lead commenter
  * @output A document passage with one comment pin in its margin; activating
- *   the pin toggles its selection and aria-pressed state
+ *   the pin toggles its own selection and aria-pressed state
  * @position Copyable Lab CommentPin placement example
  */
 
-import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Card} from '@astryxdesign/core/Card';
 import {Text} from '@astryxdesign/core/Text';
@@ -45,7 +43,6 @@ const styles = stylex.create({
 });
 
 export default function CommentPinInMargin() {
-  const [isSelected, setIsSelected] = useState(false);
   return (
     <Card padding={0} width={520}>
       <div {...stylex.props(styles.document)}>
@@ -66,8 +63,6 @@ export default function CommentPinInMargin() {
           <CommentPin
             label="Open comment from Maya"
             participants={[{id: 'maya', name: 'Maya Chen'}]}
-            isSelected={isSelected}
-            onClick={() => setIsSelected(current => !current)}
             xstyle={styles.pin}
           />
         </div>

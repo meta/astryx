@@ -10,4 +10,4 @@
  */
 
 export {CommentPin} from './CommentPin';
-export type {CommentPinParticipant, CommentPinProps} from './CommentPin';
+export type {CommentPinProps} from './CommentPin';

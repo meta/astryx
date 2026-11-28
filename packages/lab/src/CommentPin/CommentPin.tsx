@@ -6,10 +6,9 @@
  * @file CommentPin.tsx
  * @input Ordered participants (grouped pins show at most three circles),
  *   total and unread represented thread counts (unread shows as a dot), a
- *   size on the element-size
- *   scale, controlled selected/dimmed/resolved/disabled state, and button DOM
- *   props
- * @output Exports the avatar-first CommentPin button and its public types
+ *   size on the element-size scale, controlled or uncontrolled selection,
+ *   disabled state, and button DOM props
+ * @output Exports the avatar-first CommentPin button and its props type
  * @position Lab collaboration primitive for annotation anchors over content or
  *   in content margins; callers own grouping, coordinates, and opened content
  *
@@ -22,6 +21,7 @@
  * - /packages/lab/blocks/CommentPinShowcase.tsx
  */
 
+import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {Avatar, type AvatarSize} from '@astryxdesign/core/Avatar';
@@ -32,6 +32,7 @@ import {
   usePressFeedback,
 } from '@astryxdesign/core/hooks';
 import {Icon, type IconSize} from '@astryxdesign/core/Icon';
+import type {ElementSize} from '@astryxdesign/core/SizeContext';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
 import {
   borderVars,
@@ -50,19 +51,7 @@ import {
   mergeProps,
   themeProps,
 } from '@astryxdesign/core/utils';
-
-/** Pin heights on the shared element-size scale: 28, 32, or 36px. */
-export type CommentPinSize = 'sm' | 'md' | 'lg';
-
-/** Identity data for one representative shown inside a CommentPin. */
-export interface CommentPinParticipant {
-  /** Stable identity used to remove duplicate representatives. */
-  id: string;
-  /** Display name used by Avatar for image fallback initials. */
-  name: string;
-  /** Optional image source passed to Avatar. */
-  avatarSrc?: string;
-}
+import type {CommentUser} from '../Comments/types';
 
 export interface CommentPinProps extends Omit<
   BaseProps<HTMLButtonElement>,
@@ -72,8 +61,7 @@ export interface CommentPinProps extends Omit<
   ref?: React.Ref<HTMLButtonElement>;
   /**
    * Accessible action name and visual hover/focus tooltip.
-   * Include grouped, unread, or resolved context when it changes the action's
-   * meaning.
+   * Include grouped or unread context when it changes the action's meaning.
    */
   label: string;
   /**
@@ -82,15 +70,16 @@ export interface CommentPinProps extends Omit<
    * circles: every participant when three or fewer are distinct, otherwise the
    * first two plus an ellipsis overflow circle. Pass every distinct
    * participant so the overflow appears only when more than three people
-   * participate.
+   * participate. The pin reads each person's `id`, `name`, and `src`, the
+   * same `CommentUser` records the Comments family takes.
    */
-  participants: readonly [CommentPinParticipant, ...CommentPinParticipant[]];
+  participants: readonly [CommentUser, ...CommentUser[]];
   /**
    * Pin height on the element-size scale: `sm` 28px, `md` 32px, `lg` 36px,
    * with 22px, 24px, and 28px participant circles.
    * @default 'sm'
    */
-  size?: CommentPinSize;
+  size?: ElementSize;
   /**
    * Total number of threads represented by this marker. Values above one use
    * the grouped presentation and show the exact total.
@@ -105,19 +94,21 @@ export interface CommentPinProps extends Omit<
    * @default 0
    */
   unreadCount?: number;
-  /** Whether this pin is the currently selected annotation target. */
+  /**
+   * Whether this pin is the selected annotation target. Pass it to control
+   * the selection; leave it out and the pin keeps its own.
+   */
   isSelected?: boolean;
   /**
-   * Whether another pin is selected in the host. Dims this pin without
-   * disabling it, so it remains available to switch selection.
+   * Whether the pin starts selected when `isSelected` is left out.
+   * @default false
    */
-  isDimmed?: boolean;
+  defaultIsSelected?: boolean;
   /**
-   * Whether every thread represented by this pin is resolved. A resolved pin
-   * renders nothing unless it is selected, so resolved discussion leaves the
-   * content while a thread the reader opened keeps its anchor.
+   * Called with the requested selection when activation flips it: a click,
+   * Enter, or Space. A disabled pin does not call it.
    */
-  isResolved?: boolean;
+  onSelectedChange?: (isSelected: boolean) => void;
   /** Whether activation is unavailable. */
   isDisabled?: boolean;
 }
@@ -169,7 +160,6 @@ const styles = stylex.create({
     // Native buttons keep ButtonFace/ButtonText under forced colors unless the
     // selected state opts out of UA remapping; author both sides together.
     forcedColorAdjust: 'none',
-    opacity: 1,
     // The border stays transparent so the selection reads as exactly one 2px
     // accent outline: the box-shadow ring below, drawn outside the pin.
     borderColor: {
@@ -191,12 +181,6 @@ const styles = stylex.create({
     color: {
       default: colorVars['--color-text-secondary'],
       '@media (forced-colors: active)': 'HighlightText',
-    },
-  },
-  dimmed: {
-    opacity: {
-      default: 0.4,
-      '@media (forced-colors: active)': 1,
     },
   },
   disabled: {
@@ -304,24 +288,24 @@ const sizeStyles = stylex.create({
  * `sizeStyles`. Avatar renders any pixel size; its typed scale lists neither
  * 22 nor 28, hence the cast.
  */
-const AVATAR_SIZE: Record<CommentPinSize, AvatarSize> = {
+const AVATAR_SIZE: Record<ElementSize, AvatarSize> = {
   sm: 22 as AvatarSize,
   md: 24,
   lg: 28 as AvatarSize,
 };
 
 /** The overflow ellipsis per pin size. */
-const OVERFLOW_ICON_SIZE: Record<CommentPinSize, IconSize> = {
+const OVERFLOW_ICON_SIZE: Record<ElementSize, IconSize> = {
   sm: 'xsm',
   md: 'xsm',
   lg: 'sm',
 };
 
 function takeDistinctParticipants(
-  participants: readonly CommentPinParticipant[],
+  participants: readonly CommentUser[],
   limit: number,
-): CommentPinParticipant[] {
-  const result: CommentPinParticipant[] = [];
+): CommentUser[] {
+  const result: CommentUser[] = [];
   const seen = new Set<string>();
 
   for (const participant of participants) {
@@ -361,10 +345,10 @@ const MAX_GROUP_CIRCLES = 3;
  * Avatar-first annotation anchor for one thread or a caller-defined group.
  *
  * The caller owns grouping, representative selection, coordinates, collision
- * handling, and the content opened by activation. Absolute placement maps the
- * host anchor to the pin's logical bottom-start corner. The pin only owns its
- * compact button surface and controlled visual states. `size` sets its height
- * on the element-size scale.
+ * handling, which pins render, and the content opened by activation. Absolute
+ * placement maps the host anchor to the pin's logical bottom-start corner.
+ * The pin owns its compact button surface and, when `isSelected` is left out,
+ * its own selection. `size` sets its height on the element-size scale.
  *
  * @example
  * ```
@@ -382,8 +366,10 @@ const MAX_GROUP_CIRCLES = 3;
  *   participants={[ada, lin, mira, noah, sam]}
  *   threadCount={6}
  *   unreadCount={2}
- *   isSelected
- *   onClick={() => openCluster('cluster-1')}
+ *   isSelected={selectedId === 'cluster-1'}
+ *   onSelectedChange={isSelected =>
+ *     setSelectedId(isSelected ? 'cluster-1' : null)
+ *   }
  * />
  * ```
  */
@@ -393,9 +379,9 @@ export function CommentPin({
   size = 'sm',
   threadCount = 1,
   unreadCount = 0,
-  isSelected = false,
-  isDimmed = false,
-  isResolved = false,
+  isSelected: isSelectedProp,
+  defaultIsSelected = false,
+  onSelectedChange,
   isDisabled = false,
   ref,
   xstyle,
@@ -403,8 +389,12 @@ export function CommentPin({
   style,
   ...rest
 }: CommentPinProps): React.ReactNode {
-  const resolvedSize: CommentPinSize =
+  const resolvedSize: ElementSize =
     size === 'md' || size === 'lg' ? size : 'sm';
+  const [internalIsSelected, setInternalIsSelected] =
+    useState(defaultIsSelected);
+  const isControlled = isSelectedProp !== undefined;
+  const isSelected = isControlled ? isSelectedProp : internalIsSelected;
   const avatarSize = AVATAR_SIZE[resolvedSize];
   const validThreadCount = isValidThreadCount(threadCount);
   const resolvedThreadCount = validThreadCount ? threadCount : 1;
@@ -458,17 +448,10 @@ export function CommentPin({
   });
   const mergedRef = useMergedRefs(ref, hasTooltip ? tooltip.ref : undefined);
 
-  // Resolved discussion leaves the content. A selected pin stays, so a thread
-  // the reader opened (or resolved from its popover) keeps its anchor until
-  // the host clears the selection.
-  if (isResolved && !isSelected) {
-    return null;
-  }
-
-  const avatarParticipants =
+  const avatarParticipants: readonly CommentUser[] =
     visibleParticipants.length > 0
       ? visibleParticipants
-      : [{id: '__anonymous__', name: '', avatarSrc: undefined}];
+      : [{id: '__anonymous__', name: ''}];
 
   const marker = (
     <button
@@ -495,6 +478,11 @@ export function CommentPin({
           return;
         }
         rest.onClick?.(e);
+        const nextIsSelected = !isSelected;
+        if (!isControlled) {
+          setInternalIsSelected(nextIsSelected);
+        }
+        onSelectedChange?.(nextIsSelected);
       }}
       // The keyboard paths to activation are Enter and Space; other keys still
       // reach caller handlers, as on an enabled pin (FR2).
@@ -512,8 +500,6 @@ export function CommentPin({
           grouped: isGrouped ? 'grouped' : null,
           unread: hasUnread ? 'unread' : null,
           selected: isSelected ? 'selected' : null,
-          dimmed: isDimmed ? 'dimmed' : null,
-          resolved: isResolved ? 'resolved' : null,
           disabled: isDisabled ? 'disabled' : null,
         }),
         focusOutlineProps.focusVisible(
@@ -521,7 +507,6 @@ export function CommentPin({
           sizeStyles[resolvedSize],
           interactionOverlayStyles.backgroundImage,
           (isGrouped || hasUnread) && styles.withCount,
-          isDimmed && !isSelected && styles.dimmed,
           isSelected && styles.selected,
           isDisabled && styles.disabled,
           isDisabled && !isSelected && styles.disabledUnselected,
@@ -539,7 +524,7 @@ export function CommentPin({
               <Avatar
                 key={participant.id}
                 name={participant.name}
-                src={participant.avatarSrc}
+                src={participant.src}
                 tooltip={false}
               />
             ))}
@@ -559,7 +544,7 @@ export function CommentPin({
             <Avatar
               key={participant.id}
               name={participant.name}
-              src={participant.avatarSrc}
+              src={participant.src}
               size={avatarSize}
               tooltip={false}
             />
