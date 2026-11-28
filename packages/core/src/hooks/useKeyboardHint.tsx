@@ -120,6 +120,8 @@ const ARROW_HINT_KEYS: Record<
 // Hook
 // ---------------------------------------------------------------------------
 
+const claimedFocusEvents = new WeakSet<FocusEvent>();
+
 /**
  * Shows an ephemeral visual hint ("← → to navigate") anchored to the focused
  * item when a composite widget first receives keyboard focus. Teaches sighted
@@ -151,6 +153,7 @@ export function useKeyboardHint(
   const t = useComponentTranslator();
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dismissedRef = useRef(false);
+  const focusWasNestedRef = useRef(false);
   const isVisibleRef = useRef(false);
   const anchorRef = useRef<HTMLElement | null>(null);
   const layerAnchorRef = useRef<(el: HTMLElement | null) => void>(() => {});
@@ -238,14 +241,10 @@ export function useKeyboardHint(
 
   const onFocus = useCallback(
     (e: React.FocusEvent) => {
-      if (dismissedRef.current || !isEnabled) {
+      if (!isEnabled) {
         return;
       }
-      // Only show on keyboard focus (focus-visible)
       const target = e.target as HTMLElement;
-      if (!target.matches(':focus-visible')) {
-        return;
-      }
       const container = e.currentTarget as HTMLElement;
       // React bubbles focus from portaled children (a sheet or popover opened
       // from the row) to the container; that focus is not in the row, where
@@ -253,8 +252,24 @@ export function useKeyboardHint(
       if (!container.contains(target)) {
         return;
       }
-      // Only show when focus enters from outside the container
+      // Focus bubbles through nested composites. The innermost enabled group
+      // owns it, even after its hint is dismissed.
+      const fromNestedGroup = focusWasNestedRef.current;
+      focusWasNestedRef.current = claimedFocusEvents.has(e.nativeEvent);
+      if (focusWasNestedRef.current) {
+        if (isVisibleRef.current) {
+          dismiss();
+        }
+        return;
+      }
+      claimedFocusEvents.add(e.nativeEvent);
+      // Only show on keyboard focus (focus-visible)
+      if (dismissedRef.current || !target.matches(':focus-visible')) {
+        return;
+      }
+      // A move from a nested group enters this group's own controls.
       if (
+        !fromNestedGroup &&
         e.relatedTarget instanceof Node &&
         container.contains(e.relatedTarget)
       ) {
@@ -262,7 +277,7 @@ export function useKeyboardHint(
       }
       show(target);
     },
-    [show, isEnabled],
+    [show, isEnabled, dismiss],
   );
 
   const onBlur = useCallback(

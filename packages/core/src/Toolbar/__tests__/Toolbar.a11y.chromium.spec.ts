@@ -54,6 +54,22 @@ function storyUrl(storyId: string): string {
   return `${storybook.origin}/iframe.html?id=${storyId}&viewMode=story`;
 }
 
+test('a nested TabList shows only its own navigation hint', async ({page}) => {
+  await page.goto(storyUrl('core-toolbar--center-tab-navigation-end-only'));
+  const overview = page.getByRole('button', {name: 'Overview'});
+  await expect(overview).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(overview).toBeFocused();
+  const hints = page
+    .getByText('to navigate', {exact: true})
+    .filter({visible: true});
+  await expect(hints).toHaveCount(1);
+
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('button', {name: 'Analytics'})).toBeFocused();
+  await expect(hints).toHaveCount(0);
+});
+
 async function mountState(
   page: Page,
   state: ToolbarBindingState,
