@@ -551,6 +551,7 @@ export function SelectableCard({
         themeProps('selectable-card', {
           variant,
           selected: isSelected ? 'true' : 'false',
+          disabled: isDisabled ? 'disabled' : null,
         }),
         // Rings for the card's own checkbox only; a control in its children
         // rings itself.

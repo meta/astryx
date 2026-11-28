@@ -40,8 +40,8 @@ const meta: Meta<typeof SelectableCard> = {
       description: {
         component:
           'A card that toggles between selected and unselected states. ' +
-          'Shows an accent border when selected. Manage selection state externally: ' +
-          'single value for radio behavior, Set for multi-select.',
+          'Shows an accent border when selected. Manage selection state externally, ' +
+          'for example in a Set. Each card is a checkbox, so it is not for single-select groups.',
       },
     },
   },
@@ -51,7 +51,7 @@ export default meta;
 type Story = StoryObj<typeof SelectableCard>;
 
 export const SingleSelect: Story = {
-  name: 'Single Select (Radio)',
+  name: 'One Selected Card',
   render: () => {
     const [selected, setSelected] = useState<string | null>('basic');
     const plans = [
@@ -86,7 +86,7 @@ export const SingleSelect: Story = {
     docs: {
       description: {
         story:
-          'Radio-style selection: track a single selected ID in state. Clicking a card sets it as selected, deselecting the previous.',
+          'One selected card beside unselected ones. Each card is still a checkbox, so assistive technology announces a multi-select group: do not use this pattern for a single choice.',
       },
     },
   },

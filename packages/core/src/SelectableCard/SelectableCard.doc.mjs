@@ -22,7 +22,7 @@ export const docs = {
     ],
   },
   props: [
-    {name: 'label', type: 'string', description: 'Accessibility label.', required: true},
+    {name: 'label', type: 'string', description: "Accessible name of the card's checkbox. Name the option the card stands for: a screen reader announces it with the checked state.", required: true},
     {name: 'isSelected', type: 'boolean', description: 'Controlled selection state.', required: true},
     {name: 'onChange', type: '(isSelected: boolean) => void', description: 'Called when toggled.', required: true},
     {name: 'isDisabled', type: 'boolean', description: 'Disables the card.', default: 'false'},
@@ -37,7 +37,7 @@ export const docs = {
   ],
   theming: {
     container: true,
-    targets: [{className: 'astryx-selectable-card', visualProps: ['selected', 'variant']}],
+    targets: [{className: 'astryx-selectable-card', visualProps: ['selected', 'variant'], states: ['disabled']}],
     vars: [
       {name: '--selectable-card-ring-color', description: 'Colour of the selection ring drawn for a variant a theme added. The built-in variants each ring in their own border token and ignore this; a theme that adds a variant sets it in the same rule as that variant\'s `backgroundColor`, because no token the component could pick is guaranteed to contrast with a fill it cannot know.', default: 'var(--color-accent)'},
       {name: '--_press-overlay', description: 'Colour of the ::after interaction overlay for the hover and mouse states: transparent at rest, the hover overlay token on hover (hover-capable pointers), the pressed overlay token while a mouse holds `:active`. A press the touch press controller paints (`data-astryx-press`) is the overlay\'s image instead, at the press\'s strength, and the colour yields to it. Set on the card element by its own interaction arms.', default: 'transparent', private: true},
@@ -74,7 +74,7 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    label: 'accessibility label',
+    label: "checkbox's accessible name; name the option",
     isSelected: 'controlled selection state',
     onChange: 'called when toggled',
     isDisabled: 'disables card',
