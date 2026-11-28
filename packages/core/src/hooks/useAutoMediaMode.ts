@@ -24,8 +24,10 @@ import {useRef, useState} from 'react';
 import type {RefObject} from 'react';
 import type {RGBA} from '../utils/color';
 import {parseColor, formatColor} from '../utils/color';
+import {sharedMap} from '../utils/sharedRealm';
 import {compositeOver} from '../theme/contrast';
-import {useTheme} from '../theme/useTheme';
+import {useThemeInputs} from '../theme/useTheme';
+import {useMediaQuery} from './useMediaQuery';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {
   pickMediaMode,
@@ -33,25 +35,45 @@ import {
   type MediaSidePicker,
 } from './mediaSide';
 
+const paintedTokens = [
+  '--color-text-primary',
+  '--color-on-dark',
+  '--color-on-light',
+];
+const paintedColors = sharedMap<string, (RGBA | null)[]>(
+  'hooks/use-auto-media-mode/painted-colors',
+  1,
+);
+
 /**
- * Resolve token references to the colors they paint, through a hidden probe.
- * `getPropertyValue` returns a token's specified text, and Astryx tokens are
- * `light-dark(a, b)` pairs that resolve only in a real property. The probe
- * sets each token as `color` and reads the computed value. `display: none`
+ * Resolve tokens through a hidden probe, once per computed token context.
+ * `light-dark()` pairs need a real color property to resolve. `display: none`
  * keeps the probe out of layout, so this costs a style recalc and no reflow.
+ * Missing tokens cannot identify a context and bypass the shared cache.
  */
 function resolvePaintedColors(
   host: HTMLElement,
-  tokens: ReadonlyArray<string>,
+  context: string | null,
 ): (RGBA | null)[] {
+  const cached = context === null ? undefined : paintedColors.get(context);
+  if (cached !== undefined) {
+    return cached;
+  }
   const probe = document.createElement('span');
   probe.style.display = 'none';
   host.appendChild(probe);
   try {
-    return tokens.map(token => {
+    const colors = paintedTokens.map(token => {
       probe.style.color = `var(${token})`;
       return parseColor(getComputedStyle(probe).color);
     });
+    if (context !== null) {
+      if (paintedColors.size > 64) {
+        paintedColors.clear();
+      }
+      paintedColors.set(context, colors);
+    }
+    return colors;
   } finally {
     probe.remove();
   }
@@ -68,12 +90,15 @@ function resolvePaintedColors(
  *   needs CORS access the stylesheet cannot give us;
  * - no opaque layer at all, where the paint is the browser canvas.
  */
-function resolveBackdrop(element: HTMLElement): RGBA | null {
+function resolveBackdrop(
+  element: HTMLElement,
+  surfaceStyle: CSSStyleDeclaration,
+): RGBA | null {
   const layers: RGBA[] = [];
   let node: HTMLElement | null = element;
 
   while (node !== null) {
-    const style = getComputedStyle(node);
+    const style = node === element ? surfaceStyle : getComputedStyle(node);
     if (style.backgroundImage !== 'none') {
       return null;
     }
@@ -139,46 +164,50 @@ function useMeasuredMediaMode(
   isEnabled: boolean,
   pick: MediaSidePicker,
 ): DetectedMediaMode | null {
+  useThemeInputs(isEnabled);
+  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
   const [detected, setDetected] = useState<DetectedMediaMode | null>(null);
-  // `tokens` is a stable reference unless the theme or color mode changes.
-  const {tokens} = useTheme();
-  const lastRef = useRef<{background: string; tokens: unknown} | null>(null);
+  const lastRef = useRef<{background: string; context: string} | null>(null);
 
   // Syncs the media mode with the painted color behind the element.
   // No dependency array. A surface color is a painted value, and it changes
   // when a prop on some ancestor changes. No dependency that this hook can
   // name catches that. So the measurement runs on each render, and it skips
-  // its expensive half when nothing moved (see the early return below).
+  // the pick when nothing moved. Identical token contexts share one probe.
   useIsomorphicLayoutEffect(() => {
     const surface = surfaceOf();
     if (!isEnabled || surface === null) {
       return;
     }
 
-    const background = resolveBackdrop(surface);
+    const style = getComputedStyle(surface);
+    const background = resolveBackdrop(surface, style);
     if (background === null) {
       return;
     }
 
-    // The probe adds a node and forces another style resolution. Skip it when
-    // neither the painted backdrop nor the theme moved, which is the usual
-    // case.
+    const rawTokens = paintedTokens.map(token => style.getPropertyValue(token));
+    const context = JSON.stringify([
+      style.colorScheme,
+      style.color,
+      ...rawTokens,
+      prefersDark,
+    ]);
     const backgroundKey = formatColor(background);
     const last = lastRef.current;
     if (
       last !== null &&
       last.background === backgroundKey &&
-      last.tokens === tokens
+      last.context === context
     ) {
       return;
     }
-    lastRef.current = {background: backgroundKey, tokens};
+    lastRef.current = {background: backgroundKey, context};
 
-    const [ambient, onDark, onLight] = resolvePaintedColors(surface, [
-      '--color-text-primary',
-      '--color-on-dark',
-      '--color-on-light',
-    ]);
+    const [ambient, onDark, onLight] = resolvePaintedColors(
+      surface,
+      rawTokens.some(token => token.trim() === '') ? null : context,
+    );
     const next = pick(background, ambient, onDark, onLight);
     if (next === null) {
       return;
