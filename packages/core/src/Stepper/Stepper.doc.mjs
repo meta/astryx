@@ -139,7 +139,7 @@ export const docs = {
         className: 'astryx-step-description',
         visualProps: ['progress', 'status'],
       },
-      {className: 'astryx-step-bar'},
+      {className: 'astryx-step-bar', visualProps: ['disabled']},
       {className: 'astryx-step-connector'},
     ],
     vars: [
@@ -361,7 +361,7 @@ export const docsZh = {
         className: 'astryx-step-description',
         visualProps: ['progress', 'status'],
       },
-      {className: 'astryx-step-bar'},
+      {className: 'astryx-step-bar', visualProps: ['disabled']},
       {className: 'astryx-step-connector'},
     ],
     vars: [
