@@ -23,6 +23,7 @@ import {useTheme} from '../useTheme';
 import {formatColor, parseColor} from '../../utils/color';
 import {createSharedContext} from '../../utils/sharedContext';
 import {devPropError} from '../../utils/devWarning';
+import {syntaxThemeAttribute} from '../../privateAttributes/syntaxTheme';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -182,7 +183,7 @@ export function SyntaxTheme({
 
   return (
     <SyntaxThemeContext value={value}>
-      <div style={style} data-astryx-syntax-theme={theme.name}>
+      <div style={style} {...syntaxThemeAttribute(theme.name)}>
         {children}
       </div>
     </SyntaxThemeContext>

@@ -360,3 +360,130 @@ export const ThemeWithSyntaxDefaults: StoryObj = {
     </Theme>
   ),
 };
+
+// ---------------------------------------------------------------------------
+// Nested themes — code inside a nested Theme takes that Theme's colors
+// ---------------------------------------------------------------------------
+
+const accentTheme = defineTheme({
+  name: 'own-accent',
+  tokens: {'--color-text-accent': 'rgb(200, 0, 100)'},
+});
+
+const accentPairTheme = defineTheme({
+  name: 'own-accent-pair',
+  tokens: {'--color-text-accent': ['rgb(10, 10, 10)', 'rgb(250, 200, 0)']},
+});
+
+// The GitHub presets: their code block titles meet 4.5:1.
+const paletteTheme = defineTheme({
+  name: 'own-palette',
+  syntax: githubDark,
+  tokens: {
+    '--color-background-surface': '#0d1117',
+    '--color-text-primary': '#e6edf3',
+  },
+});
+
+const componentsOnlyTheme = defineTheme({
+  name: 'components-only',
+  components: {card: {base: {padding: '4px'}}},
+});
+
+// A nested Theme draws no box of its own, so each block sits on its theme's
+// surface, as content in an app's themed region does.
+function Pane({children}: {children: React.ReactNode}) {
+  return (
+    <div
+      style={{
+        background: 'var(--color-background-surface)',
+        padding: 12,
+        borderRadius: 8,
+      }}>
+      {children}
+    </div>
+  );
+}
+
+const nestedCode = 'const greeting = "hello";\nreturn greeting;';
+
+export const NestedThemes: StoryObj = {
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+      <Pane>
+        <CodeBlock code={nestedCode} language="typescript" title="Page theme" />
+      </Pane>
+      <Theme theme={accentPairTheme} mode="dark">
+        <Pane>
+          <CodeBlock
+            code={nestedCode}
+            language="typescript"
+            title="Nested dark theme with its own accent pair"
+          />
+        </Pane>
+      </Theme>
+      <Theme theme={accentTheme}>
+        <Pane>
+          <CodeBlock
+            code={nestedCode}
+            language="typescript"
+            title="Nested theme with its own accent"
+          />
+        </Pane>
+      </Theme>
+      <Theme theme={paletteTheme} mode="dark">
+        <Pane>
+          <CodeBlock
+            code={nestedCode}
+            language="typescript"
+            title="Nested theme with its own syntax palette"
+          />
+        </Pane>
+      </Theme>
+      <Theme theme={paletteTheme} mode="dark">
+        <Theme theme={accentTheme}>
+          <Pane>
+            <CodeBlock
+              code={nestedCode}
+              language="typescript"
+              title="Color-setting theme inside a syntax-palette theme"
+            />
+          </Pane>
+        </Theme>
+      </Theme>
+      <Theme theme={paletteTheme} mode="dark">
+        <Theme theme={componentsOnlyTheme}>
+          <Pane>
+            <CodeBlock
+              code={nestedCode}
+              language="typescript"
+              title="Components-only theme inside a syntax-palette theme"
+            />
+          </Pane>
+        </Theme>
+      </Theme>
+      <Theme theme={accentTheme}>
+        <SyntaxThemeProvider theme={githubLight}>
+          <Pane>
+            <CodeBlock
+              code={nestedCode}
+              language="typescript"
+              title="SyntaxTheme inside a theme"
+            />
+          </Pane>
+        </SyntaxThemeProvider>
+      </Theme>
+      <SyntaxThemeProvider theme={githubLight}>
+        <Theme theme={accentTheme}>
+          <Pane>
+            <CodeBlock
+              code={nestedCode}
+              language="typescript"
+              title="Theme inside a SyntaxTheme"
+            />
+          </Pane>
+        </Theme>
+      </SyntaxThemeProvider>
+    </div>
+  ),
+};
