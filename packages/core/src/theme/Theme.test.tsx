@@ -6,6 +6,7 @@ import {renderToString} from 'react-dom/server';
 import {act, render, cleanup} from '@testing-library/react';
 import React from 'react';
 import {declaredValue} from '../__tests__/stylexDeclarations';
+import {colorDefaults} from './tokens.stylex';
 import {Theme} from './Theme';
 import {useTheme} from './useTheme';
 import {defineTheme} from './defineTheme';
@@ -146,7 +147,29 @@ describe('Theme', () => {
     }
   });
 
-  it('declares no focus color on a wrapper that applies no theme', () => {
+  it("declares Core's color defaults again on a wrapper that applies a theme", () => {
+    const {container} = render(
+      <Theme theme={testTheme}>
+        <Theme theme={testTheme} mode="dark">
+          <span>child</span>
+        </Theme>
+      </Theme>,
+    );
+    const wrappers = container.querySelectorAll('[data-astryx-theme="test"]');
+    expect(wrappers).toHaveLength(2);
+    for (const wrapper of wrappers) {
+      const missing = Object.keys(colorDefaults).filter(
+        name => declaredValue(wrapper, name) == null,
+      );
+      expect(missing).toEqual([]);
+      expect(declaredValue(wrapper, '--color-accent')).toMatch(/light-dark\(/);
+      expect(declaredValue(wrapper, '--color-text-info')).toMatch(
+        /var\(--color-text-blue\)/,
+      );
+    }
+  });
+
+  it('declares no focus color and no color default on a wrapper that applies no theme', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const {container} = render(
@@ -157,6 +180,11 @@ describe('Theme', () => {
       const wrapper = container.querySelector('[data-child]')!.parentElement!;
       expect(wrapper.hasAttribute('data-astryx-theme')).toBe(false);
       expect(declaredValue(wrapper, '--focus-outline-color')).toBeNull();
+      expect(
+        Object.keys(colorDefaults).filter(
+          name => declaredValue(wrapper, name) != null,
+        ),
+      ).toEqual([]);
     } finally {
       warn.mockRestore();
     }
