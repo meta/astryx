@@ -535,12 +535,32 @@ describe('effectFindings', () => {
           '  // Closing brace } inside a comment',
           '  const tag = `${ok ? "{a}" : "{b}"}`;',
           '  const s = `}`;',
-          '  const s = `}`;',
           "  node.addEventListener('input', onInput);",
           '}, [onPan, ok]);',
         ].join('\n'),
       ),
     ).toEqual([]);
+  });
+
+  it('ends a template interpolation at its own closing brace', () => {
+    expect(
+      findingsFor(
+        [
+          '// Keeps the committed label for the key handlers.',
+          'useEffect(() => {',
+          '  labelRef.current = `${prefix}-${name}`;',
+          '});',
+          'export function Label({prefix, name}) {',
+          '  const id = `${prefix}-${name}`;',
+          '  labelRef.current = id;',
+          '  return null;',
+          '}',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      [2, 'The Effect only copies a value into a ref'],
+      [7, '`labelRef.current` is written during render'],
+    ]);
   });
 
   it('reports every non-exempt ref write or committed-ref read on the same line', () => {

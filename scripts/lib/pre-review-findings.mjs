@@ -163,10 +163,6 @@ const DOM_STATE =
   /\buseState\s*<[^>]*(?<![\w$.])(?:(?:HTML|SVG)\w*Element|Element|Node|NodeList|HTMLCollection)\b/;
 
 /**
- * The body of the arrow function an Effect starts on line `index`, or null
- * when the Effect takes a named function or an expression body.
- */
-/**
  * Yield each non-comment, non-string code index in `source` from `start`,
  * tracking template-literal `${...}` nesting. Recognizes strings, comments,
  * and template literals, and no other syntax (such as regex literals).
@@ -177,6 +173,8 @@ const DOM_STATE =
  */
 function* scanCode(source, start = 0) {
   const modes = ['code'];
+  // One brace depth for each open `${…}`, so its own `}` ends it.
+  const interpolationDepths = [];
   for (let i = start; i < source.length; i += 1) {
     const char = source[i];
     const next = source[i + 1];
@@ -202,6 +200,7 @@ function* scanCode(source, start = 0) {
       else if (char === '`') modes.pop();
       else if (char === '$' && next === '{') {
         modes.push('code');
+        interpolationDepths.push(0);
         yield {index: i + 1, char: '{', templateOpened: true};
         i += 1;
       }
@@ -216,12 +215,26 @@ function* scanCode(source, start = 0) {
     } else if (char === "'" || char === '"' || char === '`') {
       modes.push(char);
     } else {
+      const top = interpolationDepths.length - 1;
+      if (modes.length > 1 && char === '{') interpolationDepths[top] += 1;
+      else if (modes.length > 1 && char === '}') {
+        if (interpolationDepths[top] > 0) interpolationDepths[top] -= 1;
+        else {
+          interpolationDepths.pop();
+          modes.pop();
+        }
+      }
       yield {index: i, char, templateOpened: false};
     }
   }
 }
 
-/** The scan reads text; it recognizes strings, comments, and template literals, and no other syntax. */
+/**
+ * The body of the arrow function an Effect starts on line `index`, or null
+ * when the Effect takes a named function or an expression body. The scan
+ * reads text; it recognizes strings, comments, and template literals, and no
+ * other syntax.
+ */
 export function effectBody(lines, index) {
   const source = lines.slice(index, index + 400).join('\n');
   const start = source.search(EFFECT);
