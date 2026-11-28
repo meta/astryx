@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -21,7 +22,9 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const OUTPUT = path.resolve('popover-audit-evidence');
+const EVIDENCE = path.resolve('popover-audit-evidence');
+// This copy's evidence folder, set in beforeAll (one per --repeat-each copy).
+let OUTPUT = EVIDENCE;
 
 type Mode = 'light' | 'dark';
 type Direction = 'ltr' | 'rtl';
@@ -639,7 +642,7 @@ cases.push({
 });
 
 test.beforeAll(async () => {
-  fs.mkdirSync(OUTPUT, {recursive: true});
+  OUTPUT = resetAuditEvidence(EVIDENCE, test.info());
   checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();

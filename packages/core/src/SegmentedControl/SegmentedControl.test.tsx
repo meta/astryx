@@ -698,6 +698,38 @@ describe('SegmentedControl disabled state', () => {
     expect(handleChange).not.toHaveBeenCalled();
   });
 
+  it('never calls onChange while disabled, whatever the input', async () => {
+    const user = userEvent.setup({pointerEventsCheck: 0});
+    const handleChange = vi.fn();
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={handleChange}
+        label="View mode"
+        isDisabled>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" />
+        <SegmentedControlItem value="board" label="Board" />
+      </SegmentedControl>,
+    );
+    const grid = screen.getByRole('radio', {name: 'Grid'});
+    const list = screen.getByRole('radio', {name: 'List'});
+    const board = screen.getByRole('radio', {name: 'Board'});
+
+    // Keyboard: Tab in, then every navigation key.
+    await user.tab();
+    expect(grid).toHaveFocus();
+    await user.keyboard('{ArrowRight}{ArrowLeft}{End}{Home}{ArrowDown}');
+    // Mouse and touch taps on other segments.
+    await user.click(list);
+    fireEvent.pointerDown(board, {pointerType: 'touch'});
+    fireEvent.pointerUp(board, {pointerType: 'touch'});
+    fireEvent.click(board);
+
+    expect(handleChange).not.toHaveBeenCalled();
+    expect(grid).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('disables individual items', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
@@ -1078,6 +1110,98 @@ describe('SegmentedControl data-testid forwarding', () => {
       'role',
       'radiogroup',
     );
+  });
+});
+
+describe('SegmentedControl resource budget (PR1)', () => {
+  type Registration = [EventTarget, string, EventListenerOrEventListenerObject];
+
+  /** The listeners currently attached to window and document. */
+  function trackGlobalListeners(): {
+    current: () => number;
+    restore: () => void;
+  } {
+    const live: Registration[] = [];
+    const spies = [window, document].flatMap(target => {
+      const add = target.addEventListener.bind(target);
+      const remove = target.removeEventListener.bind(target);
+      return [
+        vi
+          .spyOn(target, 'addEventListener')
+          .mockImplementation((type, listener, options) => {
+            if (listener != null) {
+              live.push([target, type, listener]);
+            }
+            add(type, listener, options);
+          }),
+        vi
+          .spyOn(target, 'removeEventListener')
+          .mockImplementation((type, listener, options) => {
+            const index = live.findIndex(
+              ([t, ty, l]) => t === target && ty === type && l === listener,
+            );
+            if (index !== -1) {
+              live.splice(index, 1);
+            }
+            remove(type, listener, options);
+          }),
+      ];
+    });
+    return {
+      current: () => live.length,
+      restore: () => spies.forEach(spy => spy.mockRestore()),
+    };
+  }
+
+  function Controls({count}: {count: number}) {
+    return (
+      <>
+        {Array.from({length: count}, (_, index) => (
+          <SegmentedControl
+            key={index}
+            value="grid"
+            onChange={() => {}}
+            label={`View mode ${index}`}>
+            <SegmentedControlItem value="grid" label="Grid" />
+            <SegmentedControlItem value="list" label="List" />
+          </SegmentedControl>
+        ))}
+      </>
+    );
+  }
+
+  it('adds no window or document listener per control', () => {
+    const listeners = trackGlobalListeners();
+    try {
+      const {rerender} = render(<Controls count={1} />);
+      const withOne = listeners.current();
+      rerender(<Controls count={6} />);
+      expect(listeners.current()).toBe(withOne);
+    } finally {
+      listeners.restore();
+    }
+  });
+
+  it('leaves no window or document listener behind after a press', () => {
+    const listeners = trackGlobalListeners();
+    try {
+      render(<Controls count={3} />);
+      const press = (segment: HTMLElement) => {
+        fireEvent.pointerDown(segment, {pointerType: 'mouse', button: 0});
+        fireEvent.pointerUp(segment, {pointerType: 'mouse', button: 0});
+        fireEvent.click(segment);
+      };
+      const segments = screen.getAllByRole('radio', {name: 'List'});
+      // The first press installs the page's shared listeners, once.
+      press(segments[0]);
+      const shared = listeners.current();
+      for (const segment of [...segments, segments[0]]) {
+        press(segment);
+      }
+      expect(listeners.current()).toBe(shared);
+    } finally {
+      listeners.restore();
+    }
   });
 });
 

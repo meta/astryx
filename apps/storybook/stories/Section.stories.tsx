@@ -47,6 +47,22 @@ const styles = stylex.create({
     fontSize: 14,
     color: colorVars['--color-text-secondary'],
   },
+  fixedColumn: {
+    height: 400,
+  },
+  floated: {
+    float: 'left',
+    width: 40,
+    height: 100,
+  },
+  tallBlock: {
+    height: 200,
+  },
+  spacedText: {
+    fontFamily: typographyVars['--font-family-body'],
+    color: colorVars['--color-text-primary'],
+    marginBlock: 16,
+  },
 });
 
 const meta: Meta<typeof Section> = {
@@ -397,6 +413,158 @@ export const Dividers: Story = {
           <Section variant="muted">
             <p {...stylex.props(styles.text)}>Last</p>
           </Section>
+        </Section>
+      </div>
+    </div>
+  ),
+};
+
+export const MinHeight: Story = {
+  render: () => (
+    <div {...stylex.props(styles.storyWrapper)}>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>minHeight=240</h4>
+        <Section
+          data-evidence="min-height-fixed"
+          variant="muted"
+          width={220}
+          minHeight={240}
+          dividers={['bottom']}>
+          <p {...stylex.props(styles.text)}>
+            The muted paint and the bottom divider reach 240px.
+          </p>
+        </Section>
+      </div>
+      <div {...stylex.props(styles.fixedColumn)}>
+        <h4 {...stylex.props(styles.heading)}>minHeight=50% of 400px</h4>
+        <Section
+          data-evidence="min-height-percent"
+          variant="muted"
+          width={220}
+          minHeight="50%"
+          dividers={['bottom']}>
+          <p {...stylex.props(styles.text)}>
+            The muted paint and the bottom divider reach 200px.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          padding=0, no minHeight: the margins collapse out
+        </h4>
+        <Section
+          data-evidence="margin-collapse"
+          variant="muted"
+          width={220}
+          padding={0}>
+          <p {...stylex.props(styles.spacedText)}>
+            A 16px block margin falls outside the paint.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          padding=0, minHeight=120: the margins stay inside
+        </h4>
+        <Section
+          data-evidence="margin-contained"
+          variant="muted"
+          width={220}
+          padding={0}
+          minHeight={120}>
+          <p {...stylex.props(styles.spacedText)}>
+            A 16px block margin stays inside the paint.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          padding=0, minHeight=40: a 100px float stays inside
+        </h4>
+        <Section
+          data-evidence="float-contained"
+          variant="muted"
+          width={220}
+          padding={0}
+          minHeight={40}>
+          <div {...stylex.props(styles.floated)} />
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>height=160</h4>
+        <Section
+          data-evidence="height-fixed"
+          variant="muted"
+          width={220}
+          height={160}
+          dividers={['bottom']}>
+          <p {...stylex.props(styles.text)}>
+            The muted paint and the bottom divider reach 160px.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>height=80, 200px content</h4>
+        <Section
+          data-evidence="height-overflow-plain"
+          variant="muted"
+          width={220}
+          height={80}>
+          <div {...stylex.props(styles.tallBlock)} />
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          height=80 + minHeight=40, 200px content
+        </h4>
+        <Section
+          data-evidence="height-overflow"
+          variant="muted"
+          width={220}
+          height={80}
+          minHeight={40}>
+          <div {...stylex.props(styles.tallBlock)} />
+        </Section>
+      </div>
+    </div>
+  ),
+};
+
+export const PaddingPrecedence: Story = {
+  render: () => (
+    <div {...stylex.props(styles.storyWrapper)}>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          padding=6 + paddingBlock=2 + paddingInline=1
+        </h4>
+        <Section
+          data-evidence="axis-over-uniform"
+          variant="muted"
+          width={220}
+          padding={6}
+          paddingBlock={2}
+          paddingInline={1}>
+          <p {...stylex.props(styles.text)}>
+            Each axis takes its own step over the uniform 24px.
+          </p>
+        </Section>
+      </div>
+      <div>
+        <h4 {...stylex.props(styles.heading)}>
+          paddingBlock=6 + paddingBlockStart=2, paddingInline=6 +
+          paddingInlineStart=2
+        </h4>
+        <Section
+          data-evidence="edge-over-axis-start"
+          variant="muted"
+          width={220}
+          paddingBlock={6}
+          paddingBlockStart={2}
+          paddingInline={6}
+          paddingInlineStart={2}>
+          <p {...stylex.props(styles.text)}>
+            Each start edge takes 8px; each end edge keeps its axis 24px.
+          </p>
         </Section>
       </div>
     </div>
