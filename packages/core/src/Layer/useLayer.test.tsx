@@ -3533,6 +3533,62 @@ describe('light dismiss vs. the trigger click', () => {
     expect(getByTestId('state')).toHaveTextContent('open');
   });
 
+  it('acts on a later bare click after a dismissing press is cancelled', async () => {
+    const user = userEvent.setup();
+    const {container, getByRole, getByTestId} = render(<TriggerHarness />);
+    const trigger = getByRole('button', {name: 'Trigger'});
+
+    await user.click(trigger);
+    // A press outside closes the layer, then the browser cancels it (a touch
+    // that turns into a scroll), so no click follows.
+    fireEvent.pointerDown(document.body);
+    lightDismiss(container);
+    fireEvent.pointerCancel(document.body);
+    expect(getByTestId('state')).toHaveTextContent('closed');
+
+    // Assistive technology activates the trigger with a bare click.
+    act(() => {
+      trigger.click();
+    });
+
+    expect(getByTestId('state')).toHaveTextContent('open');
+  });
+
+  it('acts on a later bare click after a dismissing press ends with no click', async () => {
+    const user = userEvent.setup();
+    const {container, getByRole, getByTestId} = render(<TriggerHarness />);
+    const trigger = getByRole('button', {name: 'Trigger'});
+
+    await user.click(trigger);
+    // A drag that starts outside closes the layer and ends with no click.
+    fireEvent.pointerDown(document.body);
+    lightDismiss(container);
+    fireEvent.pointerUp(document.body);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    act(() => {
+      trigger.click();
+    });
+
+    expect(getByTestId('state')).toHaveTextContent('open');
+  });
+
+  it('still absorbs the click a dismissing press brings after its release', async () => {
+    const user = userEvent.setup();
+    const {container, getByRole, getByTestId} = render(<TriggerHarness />);
+    const trigger = getByRole('button', {name: 'Trigger'});
+
+    await user.click(trigger);
+    fireEvent.pointerDown(trigger);
+    lightDismiss(container);
+    fireEvent.pointerUp(trigger);
+    fireEvent.click(trigger);
+
+    expect(getByTestId('state')).toHaveTextContent('closed');
+  });
+
   it('acts on a synthesized click after a stopped click-first dismissal', async () => {
     const user = userEvent.setup();
     const {container, getByRole, getByTestId} = render(<TriggerHarness />);
