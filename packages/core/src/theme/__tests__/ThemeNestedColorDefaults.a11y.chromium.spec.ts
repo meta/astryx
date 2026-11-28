@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/theme/(Theme|tokens)|^apps/storybook/stories/(ListInput|CodeTheme)\.stories
+// @pr-a11y scope ^packages/core/src/theme/(Theme|tokens)|^apps/storybook/stories/(ListInput|CodeTheme|Selector)\.stories
 
 /**
  * @file ThemeNestedColorDefaults.a11y.chromium.spec.ts

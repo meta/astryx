@@ -213,6 +213,12 @@ describe('Theme', () => {
         ],
       },
     });
+    // A built theme module can carry its adaptation rules unresolved.
+    const builtAdapts = {
+      ...adaptsColors,
+      name: 'built-adapts',
+      __adaptationRules: undefined,
+    };
     const {container} = render(
       <Theme theme={testTheme}>
         <Theme theme={partsOnly}>
@@ -223,6 +229,9 @@ describe('Theme', () => {
         </Theme>
         <Theme theme={adaptsColors}>
           <span>adapts</span>
+        </Theme>
+        <Theme theme={builtAdapts}>
+          <span>built</span>
         </Theme>
       </Theme>,
     );
@@ -235,7 +244,7 @@ describe('Theme', () => {
     expect(declaredValue(parts, '--focus-outline-color')).toMatch(
       /var\(--color-accent\)/,
     );
-    for (const name of ['extends-colors', 'adapts-colors']) {
+    for (const name of ['extends-colors', 'adapts-colors', 'built-adapts']) {
       const wrapper = container.querySelector(`[data-astryx-theme="${name}"]`)!;
       expect(
         Object.keys(colorDefaults).filter(
