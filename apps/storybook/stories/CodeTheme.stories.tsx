@@ -370,6 +370,11 @@ const accentTheme = defineTheme({
   tokens: {'--color-text-accent': 'rgb(200, 0, 100)'},
 });
 
+const accentPairTheme = defineTheme({
+  name: 'own-accent-pair',
+  tokens: {'--color-text-accent': ['rgb(10, 10, 10)', 'rgb(250, 200, 0)']},
+});
+
 const componentsOnlyTheme = defineTheme({
   name: 'components-only',
   components: {card: {base: {padding: '4px'}}},
@@ -381,11 +386,11 @@ export const NestedThemes: StoryObj = {
   render: () => (
     <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
       <CodeBlock code={nestedCode} language="typescript" title="Page theme" />
-      <Theme mode="dark">
+      <Theme theme={accentPairTheme} mode="dark">
         <CodeBlock
           code={nestedCode}
           language="typescript"
-          title="Nested dark Theme"
+          title="Nested dark theme with its own accent pair"
         />
       </Theme>
       <Theme theme={accentTheme}>

@@ -156,15 +156,17 @@ for (const lowered of [false, true]) {
     ).toBe('rgb(200, 0, 100)');
   });
 
-  test(`in ${build}, code in a nested dark Theme takes the dark accent`, async ({
+  test(`in ${build}, code in a nested dark theme takes the dark side of its accent pair`, async ({
     page,
   }) => {
     await openStory(page, lowered);
-    const keyword = await colorIn(page, 'Nested dark Theme', KEYWORD);
-    expect(keyword).toBe(
-      await colorIn(page, 'Nested dark Theme', '--color-text-accent'),
-    );
-    expect(keyword).not.toBe(await colorIn(page, 'Page theme', KEYWORD));
+    expect(
+      await colorIn(
+        page,
+        'Nested dark theme with its own accent pair',
+        KEYWORD,
+      ),
+    ).toBe('rgb(250, 200, 0)');
   });
 
   test(`in ${build}, a components-only theme keeps the syntax colors of the theme around it`, async ({
