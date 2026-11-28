@@ -612,6 +612,37 @@ export const samples = {
     }
     return React.createElement(Sample);
   },
+  // The hook throws by design without a positive count and whole-pixel
+  // geometry, so the sample gives both, as an app does.
+  lab__useTableInfinityVirtualization: ({React, mod, Core}) => {
+    function Sample() {
+      const infinity = mod.useTableInfinityVirtualization({
+        rowCount: 1000,
+        columnCount: 100,
+        rowHeight: 32,
+        columnWidth: 112,
+        viewportWidth: 448,
+        viewportHeight: 320,
+        headerHeight: 36,
+        viewportLabel: 'Table viewport',
+        rowScrollbarLabel: 'Scroll rows',
+        columnScrollbarLabel: 'Scroll columns',
+        getRow: index => ({id: index}),
+        getColumn: index => ({
+          key: String(index),
+          width: Core.pixel(112),
+          header: `Column ${index + 1}`,
+          renderCell: row => `R${row.id + 1} C${index + 1}`,
+        }),
+      });
+      return React.createElement(Core.Table, {
+        ...infinity.tableProps,
+        idKey: 'id',
+        'aria-label': 'Archive',
+      });
+    }
+    return React.createElement(Sample);
+  },
   lab__MediaPlayer: ({C, React, mod, Pkg}) =>
     React.createElement(
       C,
