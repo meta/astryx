@@ -35,6 +35,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/hooks/useKeyboardHint.generated';
 import {anchoredHintStyles, renderAnchoredHint} from './anchoredHint';
+import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 
 registerEnglishFallback(english);
 
@@ -193,6 +194,13 @@ export function useKeyboardHint(
     isVisibleRef.current = false;
     layerAnchorRef.current(null);
   }, [clearDismissTimeout, layer]);
+
+  // Close the native popover even when the disabled composite keeps focus.
+  useIsomorphicLayoutEffect(() => {
+    if (!isEnabled && layer.isOpen) {
+      dismiss();
+    }
+  }, [dismiss, isEnabled, layer.isOpen]);
 
   // Show the layer anchored to the focused element
   const show = useCallback(

@@ -7,6 +7,7 @@
  */
 
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -156,8 +157,10 @@ describe('useKeyboardHint dismissal', () => {
     HTMLElement.prototype.hidePopover = originalHidePopover;
   });
 
-  function Row() {
-    const {hintElement, onFocus, onBlur, onKeyDown} = useKeyboardHint({});
+  function Row({isEnabled}: {isEnabled?: boolean}) {
+    const {hintElement, onFocus, onBlur, onKeyDown} = useKeyboardHint({
+      isEnabled,
+    });
     return (
       <div onFocus={onFocus} onBlur={onBlur} onKeyDown={onKeyDown}>
         <button type="button">First</button>
@@ -182,12 +185,11 @@ describe('useKeyboardHint dismissal', () => {
     const hidePopover = vi.fn();
     HTMLElement.prototype.showPopover = showPopover;
     HTMLElement.prototype.hidePopover = hidePopover;
-    render(<Row />);
+    const {rerender} = render(<Row />);
     const first = screen.getByRole('button', {name: 'First'});
-    first.focus();
-    fireEvent.focus(first);
+    act(() => first.focus());
     expect(showPopover).toHaveBeenCalledTimes(1);
-    return {first, hidePopover};
+    return {first, hidePopover, rerender, showPopover};
   }
 
   // A popover takes its invoker's place in the focus order. The hint has
@@ -206,6 +208,21 @@ describe('useKeyboardHint dismissal', () => {
     vi.advanceTimersByTime(60_000);
 
     expect(hidePopover).not.toHaveBeenCalled();
+  });
+
+  it('dismisses the visible hint when disabled and does not show it again', () => {
+    const {first, hidePopover, rerender, showPopover} =
+      renderWithKeyboardFocus();
+    rerender(<Row isEnabled={false} />);
+    expect(hidePopover).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(first);
+
+    rerender(<Row isEnabled />);
+    act(() => {
+      first.blur();
+      first.focus();
+    });
+    expect(showPopover).toHaveBeenCalledTimes(1);
   });
 
   it('closes on Escape without moving focus', () => {
