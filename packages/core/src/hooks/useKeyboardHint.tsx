@@ -195,7 +195,8 @@ export function useKeyboardHint(
     layerAnchorRef.current(null);
   }, [clearDismissTimeout, layer]);
 
-  // Close the native popover even when the disabled composite keeps focus.
+  // Effect: closes the hint's native popover when the widget becomes
+  // disabled. Focus stays on the widget, so no blur closes it.
   useIsomorphicLayoutEffect(() => {
     if (!isEnabled && layer.isOpen) {
       dismiss();
