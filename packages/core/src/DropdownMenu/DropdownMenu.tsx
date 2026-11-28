@@ -105,6 +105,7 @@ import {
 import {
   MenuBottomSheet,
   MenuBottomSheetActionList,
+  loadMenuBottomSheet,
   preloadMenuBottomSheetActionList,
 } from './lazyMenuBottomSheet';
 import {menuBottomSheetStyles} from './menuBottomSheet.stylex';
@@ -661,6 +662,12 @@ function DropdownMenuBottomSheet({
   );
   const isControlled = controlledIsOpen !== undefined;
   const isOpen = isControlled ? controlledIsOpen : internalIsOpen;
+  const isOpenRef = useRef(isOpen);
+  useCommittedRefInto(isOpenRef, isOpen);
+  const onOpenChangeRef = useRef(onOpenChange);
+  useCommittedRefInto(onOpenChangeRef, onOpenChange);
+  // Whether the open sheet was opened here, whose handler then owns its load.
+  const isOpenedHereRef = useRef(false);
   const [previousIsOpen, setPreviousIsOpen] = useState(isOpen);
   if (previousIsOpen !== isOpen) {
     setPreviousIsOpen(isOpen);
@@ -716,6 +723,24 @@ function DropdownMenuBottomSheet({
         prepareFocusReturn();
       } else {
         resetFocusReturn();
+        isOpenedHereRef.current = true;
+        // A sheet whose module or rows fail to load closes, so the trigger
+        // works again.
+        void loadMenuBottomSheet().then(isLoaded => {
+          if (!isOpenRef.current) {
+            // The sheet did not open, or closed, before the load settled: a
+            // later open is not this handler's, so the caller-open sync owns
+            // its load.
+            isOpenedHereRef.current = false;
+            return;
+          }
+          if (!isLoaded) {
+            onOpenChangeRef.current?.(false);
+            if (!isControlled) {
+              setInternalIsOpen(false);
+            }
+          }
+        });
       }
       onOpenChange?.(nextIsOpen);
       if (!isControlled) {
@@ -724,6 +749,29 @@ function DropdownMenuBottomSheet({
     },
     [isControlled, onOpenChange, prepareFocusReturn, resetFocusReturn],
   );
+  // Syncs a caller's open (`isMenuOpen`) with the sheet's module loader: an
+  // open not made here asks for the module and closes when its load fails.
+  useEffect(() => {
+    if (!isOpen) {
+      isOpenedHereRef.current = false;
+      return;
+    }
+    if (isOpenedHereRef.current) {
+      return;
+    }
+    let isCurrent = true;
+    void loadMenuBottomSheet().then(isLoaded => {
+      if (!isLoaded && isCurrent) {
+        onOpenChangeRef.current?.(false);
+        if (!isControlled) {
+          setInternalIsOpen(false);
+        }
+      }
+    });
+    return () => {
+      isCurrent = false;
+    };
+  }, [isControlled, isOpen]);
 
   const handleSelect = useCallback(
     (item: DropdownMenuItemData, event: React.MouseEvent) => {

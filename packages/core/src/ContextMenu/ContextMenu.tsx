@@ -59,9 +59,12 @@ import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {currentGesture} from '../Layer/gestureCounter';
 import {noteOutsideDismissal} from '../Layer/outsidePress';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import {
   MenuBottomSheet,
   MenuBottomSheetActionList,
+  loadMenuBottomSheet,
+  loadMenuBottomSheetWithoutActionList,
   MenuBottomSheetWithoutActionList,
   preloadMenuBottomSheetActionList,
 } from '../DropdownMenu/lazyMenuBottomSheet';
@@ -429,6 +432,8 @@ export function ContextMenu({
   const openingGestureRef = useRef<number | null>(null);
 
   const [isOpen, setIsOpen] = useState(false);
+  const isOpenRef = useRef(isOpen);
+  useCommittedRefInto(isOpenRef, isOpen);
   // An open from the trigger moves focus into the menu once it shows: a frame
   // after the show, which for a first open comes as its layer attaches.
   const focusOnShowRef = useRef(false);
@@ -452,11 +457,23 @@ export function ContextMenu({
       if (!nextIsOpen) {
         setSubmenuPath([]);
         setSubmenuTitles([]);
+      } else if (usesBottomSheet) {
+        // A sheet whose module (or rows) fails to load closes, so the
+        // trigger works again.
+        const load = usesSheetActionList
+          ? loadMenuBottomSheet
+          : loadMenuBottomSheetWithoutActionList;
+        void load().then(isLoaded => {
+          if (!isLoaded && isOpenRef.current) {
+            setIsOpen(false);
+            onOpenChange?.(false);
+          }
+        });
       }
       setIsOpen(nextIsOpen);
       onOpenChange?.(nextIsOpen);
     },
-    [onOpenChange],
+    [onOpenChange, usesBottomSheet, usesSheetActionList],
   );
 
   const layer = useLayerInternal({

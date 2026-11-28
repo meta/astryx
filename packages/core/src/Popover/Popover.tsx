@@ -78,6 +78,7 @@ import {InteractiveRoleContext} from '../InteractiveRoleContext/InteractiveRoleC
 import type {SpacingStep} from '../utils/types';
 import {BottomSheetEscapeContext} from '../BottomSheet/bottomSheetEscape';
 import {
+  loadPopoverBottomSheet,
   PopoverBottomSheet,
   preloadPopoverBottomSheet,
 } from './lazyPopoverBottomSheet';
@@ -759,15 +760,58 @@ export function Popover({
   const isAnySurfaceOpen = popover.isOpen || isSheetOpen;
   const sheetId = `${popover.id}-sheet`;
 
+  const isSheetOpenRef = useCommittedRef(isSheetOpen);
+  // Whether the open sheet was opened here, whose handler then owns its load.
+  const isSheetOpenedHereRef = useRef(false);
   const setSheetOpen = useCallback(
     (next: boolean) => {
       if (!isControlled) {
         setIsSheetOpenState(next);
       }
       onOpenChangeRef.current?.(next);
+      if (next) {
+        isSheetOpenedHereRef.current = true;
+        // A sheet whose module fails to load closes, so the trigger works
+        // again.
+        void loadPopoverBottomSheet().then(isLoaded => {
+          if (!isSheetOpenRef.current) {
+            // The sheet did not open, or closed, before the load settled: a
+            // later open is not this handler's, so the caller-open sync owns
+            // its load.
+            isSheetOpenedHereRef.current = false;
+            return;
+          }
+          if (!isLoaded) {
+            if (!isControlled) {
+              setIsSheetOpenState(false);
+            }
+            onOpenChangeRef.current?.(false);
+          }
+        });
+      }
     },
-    [isControlled, onOpenChangeRef],
+    [isControlled, isSheetOpenRef, onOpenChangeRef],
   );
+  // Syncs a caller's open (`isOpen`) with the sheet's module loader: an open
+  // not made here asks for the module and closes when its load fails.
+  useEffect(() => {
+    if (!isSheetOpen) {
+      isSheetOpenedHereRef.current = false;
+      return;
+    }
+    if (isSheetOpenedHereRef.current) {
+      return;
+    }
+    let isCurrent = true;
+    void loadPopoverBottomSheet().then(isLoaded => {
+      if (!isLoaded && isCurrent) {
+        onOpenChangeRef.current?.(false);
+      }
+    });
+    return () => {
+      isCurrent = false;
+    };
+  }, [isSheetOpen, onOpenChangeRef]);
 
   const measureOverflow = useCallback(() => {
     const surface = popover.contentRef.current;

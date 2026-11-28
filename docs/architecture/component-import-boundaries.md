@@ -151,7 +151,11 @@ one pending load per module, caches a success, and resets after a failure.
   the trigger and the page stay mounted and operable, the held intent is
   dropped, and any native behavior the trigger suppressed returns (the
   browser's own context menu). Development builds warn once. A later intent
-  asks the loader again.
+  asks the loader again. A browser that keeps a failed module keeps the
+  surface unavailable until the page reloads. A surface that renders before
+  its module loads reads
+  it through `useSurfaceModule`, which never suspends, so a failed load
+  reaches no error boundary.
 - **INV7 — Opt-in capabilities are reachable only through their own
   import.** A capability's code lives in modules that only its own public
   import (its hook, constructor, or plugin factory) reaches. The component it
@@ -316,6 +320,8 @@ Review against this record when a change:
 ## Owning code
 
 - `packages/core/src/utils/moduleLoader.ts` — the shared module loader.
+- `packages/core/src/utils/useSurfaceModule.ts` — a rendered surface's read
+  of its module, and its asks after a failed load.
 - `packages/core/src/Text/TruncationTooltip.tsx` — the truncation tooltip's
   intent tracking and load.
 - `packages/core/src/Tooltip/`, `packages/core/src/HoverCard/`,
