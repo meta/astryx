@@ -340,6 +340,7 @@ export function Token({
   className,
   style,
   'data-testid': testId,
+  'aria-label': ariaLabel,
   'aria-labelledby': ariaLabelledBy,
   'aria-describedby': ariaDescribedBy,
   'aria-haspopup': ariaHasPopup,
@@ -421,6 +422,7 @@ export function Token({
   // the inner button of a clickable token, otherwise the root
   // (architecture:public-component-api INV5).
   const labellingProps = {
+    'aria-label': ariaLabel,
     'aria-labelledby': ariaLabelledBy,
     'aria-describedby': ariaDescribedBy,
     'aria-haspopup': ariaHasPopup,
@@ -627,8 +629,12 @@ export function Token({
         <button
           type="button"
           onClick={effectiveOnClick}
-          aria-label={ariaLabelledBy == null ? naming?.actionName : undefined}
           {...labellingProps}
+          aria-label={
+            ariaLabelledBy == null
+              ? (ariaLabel ?? naming?.actionName)
+              : undefined
+          }
           aria-disabled={isDisabled || undefined}
           {...(isDisabled ? disabledInteractionProps() : null)}
           {...focusOwnerProps}

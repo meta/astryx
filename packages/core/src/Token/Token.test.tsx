@@ -344,6 +344,7 @@ describe('Token accessibility', () => {
         <Token
           label="Apple"
           onClick={() => {}}
+          aria-label="Fallback name"
           aria-labelledby="field-label"
           aria-describedby="field-hint"
           data-testid="token"
@@ -352,7 +353,40 @@ describe('Token accessibility', () => {
     );
     const button = screen.getByRole('button', {name: 'Fruit'});
     expect(button).toHaveAccessibleDescription('Pick one');
+    expect(button).not.toHaveAttribute('aria-label');
     expect(screen.getByTestId('token')).not.toHaveAttribute('aria-labelledby');
+    expect(screen.getByTestId('token')).not.toHaveAttribute('aria-label');
+  });
+
+  it("names a clickable token's button from aria-label when no aria-labelledby is supplied (public-component-api INV5)", () => {
+    render(
+      <>
+        <Token
+          label="Invoice"
+          aria-label="Invoice for Project A"
+          onClick={() => {}}
+          onRemove={() => {}}
+          data-testid="token-a"
+        />
+        <Token
+          label="Invoice"
+          aria-label="Invoice for Project B"
+          onClick={() => {}}
+          data-testid="token-b"
+        />
+      </>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Invoice for Project A'}),
+    ).toHaveTextContent('Invoice');
+    expect(
+      screen.getByRole('button', {name: 'Invoice for Project B'}),
+    ).toHaveTextContent('Invoice');
+    expect(
+      screen.getByRole('button', {name: 'Remove Invoice'}),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('token-a')).not.toHaveAttribute('aria-label');
+    expect(screen.getByTestId('token-b')).not.toHaveAttribute('aria-label');
   });
 
   it('reflects the disabled state on the token target in every structure (theming-surface INV6)', () => {
