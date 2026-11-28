@@ -18,7 +18,10 @@ import {describe, expect, it} from 'vitest';
 const REPO = path.resolve(import.meta.dirname, '..');
 
 /** Rules that strict mode reports as errors, each with a file it covers. */
-const PROMOTED = [{rule: 'curly', file: 'packages/core/src/index.ts'}];
+const PROMOTED = [
+  {rule: 'curly', file: 'packages/core/src/index.ts'},
+  {rule: 'no-console', file: 'packages/core/src/index.ts'},
+];
 
 // The config reads the tier from the environment when it loads, so each
 // reading loads it in a child process, without the tier variables of this

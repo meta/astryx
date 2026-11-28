@@ -322,6 +322,7 @@ jobs:
         env:
           SHARES: ${{ needs.plan.outputs.shares }}
           LEG: ${{ matrix.leg }}
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ github.workspace }}/audits-at-head-output/a11y-report.json
         run: |
           node -e 'for (const f of JSON.parse(process.env.SHARES)[Number(process.env.LEG) - 1] ?? []) console.log(f)' > "$RUNNER_TEMP/audits.txt"
           FILES=()
@@ -333,7 +334,20 @@ jobs:
             exit 0
           fi
           printf 'Audits in this leg:\n'; printf '  %s\n' "${FILES[@]}"
-          pnpm exec playwright test "${FILES[@]}" --config playwright.config.ts --project chromium --reporter list,github --output audits-at-head-output
+          pnpm exec playwright test "${FILES[@]}" --config playwright.config.ts --project chromium --reporter list,github,json --output audits-at-head-output
+
+      # The JSON reporter keeps each spec's attached accessibility report.
+      - name: Upload the accessibility reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-reports-at-head-${{ matrix.leg }}-${{ github.run_attempt }}
+          path: |
+            audits-at-head-output/a11y-report.json
+            audits-at-head-output/**/*-a11y-report.txt
+          # A leg with no audit spec file exits before Playwright writes one.
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload audit evidence
         if: always() && (steps.run.outcome == 'success' || steps.run.outcome == 'failure')

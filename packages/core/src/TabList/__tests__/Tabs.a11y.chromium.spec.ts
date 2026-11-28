@@ -177,8 +177,10 @@ for (const state of TABS_BINDING_STATES) {
     const result = await runState(page, cdp, state);
     recorded.set(state.id, result);
     const report = summarize(TABS_PATTERN, [result]);
-    // eslint-disable-next-line no-console -- the report is this run's artifact
-    console.log(formatReport(report));
+    await test.info().attach('tabs-a11y-report.txt', {
+      body: formatReport(report),
+      contentType: 'text/plain',
+    });
     expect(formatFailures(blockingResults([result]))).toBe('');
     expect(report.unrunLayers).toEqual([]);
     expect(report.counts.unexpectedPass).toBe(0);

@@ -147,8 +147,10 @@ test('the collapse keeps its frames and timing, and Reduce Motion stays instant'
         `${duration.toFixed(1)}|${easing}|${frames}`,
     )
     .sort();
-  // eslint-disable-next-line no-console -- the receipt is this run's artifact
-  console.log(`collapse timings ${JSON.stringify(receipt)}`);
+  await test.info().attach('side-nav-collapse-timings.json', {
+    body: JSON.stringify(receipt),
+    contentType: 'application/json',
+  });
 
   await page.emulateMedia({reducedMotion: 'reduce'});
   await mount(page);

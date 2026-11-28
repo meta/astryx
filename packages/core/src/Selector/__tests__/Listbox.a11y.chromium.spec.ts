@@ -121,7 +121,10 @@ for (const scenario of LISTBOX_SCENARIOS) {
 
     observedResults.push(...results);
     const report = summarize(LISTBOX_PATTERN, results);
-    console.log(formatReport(report));
+    await test.info().attach('listbox-a11y-report.txt', {
+      body: formatReport(report),
+      contentType: 'text/plain',
+    });
     expect(formatFailures(blockingResults(results))).toBe('');
     expect(report.counts.unrun).toBe(0);
     if (scenario.component === 'Selector' && scenario.groups.length > 0) {

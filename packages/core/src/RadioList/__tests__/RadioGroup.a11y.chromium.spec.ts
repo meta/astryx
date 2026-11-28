@@ -304,8 +304,10 @@ for (const state of RADIO_GROUP_BINDING_STATES) {
     const cdp = await page.context().newCDPSession(page);
     const result = await runState(page, cdp, state);
     const report = summarize(RADIO_GROUP_PATTERN, [result]);
-    // eslint-disable-next-line no-console -- the report is this run's artifact
-    console.log(formatReport(report));
+    await test.info().attach('radio-group-a11y-report.txt', {
+      body: formatReport(report),
+      contentType: 'text/plain',
+    });
     expect(formatFailures(blockingResults([result]))).toBe('');
     expect(report.unrunLayers).toEqual([]);
     expect(report.counts.unexpectedPass).toBe(0);

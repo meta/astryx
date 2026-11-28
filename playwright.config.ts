@@ -89,7 +89,13 @@ export default defineConfig({
   // default; a test that sets its own budget keeps it.
   timeout: 60_000,
   forbidOnly: isCI,
-  reporter: isCI ? [['list'], ['github']] : [['list']],
+  reporter: isCI
+    ? [
+        ['list'],
+        ['github'],
+        ['json', {outputFile: 'test-results/a11y-report.json'}],
+      ]
+    : [['list']],
   // One `use` block, on the project. Motion is NOT held here: neither
   // `use.reducedMotion` nor Chromium's `--force-prefers-reduced-motion` reaches
   // `matchMedia` in this Playwright version — both were measured returning

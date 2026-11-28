@@ -161,8 +161,10 @@ for (const state of TOGGLE_BUTTON_BINDING_STATES) {
     const result = await runState(page, cdp, state);
     recorded.set(state.id, result);
     const report = summarize(TOGGLE_BUTTON_PATTERN, [result]);
-    // eslint-disable-next-line no-console -- the report is this run's evidence
-    console.log(formatReport(report));
+    await test.info().attach('toggle-button-a11y-report.txt', {
+      body: formatReport(report),
+      contentType: 'text/plain',
+    });
     expect(formatFailures(blockingResults([result]))).toBe('');
     expect(report.unrunLayers).toEqual([]);
     expect(report.counts.unexpectedPass).toBe(0);

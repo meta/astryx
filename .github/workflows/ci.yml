@@ -4033,6 +4033,22 @@ jobs:
           node .github/scripts/a11y-contract-shard.mjs --shard "${{ matrix.shard }}/${{ strategy.job-total }}" > contract-tests.txt
           pnpm exec playwright test --test-list contract-tests.txt --config playwright.config.ts --project chromium
 
+      # The JSON reporter keeps each spec's attached accessibility report, and
+      # the Schedule specs write their receipts beside it. Every leg uploads
+      # its own, whether its specs pass or fail.
+      - name: Upload the accessibility reports
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-reports-contracts-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: |
+            test-results/a11y-report.json
+            test-results/**/*-a11y-report.txt
+            test-results/schedule-time-grid-evidence/
+          # Every leg runs specs, so a missing file means the reporter failed.
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload pressed-state pixel evidence
         if: always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
         uses: actions/upload-artifact@v7
@@ -7477,6 +7493,7 @@ jobs:
       # The job never drops a planned spec (spec:AST-030 FR32): one the head
       # lacks, or one outside the config's spec globs, fails here by name.
       - name: Run the planned release specs
+        id: specs
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           SPECS: ${{ toJSON(matrix.specs) }}
@@ -7510,6 +7527,23 @@ jobs:
           # One worker: a release spec judges timing alone, as the release
           # check gives an isolated timing proof a contract leg of its own.
           pnpm exec playwright test "${RUN[@]}" --config playwright.config.ts --project chromium --workers=1
+
+      # The JSON reporter keeps each spec's attached accessibility report, and
+      # the Schedule specs write their receipts beside it. Every shard uploads
+      # them, whether its specs pass or fail.
+      - name: Upload the accessibility reports
+        if: always() && steps.specs.outcome != 'skipped'
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-reports-release-specs-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: |
+            test-results/a11y-report.json
+            test-results/**/*-a11y-report.txt
+            test-results/schedule-time-grid-evidence/
+          # A shard that reached Playwright wrote the file, and one that did
+          # not has already failed, so a missing file is a failure either way.
+          if-no-files-found: error
+          retention-days: 7
 
   # The check merge-guard waits for when a pull request triggers it: it
   # passes only when every release-spec shard passed.
@@ -7796,6 +7830,7 @@ jobs:
         env:
           SHARES: ${{ needs.a11y-dependent-audits-plan.outputs.shares }}
           LEG: ${{ matrix.leg }}
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ github.workspace }}/pr-a11y-dependent-output/a11y-report.json
         run: |
           node -e 'for (const f of JSON.parse(process.env.SHARES)[Number(process.env.LEG) - 1] ?? []) console.log(f)' > "$RUNNER_TEMP/dependent-audits.txt"
           FILES=()
@@ -7807,7 +7842,20 @@ jobs:
             exit 0
           fi
           printf 'Dependent audits in this leg:\n'; printf '  %s\n' "${FILES[@]}"
-          pnpm exec playwright test "${FILES[@]}" --config playwright.config.ts --project chromium --reporter list,github --output pr-a11y-dependent-output
+          pnpm exec playwright test "${FILES[@]}" --config playwright.config.ts --project chromium --reporter list,github,json --output pr-a11y-dependent-output
+
+      # The JSON reporter keeps each spec's attached accessibility report.
+      - name: Upload the accessibility reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-reports-dependent-${{ matrix.leg }}-${{ github.run_attempt }}
+          path: |
+            pr-a11y-dependent-output/a11y-report.json
+            pr-a11y-dependent-output/**/*-a11y-report.txt
+          # A leg with no audit spec file exits before Playwright writes one.
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload dependent-audit evidence
         if: always() && (steps.audits.outcome == 'success' || steps.audits.outcome == 'failure')
