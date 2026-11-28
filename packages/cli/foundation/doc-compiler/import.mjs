@@ -208,7 +208,7 @@ export function importTemplateModule(file) {
         });
         return jsxJiti.import(first);
       }
-      return importInTurn(first, `file://${first}`);
+      return importInTurn(first, pathToFileURL(first).href);
     },
     changed =>
       changed.endsWith('.ts')

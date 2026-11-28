@@ -27,7 +27,11 @@ const {
 /** @type {typeof import('./read.mjs')} */
 const {compileDocFile, readDocView} = require('./read.mjs');
 /** @type {typeof import('./import.mjs')} */
-const {importDocModule, importNativeModule} = require('./import.mjs');
+const {
+  importDocModule,
+  importNativeModule,
+  importTemplateModule,
+} = require('./import.mjs');
 /** @type {typeof import('./inputs.mjs')} */
 const {collectDocInputs} = require('./inputs.mjs');
 
@@ -490,4 +494,20 @@ process.stdout.write(JSON.stringify({before: shown(before), after: shown(after),
       });
     },
   );
+
+  it('loads a template doc from a directory whose name contains # and %', async () => {
+    const specialDir = path.join(tmpDir, 'dir#1%20template');
+    fs.mkdirSync(specialDir);
+    const file = path.join(specialDir, 'Hero.doc.mjs');
+    fs.writeFileSync(
+      file,
+      "export default {type: 'block', name: 'Hero', description: 'A hero.'};\n",
+    );
+    const mod = await importTemplateModule(file);
+    expect(mod.default).toEqual({
+      type: 'block',
+      name: 'Hero',
+      description: 'A hero.',
+    });
+  });
 });
