@@ -174,7 +174,6 @@ export function useKeyboardHint(
     isVisibleRef.current = false;
     setIsShowing(false);
     clearDismissTimeout();
-    layerAnchorRef.current(null);
   }, [clearDismissTimeout]);
 
   const layer = useLayerInternal({
@@ -191,7 +190,6 @@ export function useKeyboardHint(
     clearDismissTimeout();
     layer.hide();
     isVisibleRef.current = false;
-    layerAnchorRef.current(null);
   }, [clearDismissTimeout, layer]);
 
   // Show the layer anchored to the focused element
