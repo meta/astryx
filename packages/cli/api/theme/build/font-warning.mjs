@@ -229,6 +229,33 @@ export const SYSTEM_FONTS_BY_PLATFORM = {
 };
 
 /**
+ * Older names of a system family, on the family that replaced them: a
+ * theme that names the older one ("MS Sans Serif") reaches the family a
+ * machine has now, written right after it.
+ * @type {Readonly<Record<string, {name: string, aliases: readonly string[]}>>}
+ */
+export const SYSTEM_FONT_ALIASES = {
+  'microsoft sans serif': {
+    name: 'Microsoft Sans Serif',
+    aliases: ['ms sans serif'],
+  },
+};
+
+/**
+ * The system family that replaced a family's older name, as the system
+ * names it, or null.
+ * @param {string} family without quotes
+ * @returns {string | null}
+ */
+export function systemFontSuccessor(family) {
+  const low = family.trim().toLowerCase();
+  return (
+    Object.values(SYSTEM_FONT_ALIASES).find(f => f.aliases.includes(low))
+      ?.name ?? null
+  );
+}
+
+/**
  * Apple's own interface faces, by lowercase name, with the generic family
  * that reaches each. Apple systems hide them from a lookup by family name,
  * so a page reaches them only through these generics: by name, every
@@ -248,14 +275,26 @@ export const APPLE_FACE_GENERICS = /** @type {Record<string, string>} */ ({
 });
 
 /**
- * The generic family that reaches one of Apple's interface faces, or null
- * for any other family.
+ * Other names of those faces, by lowercase name, with the face's own name.
+ * `SFMono-Regular` is SF Mono's PostScript name, the one that monospace
+ * stacks name after `ui-monospace`.
+ */
+const APPLE_FACE_ALIASES = /** @type {Record<string, string>} */ ({
+  'sfmono-regular': 'sf mono',
+});
+
+/**
+ * The generic family that reaches one of Apple's interface faces, by any of
+ * its names, or null for any other family.
  * @param {string} family without quotes
  * @returns {string | null}
  */
 export function appleFaceGeneric(family) {
-  const key = family.trim().replace(/\s+/g, ' ').toLowerCase();
-  // Only the table's own names: a word such as constructor is no face.
+  const name = family.trim().replace(/\s+/g, ' ').toLowerCase();
+  // Only the tables' own names: a word such as constructor is no face.
+  const key = Object.hasOwn(APPLE_FACE_ALIASES, name)
+    ? APPLE_FACE_ALIASES[name]
+    : name;
   return Object.hasOwn(APPLE_FACE_GENERICS, key)
     ? APPLE_FACE_GENERICS[key]
     : null;
@@ -263,11 +302,13 @@ export function appleFaceGeneric(family) {
 
 /**
  * Every family a system ships, by lowercase name, and Apple's interface
- * faces: nothing loads those either, and no install line applies to them.
+ * faces by each of their names: nothing loads those either, and no install
+ * line applies to them.
  */
 const SYSTEM_FAMILIES = new Set([
   ...Object.values(SYSTEM_FONTS_BY_PLATFORM).flat(),
   ...Object.keys(APPLE_FACE_GENERICS),
+  ...Object.keys(APPLE_FACE_ALIASES),
 ]);
 
 /**

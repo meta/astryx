@@ -116,6 +116,11 @@ import {
 } from '../i18n/useComponentTranslator';
 import {useDirection} from '../i18n/useDirection';
 import english from '../i18n/generated-english/Markdown/Markdown.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -2267,6 +2272,13 @@ export function Markdown<
   'data-testid': testId,
   ...props
 }: MarkdownProps<Plugins>): React.ReactElement {
+  if (process.env.NODE_ENV !== 'production' && children == null) {
+    throw devPropError(
+      'Markdown',
+      'children',
+      "is required: the Markdown source as a string, for example <Markdown>{'# Title'}</Markdown>.",
+    );
+  }
   const t = useComponentTranslator();
   const direction = useDirection();
   // Keep one list while it names the same values, so an inline

@@ -570,6 +570,27 @@ describe('DateInput nativePicker', () => {
     expect(screen.queryByText('Select a date')).toBeNull();
   });
 
+  it.each([
+    ['en-US', 'ltr'],
+    ['he', 'rtl'],
+  ])(
+    'reads a %s date in dir %s on a right-to-left page, field and overlay',
+    (locale, dir) => {
+      stubPointer(true);
+      const {container} = render(
+        <div dir="rtl">
+          <InternationalizationProvider locale={locale}>
+            <DateInput label="Date" value="2026-01-25" onChange={() => {}} />
+          </InternationalizationProvider>
+        </div>,
+      );
+      expect(getInput()).toHaveAttribute('dir', dir);
+      const overlay = container.querySelector('span[aria-hidden="true"][dir]');
+      expect(overlay).toHaveAttribute('dir', dir);
+      expect(overlay?.textContent).not.toBe('');
+    },
+  );
+
   it('keeps the overlay out of the accessibility tree', () => {
     // The input still holds the value and carries the label, so announcing
     // the overlay too would double-speak.

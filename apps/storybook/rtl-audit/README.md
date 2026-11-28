@@ -321,6 +321,19 @@ Add a declaration only after reading the component's source and every story:
 An all-N/A scorecard without such a checked-in reason means **unmeasured**, not
 RTL-ready.
 
+### Receipts and receipt drift
+
+A declaration may also carry `evidence`: each repository file the reason was
+reviewed against, mapped to the `sha256:` of its bytes at that review. The
+audit report's `receiptDrift` section, and the scorecard's **Receipt drift
+(informational)** table, list every in-scope declaration whose recorded files
+changed, went missing, or carry a malformed receipt. Drift changes no coverage
+status and fails nothing: it tells a reviewer to re-read the component's source
+and stories and refresh the receipts.
+
+`pnpm rtl:audit:verify-na` prints the same drift for the whole registry without
+a Storybook build; `--component <package/Name>` checks one declaration.
+
 ## Why relationship-based, not pixel baselines
 
 Directional RTL bugs are _semantic_ ("the chevron didn't mirror", "prev/next

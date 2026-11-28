@@ -11,6 +11,7 @@ import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import {FormLayout} from '../FormLayout/FormLayout';
 import {PowerSearchValueEditor} from './PowerSearchValueEditor';
+import {InternationalizationProvider} from '../i18n';
 import type {
   FilterValueEntityList,
   OperatorValue,
@@ -18,6 +19,12 @@ import type {
 } from './types';
 import type {InternalConfig} from './useInternalConfig';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
+import {loadDateRangeCalendar} from '../DateRangeInput/DateRangeCalendar';
+// DateRangeInput loads its Calendar on the first intent. Loading it up front
+// lets these cases find the calendar's days right after the open.
+beforeAll(async () => {
+  await loadDateRangeCalendar();
+});
 
 // =============================================================================
 // Test infrastructure
@@ -773,4 +780,27 @@ describe('date editors inside a FormLayout', () => {
       expect(input).toHaveAttribute('aria-invalid', 'true');
     },
   );
+});
+
+describe('relative-date editor', () => {
+  it('lists its choices in the provider language', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{
+          fr: {
+            '@astryx.powersearch.sheet.relativeDaysAgo':
+              'il y a {count, number} {count, plural, one {jour} other {jours}}',
+          },
+        }}>
+        <PowerSearchValueEditor
+          operatorValue={{type: 'date_relative', isFutureAllowed: false}}
+          filterValue={{type: 'date_relative', value: '7d_ago'}}
+          onChange={() => {}}
+          config={stubConfig}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('combobox')).toHaveTextContent('il y a 7 jours');
+  });
 });

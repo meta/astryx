@@ -12,7 +12,8 @@
  *   draws the focus ring inset, following the elevated surface's rounded
  *   corner (also after Shift+Tab from the page start, and for as long as that
  *   focus stays when the content shrinks to fit), and pointer focus, the skip
- *   link's focus move and a script's focus() draw none; an
+ *   link's focus move and a script's focus() draw none; the skip link
+ *   leaves the URL hash alone on Enter and on a click; an
  *   overflowing main rounds its corner only while its ring shows; a main
  *   region that fits stays out of the tab order and keeps its square corner.
  * @position Cross-browser proof; jsdom has no layout, so AppShell.test.tsx can
@@ -239,6 +240,46 @@ test('the skip link moves focus to an overflowing main without drawing the ring'
     await main.evaluate(element => getComputedStyle(element).outlineStyle),
   ).toBe('none');
 });
+
+for (const activation of ['Enter', 'a click'] as const) {
+  test(`the skip link leaves the URL alone on ${activation}, so a hash router stays on its page`, async ({
+    page,
+  }) => {
+    await openStory(page, 'long-content');
+    await page.evaluate(() => {
+      window.history.replaceState(null, '', '#/orders/46');
+      const record = window as unknown as {hashChanges: number};
+      record.hashChanges = 0;
+      window.addEventListener('hashchange', () => {
+        record.hashChanges += 1;
+      });
+    });
+    const presses = await tabUntil(
+      page,
+      () =>
+        document.activeElement?.getAttribute('data-testid') ===
+        'skip-to-content',
+    );
+    expect(presses).toBeGreaterThan(0);
+    if (activation === 'Enter') {
+      await page.keyboard.press('Enter');
+    } else {
+      await page.getByTestId('skip-to-content').click();
+    }
+    // `hashchange` is a task the browser queues after the activation.
+    await page.waitForTimeout(100);
+    const after = await page.evaluate(() => ({
+      hash: window.location.hash,
+      hashChanges: (window as unknown as {hashChanges: number}).hashChanges,
+      focused: document.activeElement?.getAttribute('role'),
+    }));
+    expect(after).toEqual({
+      hash: '#/orders/46',
+      hashChanges: 0,
+      focused: 'main',
+    });
+  });
+}
 
 test("a script's focus on an overflowing main after keyboard input draws no ring", async ({
   page,

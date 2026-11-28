@@ -66,12 +66,12 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import {
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  ArrowDownTrayIcon,
+  SuccessIcon,
+  WarningIcon,
+  DownloadIcon,
   FlagIcon,
-} from '@heroicons/react/24/outline';
-import {StopIcon} from '@heroicons/react/24/solid';
+} from '@astryxdesign/template-icons';
+import {StopIcon} from '@astryxdesign/template-icons/24/solid';
 
 // ============= TYPES =============
 
@@ -142,9 +142,9 @@ const RAG_BADGE: Record<Rag, 'green' | 'yellow' | 'red'> = {
 // Leading icon for the program-status badge in the page header, the one badge
 // loud enough to earn one.
 const RAG_ICON: Record<Rag, IconType> = {
-  onTrack: CheckCircleIcon,
-  atRisk: ExclamationTriangleIcon,
-  blocked: ExclamationTriangleIcon,
+  onTrack: SuccessIcon,
+  atRisk: WarningIcon,
+  blocked: WarningIcon,
 };
 
 // Chart fills for RAG status: the data-viz semantic anchors, not the UI status
@@ -603,7 +603,7 @@ function ProgramHeader({
           <Button
             label="Export status"
             variant="secondary"
-            icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+            icon={<Icon icon={DownloadIcon} size="sm" />}
             onClick={() =>
               // Demo only: replace this toast with the call that performs the action.
               showToast({
@@ -984,7 +984,7 @@ function RisksPanel({risks}: {risks: Risk[]}) {
         <EmptyState
           title="No open blockers or risks"
           description="Nothing flagged for the selected phase. Keep it up."
-          icon={<Icon icon={CheckCircleIcon} size="lg" color="success" />}
+          icon={<Icon icon={SuccessIcon} size="lg" color="success" />}
           isCompact
         />
       ) : (

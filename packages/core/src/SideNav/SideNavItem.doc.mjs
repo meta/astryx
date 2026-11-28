@@ -26,12 +26,12 @@ export const docs = {
     {
       name: 'icon',
       type: 'ReactNode | IconType',
-      description: 'Icon displayed in the outline (unselected) variant; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+      description: 'Icon displayed in the outline (unselected) variant; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'selectedIcon',
       type: 'ReactNode | IconType',
-      description: 'Icon displayed when the item is selected (filled variant); pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+      description: 'Icon displayed when the item is selected (filled variant); pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'isSelected',
@@ -135,12 +135,12 @@ export const docsZh = {
     {
       name: 'icon',
       type: 'ReactNode | IconType',
-      description: '轮廓（未选中）变体中显示的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
+      description: '轮廓（未选中）变体中显示的图标；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'selectedIcon',
       type: 'ReactNode | IconType',
-      description: '选中时显示的图标（填充变体）；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
+      description: '选中时显示的图标（填充变体）；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'isSelected',
@@ -203,8 +203,8 @@ export const docsDense = {
   propDescriptions: {
     label: 'Item label.',
     as: 'Custom link component.',
-    icon: 'Icon displayed in outline (unselected) variant; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
-    selectedIcon: 'Icon displayed when item selected (filled variant); semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    icon: 'Icon displayed in outline (unselected) variant; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    selectedIcon: 'Icon displayed when item selected (filled variant); built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     isSelected: 'Marks this item as current page.',
     isDisabled: 'Disabled state.',
     href: 'Navigation URL.',

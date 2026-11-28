@@ -27,7 +27,9 @@ import {
   rewriteTemplatePreview,
 } from './template-icon-loader.mjs';
 import {optimizeTemplateImages} from './template-image-loader.mjs';
+import {fillTemplatePlaceholders} from '../../../packages/cli/foundation/discovery/template-placeholders.mjs';
 import {finishSnapshotHtml} from './lib/preview-snapshot-html.mjs';
+import {themesStorePhotoSources} from '../src/app/(site)/_landing/themesStorePhotos.mjs';
 
 const docsiteDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -53,10 +55,10 @@ export const CLIENT_NAVIGATION_FILE = path.join(
 );
 // The page template the themes card shows.
 const STORE_TEMPLATE = 'theme-showcase';
-const themeFontsFile = path.resolve(
-  docsiteDir,
-  '../../packages/themes/neutral/fonts.css',
-);
+// The hosted previews load the neutral theme's font from Google Fonts' CDN,
+// as an app that prefers it does.
+const THEME_FONTS_STYLESHEET =
+  'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap';
 const themesStoreModule = path.join(
   docsiteDir,
   'src/app/(site)/_landing/ThemesStorePreview',
@@ -70,9 +72,20 @@ const templatesDir = path.resolve(
   '../../packages/cli/assets/templates/pages',
 );
 
-// A tile shows its page at less than half size, so this width is enough on a
-// high-density screen. It must be a width the image optimizer allows.
-export const PREVIEW_IMAGE_WIDTH = 640;
+// A tile lays its page out at full size and scales the whole page down. It
+// draws a photo at about one fifth of the photo's layout size, so the largest
+// photo box of a tile sets this width, not the template's layout. The width
+// is a constant: the generator rewrites a URL in the template's source, and
+// has no `<img>` to give a `srcset` to. It must be a width the image
+// optimizer allows.
+export const PREVIEW_IMAGE_WIDTH = 384;
+
+/**
+ * How a preview whose markup the site takes is rendered: the site's own
+ * StyleX styles style it, so it keeps StyleX's class names instead of the
+ * short aliases whose rules only the file's own stylesheet holds.
+ */
+export const PREVIEW_MARKUP_RENDER = {keepClassNames: true};
 
 // The page fills the frame and never scrolls, as a live template preview
 // fills its tile: without this, a template taller than the frame shows a
@@ -96,7 +109,7 @@ const SOURCE_BLOCK =
  * The page's script, which the render puts after the embedded source. It
  * holds no closing script tag of its own: the render escapes that.
  */
-const PAGE_SCRIPT = /<script>[\s\S]*?<\/script>/u;
+const PAGE_SCRIPT = /<script(?: type="module")?>[\s\S]*?<\/script>/u;
 
 /**
  * The page that the renderer renders for a tile: the template inside the
@@ -118,18 +131,6 @@ export default function Preview() {
   );
 }
 `;
-}
-
-/**
- * The stylesheet URL that loads the theme's fonts, read from the theme's
- * `fonts.css`.
- * @param {string} fontsCss
- * @returns {string | null}
- */
-export function fontStylesheetOf(fontsCss) {
-  return (
-    /@import\s+url\(\s*['"]?([^'")]+)['"]?\s*\)/u.exec(fontsCss)?.[1] ?? null
-  );
 }
 
 /**
@@ -182,14 +183,16 @@ export default function Preview() {
  * without the embedded source that only `export --reverse` reads, or the
  * page's script. The site's
  * own stylesheet styles it, so the page's styles are not kept. Its images
- * load at low priority.
+ * load at low priority, from the sources that `imageSources` gives them.
  * @param {string} html
+ * @param {Parameters<typeof finishSnapshotHtml>[1]} [imageSources]
  * @returns {string}
  */
-export function previewMarkup(html) {
+export function previewMarkup(html, imageSources) {
   const body = /<body[^>]*>([\s\S]*)<\/body>/u.exec(html)?.[1] ?? '';
   return finishSnapshotHtml(
     body.replace(SOURCE_BLOCK, '').replace(PAGE_SCRIPT, '').trim(),
+    imageSources,
   );
 }
 
@@ -238,6 +241,10 @@ async function stageTemplateCopy({
         projectDir,
         list: iconSets,
       });
+    } else {
+      // A copy imports the library icon each placeholder names, not the
+      // private placeholder package.
+      source = fillTemplatePlaceholders(source).source;
     }
     fs.writeFileSync(path.join(copyDir, relative), source);
   }
@@ -275,9 +282,7 @@ async function main() {
   /** @type {string[]} */
   const slugs = JSON.parse(fs.readFileSync(rowsFile, 'utf8')).flat();
   const iconSets = previewIconSetList(process.env[ICON_SET_SETTING]);
-  const fontStylesheet = fontStylesheetOf(
-    fs.readFileSync(themeFontsFile, 'utf8'),
-  );
+  const fontStylesheet = THEME_FONTS_STYLESHEET;
   fs.rmSync(outDir, {recursive: true, force: true});
   fs.mkdirSync(outDir, {recursive: true});
   fs.rmSync(workDir, {recursive: true, force: true});
@@ -289,9 +294,10 @@ async function main() {
   /** @type {Record<string, string>} */
   const previews = {};
   const renderPage = async (id, pageDir) => {
-    await render('page.tsx', {cwd: pageDir, out: 'page.html'});
+    await render('page.tsx', {cwd: pageDir, out: 'page.html', ...PREVIEW_MARKUP_RENDER});
     previews[id] = previewMarkup(
       fs.readFileSync(path.join(pageDir, 'page.html'), 'utf8'),
+      themesStorePhotoSources,
     );
     console.log(
       `landing preview ${id} ${(previews[id].length / 1024).toFixed(0)} KB`,

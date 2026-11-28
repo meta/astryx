@@ -55,15 +55,58 @@ function normalizeReviewApp(value) {
   return /^[a-z0-9][a-z0-9-]*\[bot\]$/.test(login) ? login : '';
 }
 
+/**
+ * When a head was pushed: the later of its commit's committer date and the
+ * creation of its first check suite, as GitHub reports them; null when either
+ * cannot be read. GitHub re-binds older reviews to a new head (their
+ * `commit_id` names the new head), so only a review submitted at or after
+ * this time reviewed the head.
+ * @param {{github: any, owner: string, repo: string, sha: string}} input
+ * @returns {Promise<string | null>}
+ */
+async function readHeadPushedAt({github, owner, repo, sha}) {
+  try {
+    const {data: commit} = await github.rest.repos.getCommit({
+      owner,
+      repo,
+      ref: sha,
+    });
+    const committed = commit?.commit?.committer?.date;
+    if (!committed || !Number.isFinite(Date.parse(committed))) return null;
+    const {data: suites} = await github.rest.checks.listSuitesForRef({
+      owner,
+      repo,
+      ref: sha,
+      per_page: 100,
+    });
+    const created = (suites?.check_suites ?? [])
+      .map(suite => suite.created_at)
+      .filter(at => Number.isFinite(Date.parse(at ?? '')))
+      .sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+    return created && Date.parse(created) > Date.parse(committed)
+      ? created
+      : committed;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The code and design review state of a head from its reviews. A review
+ * counts only when it names the head and was submitted at or after
+ * `headPushedAt` (readHeadPushedAt); without a push time no review counts.
+ */
 function resolveReviewApprovals({
   reviews,
   headSha,
+  headPushedAt,
   engOwners,
   designOwners,
   reviewApp = '',
   authorHasWrite = false,
 }) {
   const app = normalizeReviewApp(reviewApp);
+  const pushedAt = Date.parse(headPushedAt ?? '');
   const latestByUser = new Map();
   let appState = null;
   for (const review of reviews) {
@@ -71,6 +114,10 @@ function resolveReviewApprovals({
     if (
       !login ||
       review.commit_id !== headSha ||
+      // A review submitted before the head was pushed is a re-bound review
+      // of an older head.
+      !Number.isFinite(pushedAt) ||
+      !(Date.parse(review.submitted_at ?? '') >= pushedAt) ||
       review.state === 'COMMENTED' ||
       !['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(review.state)
     ) {
@@ -178,10 +225,11 @@ function needsTrainerPass({author, reviewApp}) {
 }
 
 /** Whether an engineering owner's latest exact-head review approves. */
-function trainerPassed({reviews, headSha, engOwners}) {
+function trainerPassed({reviews, headSha, headPushedAt, engOwners}) {
   return resolveReviewApprovals({
     reviews,
     headSha,
+    headPushedAt,
     engOwners,
     designOwners: [],
   }).codeApproved;
@@ -410,6 +458,7 @@ module.exports = {
   needsTrainerPass,
   normalizeReviewApp,
   ownerRemovedLabelAtHead,
+  readHeadPushedAt,
   resolveReviewApprovals,
   trainerPassed,
 };

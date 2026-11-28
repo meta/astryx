@@ -9,7 +9,7 @@
  *   spreads, including the layer-root mark; also stopInReactTree
  * @position Internal to Layer; used by useLayer's renderers and the Dialog,
  *   Drawer, Lightbox, MobileNav, BottomSheetPanel and ToastViewport roots.
- *   Not exported from the package.
+ *   Not in the package entry; internal/tour re-exports it.
  *
  * A press that starts inside a layer runs the handlers inside the layer and
  * the root's own, then stops propagating through the React tree, so no

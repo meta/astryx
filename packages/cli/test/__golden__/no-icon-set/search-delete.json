@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "delete",
-    "matchCount": 21,
+    "matchCount": 23,
     "results": [
       {
         "domain": "component",
@@ -52,15 +52,14 @@
       },
       {
         "domain": "doc",
-        "name": "global/uninstall",
+        "name": "cli/api/functions/theme-remove",
         "package": "@astryxdesign/cli",
         "score": "<text>",
         "reason": "<text>",
         "description": "<text>",
-        "section": "<text>",
         "title": "<text>",
-        "command": "astryx docs global/uninstall reset",
-        "parent": "astryx docs global/uninstall --index",
+        "command": "astryx docs cli/api/functions/theme-remove",
+        "parent": "astryx docs cli/api/functions",
         "mentions": []
       },
       {
@@ -73,6 +72,18 @@
         "title": "<text>",
         "command": "astryx docs cli/api/functions/theme-template",
         "parent": "astryx docs cli/api/functions",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "cli/commands/theme-remove",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs cli/commands/theme-remove",
+        "parent": "astryx docs cli/commands",
         "mentions": []
       },
       {
@@ -123,6 +134,19 @@
         "section": "<text>",
         "title": "<text>",
         "command": "astryx docs global/uninstall agent-guide",
+        "parent": "astryx docs global/uninstall --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "global/uninstall",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs global/uninstall reset",
         "parent": "astryx docs global/uninstall --index",
         "mentions": []
       },
@@ -226,28 +250,6 @@
         "description": "<text>",
         "import": "@astryxdesign/core/Button",
         "command": "astryx component Button",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "ButtonGroup",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/ButtonGroup",
-        "command": "astryx component ButtonGroup",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "IconButton",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/IconButton",
-        "command": "astryx component IconButton",
         "mentions": []
       }
     ]

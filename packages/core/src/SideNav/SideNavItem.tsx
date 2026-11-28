@@ -87,6 +87,7 @@ import {
 import english from '../i18n/generated-english/SideNav/SideNavItem.generated';
 import {isRenderable} from '../utils/isRenderable';
 import {createSharedContext} from '../utils/sharedContext';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -175,8 +176,11 @@ const styles = stylex.create({
   // No inline padding: nested rows fill the full width of the nav list, and
   // each row carries its own indent (`indentStyles` below). `minHeight: 0`
   // lets the 0fr track shrink this item to nothing; the group clips it.
+  // `minWidth: 0` keeps the track at the list's width, so a long label
+  // truncates instead of widening the open group past the nav.
   childrenInner: {
     minHeight: 0,
+    minWidth: 0,
   },
   expandChevron: {
     display: 'inline-flex',
@@ -191,7 +195,7 @@ const styles = stylex.create({
     fontSize: 'inherit',
     transitionProperty: 'transform',
     transitionDuration: {
-      default: durationVars['--duration-fast'],
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
@@ -575,16 +579,31 @@ export function SideNavItem({
   // so it is held shut whenever the item is not a collapsed leaf: a tooltip
   // open when the rail expands must not come back on the next collapse.
   const isRailLeaf = isCollapsed && !hasChildren;
+  // A collapsed item with children shows the same label tooltip on keyboard
+  // focus only. A hover opens its flyout instead, and the tooltip closes when
+  // the flyout opens.
+  const isRailGroup = isCollapsed && hasChildren;
+  const [isGroupLabelShown, setIsGroupLabelShown] = useState(false);
+  const showGroupLabel = useCallback(() => setIsGroupLabelShown(true), []);
+  const hideGroupLabel = useCallback(() => setIsGroupLabelShown(false), []);
   const railTooltip = useTooltip({
     placement: 'end',
     // A disabled leaf's row is the trigger (see the collapsed path). It is not
     // focusable itself, so `auto` would never hear the focus that bubbles up
     // from its control.
     focusTrigger: 'always',
-    isEnabled: isRailLeaf,
-    isOpen: isRailLeaf ? undefined : false,
+    isEnabled: isRailLeaf || isRailGroup,
+    isOpen: isRailLeaf
+      ? undefined
+      : isRailGroup && isGroupLabelShown && !popover.isOpen,
+    // The tooltip reports a focus that would show it while it is held shut.
+    onShow: isRailGroup ? showGroupLabel : undefined,
+    // The tooltip reports each hide here, Escape included. Clear the request,
+    // so only the next keyboard focus shows the label.
+    onHide: hideGroupLabel,
   });
   const railLeafRef = useMergedRefs(ref, railTooltip.ref);
+  const railGroupRef = useMergedRefs(mergedTriggerRef, railTooltip.ref);
 
   // The row's root registers with its SideNav, so a collapse that removes the
   // focused row can hand focus to the toggle or the nearest row still in the
@@ -724,16 +743,25 @@ export function SideNavItem({
       return (
         <div ref={rowRef} {...stylex.props(styles.root, xstyle)}>
           <button
-            ref={mergedTriggerRef}
+            ref={railGroupRef}
             type="button"
             {...rest}
             {...hoverTriggerProps}
             aria-label={collapsedAccessibleLabel}
+            aria-describedby={joinIds(
+              rest['aria-describedby'],
+              railTooltip.describedBy,
+            )}
             data-testid={testId}
             {...popover.triggerProps}
-            {...collapsedItemStyles}>
+            {...collapsedItemStyles}
+            onBlur={event => {
+              rest.onBlur?.(event);
+              setIsGroupLabelShown(false);
+            }}>
             {collapsedIcon}
           </button>
+          {railTooltip.renderTooltip(label)}
           {popover.render(
             <div
               {...stylex.props(styles.popoverSurface)}

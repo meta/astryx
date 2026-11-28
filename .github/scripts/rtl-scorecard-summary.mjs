@@ -189,6 +189,24 @@ if (!fs.existsSync(reportPath)) {
       out.push('');
     }
   }
+  // Receipt drift is informational: it lists receipts whose recorded bytes no
+  // longer match the checkout, and changes no coverage status.
+  const drift = r.receiptDrift;
+  if (drift && drift.drifted.length > 0) {
+    out.push('### Receipt drift (informational)');
+    out.push('');
+    out.push(
+      `${drift.drifted.length} of ${drift.checked} receipted verified-N/A declarations no longer match their recorded files. Coverage status is unchanged. Re-review each component's source and stories, then refresh its receipts.`,
+    );
+    out.push('');
+    out.push('| Component | Changed | Missing | Malformed |');
+    out.push('|-----------|---------|---------|-----------|');
+    for (const entry of drift.drifted)
+      out.push(
+        `| ${markdownCell(entry.component)} | ${markdownCell(entry.changed.join(', '))} | ${markdownCell(entry.missing.join(', '))} | ${markdownCell(entry.malformed.join(', '))} |`,
+      );
+    out.push('');
+  }
   // Stories whose scan threw and ran once more on a fresh page. The last
   // line is the one a log search counts across runs.
   const retried = r.retries?.stories ?? [];

@@ -1844,6 +1844,51 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it("check 9 names the next/font fix for a local theme in a next/font app, and keeps a package theme's <link> fix", async () => {
+    const nextFontLayout = from =>
+      `import {Geist} from '${from}';\nconst geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n`;
+
+    // A package theme's family is not the app's to change, so its fix stays.
+    const pkg = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(pkg.dir, 'app/layout.tsx'),
+      nextFontLayout('next/font/google'),
+    );
+    const pkgCheck = check(await checkAppThemes(pkg.dir), 'theme-fonts');
+    expect(pkgCheck.status).toBe('warn');
+    expect(pkgCheck.fix).toContain('fonts.googleapis.com');
+    expect(pkgCheck.fix).not.toContain('next/font');
+
+    // The app owns a local theme's family: the next/font fix replaces the
+    // font stylesheet step.
+    const local = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(local.dir, 'src/app/layout.tsx'),
+      nextFontLayout('next/font/local'),
+    );
+    await themeEject('ocean', {cwd: local.dir, package: '@acme/themes'});
+    await themeBuild(
+      path.join(local.dir, 'src/themes/ocean/oceanTheme.ts'),
+      {},
+      {cwd: local.dir},
+    );
+    await themeAdd('ocean', {cwd: local.dir, import: true});
+    const localCheck = check(await checkAppThemes(local.dir), 'theme-fonts');
+    expect(localCheck.status).toBe('warn');
+    expect(localCheck.fix).toContain('This app loads fonts with next/font');
+    expect(localCheck.fix).toContain('docs font-setup');
+    expect(localCheck.fix).not.toContain('.fonts.css');
+
+    // A commented import is no next/font app: the stylesheet step comes back.
+    write(
+      path.join(local.dir, 'src/app/layout.tsx'),
+      "// import {Geist} from 'next/font/local';\nexport default function RootLayout({children}) {\n  return <html><body>{children}</body></html>;\n}\n",
+    );
+    const plain = check(await checkAppThemes(local.dir), 'theme-fonts');
+    expect(plain.fix).toContain('.fonts.css');
+    expect(plain.fix).not.toContain('next/font');
+  });
+
   it('check 9 reads a Next.js root layout, and never a commented link or a preload', async () => {
     const layout = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
     write(
@@ -2073,7 +2118,7 @@ describe('app-theme doctor checks', () => {
     }
   });
 
-  it('check 9 still warns for a family the font service URL does not name', async () => {
+  it('check 9 warns, naming it, for a family the font service URL does not name', async () => {
     const {dir} = await fixture([
       {
         slug: 'ocean',
@@ -2085,8 +2130,30 @@ describe('app-theme doctor checks', () => {
 
     expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
       status: 'warn',
-      message: 'External font imports prevent proof for ocean: Ocean Sans.',
+      message:
+        'The font service stylesheet each theme imports does not name ocean: Ocean Sans.',
     });
+  });
+
+  it('check 9 names the package that loads an open font the font service URL does not name', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'JetBrains Mono',
+        fontCss:
+          "@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;700&display=swap');\n",
+      },
+    ]);
+
+    const result = check(await checkAppThemes(dir), 'theme-fonts');
+    expect(result).toMatchObject({
+      status: 'warn',
+      message:
+        'The font service stylesheet each theme imports does not name ocean: JetBrains Mono.',
+    });
+    expect(result.fix).toMatch(
+      /install the packages that load them \(.*@fontsource\/jetbrains-mono\)/,
+    );
   });
 
   it('check 9 follows a local font import, a relative file or a package stylesheet, and proves its families', async () => {

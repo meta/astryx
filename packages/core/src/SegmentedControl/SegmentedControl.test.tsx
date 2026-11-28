@@ -13,7 +13,7 @@
  */
 
 import {StrictMode, useState} from 'react';
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {
   act,
   cleanup,
@@ -27,10 +27,12 @@ import {hasPressedArm} from '../__tests__/pressState';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {SegmentedControl} from './SegmentedControl';
 import {SegmentedControlItem} from './SegmentedControlItem';
+import {SizeProvider} from '../SizeContext/SizeContext';
 import {
   getAllInjectedCss,
   getForcedColorsRules,
 } from '../__tests__/forcedColors';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // Mock showPopover/hidePopover (not implemented in jsdom) so the tooltip layer
 // reflects its open state via a `popover-open` attribute the tests can assert.
@@ -60,6 +62,22 @@ beforeEach(() => {
 });
 
 describe('SegmentedControl', () => {
+  it('gives a Latin label its own direction, so a cut label keeps its start, and gives a right-to-left label its own right-to-left direction', () => {
+    render(
+      <div dir="rtl">
+        <SegmentedControl value="month" onChange={() => {}} label="Range">
+          <SegmentedControlItem value="month" label="Monthly" />
+          <SegmentedControlItem value="week" label="שבועי" />
+          <SegmentedControlItem value="new" label="iPhone جديد" />
+        </SegmentedControl>
+      </div>,
+    );
+    expect(screen.getByText('Monthly')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('שבועי')).toHaveAttribute('dir', 'rtl');
+    expect(screen.getByText('iPhone جديد')).not.toHaveAttribute('dir');
+    expect(screen.getByRole('radio', {name: 'Monthly'})).toBeTruthy();
+  });
+
   it('calls onChange when an item is clicked', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
@@ -680,6 +698,38 @@ describe('SegmentedControl disabled state', () => {
     expect(handleChange).not.toHaveBeenCalled();
   });
 
+  it('never calls onChange while disabled, whatever the input', async () => {
+    const user = userEvent.setup({pointerEventsCheck: 0});
+    const handleChange = vi.fn();
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={handleChange}
+        label="View mode"
+        isDisabled>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" />
+        <SegmentedControlItem value="board" label="Board" />
+      </SegmentedControl>,
+    );
+    const grid = screen.getByRole('radio', {name: 'Grid'});
+    const list = screen.getByRole('radio', {name: 'List'});
+    const board = screen.getByRole('radio', {name: 'Board'});
+
+    // Keyboard: Tab in, then every navigation key.
+    await user.tab();
+    expect(grid).toHaveFocus();
+    await user.keyboard('{ArrowRight}{ArrowLeft}{End}{Home}{ArrowDown}');
+    // Mouse and touch taps on other segments.
+    await user.click(list);
+    fireEvent.pointerDown(board, {pointerType: 'touch'});
+    fireEvent.pointerUp(board, {pointerType: 'touch'});
+    fireEvent.click(board);
+
+    expect(handleChange).not.toHaveBeenCalled();
+    expect(grid).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('disables individual items', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
@@ -823,21 +873,24 @@ describe('SegmentedControl disabled state', () => {
 
     it('shows the reason tooltip on hover when the control is disabled with a reason', async () => {
       renderControl();
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('Choose a project to switch views');
+      const tooltip = () => getTooltip();
+      expect(tooltip()).toHaveTextContent('Choose a project to switch views');
       const group = screen.getByRole('radiogroup');
       fireEvent.mouseEnter(group);
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      fireEvent.pointerMove(group);
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(group);
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(tooltip()).not.toHaveAttribute('popover-open'),
+      );
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderControl();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       await user.tab();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -983,7 +1036,7 @@ describe('SegmentedControl disabled state', () => {
     it('opens the reason on a tap and selects nothing', async () => {
       const onChange = vi.fn();
       renderControl({onChange});
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltip();
       const list = screen.getByRole('radio', {name: 'List'});
       // A tap, in the order a browser dispatches it.
       fireEvent.pointerEnter(list, {pointerType: 'touch'});
@@ -991,7 +1044,7 @@ describe('SegmentedControl disabled state', () => {
       fireEvent.pointerUp(list, {pointerType: 'touch'});
       fireEvent.mouseEnter(list);
       fireEvent.click(list);
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       expect(onChange).not.toHaveBeenCalled();
     });
   });
@@ -1057,6 +1110,98 @@ describe('SegmentedControl data-testid forwarding', () => {
       'role',
       'radiogroup',
     );
+  });
+});
+
+describe('SegmentedControl resource budget (PR1)', () => {
+  type Registration = [EventTarget, string, EventListenerOrEventListenerObject];
+
+  /** The listeners currently attached to window and document. */
+  function trackGlobalListeners(): {
+    current: () => number;
+    restore: () => void;
+  } {
+    const live: Registration[] = [];
+    const spies = [window, document].flatMap(target => {
+      const add = target.addEventListener.bind(target);
+      const remove = target.removeEventListener.bind(target);
+      return [
+        vi
+          .spyOn(target, 'addEventListener')
+          .mockImplementation((type, listener, options) => {
+            if (listener != null) {
+              live.push([target, type, listener]);
+            }
+            add(type, listener, options);
+          }),
+        vi
+          .spyOn(target, 'removeEventListener')
+          .mockImplementation((type, listener, options) => {
+            const index = live.findIndex(
+              ([t, ty, l]) => t === target && ty === type && l === listener,
+            );
+            if (index !== -1) {
+              live.splice(index, 1);
+            }
+            remove(type, listener, options);
+          }),
+      ];
+    });
+    return {
+      current: () => live.length,
+      restore: () => spies.forEach(spy => spy.mockRestore()),
+    };
+  }
+
+  function Controls({count}: {count: number}) {
+    return (
+      <>
+        {Array.from({length: count}, (_, index) => (
+          <SegmentedControl
+            key={index}
+            value="grid"
+            onChange={() => {}}
+            label={`View mode ${index}`}>
+            <SegmentedControlItem value="grid" label="Grid" />
+            <SegmentedControlItem value="list" label="List" />
+          </SegmentedControl>
+        ))}
+      </>
+    );
+  }
+
+  it('adds no window or document listener per control', () => {
+    const listeners = trackGlobalListeners();
+    try {
+      const {rerender} = render(<Controls count={1} />);
+      const withOne = listeners.current();
+      rerender(<Controls count={6} />);
+      expect(listeners.current()).toBe(withOne);
+    } finally {
+      listeners.restore();
+    }
+  });
+
+  it('leaves no window or document listener behind after a press', () => {
+    const listeners = trackGlobalListeners();
+    try {
+      render(<Controls count={3} />);
+      const press = (segment: HTMLElement) => {
+        fireEvent.pointerDown(segment, {pointerType: 'mouse', button: 0});
+        fireEvent.pointerUp(segment, {pointerType: 'mouse', button: 0});
+        fireEvent.click(segment);
+      };
+      const segments = screen.getAllByRole('radio', {name: 'List'});
+      // The first press installs the page's shared listeners, once.
+      press(segments[0]);
+      const shared = listeners.current();
+      for (const segment of [...segments, segments[0]]) {
+        press(segment);
+      }
+      expect(listeners.current()).toBe(shared);
+    } finally {
+      listeners.restore();
+    }
   });
 });
 
@@ -1361,6 +1506,49 @@ describe('selection motion', () => {
       spy.mockRestore();
     }
   });
+
+  it('starts no animation in the commit that mounts it; the first change holds the leaving surface', () => {
+    // jsdom has no Web Animations. This records each animation that starts.
+    const started: {element: HTMLElement; pseudoElement?: string | null}[] = [];
+    HTMLElement.prototype.animate = function (
+      this: HTMLElement,
+      _keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      started.push({
+        element: this,
+        pseudoElement:
+          typeof options === 'object' ? options.pseudoElement : undefined,
+      });
+      return {
+        finished: new Promise<void>(() => {}),
+        cancel: () => {},
+        startTime: null,
+      } as unknown as Animation;
+    };
+    try {
+      const ui = (value: string) => (
+        <SegmentedControl value={value} onChange={() => {}} label="View">
+          <SegmentedControlItem value="grid" label="Grid" />
+          <SegmentedControlItem value="list" label="List" />
+        </SegmentedControl>
+      );
+      const {rerender} = render(ui('grid'));
+      // A new animation resolves style, which the mount commit must not do.
+      expect(started).toEqual([]);
+
+      rerender(ui('list'));
+      const group = screen.getByRole('radiogroup');
+      expect(
+        started.filter(
+          ({element, pseudoElement}) =>
+            element === group && pseudoElement === '::after',
+        ),
+      ).toHaveLength(1);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'animate');
+    }
+  });
 });
 
 describe("SegmentedControl keeps a caller's aria-describedby", () => {
@@ -1406,5 +1594,186 @@ describe("SegmentedControl keeps a caller's aria-describedby", () => {
     expect(document.getElementById(ids?.[1] ?? '')).toHaveTextContent(
       'Choose a project to switch views',
     );
+  });
+});
+
+describe('SegmentedControl target, size and ref (FR1, FR6, FR8)', () => {
+  function Control(props: {size?: 'sm' | 'md' | 'lg'}) {
+    return (
+      <SegmentedControl
+        value="grid"
+        onChange={() => {}}
+        label="View mode"
+        {...props}>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>
+    );
+  }
+
+  function sizes() {
+    return [
+      screen.getByRole('radiogroup').getAttribute('data-size'),
+      ...screen
+        .getAllByRole('radio')
+        .map(segment => segment.getAttribute('data-size')),
+    ];
+  }
+
+  it('puts the segmented-control target and data-size on the radiogroup', () => {
+    render(<Control />);
+    const group = screen.getByRole('radiogroup', {name: 'View mode'});
+    expect(group.className).toContain('astryx-segmented-control');
+    expect(group).toHaveAttribute('data-size', 'md');
+  });
+
+  it('resolves size from the prop, then the nearest provider, then md, and gives it to every segment', () => {
+    const {rerender} = render(<Control />);
+    expect(sizes()).toEqual(['md', 'md', 'md']);
+    rerender(
+      <SizeProvider value="lg">
+        <Control />
+      </SizeProvider>,
+    );
+    expect(sizes()).toEqual(['lg', 'lg', 'lg']);
+    rerender(
+      <SizeProvider value="lg">
+        <Control size="sm" />
+      </SizeProvider>,
+    );
+    expect(sizes()).toEqual(['sm', 'sm', 'sm']);
+  });
+
+  it('connects ref to the radiogroup', () => {
+    const ref = {current: null as HTMLDivElement | null};
+    render(
+      <SegmentedControl
+        ref={ref}
+        value="grid"
+        onChange={() => {}}
+        label="View mode">
+        <SegmentedControlItem value="grid" label="Grid" />
+      </SegmentedControl>,
+    );
+    expect(ref.current).toBe(screen.getByRole('radiogroup'));
+  });
+});
+
+describe('SegmentedControl focus handlers cannot cancel built-in focus behavior (FR4)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function treatFocusAsKeyboardFocus() {
+    const matches = HTMLElement.prototype.matches;
+    vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
+      this: HTMLElement,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : matches.call(this, selector);
+    });
+  }
+
+  function hintIsOpen() {
+    return document.querySelector('[popover="manual"][popover-open]') != null;
+  }
+
+  it('runs a caller onFocus before selection follows focus', async () => {
+    const user = userEvent.setup();
+    const calls: string[] = [];
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={value => calls.push(`change ${value}`)}
+        label="View mode"
+        onFocus={() => calls.push('focus')}>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>,
+    );
+    screen.getByRole('radio', {name: 'Grid'}).focus();
+    calls.length = 0;
+    await user.keyboard('{ArrowRight}');
+    expect(calls).toEqual(['focus', 'change list']);
+  });
+
+  it('keeps selection following focus when a caller onFocus calls preventDefault', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={onChange}
+        label="View mode"
+        onFocus={e => e.preventDefault()}>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>,
+    );
+    screen.getByRole('radio', {name: 'Grid'}).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onChange).toHaveBeenCalledWith('list');
+  });
+
+  it('keeps selection following focus when a segment onFocus calls preventDefault', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl value="grid" onChange={onChange} label="View mode">
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem
+          value="list"
+          label="List"
+          onFocus={e => e.preventDefault()}
+        />
+      </SegmentedControl>,
+    );
+    screen.getByRole('radio', {name: 'Grid'}).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onChange).toHaveBeenCalledWith('list');
+  });
+
+  it('still shows the keyboard hint when a caller onFocus calls preventDefault', () => {
+    treatFocusAsKeyboardFocus();
+    render(
+      <>
+        <button type="button">before</button>
+        <SegmentedControl
+          value="grid"
+          onChange={() => {}}
+          label="View mode"
+          onFocus={e => e.preventDefault()}>
+          <SegmentedControlItem value="grid" label="Grid" />
+          <SegmentedControlItem value="list" label="List" />
+        </SegmentedControl>
+      </>,
+    );
+    screen.getByText('before').focus();
+    act(() => screen.getByRole('radio', {name: 'Grid'}).focus());
+    expect(hintIsOpen()).toBe(true);
+  });
+
+  it('still closes the keyboard hint on blur when a caller onBlur calls preventDefault', () => {
+    treatFocusAsKeyboardFocus();
+    render(
+      <>
+        <button type="button">before</button>
+        <SegmentedControl
+          value="grid"
+          onChange={() => {}}
+          label="View mode"
+          onBlur={e => e.preventDefault()}>
+          <SegmentedControlItem value="grid" label="Grid" />
+          <SegmentedControlItem value="list" label="List" />
+        </SegmentedControl>
+      </>,
+    );
+    screen.getByText('before').focus();
+    act(() => screen.getByRole('radio', {name: 'Grid'}).focus());
+    expect(hintIsOpen()).toBe(true);
+    act(() => screen.getByText('before').focus());
+    expect(hintIsOpen()).toBe(false);
   });
 });

@@ -1,8 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {describe, it, expect, vi} from 'vitest';
+import {fireEvent, render, screen} from '@testing-library/react';
+import * as stylex from '@stylexjs/stylex';
 import {Section} from './Section';
+
+const callerStyles = stylex.create({
+  inset: {marginBlockStart: 7, outlineWidth: 3},
+});
 
 /**
  * The functional class output, as an order-insensitive set. StyleX's dev
@@ -142,6 +147,7 @@ describe('Section', () => {
     );
     const root = container.firstElementChild!;
     expect(root.className).toContain('custom-class');
+    expect(root.firstElementChild!.className).not.toContain('custom-class');
   });
 
   it('accepts style prop', () => {
@@ -150,6 +156,7 @@ describe('Section', () => {
     );
     const root = container.firstElementChild as HTMLElement;
     expect(root.style.opacity).toBe('0.5');
+    expect((root.firstElementChild as HTMLElement).style.opacity).toBe('');
   });
 
   it('has two-div structure (outer + inner)', () => {
@@ -165,6 +172,86 @@ describe('Section', () => {
   it('spreads additional props', () => {
     render(<Section data-testid="custom-section">Content</Section>);
     expect(screen.getByTestId('custom-section')).toBeInTheDocument();
+  });
+
+  it('forwards ref to the outer wrapper, not the painted container', () => {
+    const ref = {current: null as HTMLElement | null};
+    const {container} = render(<Section ref={ref}>Content</Section>);
+    expect(ref.current).toBe(container.firstElementChild);
+    expect(ref.current!.firstElementChild!.className).toContain(
+      'astryx-section',
+    );
+  });
+
+  it('routes DOM, data, ARIA and event props to the outer wrapper only', () => {
+    const onClick = vi.fn((event: React.MouseEvent<HTMLElement>) => {
+      handledBy = event.currentTarget;
+    });
+    let handledBy: EventTarget | null = null;
+    const {container} = render(
+      <Section
+        id="region"
+        role="region"
+        aria-label="Billing"
+        data-testid="billing"
+        onClick={onClick}>
+        Content
+      </Section>,
+    );
+    const outer = container.firstElementChild as HTMLElement;
+    const inner = outer.firstElementChild as HTMLElement;
+    expect(screen.getByRole('region', {name: 'Billing'})).toBe(outer);
+    expect(screen.getByTestId('billing')).toBe(outer);
+    expect(outer).toHaveAttribute('id', 'region');
+    for (const name of ['id', 'role', 'aria-label', 'data-testid']) {
+      expect(inner).not.toHaveAttribute(name);
+    }
+    fireEvent.click(inner);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(handledBy).toBe(outer);
+  });
+
+  it('gives the sizing props to the outer wrapper, not the painted container', () => {
+    const {container} = render(
+      <Section width={400} height={300} maxWidth={500} minHeight={200}>
+        Content
+      </Section>,
+    );
+    const outer = container.firstElementChild as HTMLElement;
+    const inner = outer.firstElementChild as HTMLElement;
+    const outerStyle = outer.getAttribute('style') ?? '';
+    for (const size of ['400px', '300px', '500px', '200px']) {
+      expect(outerStyle).toContain(size);
+    }
+    expect(inner.getAttribute('style') ?? '').not.toMatch(/\d+px/);
+  });
+
+  it('gives the xstyle classes to the outer wrapper, not the painted container', () => {
+    const {container} = render(
+      <Section xstyle={callerStyles.inset}>Content</Section>,
+    );
+    const outer = container.firstElementChild as HTMLElement;
+    const inner = outer.firstElementChild as HTMLElement;
+    const caller = (stylex.props(callerStyles.inset).className ?? '')
+      .split(' ')
+      .filter(c => c !== '' && !c.includes('__') && !c.includes('.'));
+    expect(caller.length).toBeGreaterThan(0);
+    for (const name of caller) {
+      expect(classSet(outer)).toContain(name);
+      expect(classSet(inner)).not.toContain(name);
+    }
+  });
+
+  it('adds no role, name, or tab stop of its own', () => {
+    const {container} = render(<Section>Content</Section>);
+    const outer = container.firstElementChild as HTMLElement;
+    const inner = outer.firstElementChild as HTMLElement;
+    for (const element of [outer, inner]) {
+      expect(element.tagName).toBe('DIV');
+      expect(element).not.toHaveAttribute('role');
+      expect(element).not.toHaveAccessibleName();
+      expect(element).not.toHaveAttribute('tabindex');
+    }
   });
 
   it('propagates explicit padding to nested sections via --_section-padding-propagated', () => {

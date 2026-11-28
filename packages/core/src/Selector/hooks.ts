@@ -148,13 +148,11 @@ function measureSelectedItem(
   let isAboveAnchor = false;
   if (layer != null) {
     const layerStyle = getComputedStyle(layer);
-    // The position area's block keyword names the side the browser chose:
-    // its block-start side once a fallback flipped the layer. An engine
-    // without anchor positioning reads an empty string here.
-    const [blockArea = ''] = layerStyle
-      .getPropertyValue('position-area')
-      .split(' ');
-    isAboveAnchor = /start$|^top$/.test(blockArea);
+    // The layer opens below its anchor and aligns its block-start edge
+    // toward it. A block flip mirrors that self alignment, so the computed
+    // value names the block end once a fallback flipped the layer. An engine
+    // without anchor positioning keeps the block-start value.
+    isAboveAnchor = layerStyle.alignSelf.endsWith('self-end');
     blockEndGutter = Math.max(
       0,
       parseFloat(
@@ -240,6 +238,11 @@ export function useSelectedItemOffset({
 interface SelectedItemOverlayMargin {
   marginBlockStart: string | undefined;
   isPositioned: boolean;
+  /**
+   * Measures the margin again. The layer runtime calls it after a scroll stop
+   * places the list afresh, because the browser may then have flipped it.
+   */
+  remeasure: () => void;
 }
 
 /**
@@ -258,6 +261,12 @@ export function useSelectedItemOverlayMargin({
   const [marginBlockStart, setMarginBlockStart] = useState<string>();
   const [isPositioned, setIsPositioned] = useState(false);
   const [listboxResizes, setListboxResizes] = useState(0);
+  // A flip changes which margin applies, and the next frame must not show the
+  // old one.
+  const remeasure = useCallback(() => {
+    // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the margin must change before the frame paints
+    flushSync(() => setListboxResizes(count => count + 1));
+  }, []);
 
   // The open list measures again when its own box resizes. An option that
   // grows or shrinks moves the selected row. The report comes before paint.
@@ -339,7 +348,7 @@ export function useSelectedItemOverlayMargin({
     }
   }, [isOpen, isPositioned, listboxRef, anchorRef]);
 
-  return {marginBlockStart, isPositioned};
+  return {marginBlockStart, isPositioned, remeasure};
 }
 
 // =============================================================================
@@ -381,6 +390,30 @@ interface UseComboboxOptions<T extends ComboboxOption> {
   onSearchSeed?: (char: string) => void;
   listboxId: string;
 }
+
+// The options Selector's own trigger passes: those of the public hook, and
+// whether the open list is in the document.
+interface UseComboboxInternalOptions<
+  T extends ComboboxOption,
+> extends UseComboboxOptions<T> {
+  /**
+   * Whether the open list is in the document. False while an open waits for
+   * its surface to load. A second press, Enter, Space and the highlight keys
+   * then leave that open as it is.
+   * Defaults to `isOpen`.
+   */
+  isListShown?: boolean;
+}
+
+/** The keys that move the highlight across the options of an open list. */
+const HIGHLIGHT_KEYS: ReadonlySet<string> = new Set([
+  'ArrowDown',
+  'ArrowUp',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+]);
 
 /** Spread onto the caller's field. */
 interface ComboboxFieldProps {
@@ -451,10 +484,23 @@ function hasModifier(e: React.KeyboardEvent): boolean {
  * through useAnnounce (spec:AST-075 DEC-2), with the words the field shows.
  */
 export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
+  ...options
+}: UseComboboxOptions<T>): UseComboboxResult<T> {
+  return useComboboxInternal(options);
+}
+
+/**
+ * `useCombobox` with Selector's held open: an open whose list is not in the
+ * document yet. Internal; not exported from the package.
+ */
+export function useComboboxInternal<
+  T extends ComboboxOption = SelectorOptionData,
+>({
   selectableItems,
   value,
   isDisabled = false,
   isOpen,
+  isListShown = isOpen,
   hasSearch = false,
   onOpen,
   onClose,
@@ -462,7 +508,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
   onClear,
   onSearchSeed,
   listboxId,
-}: UseComboboxOptions<T>): UseComboboxResult<T> {
+}: UseComboboxInternalOptions<T>): UseComboboxResult<T> {
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
 
   const getItemId = useCallback(
@@ -512,6 +558,10 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     if (isDisabled) {
       return;
     }
+    if (isOpen && !isListShown) {
+      // The held open stays: a second press repeats it.
+      return;
+    }
     if (isOpen) {
       closeAndReset();
     } else {
@@ -520,7 +570,15 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
         setHighlightedIndex(findOpeningIndex(false));
       }
     }
-  }, [isDisabled, isOpen, onOpen, closeAndReset, findOpeningIndex, hasSearch]);
+  }, [
+    isDisabled,
+    isOpen,
+    isListShown,
+    onOpen,
+    closeAndReset,
+    findOpeningIndex,
+    hasSearch,
+  ]);
 
   // The scroll effect lives here, the highlight owner, so every consumer
   // (Selector, CommandPalette) shares one hover/keyboard split (#6077).
@@ -543,6 +601,13 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (isDisabled) {
+        return;
+      }
+
+      // While an open waits for its list, no option shows. The open keeps its
+      // opening option.
+      if (isOpen && !isListShown && HIGHLIGHT_KEYS.has(e.key)) {
+        e.preventDefault();
         return;
       }
 
@@ -587,6 +652,10 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
         // falls through
         case 'Enter':
           e.preventDefault();
+          if (isOpen && !isListShown) {
+            // The held open stays, and nothing unseen is picked.
+            break;
+          }
           if (isOpen && highlightedIndex >= 0) {
             const item = selectableItems[highlightedIndex];
             if (item && !item.disabled) {
@@ -677,6 +746,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     [
       isDisabled,
       isOpen,
+      isListShown,
       onOpen,
       closeAndReset,
       selectableItems,

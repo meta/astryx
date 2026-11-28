@@ -140,27 +140,6 @@ function threeD(React, mod, Pkg, child) {
   );
 }
 
-function tour(React, Tour, TourStep) {
-  const h = React.createElement;
-  function Sample() {
-    const a = React.useRef(null);
-    const b = React.useRef(null);
-    return h(
-      React.Fragment,
-      null,
-      h('button', {type: 'button', ref: a}, 'Target A'),
-      h('button', {type: 'button', ref: b}, 'Target B'),
-      h(
-        Tour,
-        {isActive: true, onDismiss: noop},
-        h(TourStep, {targetRef: a, heading: 'First'}, 'First body'),
-        h(TourStep, {targetRef: b, heading: 'Second'}, 'Second body'),
-      ),
-    );
-  }
-  return h(Sample);
-}
-
 function navigation(React, Stack, Screen) {
   const h = React.createElement;
   return h(Stack, {
@@ -177,6 +156,18 @@ function navigation(React, Stack, Screen) {
   });
 }
 
+/** A media part inside a player from the same copy, so it reads that player. */
+function mediaPart(React, mod, Pkg, part) {
+  const h = React.createElement;
+  const MediaPlayer = mod.MediaPlayer ?? Pkg.MediaPlayer;
+  const MediaPlayerElement = mod.MediaPlayerElement ?? Pkg.MediaPlayerElement;
+  return h(
+    MediaPlayer,
+    {label: 'Clip'},
+    h(MediaPlayerElement, {kind: 'video', src: '/clip.mp4'}),
+    part,
+  );
+}
 export const samples = {
   core__AlertDialog: ({C, React}) =>
     React.createElement(C, {
@@ -360,9 +351,6 @@ export const samples = {
       onReactionClick: noop,
       onAddReaction: noop,
     }),
-  lab__Tour: ({C, React, mod, Pkg}) =>
-    tour(React, C, mod.TourStep ?? Pkg.TourStep),
-  lab__TourStep: ({C, React, mod, Pkg}) => tour(React, mod.Tour ?? Pkg.Tour, C),
   lab__CodeEditor: ({C, React}) =>
     React.createElement(C, {
       value: 'const answer = 42;',
@@ -497,6 +485,13 @@ export const samples = {
         React.createElement(mod.ThreeDBar ?? Pkg.ThreeDBar, {color: '#00aa00'}),
       ),
     ),
+  lab__Tour: ({C, React}) =>
+    React.createElement(C, {
+      steps: [{id: 'first', title: 'First', body: 'First body'}],
+      activeId: 'first',
+      onActiveIdChange: noop,
+      onEnd: noop,
+    }),
   lab__TransferList: ({C, React}) =>
     React.createElement(C, {
       label: 'Columns',
@@ -617,6 +612,69 @@ export const samples = {
     }
     return React.createElement(Sample);
   },
+  // The hook throws by design without a positive count and whole-pixel
+  // geometry, so the sample gives both, as an app does.
+  lab__useTableInfinityVirtualization: ({React, mod, Core}) => {
+    function Sample() {
+      const infinity = mod.useTableInfinityVirtualization({
+        rowCount: 1000,
+        columnCount: 100,
+        rowHeight: 32,
+        columnWidth: 112,
+        viewportWidth: 448,
+        viewportHeight: 320,
+        headerHeight: 36,
+        viewportLabel: 'Table viewport',
+        rowScrollbarLabel: 'Scroll rows',
+        columnScrollbarLabel: 'Scroll columns',
+        getRow: index => ({id: index}),
+        getColumn: index => ({
+          key: String(index),
+          width: Core.pixel(112),
+          header: `Column ${index + 1}`,
+          renderCell: row => `R${row.id + 1} C${index + 1}`,
+        }),
+      });
+      return React.createElement(Core.Table, {
+        ...infinity.tableProps,
+        idKey: 'id',
+        'aria-label': 'Archive',
+      });
+    }
+    return React.createElement(Sample);
+  },
+  lab__MediaPlayer: ({C, React, mod, Pkg}) =>
+    React.createElement(
+      C,
+      {label: 'Clip'},
+      React.createElement(mod.MediaPlayerElement ?? Pkg.MediaPlayerElement, {
+        kind: 'video',
+        src: '/clip.mp4',
+      }),
+      React.createElement(mod.MediaPlayButton ?? Pkg.MediaPlayButton),
+    ),
+  lab__MediaPlayerElement: ({C, React, mod, Pkg}) =>
+    React.createElement(
+      mod.MediaPlayer ?? Pkg.MediaPlayer,
+      {label: 'Clip'},
+      React.createElement(C, {kind: 'video', src: '/clip.mp4'}),
+    ),
+  lab__MediaPlayButton: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
+  lab__MediaSeekButton: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C, {offset: 10})),
+  lab__MediaVolume: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
+  lab__MediaTimeSlider: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
+  lab__MediaTime: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
+  lab__MediaCaptionsButton: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
+  lab__MediaFullscreenButton: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
+  lab__MediaPlaybackRate: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
   core__Swipe: ({React, mod, Core}) =>
     React.createElement(Core.Item, {
       label: 'Inbox',

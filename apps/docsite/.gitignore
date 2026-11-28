@@ -30,6 +30,7 @@ public/version.json
 # regenerated locally and in CI before next dev / next build.
 src/themes/astryx.js
 src/themes/astryx.css
+src/themes/astryx.css.d.ts
 src/themes/astryx.d.ts
 
 # The MCP endpoint's CLI folder, written by scripts/build-mcp-runtime.mjs

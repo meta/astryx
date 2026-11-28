@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/theme-matcha",
-  "version": "0.7.17",
+  "version": "0.7.18",
   "private": false,
   "description": "Earthy greens with a calm, organic feel. Naturalistic and grounded, great for wellness or content-first apps.",
   "author": "Meta Open Source",
@@ -57,6 +57,7 @@
     "src",
     "fonts.css",
     "fonts.css.d.ts",
+    "fonts",
     "theme.css.d.ts",
     "palette.config.json",
     "!**/*.test.*",
@@ -80,11 +81,11 @@
     "lucide-react": "^1.66.0"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.7.17",
+    "@astryxdesign/core": "0.7.18",
     "react": ">=19"
   },
   "devDependencies": {
-    "@astryxdesign/cli": "0.7.17"
+    "@astryxdesign/cli": "0.7.18"
   },
   "module": "./dist/source.mjs"
 }

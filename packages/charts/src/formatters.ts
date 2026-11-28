@@ -6,11 +6,12 @@
  * @output Built-in locale-aware tick, value, and list format utilities
  * @position Utility; consumed by Chart and ChartAxis
  *
- * Formatters degrade gracefully: non-finite numbers (NaN/±Infinity) and
- * unparseable values are passed through as-is rather than producing garbage
- * like "InfinityB", and no input throws. Numeric/date formatting is delegated
- * to cached `Intl` formatters so output is locale-aware and rounding is correct
- * across the full magnitude range (K/M/B/T and beyond).
+ * Each value formatter is a `ChartValueFormat`. A `null` or `undefined` value
+ * returns `undefined` to ask for the chart's default text. Non-finite numbers
+ * (NaN/±Infinity) and unparseable values pass through as-is rather than
+ * producing garbage like "InfinityB", and no input throws. Numeric/date
+ * formatting is delegated to cached `Intl` formatters so output is locale-aware
+ * and rounding is correct across the full magnitude range (K/M/B/T and beyond).
  */
 
 import type {CalendarSystem, Locale} from '@astryxdesign/core/i18n';
@@ -69,6 +70,9 @@ const getListFormat = byLocale(
   locale => new Intl.ListFormat(locale, {style: 'long', type: 'conjunction'}),
 );
 
+/** A value that is neither `null` nor `undefined`. */
+type PresentValue = NonNullable<unknown>;
+
 /** Format labels as a conjunction list using the provider locale. */
 export function formatList(values: readonly string[], locale: Locale): string {
   return getListFormat(locale).format(values);
@@ -78,9 +82,25 @@ export function formatList(values: readonly string[], locale: Locale): string {
  * Compact number formatter (e.g. 1200 → "1.2K", 1500000 → "1.5M", 1e12 → "1T").
  *
  * Non-numeric values (e.g. category labels) and non-finite numbers pass through
- * unchanged, so it is safe to use as a general-purpose tick formatter.
+ * unchanged, so it is safe to use as a general-purpose tick formatter. A `null`
+ * or `undefined` value returns `undefined`.
  */
-export function compactNumber(value: unknown, locale: Locale): string {
+export function compactNumber(value: PresentValue, locale: Locale): string;
+export function compactNumber(
+  value: null | undefined,
+  locale: Locale,
+): undefined;
+export function compactNumber(
+  value: unknown,
+  locale: Locale,
+): string | undefined;
+export function compactNumber(
+  value: unknown,
+  locale: Locale,
+): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
   const n = Number(value);
   if (!Number.isFinite(n)) {
     return String(value);
@@ -89,10 +109,13 @@ export function compactNumber(value: unknown, locale: Locale): string {
 }
 
 /**
- * Currency formatter factory. Returns a tick format function.
+ * Currency formatter factory. Returns a value format function.
  *
  * The symbol prefixes the magnitude and the sign leads the symbol, so negatives
  * read as "-$1.5K" rather than "$-1.5K". Large values use compact notation.
+ * The returned function takes an optional call-time locale, such as the one a
+ * chart supplies. A locale given to the factory wins over it. A `null` or
+ * `undefined` value returns `undefined`.
  *
  * @example
  * ```
@@ -104,20 +127,32 @@ export function compactNumber(value: unknown, locale: Locale): string {
 export function currency(
   symbol = '$',
   locale?: Locale,
-): (value: unknown) => string {
-  return (value: unknown) => {
+): {
+  (value: PresentValue, callLocale?: Locale): string;
+  (value: null | undefined, callLocale?: Locale): undefined;
+  (value: unknown, callLocale?: Locale): string | undefined;
+} {
+  function format(value: PresentValue, callLocale?: Locale): string;
+  function format(value: null | undefined, callLocale?: Locale): undefined;
+  function format(value: unknown, callLocale?: Locale): string | undefined;
+  function format(value: unknown, callLocale?: Locale): string | undefined {
+    if (value == null) {
+      return undefined;
+    }
     const n = Number(value);
     if (!Number.isFinite(n)) {
       return String(value);
     }
+    const resolvedLocale = locale ?? callLocale;
     const sign = n < 0 ? '-' : '';
     const abs = Math.abs(n);
     const body =
       abs >= 1000
-        ? getCompactFormat(locale).format(abs)
-        : abs.toLocaleString(locale);
+        ? getCompactFormat(resolvedLocale).format(abs)
+        : abs.toLocaleString(resolvedLocale);
     return `${sign}${symbol}${body}`;
-  };
+  }
+  return format;
 }
 
 /**
@@ -125,8 +160,15 @@ export function currency(
  *
  * The input is a ratio; it is multiplied by 100 and localized. Whole percents
  * render without a decimal, and up to one fractional digit is shown otherwise.
+ * A `null` or `undefined` value returns `undefined`.
  */
-export function percent(value: unknown, locale: Locale): string {
+export function percent(value: PresentValue, locale: Locale): string;
+export function percent(value: null | undefined, locale: Locale): undefined;
+export function percent(value: unknown, locale: Locale): string | undefined;
+export function percent(value: unknown, locale: Locale): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
   const n = Number(value);
   if (!Number.isFinite(n)) {
     return String(value);
@@ -184,13 +226,31 @@ function toDate(value: unknown): Date {
 /**
  * Date formatter — short date (e.g. "Jan 5", "Mar 12"), in `calendar`. The
  * calendar defaults to Gregorian; pass the application's calendar to match
- * the date components.
+ * the date components. A `null` or `undefined` value returns `undefined`.
  */
+export function shortDate(
+  value: PresentValue,
+  locale: Locale,
+  calendar?: CalendarSystem,
+): string;
+export function shortDate(
+  value: null | undefined,
+  locale: Locale,
+  calendar?: CalendarSystem,
+): undefined;
+export function shortDate(
+  value: unknown,
+  locale: Locale,
+  calendar?: CalendarSystem,
+): string | undefined;
 export function shortDate(
   value: unknown,
   locale: Locale,
   calendar: CalendarSystem = 'gregory',
-): string {
+): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
   const d = toDate(value);
   if (Number.isNaN(d.getTime())) {
     return String(value);
@@ -207,13 +267,32 @@ export function shortDate(
 /**
  * Date formatter — month/year (e.g. "Jan 2024", "Mar 2025"), in `calendar`.
  * The calendar defaults to Gregorian; pass the application's calendar to
- * match the date components.
+ * match the date components. A `null` or `undefined` value returns
+ * `undefined`.
  */
+export function monthYear(
+  value: PresentValue,
+  locale: Locale,
+  calendar?: CalendarSystem,
+): string;
+export function monthYear(
+  value: null | undefined,
+  locale: Locale,
+  calendar?: CalendarSystem,
+): undefined;
+export function monthYear(
+  value: unknown,
+  locale: Locale,
+  calendar?: CalendarSystem,
+): string | undefined;
 export function monthYear(
   value: unknown,
   locale: Locale,
   calendar: CalendarSystem = 'gregory',
-): string {
+): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
   const d = toDate(value);
   if (Number.isNaN(d.getTime())) {
     return String(value);

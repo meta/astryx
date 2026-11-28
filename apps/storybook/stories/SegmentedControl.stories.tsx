@@ -65,6 +65,22 @@ export const Default: Story = {
   },
 };
 
+/** Segments too narrow for their labels: a Latin label keeps its start under a right-to-left page. */
+export const TruncatedLabels: Story = {
+  render: () => {
+    const [value, setValue] = useState('month');
+    return (
+      <div data-testid="cut-labels" style={{width: '200px'}}>
+        <SegmentedControl value={value} onChange={setValue} label="Range">
+          <SegmentedControlItem value="month" label="Monthly" />
+          <SegmentedControlItem value="week" label="שבועי מפורט" />
+          <SegmentedControlItem value="year" label="Yearly" />
+        </SegmentedControl>
+      </div>
+    );
+  },
+};
+
 export const InVerticalStack: Story = {
   name: 'Inside a vertical stack',
   render: () => {

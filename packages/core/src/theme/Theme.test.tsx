@@ -129,6 +129,39 @@ describe('Theme', () => {
     );
   });
 
+  it("re-anchors the focus color to the theme's accent on a wrapper that applies a theme", () => {
+    const {container} = render(
+      <Theme theme={testTheme}>
+        <Theme theme={testTheme} mode="dark">
+          <span>child</span>
+        </Theme>
+      </Theme>,
+    );
+    const wrappers = container.querySelectorAll('[data-astryx-theme="test"]');
+    expect(wrappers).toHaveLength(2);
+    for (const wrapper of wrappers) {
+      expect(declaredValue(wrapper, '--focus-outline-color')).toMatch(
+        /var\(--color-accent\)/,
+      );
+    }
+  });
+
+  it('declares no focus color on a wrapper that applies no theme', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const {container} = render(
+        <Theme theme={null as never} mode="dark">
+          <span data-child="">child</span>
+        </Theme>,
+      );
+      const wrapper = container.querySelector('[data-child]')!.parentElement!;
+      expect(wrapper.hasAttribute('data-astryx-theme')).toBe(false);
+      expect(declaredValue(wrapper, '--focus-outline-color')).toBeNull();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   // =========================================================================
   // Root detection — data-theme on <html>
   // =========================================================================

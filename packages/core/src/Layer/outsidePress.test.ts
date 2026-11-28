@@ -127,6 +127,84 @@ describe('outsideDismissalCount', () => {
     owner.remove();
     outside.remove();
   });
+
+  it('counts no dismissal for an outside press whose owner closes no layer', () => {
+    const owner = document.createElement('div');
+    const outside = document.createElement('div');
+    document.body.append(owner, outside);
+    const onOutside = vi.fn();
+    const stop = watchOutsidePress(
+      owner,
+      path => path.includes(owner),
+      onOutside,
+      {isDismissal: false},
+    );
+    const before = outsideDismissalCount(document);
+    outside.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+    outside.dispatchEvent(new Event('pointerup', {bubbles: true}));
+    expect(onOutside).toHaveBeenCalledTimes(1);
+    expect(outsideDismissalCount(document)).toBe(before);
+    stop();
+    owner.remove();
+    outside.remove();
+  });
+});
+
+describe('watchOutsidePress, ignoring a pan', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  function setup() {
+    const owner = document.createElement('div');
+    const outside = document.createElement('button');
+    document.body.append(owner, outside);
+    const onOutside = vi.fn();
+    const stop = watchOutsidePress(
+      owner,
+      path => path.includes(owner),
+      onOutside,
+      {ignoresPans: true},
+    );
+    return {outside, onOutside, stop};
+  }
+  const pointer = (pointerType: string, x = 0, y = 0) => ({
+    pointerType,
+    pointerId: 1,
+    clientX: x,
+    clientY: y,
+    composed: true,
+  });
+
+  it('does not close for a touch press outside that pans, and closes for a tap', () => {
+    const {outside, onOutside, stop} = setup();
+    fireEvent.pointerDown(outside, pointer('touch'));
+    fireEvent.pointerMove(outside, pointer('touch', 0, 30));
+    fireEvent.pointerUp(outside, pointer('touch', 0, 30));
+    expect(onOutside).not.toHaveBeenCalled();
+    fireEvent.pointerDown(outside, pointer('touch'));
+    fireEvent.pointerUp(outside, pointer('touch'));
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('does not close for a pen press outside that pans', () => {
+    const {outside, onOutside, stop} = setup();
+    fireEvent.pointerDown(outside, pointer('pen'));
+    fireEvent.pointerMove(outside, pointer('pen', 0, 30));
+    fireEvent.pointerUp(outside, pointer('pen', 0, 30));
+    expect(onOutside).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('closes for a mouse press outside that moves before its release', () => {
+    const {outside, onOutside, stop} = setup();
+    fireEvent.pointerDown(outside, pointer('mouse'));
+    fireEvent.pointerMove(outside, pointer('mouse', 0, 30));
+    fireEvent.pointerUp(outside, pointer('mouse', 0, 30));
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
 });
 
 describe('watchOutsidePress, closing on a pan', () => {

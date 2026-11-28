@@ -2,12 +2,14 @@
 
 /**
  * @file tokensImports.test.ts
- * @input The source of theme/tokens.ts, theme/useTheme.ts, Icon, Button, the
- *   Button, Icon, Link and IconButton package entries, and every module they
- *   import
+ * @input The source of theme/tokens.ts, theme/useTheme.ts, Icon, Button,
+ *   Link, IconButton, Popover, AppShell, utils/touchPresentation.ts, their
+ *   package entries, and every module they import
  * @output Token resolution, and so a first load that renders an Icon or a
  *   Button, imports no theme-rule generator, also when every export of a
- *   component entry is kept
+ *   component entry is kept; token resolution also imports no theme builder;
+ *   and a first load that renders a Button, a Link, an IconButton, a Popover
+ *   or an AppShell imports no theme adaptation writer
  * @position Source boundary test of packages/core/src/theme/tokens.ts
  *
  * The walk follows static imports only: a type-only import is erased, and a
@@ -28,6 +30,24 @@ const PACKAGE_EXPORTS: Record<string, {source: string}> = JSON.parse(
 ).exports;
 
 type Names = ReadonlySet<string> | 'all';
+
+// The theme builder and the modules that only it loads. Token resolution
+// reads the token defaults from their own module, so it loads none of these.
+const THEME_BUILDER = [
+  'theme/defineTheme.ts',
+  'theme/resolveThemeValues.ts',
+  'theme/themeAdaptations.ts',
+  'theme/localTokens.ts',
+  'theme/themeRegistry.ts',
+];
+
+// The theme adaptation writer and the value resolver it runs. A component
+// reads only the breakpoint vocabulary, so its first load needs none of them.
+const ADAPTATION_WRITER = [
+  'theme/themeAdaptations.ts',
+  'theme/resolveThemeValues.ts',
+  'theme/localTokens.ts',
+];
 
 interface ModuleLinks {
   /** Modules this module's own code imports, with the names it uses. */
@@ -193,4 +213,35 @@ describe('the theme tokens first load', () => {
       'theme/generateThemeRules.ts',
     );
   });
+
+  it('theme/tokens.ts imports no theme builder', () => {
+    const loaded = firstLoadModules('theme/tokens.ts');
+    expect(THEME_BUILDER.filter(file => loaded.has(file))).toEqual([]);
+  });
+
+  it('finds every theme builder module from defineTheme', () => {
+    const loaded = firstLoadModules('theme/defineTheme.ts');
+    expect(THEME_BUILDER.filter(file => !loaded.has(file))).toEqual([]);
+  });
+
+  it.each([
+    'Button/Button.tsx',
+    'Link/Link.tsx',
+    'IconButton/IconButton.tsx',
+    'Popover/Popover.tsx',
+    'AppShell/AppShell.tsx',
+    'utils/touchPresentation.ts',
+  ])('%s imports no theme adaptation writer', entry => {
+    const loaded = firstLoadModules(entry);
+    expect(ADAPTATION_WRITER.filter(file => loaded.has(file))).toEqual([]);
+  });
+
+  it.each(['./Button', './Link', './IconButton', './Popover', './AppShell'])(
+    'every export of the %s entry imports no theme adaptation writer',
+    entry => {
+      const source = path.resolve(SRC, '..', PACKAGE_EXPORTS[entry].source);
+      const loaded = firstLoadModules(path.relative(SRC, source));
+      expect(ADAPTATION_WRITER.filter(file => loaded.has(file))).toEqual([]);
+    },
+  );
 });

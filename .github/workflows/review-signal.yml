@@ -376,7 +376,10 @@ jobs:
                   const reviews = await github.paginate(github.rest.pulls.listReviews, {
                     owner, repo, pull_number: pr.number, per_page: 100,
                   });
-                  passed = reviewDecision.trainerPassed({reviews, headSha: pr.head.sha, engOwners});
+                  const headPushedAt = await reviewDecision.readHeadPushedAt({
+                    github, owner, repo, sha: pr.head.sha,
+                  });
+                  passed = reviewDecision.trainerPassed({reviews, headSha: pr.head.sha, headPushedAt, engOwners});
                 } catch (e) {
                   core.warning(`Could not read exact-head reviews; the trainer pass stays pending: ${e.message}`);
                 }
@@ -701,10 +704,14 @@ jobs:
               const reviews = await github.paginate(github.rest.pulls.listReviews, {
                 owner, repo, pull_number: pr.number, per_page: 100,
               });
+              const headPushedAt = await reviewDecision.readHeadPushedAt({
+                github, owner, repo, sha: pr.head.sha,
+              });
               ({codeApproved, codeApprovedBy, designApproved} =
                 reviewDecision.resolveReviewApprovals({
                   reviews,
                   headSha: pr.head.sha,
+                  headPushedAt,
                   engOwners,
                   designOwners,
                   reviewApp,

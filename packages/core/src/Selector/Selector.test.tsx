@@ -49,6 +49,18 @@ import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {selectorPresentationStyles} from './selectorPresentation.stylex';
 import {groupStyles} from '../InputGroup/groupStyles';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {getTooltip} from '../__tests__/tooltipDescription';
+
+/** The popup the combobox names in `aria-controls`. */
+function popupOf(combobox: HTMLElement): HTMLElement {
+  const popup = document.getElementById(
+    combobox.getAttribute('aria-controls') ?? '',
+  );
+  if (popup == null) {
+    throw new Error('aria-controls names no element in the document');
+  }
+  return popup;
+}
 
 /**
  * Enters a search query as one change. Typing it key by key can land several
@@ -77,6 +89,8 @@ function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
 // resolves from the module cache and every sheet test waits only on the open.
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
+  await import('./SelectorBottomSheet');
+  await import('./SelectorBottomSheetFrame');
 });
 
 beforeEach(() => {
@@ -303,6 +317,8 @@ function expectSilentBusySpinner() {
 // here, and each test's open waits only for the open.
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
+  await import('./SelectorBottomSheet');
+  await import('./SelectorBottomSheetFrame');
 });
 
 describe('Selector', () => {
@@ -329,6 +345,30 @@ describe('Selector', () => {
     await user.click(screen.getByRole('option', {name: /Banana/}));
     expect(onChange).toHaveBeenCalledWith('Banana');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('with no options, focuses a group named by the label in the sheet', async () => {
+    const user = userEvent.setup();
+    render(
+      <Selector
+        label="Fruit"
+        options={[]}
+        onChange={() => {}}
+        presentation="bottom-sheet"
+      />,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await screen.findByRole('dialog', {name: 'Fruit'});
+    // The field is a group named "Fruit" too; the popup is the one the trigger
+    // controls.
+    const group = popupOf(trigger);
+    expect(group).toHaveAttribute('role', 'group');
+    expect(group).toHaveAccessibleName('Fruit');
+    await waitFor(() => {
+      expect(group).toHaveFocus();
+    });
+    expect(group).toHaveTextContent('No options');
   });
 
   it('restores touch focus without painting a trigger focus ring', async () => {
@@ -396,7 +436,7 @@ describe('Selector', () => {
 
   it('uses content-hugging height without extra bottom content padding', () => {
     const source = readFileSync(
-      'packages/core/src/Selector/SelectorBottomSheet.tsx',
+      'packages/core/src/Selector/SelectorBottomSheetFrame.tsx',
       'utf8',
     );
 
@@ -581,14 +621,13 @@ describe('Selector', () => {
     const popover = screen
       .getByRole('listbox', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-start span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideAbove');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('emits the direction-independent logical mapping under an RTL ancestor (#3389)', async () => {
-    // The self-* position-area keywords resolve against the popover's own
-    // inherited direction in the browser, so RTL emits the same string as
+    // The logical anchor insets resolve against the popover's own
+    // inherited direction in the browser, so RTL emits the same styles as
     // LTR and the mirroring is pure CSS — jsdom can only assert the string.
     const user = userEvent.setup();
     render(
@@ -607,9 +646,8 @@ describe('Selector', () => {
     const popover = screen
       .getByRole('listbox', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('clamps the default selected-item overlay to the viewport', async () => {
@@ -647,18 +685,14 @@ describe('Selector', () => {
 
   it.each([
     ['below its anchor', 'marginBlockEnd', null],
-    [
-      'already flipped above its anchor',
-      'marginBlockStart',
-      'self-block-start span-self-inline-end',
-    ],
+    ['already flipped above its anchor', 'marginBlockStart', 'self-end'],
   ])(
     "keeps the overlay out of the layer's viewport gutter, the layer %s",
-    async (_, gutterMargin, flippedArea) => {
+    async (_, gutterMargin, flippedAlignSelf) => {
       const restoreRects = mockSelectorRects();
       // The layer keeps a 16 px gutter from the viewport's block end. A flip
-      // moves it to the block-start margin and names the block-start side in
-      // the layer's position area.
+      // moves it to the block-start margin and mirrors the layer's block
+      // self alignment to the block end.
       const realGetComputedStyle = window.getComputedStyle.bind(window);
       const styleSpy = vi
         .spyOn(window, 'getComputedStyle')
@@ -669,11 +703,9 @@ describe('Selector', () => {
             element.hasAttribute('popover')
           ) {
             Object.defineProperty(style, gutterMargin, {value: '16px'});
-            if (flippedArea != null) {
-              const read = style.getPropertyValue.bind(style);
-              Object.defineProperty(style, 'getPropertyValue', {
-                value: (name: string) =>
-                  name === 'position-area' ? flippedArea : read(name),
+            if (flippedAlignSelf != null) {
+              Object.defineProperty(style, 'alignSelf', {
+                value: flippedAlignSelf,
               });
             }
           }
@@ -707,6 +739,68 @@ describe('Selector', () => {
       }
     },
   );
+
+  it('measures the overlay again when a scroll stop re-picks the list onto the other side', async () => {
+    const restoreRects = mockSelectorRects();
+    // The browser picks the layer's side. A block flip mirrors the layer's
+    // block self alignment to the block end and moves the gutter to the
+    // block-start margin.
+    let isFlipped = false;
+    const realGetComputedStyle = window.getComputedStyle.bind(window);
+    const styleSpy = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((element, pseudo) => {
+        const style = realGetComputedStyle(element, pseudo);
+        if (
+          isFlipped &&
+          element instanceof HTMLElement &&
+          element.hasAttribute('popover')
+        ) {
+          Object.defineProperty(style, 'alignSelf', {value: 'self-end'});
+          Object.defineProperty(style, 'marginBlockStart', {value: '16px'});
+        }
+        return style;
+      });
+    // Scroll stops arrive as `scrollend`.
+    const view = window as {onscrollend?: unknown};
+    view.onscrollend = null;
+    const user = userEvent.setup();
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+        />,
+      );
+      await user.click(screen.getByRole('combobox'));
+      const popover = screen
+        .getByRole('listbox', {hidden: true})
+        .closest('[popover]');
+      // Opened below its anchor: the margin below the anchor.
+      await waitFor(() => {
+        expect(popover?.getAttribute('style')).toContain(
+          '--_selector-overlay-margin: min(-110px,',
+        );
+      });
+      // A scroll stops, and the re-pick puts the list above its anchor.
+      isFlipped = true;
+      act(() => {
+        document.dispatchEvent(new Event('scrollend'));
+      });
+      // The margin for a list above its anchor ends at the keyboard's term.
+      await waitFor(() => {
+        expect(popover?.getAttribute('style')).toContain(
+          'var(--_layer-keyboard-inset-block-end, 0px))))',
+        );
+      });
+    } finally {
+      delete view.onscrollend;
+      styleSpy.mockRestore();
+      restoreRects();
+    }
+  });
 
   it('aligns the selected item using untransformed layout geometry', async () => {
     const restoreRects = mockSelectorRects({
@@ -1358,14 +1452,14 @@ describe('Selector', () => {
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
       await user.type(screen.getByRole('combobox', h), 'xyz');
       expect(screen.queryAllByRole('option', h)).toHaveLength(0);
-      // Scope to the listbox: the polite live region also announces "No results
+      // Scope to the popup: the polite live region also announces "No results
       // found", so an unscoped query matches both the visible empty state and
       // the a11y announcement.
-      const listbox = screen.getByRole('listbox', h);
-      expect(within(listbox).getByText('No results found')).toBeInTheDocument();
+      const popup = popupOf(screen.getByRole('combobox', h));
+      expect(within(popup).getByText('No results found')).toBeInTheDocument();
     });
 
-    it('empty-state message is not exposed as a listbox child', async () => {
+    it('with no matching options, the popup is a named group, not a listbox, and the input still controls it', async () => {
       const user = userEvent.setup();
       render(
         <Selector
@@ -1379,12 +1473,18 @@ describe('Selector', () => {
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
       await user.type(screen.getByRole('combobox', h), 'xyz');
 
-      // role="listbox" only permits option/group children — the visual
-      // empty-state message must be presentational (it is announced through
-      // the result-count live region instead).
-      const listbox = screen.getByRole('listbox', h);
-      const empty = within(listbox).getByText('No results found');
-      expect(empty).toHaveAttribute('role', 'presentation');
+      // An empty listbox is invalid (AST-020 1.3.1, 4.1.2): with no options the
+      // popup is a group named by the label, and the message is its content.
+      const combobox = screen.getByRole('combobox', h);
+      expect(screen.queryByRole('listbox', h)).toBeNull();
+      expect(combobox).toHaveAttribute('aria-expanded', 'true');
+      const popup = popupOf(combobox);
+      expect(popup).toBe(screen.getByRole('group', {name: 'Fruit', ...h}));
+      expect(within(popup).getByText('No results found')).toBeInTheDocument();
+
+      // Matching options bring the listbox back.
+      await user.clear(combobox);
+      expect(screen.getByRole('listbox', h)).toBe(popupOf(combobox));
     });
 
     it('renders emptySearchText in place of the default message', async () => {
@@ -1402,12 +1502,12 @@ describe('Selector', () => {
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
       await user.type(screen.getByRole('combobox', h), 'xyz');
 
-      const listbox = screen.getByRole('listbox', h);
+      const popup = popupOf(screen.getByRole('combobox', h));
       expect(
-        within(listbox).getByText('Nothing like that here'),
+        within(popup).getByText('Nothing like that here'),
       ).toBeInTheDocument();
       expect(
-        within(listbox).queryByText('No results found'),
+        within(popup).queryByText('No results found'),
       ).not.toBeInTheDocument();
     });
 
@@ -1424,10 +1524,10 @@ describe('Selector', () => {
       );
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
 
-      const listbox = screen.getByRole('listbox', h);
-      expect(within(listbox).getByText('No options')).toBeInTheDocument();
+      const popup = popupOf(screen.getByRole('combobox', h));
+      expect(within(popup).getByText('No options')).toBeInTheDocument();
       expect(
-        within(listbox).queryByText('Nothing like that here'),
+        within(popup).queryByText('Nothing like that here'),
       ).not.toBeInTheDocument();
     });
 
@@ -1446,8 +1546,8 @@ describe('Selector', () => {
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
       await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
 
-      // The panel message is role="presentation", so the live region is the
-      // only thing a screen reader gets — it has to say the same words.
+      // The live region announces the panel message, so it has to say the
+      // same words.
       await waitFor(() =>
         expect(politeRegion()?.textContent).toBe('Nothing like that here'),
       );
@@ -1728,7 +1828,7 @@ describe('Selector', () => {
       // Without hasSearch the trigger itself is the combobox.
       await user.click(screen.getByRole('combobox', {name: 'Fruit'}));
 
-      const listbox = screen.getByRole('listbox', h);
+      const listbox = popupOf(screen.getByRole('combobox', {name: 'Fruit'}));
       expect(
         within(listbox).getByText('Add a fruit first'),
       ).toBeInTheDocument();
@@ -2051,7 +2151,7 @@ describe('Selector', () => {
         expect(
           screen.queryByRole('group', {name: 'Citrus', ...h}),
         ).not.toBeInTheDocument();
-        const listbox = screen.getByRole('listbox', h);
+        const listbox = popupOf(screen.getByRole('combobox', h));
         expect(
           within(listbox).getByText('No results found'),
         ).toBeInTheDocument();
@@ -2943,7 +3043,7 @@ describe('Selector', () => {
       const trigger = screen.getByRole('combobox', {
         name: 'Destination Channel',
       });
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
 
       expect(trigger).not.toBeDisabled();
       expect(trigger).toHaveAttribute('aria-disabled', 'true');
@@ -2968,17 +3068,20 @@ describe('Selector', () => {
       const container = screen
         .getByTestId('fruit-selector')
         .closest('.astryx-selector') as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        );
       });
     });
 
@@ -2993,11 +3096,10 @@ describe('Selector', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
     });
 
@@ -3042,7 +3144,7 @@ describe('Selector', () => {
         />,
       );
       const trigger = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -3670,12 +3772,35 @@ describe('Selector statusVariant forwarding', () => {
     const statusButton = screen.getByRole('button', {
       name: /warning details/i,
     });
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent('Visible to all users');
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
     expect(
       screen.getByRole('combobox').getAttribute('aria-describedby'),
     ).toContain(tooltip.id);
+  });
+
+  it('keeps the written order of the status tooltip message under right-to-left', async () => {
+    render(
+      <div dir="rtl">
+        <Selector
+          label="Fruit"
+          options={['Apple', 'Banana']}
+          variant="ghost"
+          status={{type: 'warning', message: '-42 items'}}
+          statusVariant="tooltip"
+        />
+      </div>,
+    );
+    // The tooltip mounts on the first hover; its text keeps the written order.
+    await userEvent.hover(
+      screen.getByRole('button', {name: /warning details/i}),
+    );
+    const tooltip = await screen.findByRole('tooltip', h);
+    expect(within(tooltip).getByText('-42 items')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
   });
 });
 

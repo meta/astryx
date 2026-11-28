@@ -68,14 +68,14 @@ import {useToast} from '@astryxdesign/core/Toast';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 
 import {
-  Cog6ToothIcon,
-  HashtagIcon,
+  SettingsIcon,
+  ChannelIcon,
   InboxIcon,
-  MagnifyingGlassIcon,
-  PencilSquareIcon,
-  UserGroupIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
+  SearchIcon,
+  ComposeIcon,
+  TeamIcon,
+  CloseIcon,
+} from '@astryxdesign/template-icons';
 
 // ---------------------------------------------------------------------------
 // Deterministic fixtures: fixed ISO timestamps, stable ordering.
@@ -445,7 +445,7 @@ export default function MessagingShellPage() {
             <IconButton
               label="New message"
               tooltip="New message"
-              icon={<Icon icon={PencilSquareIcon} size="sm" color="inherit" />}
+              icon={<Icon icon={ComposeIcon} size="sm" color="inherit" />}
               variant="ghost"
               size="sm"
               onClick={() => demoAction('A new message')}
@@ -460,7 +460,7 @@ export default function MessagingShellPage() {
           placeholder="Jump to..."
           value={searchQuery}
           onChange={setSearchQuery}
-          startIcon={MagnifyingGlassIcon}
+          startIcon={SearchIcon}
           hasClear
         />
       }
@@ -468,7 +468,7 @@ export default function MessagingShellPage() {
         <SideNavSection title="Account" isHeaderHidden>
           <SideNavItem
             label="Preferences"
-            icon={Cog6ToothIcon}
+            icon={SettingsIcon}
             onClick={() => demoAction('Preferences')}
           />
         </SideNavSection>
@@ -478,7 +478,7 @@ export default function MessagingShellPage() {
           <SideNavItem
             key={item.id}
             label={item.name}
-            icon={HashtagIcon}
+            icon={ChannelIcon}
             isSelected={item.id === conversationId}
             onClick={() => openConversation(item.id)}
             endContent={
@@ -533,7 +533,7 @@ export default function MessagingShellPage() {
             <IconButton
               label="Close thread"
               tooltip="Close thread"
-              icon={<Icon icon={XMarkIcon} size="sm" color="inherit" />}
+              icon={<Icon icon={CloseIcon} size="sm" color="inherit" />}
               variant="ghost"
               size="sm"
               onClick={() => {
@@ -578,7 +578,7 @@ export default function MessagingShellPage() {
           <LayoutHeader hasDivider padding={3}>
             <HStack gap={3} vAlign="center">
               {channel ? (
-                <Icon icon={HashtagIcon} size="sm" />
+                <Icon icon={ChannelIcon} size="sm" />
               ) : (
                 <Avatar name={title} size="sm" />
               )}
@@ -596,7 +596,7 @@ export default function MessagingShellPage() {
                 <IconButton
                   label="Members"
                   tooltip="Members"
-                  icon={<Icon icon={UserGroupIcon} size="sm" color="inherit" />}
+                  icon={<Icon icon={TeamIcon} size="sm" color="inherit" />}
                   variant="ghost"
                   size="sm"
                   onClick={() => demoAction(`The #${channel.name} member list`)}

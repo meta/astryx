@@ -113,12 +113,10 @@ test('each tab stop draws the token ring under keyboard focus', async ({
 
 test("a theme's focus tokens restyle all three rings", async ({page}) => {
   await open(page);
-  await page.evaluate(() => {
-    document.documentElement.style.setProperty(
-      '--focus-outline-color',
-      'rgb(255, 0, 255)',
-    );
-    document.documentElement.style.setProperty('--focus-outline-width', '4px');
+  // A theme declares its tokens on each scope it applies to.
+  await page.addStyleTag({
+    content:
+      '@layer astryx-theme { @scope ([data-astryx-theme]) { :scope { --focus-outline-color: rgb(255, 0, 255); --focus-outline-width: 4px; } } }',
   });
   const rings = await tabThroughStops(page);
   rings.forEach((ring, index) => {

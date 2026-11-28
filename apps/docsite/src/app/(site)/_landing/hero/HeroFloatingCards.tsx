@@ -12,6 +12,9 @@
  * them per theme. The whole layer is decorative: aria-hidden + inert + no pointer
  * events. layout="overlap" is the desktop art composition; layout="stack" is the
  * narrow-screen grid collage.
+ *
+ * SYNC: When the size of a photo box changes in a layout, update PHOTO_SIZES
+ * and THUMB_SIZES in heroThemeContent.ts.
  */
 
 import * as stylex from '@stylexjs/stylex';
@@ -26,7 +29,11 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
-import type {HeroThemeContent} from './heroThemeContent';
+import {
+  reelPhotoSources,
+  reelThumbSources,
+  type HeroThemeContent,
+} from './heroThemeContent';
 
 // One recurring member across every theme slide (the per-theme `member` copy is
 // intentionally not used here).
@@ -427,7 +434,7 @@ export function HeroFloatingCards({
           // Collage: image grows to fill the card's stretched height.
           <div {...stylex.props(styles.collageImageFill)}>
             <img
-              src={content.product.image}
+              {...reelPhotoSources(content.product.image)}
               alt=""
               {...stylex.props(styles.collageImageAbs)}
             />
@@ -437,7 +444,7 @@ export function HeroFloatingCards({
             <div {...stylex.props(styles.imageFrame)}>
               <AspectRatio ratio={1}>
                 <img
-                  src={content.product.image}
+                  {...reelPhotoSources(content.product.image)}
                   alt=""
                   {...stylex.props(styles.image)}
                 />
@@ -464,7 +471,7 @@ export function HeroFloatingCards({
         // Collage: image grows to fill the card's stretched height.
         <div {...stylex.props(styles.collageRewardImage)}>
           <img
-            src={content.feature.image}
+            {...reelPhotoSources(content.feature.image)}
             alt=""
             {...stylex.props(styles.collageImageAbs)}
           />
@@ -472,7 +479,7 @@ export function HeroFloatingCards({
       ) : (
         <AspectRatio ratio={1}>
           <img
-            src={content.feature.image}
+            {...reelPhotoSources(content.feature.image)}
             alt=""
             {...stylex.props(styles.image)}
           />
@@ -522,7 +529,7 @@ export function HeroFloatingCards({
         <HStack gap={3} vAlign="center">
           <div {...stylex.props(styles.buyThumbFrame)}>
             <img
-              src={content.mini.image}
+              {...reelThumbSources(content.mini.image)}
               alt=""
               {...stylex.props(styles.image)}
             />

@@ -36,6 +36,9 @@ const HELPER_PATH = '.github/scripts/review-signal-decision.cjs';
 const BACKOFF_PATH = '.github/scripts/lib/rate-limit-backoff.cjs';
 const WORKFLOW_SHA = '1'.repeat(40);
 const OLD_BASE = '2'.repeat(40);
+// Each head was pushed at PUSHED_AT (its first check suite); reviews come after.
+const PUSHED_AT = '2026-11-20T10:00:00Z';
+const REVIEWED_AT = '2026-11-20T11:00:00Z';
 const HEAD = '3'.repeat(40);
 
 async function runSignal({
@@ -129,6 +132,9 @@ async function runSignal({
         requestReviewers: mutations.requestReviewers,
       },
       repos: {
+        getCommit: async () => ({
+          data: {commit: {committer: {date: '2026-11-19T08:00:00Z'}}},
+        }),
         getContent,
         compareCommitsWithBasehead: vi.fn(async () => ({data: {files}})),
         createCommitStatus: mutations.createCommitStatus,
@@ -159,6 +165,9 @@ async function runSignal({
         })),
       },
       checks: {
+        listSuitesForRef: async () => ({
+          data: {check_suites: [{created_at: PUSHED_AT}]},
+        }),
         listForRef: async () => ({data: {check_runs: []}}),
         update: mutations.updateCheck,
       },
@@ -345,6 +354,7 @@ describe('review-signal trusted helper ref', () => {
             user: {login: 'engineer'},
             state: 'APPROVED',
             commit_id: reviewedSha,
+            submitted_at: REVIEWED_AT,
           },
         ],
       });
@@ -359,7 +369,12 @@ describe('review-signal trusted helper ref', () => {
 
 describe("an engineering owner's owner command re-evaluates the code half (spec:AST-030 FR15)", () => {
   const approved = [
-    {user: {login: 'engineer'}, state: 'APPROVED', commit_id: HEAD},
+    {
+      user: {login: 'engineer'},
+      state: 'APPROVED',
+      commit_id: HEAD,
+      submitted_at: REVIEWED_AT,
+    },
   ];
 
   it("clears a fork's code-only gate when the owner approved the exact head and then comments", async () => {
@@ -546,6 +561,7 @@ describe('a pull request the review app opens waits for a trainer pass (spec:AST
     user: {login, type: 'User'},
     state,
     commit_id: commitId,
+    submitted_at: REVIEWED_AT,
   });
   const gate = async options => {
     const {mutations, github} = await runSignal({
@@ -617,6 +633,7 @@ describe('review-signal review-app approval for write-access authors', () => {
     user: {login: APP, type: 'Bot'},
     state,
     commit_id: commitId,
+    submitted_at: REVIEWED_AT,
   });
   const gateStatus = mutations =>
     mutations.createCommitStatus.mock.calls.map(([input]) => ({

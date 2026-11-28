@@ -27,6 +27,7 @@ import {
   CORE_GENERATED,
   CORE_SOURCES,
   coreBuildIsStale,
+  checkoutLockDir,
   coreBuildLockDir,
   coreRunLeaseDir,
   earlierLiveRuns,
@@ -302,17 +303,67 @@ describe('ensureCoreBuiltAt', () => {
   });
 });
 
+describe('who runs the Core build helper', () => {
+  it('is only the node tests and their setup, so an installed CLI never reaches it', () => {
+    // It ships under clients/, but nothing an installed CLI loads imports it:
+    // only test files, test-utils and the node global setup do. So its lock
+    // in the checkout's node_modules/.cache is made only in a source checkout.
+    const importers = [];
+    const walk = current => {
+      for (const entry of fs.readdirSync(current, {withFileTypes: true})) {
+        const full = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          if (!['node_modules', 'test-utils'].includes(entry.name)) walk(full);
+        } else if (
+          /\.(?:mjs|cjs|js|ts)$/.test(entry.name) &&
+          !/\.(?:test|spec)\./.test(entry.name) &&
+          entry.name !== 'ensure-core-built.mjs' &&
+          fs.readFileSync(full, 'utf8').includes('ensure-core-built')
+        ) {
+          importers.push(path.relative(REPO_ROOT, full));
+        }
+      }
+    };
+    walk(path.join(REPO_ROOT, 'packages/cli'));
+    expect(importers).toEqual([]);
+  });
+});
+
+describe('checkoutLockDir', () => {
+  it('names the same lock for every process of a checkout, whatever its temp folder', () => {
+    const before = process.env.TMPDIR;
+    try {
+      process.env.TMPDIR = path.join(os.tmpdir(), 'one');
+      const first = checkoutLockDir('/work/a', 'x.lock');
+      process.env.TMPDIR = path.join(os.tmpdir(), 'two');
+      expect(checkoutLockDir('/work/a', 'x.lock')).toBe(first);
+    } finally {
+      if (before === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = before;
+    }
+  });
+});
+
 describe('coreBuildLockDir', () => {
   it('gives each checkout its own lock', () => {
     expect(coreBuildLockDir('/work/a')).not.toBe(coreBuildLockDir('/work/b'));
     expect(coreBuildLockDir('/work/a')).toBe(coreBuildLockDir('/work/a/'));
-    expect(path.dirname(coreBuildLockDir('/work/a'))).toBe(os.tmpdir());
+    // Inside the checkout, so a worker whose temp folder moved reads the same
+    // lock as the global setup.
+    expect(coreBuildLockDir('/work/a')).toBe(
+      path.join(
+        path.resolve('/work/a'),
+        'node_modules',
+        '.cache',
+        'astryx-core-build.lock',
+      ),
+    );
   });
 
   it("does not keep a checkout with a current build waiting on another checkout's build", () => {
     const {entry, roots} = tree();
     const other = coreBuildLockDir(path.join(dir, 'other-checkout'));
-    fs.mkdirSync(other);
+    fs.mkdirSync(other, {recursive: true});
     try {
       const started = Date.now();
       ensureCoreBuiltAt({

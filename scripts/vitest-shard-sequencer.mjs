@@ -15,9 +15,15 @@
  *   time against about 320 s for two other legs. This assigns every file to
  *   exactly one leg, slowest first, each to the leg with the least recorded
  *   time so far, so the slowest files each take a leg of their own and the
- *   slowest single file sets the floor (spec:AST-030 FR22). Within a leg it
+ *   slowest single file sets the floor (spec:AST-030 FR22). The files that
+ *   draw pages in a real Chrome share the last leg, with only light files
+ *   beside them, so their pictures never run beside the packing and
+ *   conformance suites; a real-Chrome file with a `// node-leg: own` line
+ *   takes a leg of its own, with the same light files beside it
+ *   (`nodeLegsApart`). Within a leg it
  *   starts the slowest recorded file first, so that file never waits behind
- *   others. Each file costs what the Node leg planner
+ *   others, except that a file with a leg of its own starts last, when the
+ *   leg's light files are nearly done. Each file costs what the Node leg planner
  *   (scripts/vitest-node-legs.mjs) books for it, so the legs it planned are
  *   the legs that run; a file with no recorded time counts as the ninetieth
  *   percentile (scripts/lib/duration-split.mjs). The numbers only steer
@@ -38,7 +44,9 @@ import {
 import {
   DURATIONS,
   nodeFileCost,
+  nodeLegsApart,
   readDurations as readRecord,
+  takesOwnNodeLeg,
 } from './vitest-node-legs.mjs';
 
 export {DURATIONS};
@@ -76,8 +84,10 @@ export function partitionByDuration(
   {idle = new Set()} = {},
 ) {
   // A file that runs no test in this run (the swizzle-proof slices when the
-  // change reaches no component) costs only its import.
-  return splitByDuration(files, count, nodeFileCost(files, seconds, {idle}));
+  // change reaches no component) costs only its import. The real-Chrome
+  // files share a leg, as the leg planner books them.
+  const cost = nodeFileCost(files, seconds, {idle});
+  return splitByDuration(files, count, cost, [], nodeLegsApart(cost));
 }
 
 /**
@@ -251,7 +261,12 @@ export default class DurationShardSequencer extends BaseSequencer {
     // One spec per file is the rule; anything else keeps Vitest's order.
     if (byPath.size !== node.length) return sorted;
     const files = [...byPath.keys()];
+    // A file with a leg of its own starts last: by then the leg's light files
+    // are nearly done, so its browser run has the runner to itself.
     const order = slowestFirst(files, nodeFileCost(files, readDurations()));
+    order.sort(
+      (a, b) => Number(takesOwnNodeLeg(a)) - Number(takesOwnNodeLeg(b)),
+    );
     const result = [...sorted];
     order.forEach((file, i) => {
       result[slots[i]] = byPath.get(file);

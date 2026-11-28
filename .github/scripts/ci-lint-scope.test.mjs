@@ -5,7 +5,8 @@
  *
  * lint.yml classifies a pull request's files with the trusted classifier from
  * the base branch and skips full ESLint for a spec-only or docsite-only change;
- * a tooling-only change still runs it (spec:AST-030 FR8). Its checkout was
+ * a tooling-only change still runs it (spec:AST-030 FR8). The docs lane lints
+ * only the docsite files that the change adds, changes or renames. Its checkout was
  * depth 1, where the merge commit never reaches its merge base with the base
  * branch, so the classifier was never fed and every pull request ran full lint.
  * These cases run the real step script
@@ -199,6 +200,18 @@ describe('required lint routing', () => {
     });
   });
 
+  it('gives the full ESLint pass a 6 GB heap, and the baseline check the same', () => {
+    // The type-aware pass outgrew 4 GB on main; 6 GB stays well inside the
+    // 16 GB runner.
+    const eslint = steps.find(step => step.name === 'Run ESLint');
+    expect(lint.jobs.lint['runs-on']).toBe('ubuntu-24.04-arm');
+    expect(eslint.env.NODE_OPTIONS).toMatch(/^--max-old-space-size=6144( |$)/);
+    expect(
+      steps.find(step => step.name === 'Check the comment-provenance baseline')
+        .env.NODE_OPTIONS,
+    ).toBe(eslint.env.NODE_OPTIONS);
+  });
+
   it('checks the comment-provenance baseline in full lint, and a baseline-only change runs it', () => {
     const check = steps.find(
       step => step.name === 'Check the comment-provenance baseline',
@@ -233,7 +246,7 @@ describe('required lint routing', () => {
       'internal/eslint-plugin-astryx/no-comment-provenance.js',
       'internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs',
       'internal/eslint-plugin-astryx/rule-baseline.mjs',
-      'eslint.config.js',
+      'eslint.config.mjs',
     ]) {
       expect(canSkipBaselineCheck([file], baseline), file).toBe(false);
     }
@@ -377,5 +390,280 @@ describe('required lint routing', () => {
         encoding: 'utf8',
       }).status,
     ).not.toBe(0);
+  });
+});
+
+describe('formatting of changed files', () => {
+  const format = steps.find(
+    step => step.name === 'Check formatting of changed files',
+  );
+  // The repository's own Prettier package folder, which the stand-in npm
+  // links where the step installs Prettier.
+  const prettierPackage = fs.realpathSync(
+    path.join(root, 'node_modules/prettier'),
+  );
+  const lockedPrettier = fs
+    .readFileSync(path.join(root, 'pnpm-lock.yaml'), 'utf8')
+    .match(
+      /^ {2}\.:\n[\s\S]*?^ {6}prettier:\n {8}specifier: .*\n {8}version: ([^\s(]+)/m,
+    )[1];
+
+  /**
+   * Runs the step on a spec-only change, in a checkout with no installed
+   * dependencies, as the spec lane has. A stand-in `npm` records what the step
+   * installs and links the repository's own Prettier in its place.
+   * @param {string} spec the changed record's text
+   * @param {{file?: string, npmFails?: boolean}} [options] the changed file,
+   *   and whether the stand-in npm fails as a failed download does
+   */
+  function checkSpecOnly(
+    spec,
+    {file = 'docs/specs/AST-999-example/spec.md', npmFails = false} = {},
+  ) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-format-'));
+    scratch.push(dir);
+    const workspace = path.join(dir, 'ws');
+    for (const file of [
+      '.prettierrc.json',
+      '.prettierignore',
+      'pnpm-lock.yaml',
+    ])
+      write(workspace, file, fs.readFileSync(path.join(root, file), 'utf8'));
+    git(workspace, 'init', '-q');
+    git(workspace, 'add', '-A');
+    git(workspace, 'commit', '-q', '-m', 'base');
+    write(workspace, file, spec);
+    git(workspace, 'add', '-A');
+    git(workspace, 'commit', '-q', '-m', 'the pull request');
+    const bin = path.join(dir, 'bin');
+    write(
+      bin,
+      'npm',
+      [
+        '#!/bin/bash',
+        `echo "$*" > ${JSON.stringify(path.join(dir, 'npm-args'))}`,
+        ...(npmFails ? ['exit 1'] : []),
+        'while [ $# -gt 0 ]; do [ "$1" = --prefix ] && prefix=$2; shift; done',
+        'mkdir -p "$prefix/node_modules/.bin"',
+        `ln -s ${JSON.stringify(prettierPackage)} "$prefix/node_modules/prettier"`,
+        'ln -s ../prettier/bin/prettier.cjs "$prefix/node_modules/.bin/prettier"',
+      ].join('\n'),
+    );
+    fs.chmodSync(path.join(bin, 'npm'), 0o755);
+    const result = spawnSync(
+      'bash',
+      ['--noprofile', '--norc', '-eo', 'pipefail', '-c', format.run],
+      {
+        cwd: workspace,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          MERGE_SHA: git(workspace, 'rev-parse', 'HEAD'),
+          RUNNER_TEMP: dir,
+        },
+      },
+    );
+    const npmArgs = fs.existsSync(path.join(dir, 'npm-args'))
+      ? fs.readFileSync(path.join(dir, 'npm-args'), 'utf8').trim()
+      : '';
+    return {...result, npmArgs};
+  }
+
+  it('runs for a spec-only pull request, and still skips the docs lane', () => {
+    expect(format.if).toContain("steps.scope.outputs.docsite_only != 'true'");
+    expect(format.if).not.toContain('spec_only');
+  });
+
+  it('fails a spec-only pull request whose record Prettier would reformat', () => {
+    const result = checkSpecOnly(
+      '# Example\n\n| a | b |\n|---|---|\n| a longer cell | x |\n',
+    );
+    expect(result.status, result.stdout + result.stderr).toBe(1);
+    expect(result.stdout).toContain('docs/specs/AST-999-example/spec.md');
+    expect(result.npmArgs).toContain(`prettier@${lockedPrettier}`);
+  });
+
+  it('passes a spec-only pull request whose record is formatted', () => {
+    const result = checkSpecOnly('# Example\n\nA formatted record.\n');
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout).toContain('Every changed file is formatted.');
+  });
+
+  it('installs nothing when no TypeScript or Markdown file changed', () => {
+    const result = checkSpecOnly('{"a": 1}\n', {
+      file: 'scripts/vitest-node-durations.json',
+    });
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.npmArgs).toBe('');
+    expect(result.stdout).toContain('No changed TypeScript or Markdown files.');
+  });
+
+  it('names a failed Prettier install with an error annotation', () => {
+    const result = checkSpecOnly('# Example\n\nA formatted record.\n', {
+      npmFails: true,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      `::error title=Prettier install::Prettier ${lockedPrettier} could not be installed`,
+    );
+  });
+});
+
+describe('ESLint on the docs lane', () => {
+  const setup = steps.find(step => step.uses === './.github/actions/setup');
+  const fullPass = steps.find(step => step.name === 'Run ESLint');
+  const docsite = steps.find(
+    step => step.name === 'Run ESLint on changed docsite files',
+  );
+
+  /**
+   * Runs the step's own script in a scratch repository whose last commit makes
+   * `change`. A stand-in `pnpm` records its arguments, one per line, and exits
+   * with `exitCode`, as ESLint exits.
+   * @param {Record<string, string | null>} change each changed file's new
+   *   text, or `null` to delete it
+   * @param {{exitCode?: number}} [options]
+   */
+  function runDocsiteStep(change, {exitCode = 0} = {}) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-docsite-'));
+    scratch.push(dir);
+    const workspace = path.join(dir, 'ws');
+    write(workspace, 'apps/docsite/src/Kept.tsx', 'export const kept = 1;\n');
+    write(workspace, 'apps/docsite/src/Gone.tsx', 'export const gone = 1;\n');
+    write(workspace, 'apps/docsite/src/Old.ts', 'export const moved = 1;\n');
+    git(workspace, 'init', '-q');
+    git(workspace, 'add', '-A');
+    git(workspace, 'commit', '-q', '-m', 'base');
+    for (const [file, text] of Object.entries(change)) {
+      if (text === null) fs.rmSync(path.join(workspace, file));
+      else write(workspace, file, text);
+    }
+    git(workspace, 'add', '-A');
+    git(workspace, 'commit', '-q', '-m', 'the pull request');
+    const bin = path.join(dir, 'bin');
+    const calls = path.join(dir, 'pnpm-args');
+    write(
+      bin,
+      'pnpm',
+      [
+        '#!/bin/bash',
+        `printf '%s\\n' "$@" >> ${JSON.stringify(calls)}`,
+        `exit ${exitCode}`,
+      ].join('\n'),
+    );
+    fs.chmodSync(path.join(bin, 'pnpm'), 0o755);
+    const result = spawnSync(
+      'bash',
+      ['--noprofile', '--norc', '-eo', 'pipefail', '-c', docsite.run],
+      {
+        cwd: workspace,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          MERGE_SHA: git(workspace, 'rev-parse', 'HEAD'),
+          RUNNER_TEMP: dir,
+        },
+      },
+    );
+    const args = fs.existsSync(calls)
+      ? fs.readFileSync(calls, 'utf8').trim().split('\n')
+      : [];
+    return {...result, args};
+  }
+
+  it('routes a pull request that changes only docsite files to the docs lane', () => {
+    expect(
+      classifyPullRequest({
+        'apps/docsite/src/Example.tsx': 'export const a = 1;\n',
+      }),
+    ).toMatchObject({docsite_only: 'true', spec_only: 'false'});
+  });
+
+  it('installs dependencies on the docs lane, and only the spec lane skips setup', () => {
+    expect(setup.if).toBe("steps.scope.outputs.spec_only != 'true'");
+  });
+
+  it('lints on the docs lane after setup, with the heap of the full pass', () => {
+    expect(docsite.if).toBe("steps.scope.outputs.docsite_only == 'true'");
+    // The full pass keeps its lanes.
+    expect(fullPass.if).toBe(
+      "steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'",
+    );
+    expect(docsite.env.NODE_OPTIONS).toBe(fullPass.env.NODE_OPTIONS);
+    expect(docsite.env.LINT_HEAP_PEAK_FILE).toBe(
+      fullPass.env.LINT_HEAP_PEAK_FILE,
+    );
+    expect(steps.indexOf(docsite)).toBeGreaterThan(steps.indexOf(setup));
+  });
+
+  it('lints each docsite file that the pull request adds, changes or renames, and no other file', () => {
+    const result = runDocsiteStep({
+      'apps/docsite/src/Kept.tsx': 'export const kept = 2;\n',
+      'apps/docsite/src/Gone.tsx': null,
+      'apps/docsite/src/Old.ts': null,
+      'apps/docsite/src/New.ts': 'export const moved = 1;\n',
+      'apps/docsite/src/added.mjs': 'export const added = 1;\n',
+      'apps/docsite/content/page.md': '# Page\n',
+      'apps/docsite/public/data.json': '{}\n',
+    });
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.args.slice(0, 4)).toEqual([
+      'exec',
+      'eslint',
+      '--max-warnings=-1',
+      '--no-warn-ignored',
+    ]);
+    expect(result.args.slice(4).sort()).toEqual([
+      'apps/docsite/src/Kept.tsx',
+      'apps/docsite/src/New.ts',
+      'apps/docsite/src/added.mjs',
+    ]);
+  });
+
+  it('fails when ESLint reports an error', () => {
+    const result = runDocsiteStep(
+      {'apps/docsite/src/Kept.tsx': 'export const kept = 2;\n'},
+      {exitCode: 1},
+    );
+    expect(result.args.slice(0, 2)).toEqual(['exec', 'eslint']);
+    expect(result.status).not.toBe(0);
+  });
+
+  it('runs no ESLint when the pull request changes no file that ESLint lints', () => {
+    const result = runDocsiteStep({'apps/docsite/content/page.md': '# Page\n'});
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.args).toEqual([]);
+    expect(result.stdout).toContain(
+      'No changed docsite file that ESLint lints.',
+    );
+  });
+
+  it("errors in the root config's strict tier on a docsite file, as the full pass does", async () => {
+    const {ESLint} = await import('eslint');
+    const previous = process.env.ASTRYX_STRICT_LINT;
+    process.env.ASTRYX_STRICT_LINT = '1';
+    try {
+      const eslint = new ESLint({cwd: root});
+      const filePath = path.join(root, 'apps/docsite/src/LintLaneFixture.tsx');
+      const lint = async code =>
+        (await eslint.lintText(code, {filePath}))[0].messages
+          .filter(message => message.severity === 2)
+          .map(message => message.ruleId);
+      expect(
+        await lint(
+          'export function Preview() {\n  return <iframe src="/preview" title="Preview" />;\n}\n',
+        ),
+      ).toContain('@eslint-react/dom-no-missing-iframe-sandbox');
+      expect(
+        await lint(
+          'export function Preview() {\n  return <iframe sandbox="" src="/preview" title="Preview" />;\n}\n',
+        ),
+      ).not.toContain('@eslint-react/dom-no-missing-iframe-sandbox');
+    } finally {
+      if (previous === undefined) delete process.env.ASTRYX_STRICT_LINT;
+      else process.env.ASTRYX_STRICT_LINT = previous;
+    }
   });
 });

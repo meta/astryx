@@ -9,7 +9,7 @@
  * @position Product-composed selection UI; never injected by the Table plugin
  */
 
-import type {ReactNode} from 'react';
+import {useRef, type ReactNode} from 'react';
 import {Button} from '../Button';
 import {Toolbar} from '../Toolbar';
 import type {ToolbarProps} from '../Toolbar';
@@ -20,6 +20,8 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Table/TableSelectionToolbar.generated';
 import {devPropError} from '../utils/devWarning';
+import {useAnnounce} from '../hooks/useAnnounce';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -67,6 +69,14 @@ export function TableSelectionToolbar({
   const label = labelFromProps ?? t('@astryx.table.selection.bulkActionsLabel');
   const clearLabel =
     clearLabelFromProps ?? t('@astryx.table.selection.clearAll');
+  // The count is one current state: a burst of selection changes speaks only
+  // the latest count.
+  const announceCount = useAnnounce({hasReplace: true});
+  const countRef = useRef<HTMLSpanElement>(null);
+  useAnnounceRenderedText(countRef, selection.hasSelection, '', {
+    skipFirstRender: true,
+    announce: announceCount,
+  });
 
   if (!selection.hasSelection) {
     return null;
@@ -87,7 +97,7 @@ export function TableSelectionToolbar({
       variant={variant}
       endContent={
         <>
-          <span>{selectionLabel}</span>
+          <span ref={countRef}>{selectionLabel}</span>
           <Button
             label={clearLabel}
             variant="ghost"

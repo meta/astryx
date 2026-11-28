@@ -51,7 +51,12 @@ import React, {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import type {ThemeMode} from './types';
-import {colorVars, typeScaleVars, typographyVars} from './tokens.stylex';
+import {
+  colorVars,
+  focusVars,
+  typeScaleVars,
+  typographyVars,
+} from './tokens.stylex';
 import {isDefinedTheme, type DefinedTheme} from './defineTheme';
 import {generateThemeCSS} from './generateThemeRules';
 import {registerTheme} from './themeRegistry';
@@ -70,6 +75,7 @@ import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
   reducedMotionMarkProps,
   setRootReducedMotionMark,
+  ThemeReducesMotionContext,
 } from '../privateAttributes/reducedMotion.stylex';
 import {setRootScheme} from '../privateAttributes/scheme';
 import {createSharedContext} from '../utils/sharedContext';
@@ -110,6 +116,13 @@ const wrapperStyles = stylex.create({
   },
   system: {
     colorScheme: 'light dark',
+  },
+  // Core declares the focus color at the root, so a wrapper that applies a
+  // theme declares it again. Then a nested Theme's ring takes its own theme's
+  // accent. A build that lowers `light-dark()` resolves a custom property in
+  // the mode of the element that declares it.
+  themedFocus: {
+    [focusVars['--focus-outline-color']]: colorVars['--color-accent'],
   },
   // The mark's custom property (REDUCED_MOTION_PROPERTY), which every element
   // under the mark inherits.
@@ -428,6 +441,7 @@ export function Theme({
   const parentMode = parentModeValue?.mode;
   const parentForces = parentMode === 'light' || parentMode === 'dark';
   const aroundScheme = use(SystemSchemeContext);
+  const inheritsReducedMotion = use(ThemeReducesMotionContext);
   const systemScheme = parentForces ? 'preference' : aroundScheme;
 
   // A value that is not a defined theme applies no theme of its own. The
@@ -499,6 +513,7 @@ export function Theme({
         {...stylex.props(
           wrapperStyles.base,
           colorSchemeStyle,
+          applied != null && wrapperStyles.themedFocus,
           reducesMotion && wrapperStyles.reducedMotion,
         )}
         data-astryx-theme={applied?.name}
@@ -515,7 +530,12 @@ export function Theme({
     <SystemSchemeContext value={systemScheme}>
       <ThemeModeContext value={modeValue}>
         <ThemeContext value={ctxValue}>
-          <ThemeSourceContext value={source}>{wrapper}</ThemeSourceContext>
+          <ThemeSourceContext value={source}>
+            <ThemeReducesMotionContext
+              value={reducesMotion || inheritsReducedMotion}>
+              {wrapper}
+            </ThemeReducesMotionContext>
+          </ThemeSourceContext>
         </ThemeContext>
       </ThemeModeContext>
     </SystemSchemeContext>

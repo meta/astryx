@@ -160,11 +160,22 @@ changes it stops and exits 2. `--wrap <command>` (or `PREFLIGHT_WRAP`) runs each
 jobs.
 
 `--quick` runs `pnpm review:pre`, the typecheck of the changed packages alone,
-ESLint on the changed files, the changed test files alone, `pnpm check:knowledge`
-and `pnpm check:changesets`, in minutes. It is not CI-equivalent: it builds
-nothing, leaves out dependent packages, the tests the change reaches through an
-import, and the guards, and it ends with "run `pnpm preflight` before you flip"
-rather than "ready to flip".
+ESLint on the changed files, `pnpm check:cli-structure` when the change touches
+`packages/cli/` (CI runs it in its node tests), the changed test files alone,
+`pnpm check:knowledge` and `pnpm check:changesets`, in minutes. It is not
+CI-equivalent: it builds nothing, leaves out dependent packages, the tests the
+change reaches through an import, and the guards, and it ends with "run `pnpm
+preflight` before you flip" rather than "ready to flip". When every typecheck
+error is a missing workspace build, the typecheck fails with "typecheck needs
+built packages: run `pnpm build` (or `pnpm preflight` without --quick)", and the
+run exits 1: a typecheck that cannot read its dependencies' types checked
+nothing. A missing build is an unresolved import that a workspace package's
+`exports` declares and whose types file is absent (such as
+`@astryxdesign/core/utils` or `@astryxdesign/<package>/built` before a build), or
+a relative `dist` path; an implicit-any error (TS7006, TS7031) in a file with
+such an import counts with it. Any other TypeScript error fails the typecheck
+with its own output: an undeclared subpath, an entry whose file exists, an
+implicit-any error in another file, or any other error code.
 
 Preflight is not a required step. It reproduces the pre-review checklist and
 CI's checks; it does not reproduce a reviewer's judgment.
