@@ -3,8 +3,8 @@
 /**
  * @file selectorPresentation.stylex.ts
  * @input Uses field border, size and spacing tokens
- * @output Shared focus-return and trigger line-box styles for Selector and
- *   MultiSelector
+ * @output Shared focus-return, trigger line-box, and trigger row styles for
+ *   Selector and MultiSelector
  * @position Internal visual policy for selector presentation changes
  */
 
@@ -47,5 +47,23 @@ export const selectorTriggerLineBoxStyles = stylex.create({
   lg: {
     lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
     paddingBlock: `calc((${sizeVars['--size-element-lg']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
+  },
+});
+
+// The trigger height for a picker whose content must not set it
+// (MultiSelector): the size token, or the line box above and the borders when
+// a larger text size makes that taller. A text field's row
+// (`inputRowSizeStyles`) is not used: it measures the body text, which a
+// mobile type scale makes taller than this line box, and the trigger would
+// then grow past its token at the theme's text size.
+export const selectorTriggerRowStyles = stylex.create({
+  sm: {
+    height: `max(${sizeVars['--size-element-sm']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
+  },
+  md: {
+    height: `max(${sizeVars['--size-element-md']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
+  },
+  lg: {
+    height: `max(${sizeVars['--size-element-lg']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,
   },
 });

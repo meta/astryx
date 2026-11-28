@@ -6,8 +6,8 @@
  * @input The built Storybook's MultiSelector stories in Chromium and WebKit
  * @output Real-browser proof that the trigger holds its size token at the
  *   theme's text size, grows with a larger set text size instead of clipping
- *   its value, keeps the token when badges wrap in a narrow field, and takes
- *   an InputGroup's row
+ *   its value, keeps the token when badges wrap in a narrow field and on a
+ *   phone with a coarse pointer, and takes an InputGroup's row
  * @position Ongoing browser check for component:MultiSelector FR13 and
  *   spec:AST-102 FR4; jsdom computes no layout
  */
@@ -159,4 +159,19 @@ test('in a narrow field, badges that wrap keep the trigger at its token at the t
   });
   expect(read.rows).toBeGreaterThan(1);
   expect(read.height).toBe(read.token);
+});
+
+test.describe('on a phone with a coarse pointer', () => {
+  test.use({viewport: {width: 390, height: 844}, hasTouch: true});
+
+  test('each trigger is still exactly its size token at the theme text size', async ({
+    page,
+  }) => {
+    await open(page, 'sizes');
+    const triggers = await readTriggers(page);
+    expect(triggers.length).toBeGreaterThanOrEqual(3);
+    for (const trigger of triggers) {
+      expect(trigger.height).toBe(trigger.token);
+    }
+  });
 });

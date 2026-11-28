@@ -45,7 +45,6 @@ import {
 import {useKeepLayerOpenProps} from '../Layer/useLayer';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
-import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {Divider} from '../Divider';
 import {Spinner} from '../Spinner';
 import {PanelSearchInput} from '../Field/PanelSearchInput';
@@ -118,6 +117,7 @@ import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {
   selectorPresentationStyles,
   selectorTriggerLineBoxStyles,
+  selectorTriggerRowStyles,
 } from '../Selector/selectorPresentation.stylex';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
@@ -548,11 +548,11 @@ const styles = stylex.create({
   },
 });
 
-// The trigger height is the text field row (`inputRowSizeStyles`): the size
-// token, or one bordered text line when a larger set text size makes that
-// taller. Its content, such as badges that wrap, never sets it. The line box
-// and padding are Selector's (`selectorTriggerLineBoxStyles`), so the value
-// sits where a Selector's does.
+// The trigger height is `selectorTriggerRowStyles`: the size token, or one
+// line box and the borders when a larger set text size makes that taller. Its
+// content, such as badges that wrap, never sets it. The line box and padding
+// are Selector's (`selectorTriggerLineBoxStyles`), so the value sits where a
+// Selector's does.
 
 const itemSizeStyles = stylex.create({
   sm: {
@@ -2775,7 +2775,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           stylex.props(
             inputWrapperStyles.base,
             styles.triggerContainer,
-            inputRowSizeStyles[size],
+            selectorTriggerRowStyles[size],
             selectorTriggerLineBoxStyles[size],
             variant === 'secondary' && styles.triggerSecondary,
             variant === 'ghost' && styles.triggerGhost,
