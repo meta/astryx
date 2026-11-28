@@ -800,7 +800,7 @@ describe('ContextMenu', () => {
     }
   });
 
-  it('after a touch open, the first arrow key moves focus with the keyboard indicator', async () => {
+  it('after a touch open, the first arrow key moves focus without focusVisible: false', async () => {
     const focus = vi.spyOn(HTMLElement.prototype, 'focus');
     vi.useFakeTimers();
     try {
@@ -828,8 +828,8 @@ describe('ContextMenu', () => {
       fireEvent.keyDown(document.activeElement ?? document.body, {
         key: 'ArrowDown',
       });
-      // The key moves focus without focusVisible: false, so the browser
-      // draws the ring after keyboard input.
+      // The key asks for plain focus, so the browser's own keyboard
+      // modality decides the ring.
       expect(focus.mock.contexts.at(-1)).toHaveTextContent('Copy');
       expect(focus.mock.calls.at(-1)?.[0]?.focusVisible).not.toBe(false);
     } finally {
