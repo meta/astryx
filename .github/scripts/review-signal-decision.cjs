@@ -169,14 +169,15 @@ function resolveReviewApprovals({
 }
 
 /**
- * Whether an owner removed an advisory label at the current head: the newest
- * removal of `label` by an engineering or design owner comes after the head
- * reached the pull request. A pushed commit carries its committer date, not
- * its push time, so the head's arrival is the earliest trusted
- * `review-required` status on it, which review-signal writes for every new
- * head. With no such status the head's arrival is unknown, and the removal
- * does not count. Then the owner has seen this head, and the label is not
- * added back to it.
+ * Whether an owner removed an advisory label at the current head: since the
+ * head reached the pull request, the last add or removal of `label` is a
+ * removal by an engineering or design owner. A pushed commit carries its
+ * committer date, not its push time, so the head's arrival is the earliest
+ * trusted `review-required` status on it, which review-signal writes for every
+ * new head, or a later force push that brought it back. With no such status
+ * the head's arrival is unknown, and the removal does not count. Then the
+ * owner has seen this head, and the label is not added back to it. A later
+ * head is judged again from its own arrival: nothing carries across heads.
  * @param {object} options
  * @param {Array<{event?: string, actor?: {login?: string}, label?: {name?: string}, created_at?: string}>} options.events
  *   the pull request's timeline
@@ -191,21 +192,39 @@ function ownerRemovedLabelAtHead({events, headStatuses, label, owners}) {
     .map(status => Date.parse(status.created_at ?? ''))
     .filter(Number.isFinite);
   if (arrivals.length === 0) return {removedAtHead: false, by: null};
-  const arrived = Math.min(...arrivals);
-  let removedAt = -Infinity;
+  // A force push that brings an earlier head back (A, then B, then A again)
+  // is when it arrived this time: its first status is from its first time.
+  // Any force push after that status is such a return, as the head is current.
+  const forcePushes = events
+    .filter(event => event.event === 'head_ref_force_pushed')
+    .map(event => Date.parse(event.created_at ?? ''))
+    .filter(Number.isFinite);
+  const arrived = Math.max(Math.min(...arrivals), ...forcePushes);
+  // The last add or removal of the label since the head arrived decides: an
+  // owner's removal holds it off; any later add, an owner's included, ends
+  // that, so a later removal by someone who is not an owner adds it again.
+  const changes = events
+    .filter(
+      event =>
+        (event.event === 'labeled' || event.event === 'unlabeled') &&
+        event.label?.name === label,
+    )
+    .map(event => ({event, at: Date.parse(event.created_at ?? '')}))
+    .filter(({at}) => Number.isFinite(at) && at > arrived)
+    .sort((a, b) => a.at - b.at);
+  let removedAtHead = false;
   let by = null;
-  for (const event of events) {
-    if (event.event !== 'unlabeled' || event.label?.name !== label) continue;
+  for (const {event} of changes) {
     const login = event.actor?.login?.toLowerCase();
-    const at = Date.parse(event.created_at ?? '');
-    if (!login || !owners.includes(login) || !Number.isFinite(at)) continue;
-    if (at > removedAt) {
-      removedAt = at;
+    if (event.event === 'labeled') {
+      removedAtHead = false;
+      by = null;
+    } else if (login && owners.includes(login)) {
+      removedAtHead = true;
       by = login;
     }
   }
-  const removedAtHead = removedAt > arrived;
-  return {removedAtHead, by: removedAtHead ? by : null};
+  return {removedAtHead, by};
 }
 
 // A pull request the review app opens is the app's own work, which it cannot

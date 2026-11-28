@@ -633,6 +633,16 @@ describe('ownerRemovedLabelAtHead', () => {
   });
   // A pushed commit is listed by its committer date, which can be earlier
   // than both its push and an owner's removal.
+  const added = (login, minute, name = LABEL) => ({
+    event: 'labeled',
+    actor: {login},
+    label: {name},
+    created_at: at(minute),
+  });
+  const forcePushed = minute => ({
+    event: 'head_ref_force_pushed',
+    created_at: at(minute),
+  });
   const committed = (minute, sha) => ({
     event: 'committed',
     sha,
@@ -661,8 +671,9 @@ describe('ownerRemovedLabelAtHead', () => {
   });
 
   it('does not count a removal from before the head arrived, whatever the commit date', () => {
-    // As on a real timeline: a commit dated 17:05, pushed at 17:19, after an
-    // owner removed the label at 17:14 on the head before it.
+    // A case modelled on #11740's commit ordering: a commit dated 17:05,
+    // pushed at 17:19, after an owner removed the label at 17:14 on the head
+    // before it.
     expect(
       decide([committed(5, head2), removed('designer', 14)], [arrived(19)]),
     ).toEqual({removedAtHead: false, by: null});
@@ -693,5 +704,49 @@ describe('ownerRemovedLabelAtHead', () => {
       decide([removed('designer', 30)], [arrived(40), arrived(20)])
         .removedAtHead,
     ).toBe(true);
+  });
+
+  it('keeps an owner removal at the same head: a later event there does not add it back', () => {
+    // Removed at 17:30 at the head that arrived 17:20; ready-for-review at
+    // 17:45 is another event at that same head.
+    expect(decide([removed('designer', 30)], [arrived(20)]).removedAtHead).toBe(
+      true,
+    );
+  });
+
+  it('judges a new head again, as before: a removal at the old head does not carry', () => {
+    // Removed at 17:30; a new head arrived at 17:40 and has its own status.
+    expect(decide([removed('designer', 30)], [arrived(40)]).removedAtHead).toBe(
+      false,
+    );
+  });
+
+  it('dates a head a force push brought back from that push (A, then B, then A)', () => {
+    // A arrived at 17:10; B was the head when the owner removed the label at
+    // 17:20; a force push brought A back at 17:30. A's first status is still
+    // the 17:10 one, but the removal was made at B.
+    expect(
+      decide([removed('designer', 20), forcePushed(30)], [arrived(10)]),
+    ).toEqual({removedAtHead: false, by: null});
+    // A removal after that force push counts at A.
+    expect(
+      decide(
+        [removed('designer', 20), forcePushed(30), removed('designer', 35)],
+        [arrived(10)],
+      ).removedAtHead,
+    ).toBe(true);
+  });
+
+  it("honours an owner's re-add: a later removal by someone else adds it again", () => {
+    expect(
+      decide(
+        [
+          removed('designer', 30),
+          added('designer', 35),
+          removed('contributor', 40),
+        ],
+        [arrived(20)],
+      ),
+    ).toEqual({removedAtHead: false, by: null});
   });
 });
