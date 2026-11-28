@@ -31,24 +31,26 @@ architecture:
     architecture:react-component-runtime,
     architecture:component-test-sufficiency,
     architecture:knowledge-contracts,
+    architecture:component-import-boundaries,
+    architecture:list-windowing,
   ]
 contributing: []
-system_specs: [spec:AST-025, spec:AST-029]
+system_specs: [spec:AST-025, spec:AST-029, spec:AST-099]
 ---
 
 # ChatLayout component contract
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                  |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `children`, `composer`, `emptyState`, `scrollButton`, `scrollRef`, `density`, plus `BaseProps<HTMLDivElement>` and `ref` on the layout root.                                              |
-| Behavior                | The root is a flex column; the message area grows and never shrinks; the dock is sticky when the root scrolls and fixed when `scrollRef` names an outer scroller.                         |
-| End-user impact         | A chat transcript scrolls under a composer that stays reachable, auto-follows streaming output, and offers a scroll-to-bottom affordance when the reader has moved away from the bottom.  |
-| Builder impact          | None.                                                                                                                                                                                     |
-| Compatibility/readiness | Records shipped behavior; no public change. Two owner questions stay open.                                                                                                                |
-| Review checks           | Reject any row that states unshipped behavior, promises a default this component does not apply, or resolves OQ1 or OQ2 without an owner decision.                                        |
-| Governing rules         | `architecture:public-component-api/INV1, INV5–INV6, INV8`; `architecture:component-style-authoring/INV1–INV3, INV5`; `architecture:theme-tokens/INV3`; `spec:AST-025/FR12` (not adopted). |
+| Area                    | Contract                                                                                                                                                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `children`, `composer`, `emptyState`, `scrollButton`, `scrollRef`, `density`, plus `BaseProps<HTMLDivElement>` and `ref` on the layout root. `ChatLayoutContext` also takes a host list's registration and its new-message reports, and publishes `endRoom`.              |
+| Behavior                | The root is a flex column; the message area grows and never shrinks; the dock is sticky when the root scrolls and fixed when `scrollRef` names an outer scroller. A registered host list keeps the newest message in view, and the layout then writes no scroll position. |
+| End-user impact         | A chat transcript scrolls under a composer that stays reachable, auto-follows streaming output, and offers a scroll-to-bottom affordance when the reader has moved away from the bottom. A windowed transcript does the same.                                             |
+| Builder impact          | A list that keeps the newest message in view itself registers as the host list. A list that measures from its own content's end reads `endRoom`.                                                                                                                          |
+| Compatibility/readiness | Records shipped behavior, plus additive context members: with no host list, the layout follows as before. FR11–FR13 are implementation gaps (Current-state impact). Two owner questions stay open.                                                                        |
+| Review checks           | Reject any row that states unshipped behavior outside Current-state impact, promises a default this component does not apply, writes the scroll position while a host list is registered, or resolves OQ1 or OQ2 without an owner decision.                               |
+| Governing rules         | `architecture:public-component-api/INV1, INV5–INV6, INV8`; `architecture:component-style-authoring/INV1–INV3, INV5`; `architecture:theme-tokens/INV3`; `architecture:component-import-boundaries/INV10`; `spec:AST-099/FR3, DEC-7`; `spec:AST-025/FR12` (not adopted).    |
 
 This table is a review projection; the body below is authoritative.
 
@@ -59,17 +61,28 @@ scrolling transcript above a docked composer so that short conversations do not
 overflow, long ones scroll, and the composer stays at the bottom edge of
 whichever element actually scrolls. Scroll mechanics live in
 `useChatStreamScroll` and `useChatNewMessages`; this component wires them to the
-DOM it owns and publishes the resulting refs through `ChatLayoutContext`.
+DOM it owns and publishes the resulting refs through `ChatLayoutContext`. A
+list that keeps the newest message in view itself registers as the host list,
+and the layout then leaves the scroll position to it.
 
 Consumer usage, prop syntax, and examples belong in `ChatLayout.doc.mjs`.
 
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Compatibility class: records shipped behavior; additive `ChatLayoutContext`
+  members (FR11–FR13)
 - Controlled/uncontrolled behavior: not applicable; the component holds no
   controllable value.
 - Migration decision: none.
+
+## Current-state impact
+
+- **FR11–FR13 gap:** ChatLayout takes no host list and publishes no end room.
+  Its follow writes the position on its scroller whatever list renders there,
+  and its new-messages cue counts only `ChatMessage` elements. A windowed list
+  in the message area either puts a second writer on one position or does not
+  follow the newest message.
 
 ## Ownership boundary
 
@@ -85,11 +98,18 @@ inline-size`, and the `chat-layout` theming target with its `density` axis.
 - Empty-state substitution and its centering box.
 - The default scroll-to-bottom affordance and the visibility signal it receives.
 - Publication of `scrollContainerRef` and `contentRef` through `ChatLayoutContext`.
+- Standing its own follow down while a host list is registered, and sending the
+  scroll affordance's press to that list (FR11).
+- The new-messages cue for a host list's report (FR12), and publication of
+  `endRoom` (FR13).
 
 **Does not own / non-goals**
 
 - Scroll measurement, spring animation, lock behavior, or new-message detection —
   owned by `useChatStreamScroll` and `useChatNewMessages`.
+- Windowing, and keeping the newest message in view while a host list is
+  registered — owned by that list, such as `component:ChatVirtualizer` in Lab,
+  on Core's windowing module (`architecture:list-windowing`).
 - Turning the browser's scroll anchoring off while following — owned by
   `useChatStreamScroll`, which writes it only through Core's scroll-anchoring
   owner module (`privateAttributes/scrollAnchoring.stylex.ts`), the one owner
@@ -105,15 +125,18 @@ inline-size`, and the `chat-layout` theming target with its `density` axis.
 
 ## Public concepts
 
-| Concept        | Closed values or states                                  | Meaning                                                                            | Default     | Owner                | Stability | Invalid-value behavior                     |
-| -------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------- | -------------------- | --------- | ------------------------------------------ |
-| `children`     | any `ReactNode`                                          | Transcript content placed in the message area.                                     | required    | caller               | stable    | n/a — required                             |
-| `composer`     | any `ReactNode`                                          | Content placed inside the dock.                                                    | required    | caller               | stable    | n/a — required                             |
-| `emptyState`   | `ReactNode`; omitted                                     | Rendered centred in place of `children` when `children` is empty.                  | omitted     | caller               | stable    | omitted renders `children` unchanged       |
-| `scrollButton` | `undefined`; `null`; any `ReactNode`                     | `undefined` selects the wired default, `null` renders nothing, a node replaces it. | `undefined` | component/caller     | stable    | any node renders as given                  |
-| `scrollRef`    | `RefObject<HTMLElement \| null>`; omitted                | Names the scrolling element; omitted makes the root scroll.                        | omitted     | caller               | stable    | a null `current` leaves scrolling inactive |
-| `density`      | `compact`; `balanced`; `spacious`                        | Selects dock padding, message-column width, and blur-layer size.                   | `balanced`  | component            | stable    | closed union; rejected by types            |
-| root surface   | `ref`; DOM/data/ARIA props; `className`/`style`/`xstyle` | Extends the layout root.                                                           | omitted     | public component API | stable    | n/a                                        |
+| Concept            | Closed values or states                                                    | Meaning                                                                                                                                                                                  | Default     | Owner                | Stability | Invalid-value behavior                                  |
+| ------------------ | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | -------------------- | --------- | ------------------------------------------------------- |
+| `children`         | any `ReactNode`                                                            | Transcript content placed in the message area.                                                                                                                                           | required    | caller               | stable    | n/a — required                                          |
+| `composer`         | any `ReactNode`                                                            | Content placed inside the dock.                                                                                                                                                          | required    | caller               | stable    | n/a — required                                          |
+| `emptyState`       | `ReactNode`; omitted                                                       | Rendered centred in place of `children` when `children` is empty.                                                                                                                        | omitted     | caller               | stable    | omitted renders `children` unchanged                    |
+| `scrollButton`     | `undefined`; `null`; any `ReactNode`                                       | `undefined` selects the wired default, `null` renders nothing, a node replaces it.                                                                                                       | `undefined` | component/caller     | stable    | any node renders as given                               |
+| `scrollRef`        | `RefObject<HTMLElement \| null>`; omitted                                  | Names the scrolling element; omitted makes the root scroll.                                                                                                                              | omitted     | caller               | stable    | a null `current` leaves scrolling inactive              |
+| `density`          | `compact`; `balanced`; `spacious`                                          | Selects dock padding, message-column width, and blur-layer size.                                                                                                                         | `balanced`  | component            | stable    | closed union; rejected by types                         |
+| root surface       | `ref`; DOM/data/ARIA props; `className`/`style`/`xstyle`                   | Extends the layout root.                                                                                                                                                                 | omitted     | public component API | stable    | n/a                                                     |
+| host list          | none; one or more registrations, the latest remaining one is the host list | A list in the message area that keeps the newest message in view itself. It registers through `registerHostList({scrollToBottom})` on `ChatLayoutContext`, which returns its unregister. | none        | caller               | stable    | each unregister removes only its own registration       |
+| new-message report | `reportNewMessage()` on `ChatLayoutContext`                                | A host list's report that a message newer than the reader's view arrived.                                                                                                                | none        | caller               | stable    | a report while the reader is at the end changes nothing |
+| `endRoom`          | CSS pixels, 0 or more, on `ChatLayoutContext`                              | The room the layout keeps after the message content: the message area's density spacing, the dock, and the keyboard's lift.                                                              | read-only   | component            | stable    | n/a — read-only                                         |
 
 `density` is a closed union. It is a documented `visualProps` axis of the
 `chat-layout` target, and it is not theme-extensible: no unavailable custom value
@@ -122,17 +145,20 @@ has a safe theme-independent baseline, so it stays closed under
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                           | Basis                                               |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| FR1 | The root MUST be a flex column, so an in-flow sticky dock's height is part of the root's height rather than added on top of it.                                                                                                     | Current source and tests                            |
-| FR2 | The message area MUST grow into leftover space and MUST NOT shrink below its content height, so short transcripts fill the root exactly and long ones overflow it.                                                                  | Current source and tests                            |
-| FR3 | With no `scrollRef`, the root MUST be the scroll container and the dock MUST be `position: sticky`.                                                                                                                                 | Current source and tests                            |
-| FR4 | With a `scrollRef`, the root MUST NOT become a scroll container and the dock MUST be `position: fixed`. The message area's end padding MUST hold the dock's height, so the newest message rests above the dock at the scroll's end. | Current source and tests                            |
-| FR5 | `emptyState` MUST replace `children` exactly when `children` is `null`, `undefined`, `false`, or an empty array, and MUST NOT replace any other children.                                                                           | Current source and tests                            |
-| FR6 | `scrollButton` MUST distinguish three cases: omitted selects the wired default, `null` renders nothing, and a supplied node replaces the default.                                                                                   | Current source and tests                            |
-| FR7 | `density` MUST reflect on the root as the `chat-layout` target's `data-density`, and MUST select the dock, message-area, dock-inner, and blur-layer geometry together.                                                              | Current source, tests, and docs                     |
-| FR8 | The layout MUST publish its scroll container and message content refs through `ChatLayoutContext` so the message list can register the observed content box.                                                                        | Current source                                      |
-| FR9 | Accepted `ref`, DOM/data/ARIA props, `className`, `style`, and `xstyle` MUST reach and compose on the layout root.                                                                                                                  | `architecture:public-component-api/INV5–INV6, INV8` |
+| ID   | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Basis                                               |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| FR1  | The root MUST be a flex column, so an in-flow sticky dock's height is part of the root's height rather than added on top of it.                                                                                                                                                                                                                                                                                                                                                                                         | Current source and tests                            |
+| FR2  | The message area MUST grow into leftover space and MUST NOT shrink below its content height, so short transcripts fill the root exactly and long ones overflow it.                                                                                                                                                                                                                                                                                                                                                      | Current source and tests                            |
+| FR3  | With no `scrollRef`, the root MUST be the scroll container and the dock MUST be `position: sticky`.                                                                                                                                                                                                                                                                                                                                                                                                                     | Current source and tests                            |
+| FR4  | With a `scrollRef`, the root MUST NOT become a scroll container and the dock MUST be `position: fixed`. The message area's end padding MUST hold the dock's height, so the newest message rests above the dock at the scroll's end.                                                                                                                                                                                                                                                                                     | Current source and tests                            |
+| FR5  | `emptyState` MUST replace `children` exactly when `children` is `null`, `undefined`, `false`, or an empty array, and MUST NOT replace any other children.                                                                                                                                                                                                                                                                                                                                                               | Current source and tests                            |
+| FR6  | `scrollButton` MUST distinguish three cases: omitted selects the wired default, `null` renders nothing, and a supplied node replaces the default.                                                                                                                                                                                                                                                                                                                                                                       | Current source and tests                            |
+| FR7  | `density` MUST reflect on the root as the `chat-layout` target's `data-density`, and MUST select the dock, message-area, dock-inner, and blur-layer geometry together.                                                                                                                                                                                                                                                                                                                                                  | Current source, tests, and docs                     |
+| FR8  | The layout MUST publish its scroll container and message content refs through `ChatLayoutContext` so the message list can register the observed content box.                                                                                                                                                                                                                                                                                                                                                            | Current source                                      |
+| FR9  | Accepted `ref`, DOM/data/ARIA props, `className`, `style`, and `xstyle` MUST reach and compose on the layout root.                                                                                                                                                                                                                                                                                                                                                                                                      | `architecture:public-component-api/INV5–INV6, INV8` |
+| FR11 | While a host list is registered through `registerHostList`, the layout MUST NOT write its scroller's scroll position or change its scroll anchoring; the host list keeps the newest message in view. The scroll affordance MUST still show while the reader is away from the end, and its press MUST call the host list's `scrollToBottom`. Each unregister removes only its own registration: the latest remaining one is the host list, and following returns to the layout only when none remains.                   | DEC-2                                               |
+| FR12 | A host list MAY report each new message through `reportNewMessage`. While the reader is away from the end, a report MUST give the scroll affordance the new-messages name (AR2), as a new `ChatMessage` does; at the end, a report changes nothing.                                                                                                                                                                                                                                                                     | DEC-3                                               |
+| FR13 | `ChatLayoutContext` MUST publish `endRoom`: the room the layout keeps after the end of the message content, which is the message area's density spacing, the dock's height, and the keyboard's lift over the dock. It MUST update when any of them changes, so a list that measures from its own content's end keeps the newest message above the composer. `endRoom` carries the keyboard's lift as `spec:AST-099` DEC-7 allows; if that item is declined, `endRoom` holds only the message-area spacing and the dock. | DEC-4                                               |
 
 ### Allowed variation
 
@@ -144,6 +170,9 @@ has a safe theme-independent baseline, so it stays closed under
   ChatMessageList is a convention, not a requirement.
 - **AV4 — Density geometry.** Resolved spacing and widths follow the active
   theme's spacing scale; only the relationships between the three steps are fixed.
+- **AV5 — Host list.** Any list may register as the host list; Lab's
+  `component:ChatVirtualizer` in attach mode is one. A list that does not
+  register leaves following to the layout.
 
 ### Representative states
 
@@ -154,6 +183,7 @@ has a safe theme-independent baseline, so it stays closed under
 | External `scrollRef`                | Root does not scroll; dock is fixed to the viewport's block end; the newest message rests above it at the scroll's end | The named element may be the document element |
 | Empty children with `emptyState`    | Centred empty state replaces the transcript                                                                            | Any node may be the empty state               |
 | `scrollButton={null}`               | No scroll affordance renders                                                                                           | Auto-scroll behavior is unchanged             |
+| Host list registered                | The layout writes no scroll position; the affordance's press reaches the list's `scrollToBottom`                       | The list's own follow and anchors vary        |
 
 ### Performance and resources
 
@@ -167,6 +197,9 @@ has a safe theme-independent baseline, so it stays closed under
 - **PR2 — Shared observation only.** Content-size observation reaches the browser
   through the pooled `observeResize` utility used by `useChatNewMessages`, never a
   per-instance observer.
+- **PR3 — The host-list seam costs nothing unused.** FR11 and FR12 add at most
+  0.3 KB gzip of first-load JavaScript to a page that renders ChatLayout with no
+  host list (`architecture:component-import-boundaries` INV10).
 
 ## Accessibility contract
 
@@ -176,7 +209,8 @@ has a safe theme-independent baseline, so it stays closed under
   `pointer-events` do not remove an element from sequential focus navigation.
 - **AR2 — The scroll affordance MUST remain keyboard reachable and operable while
   visible**, with its accessible name supplied by the catalog and replaced by the
-  new-messages label when new messages have arrived.
+  new-messages label when new messages have arrived or a host list has reported
+  a new message (FR12).
 - **AR3 — All user-visible and AT-facing strings MUST come from the catalog**:
   `@astryx.chatLayout.newMessages` and
   `@astryx.chatLayoutScrollButton.scrollToBottom`.
@@ -225,23 +259,30 @@ The `chat-layout` target itself is declared on the Chat family document
 - `component:ChatLayoutScrollButton` owns the scroll affordance's presentation,
   label, and focus behavior. ChatLayout owns only when it is visible.
 - `component:ChatMessageList` consumes `ChatLayoutContext.contentRef`.
+- `component:ChatVirtualizer` (Lab) in attach mode on the layout's scroller
+  registers as its host list (FR11).
+- `spec:AST-099` FR3 keeps the keyboard height internal; its DEC-7 lets a Core
+  host publish a layout value that includes the keyboard's lift, and `endRoom` is
+  one (FR13, DEC-4).
 - `spec:AST-025` owns the shared effective-axis scroll capability. ChatLayout
   does not adopt it today: it declares `overflow-y: auto` unconditionally in
   self-scroll mode rather than resolving an effective axis, and it assigns no
-  keyboard access to the viewport itself. FR12 accepts an existing focusable
+  keyboard access to the viewport itself. `spec:AST-025` FR12 accepts an existing focusable
   descendant as the keyboard path; see OQ1 for the open ownership question.
 
 ## Verification map
 
-| Contract | Verification                                                                                                                                 | Representative states                                    | Mutation or failure expectation                                                                                                                      | Audit section         |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| FR1, FR2 | `ChatLayout.test.tsx` self-scroll layout contract                                                                                            | self-scroll, short and long transcript                   | Restoring `min-height: 100%` on the message area re-adds the dock's height and the root overflows                                                    | `audit:ChatLayout/§4` |
-| FR3, FR4 | `ChatLayout.test.tsx` dock positioning and the room for a fixed dock                                                                         | no `scrollRef`; external `scrollRef`; a growing composer | Swapping sticky and fixed detaches the dock from the element that actually scrolls; dropping the room leaves the newest message under the fixed dock | `audit:ChatLayout/§4` |
-| FR5      | `ChatLayout.test.tsx` empty-state cases; `useChatNewMessages.test.tsx` conditional list case                                                 | empty array; populated children                          | Treating populated children as empty hides the transcript                                                                                            | `audit:ChatLayout/§4` |
-| FR6      | `ChatLayout.test.tsx` scroll-button cases                                                                                                    | custom node                                              | Rendering the default in place of a supplied node fails                                                                                              | `audit:ChatLayout/§4` |
-| FR7      | `ChatLayout.test.tsx` density cases; `themingTargets.test.ts`                                                                                | compact; balanced; spacious                              | Dropping the reflected attribute makes the theming axis unselectable                                                                                 | `audit:ChatLayout/§2` |
-| FR8      | `ChatLayout.test.tsx` "first-fill scroll positioning" cases; `useChatNewMessages.test.tsx` conditional-list case                             | first fill; streaming growth                             | Losing the published refs stops auto-scroll from observing content growth                                                                            | `audit:ChatLayout/§7` |
-| AR1, AR2 | `ChatLayoutScrollButton.test.tsx` and `ChatLayout.test.tsx` tab-order cases; `ChatLayoutScrollButton.a11y.chromium.spec.ts` in real Chromium | hidden at rest; visible; re-hidden after activation      | Reverting to `opacity`-only hiding puts an invisible control back in the tab order                                                                   | `audit:ChatLayout/§1` |
+| Contract  | Verification                                                                                                                                 | Representative states                                                                                                                                   | Mutation or failure expectation                                                                                                                                                                | Audit section         |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| FR1, FR2  | `ChatLayout.test.tsx` self-scroll layout contract                                                                                            | self-scroll, short and long transcript                                                                                                                  | Restoring `min-height: 100%` on the message area re-adds the dock's height and the root overflows                                                                                              | `audit:ChatLayout/§4` |
+| FR3, FR4  | `ChatLayout.test.tsx` dock positioning and the room for a fixed dock                                                                         | no `scrollRef`; external `scrollRef`; a growing composer                                                                                                | Swapping sticky and fixed detaches the dock from the element that actually scrolls; dropping the room leaves the newest message under the fixed dock                                           | `audit:ChatLayout/§4` |
+| FR5       | `ChatLayout.test.tsx` empty-state cases; `useChatNewMessages.test.tsx` conditional list case                                                 | empty array; populated children                                                                                                                         | Treating populated children as empty hides the transcript                                                                                                                                      | `audit:ChatLayout/§4` |
+| FR6       | `ChatLayout.test.tsx` scroll-button cases                                                                                                    | custom node                                                                                                                                             | Rendering the default in place of a supplied node fails                                                                                                                                        | `audit:ChatLayout/§4` |
+| FR7       | `ChatLayout.test.tsx` density cases; `themingTargets.test.ts`                                                                                | compact; balanced; spacious                                                                                                                             | Dropping the reflected attribute makes the theming axis unselectable                                                                                                                           | `audit:ChatLayout/§2` |
+| FR8       | `ChatLayout.test.tsx` "first-fill scroll positioning" cases; `useChatNewMessages.test.tsx` conditional-list case                             | first fill; streaming growth                                                                                                                            | Losing the published refs stops auto-scroll from observing content growth                                                                                                                      | `audit:ChatLayout/§7` |
+| AR1, AR2  | `ChatLayoutScrollButton.test.tsx` and `ChatLayout.test.tsx` tab-order cases; `ChatLayoutScrollButton.a11y.chromium.spec.ts` in real Chromium | hidden at rest; visible; re-hidden after activation                                                                                                     | Reverting to `opacity`-only hiding puts an invisible control back in the tab order                                                                                                             | `audit:ChatLayout/§1` |
+| FR11–FR13 | Unit tests of ChatLayout with a registered host list                                                                                         | a registered list; two registrations, the later one unregistering; a report away from the end and at it; self-scroll, a fixed dock, and a keyboard lift | A scroll write or anchoring change while a list is registered, a press that misses the list, a report that leaves the name unchanged, or an `endRoom` that leaves out a term FR13 counts fails | `audit:ChatLayout/§7` |
+| PR3       | Bundle measurement of a ChatLayout page with and without a host list                                                                         | each opt-in alone                                                                                                                                       | An opt-in that adds over 0.3 KB gzip to a ChatLayout page that does not use it fails                                                                                                           | `audit:ChatLayout/§7` |
 
 Read from source, with no focused test yet:
 
@@ -259,7 +300,42 @@ Read from source, with no focused test yet:
 
 ## Decision log
 
-No component-local decision is recorded.
+### DEC-2 — A registered host list keeps the newest message in view
+
+**Reference:** `component:ChatLayout/DEC-2`
+**Decider:** pending
+
+A windowed transcript mounts rows in and out and corrects its own position, so
+it keeps the newest message in view itself. Two followers on one scroller
+fight: the layout reads the list's corrections as the reader leaving the end.
+So while a list is registered, the layout writes no position, and its scroll
+affordance's press goes to the list (FR11).
+
+Rejected: the layout following a windowed list's end itself, which keeps two owners for one position.
+
+### DEC-3 — A host list reports new messages
+
+**Reference:** `component:ChatLayout/DEC-3`
+**Decider:** pending
+
+A windowed list mounts only the rows near the view, so counting `ChatMessage`
+elements misses arrivals. The list knows when a new message arrives, so it
+reports it, and the affordance keeps one new-messages name (FR12, AR2).
+
+Rejected: a class or attribute every row must carry, which unmounted rows cannot.
+
+### DEC-4 — The end room is one published inset
+
+**Reference:** `component:ChatLayout/DEC-4`
+**Decider:** pending
+
+A list that measures from its own content's end needs the room after that end
+to rest the newest message above the composer. The layout already computes the
+room, so it publishes it as one number through its context (FR13). The number
+includes the keyboard's lift over the dock, as `spec:AST-099` DEC-7 allows
+(FR13).
+
+Rejected: a CSS custom property, which `spec:AST-099` FR3 rules out for a value that carries the keyboard's lift.
 
 ## Open questions
 
