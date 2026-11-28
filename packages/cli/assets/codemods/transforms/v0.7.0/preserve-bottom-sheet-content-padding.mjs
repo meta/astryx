@@ -36,7 +36,9 @@ export const meta = {
     '`padding={0}` and your own inset to adopt the theme padding. An app ' +
     'whose theme already sets `bottom-sheet` padding on every edge is not ' +
     'affected by the new default; the transform cannot see the theme, so ' +
-    'remove the added `padding={0}` there to keep the theme inset.',
+    'remove the added `padding={0}` there to keep the theme inset. A theme ' +
+    'that sets it on some edges only is affected too: the added ' +
+    '`padding={0}` zeroes every edge, including the ones the theme sets.',
 };
 
 const CORE_IMPORT_RE = /^@(astryxdesign|xds)\/core(?:\/|$)/;

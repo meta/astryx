@@ -122,6 +122,28 @@ export function B() {
     expect(await applyTransform(once)).toBe(once);
   });
 
+  it('is idempotent for a sheet in an export const: the TODO is written once', async () => {
+    const once =
+      await applyTransform(`import {BottomSheet, Layout, VStack} from '@astryxdesign/core';
+export const Sheet = (
+  <BottomSheet isOpen><VStack><Layout content={<p>c</p>} /></VStack></BottomSheet>
+);
+`);
+    expect(once.match(/TODO\(astryx upgrade\)/g)).toHaveLength(1);
+    expect(await applyTransform(once)).toBe(once);
+  });
+
+  it('pads a sheet whose only child is a local Section that shadows the core one', async () => {
+    const output =
+      await applyTransform(`import {BottomSheet, Section} from '@astryxdesign/core';
+export function Host() {
+  const Section = (props) => <div {...props} />;
+  return <BottomSheet sheetId="a" label="A"><Section>x</Section></BottomSheet>;
+}
+`);
+    expect(output).toContain('<BottomSheet sheetId="a" label="A" padding={0}>');
+  });
+
   it('pads a sheet when the Section has a sibling or is not from core', async () => {
     const output =
       await applyTransform(`import {BottomSheet} from '@astryxdesign/core';
