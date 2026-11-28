@@ -95,13 +95,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept     | Closed values or states  | Meaning                          | Availability by variant/orientation/state | Default           | Owner                         | Stability                     | Invalid-value behavior                                                   |
-| ----------- | ------------------------ | -------------------------------- | ----------------------------------------- | ----------------- | ----------------------------- | ----------------------------- | ------------------------------------------------------------------------ |
-| Type        | `single`, `multiple`     | How many members may be pressed. | Always; fixes the `value` shape.          | `single`          | `component:ToggleButtonGroup` | Stable                        | TypeScript rejects a `value` or `onChange` that does not match the type. |
-| Value       | `string \                | null`, `string[]`                | The selected member values.               | Always; required. | required                      | `component:ToggleButtonGroup` | Stable                                                                   | A value no member carries selects nothing visible. |
-| Orientation | `horizontal`, `vertical` | Row or column layout.            | Always.                                   | `horizontal`      | `component:ToggleButtonGroup` | Stable                        | TypeScript rejects other values.                                         |
-| Size        | `sm`, `md`, `lg`         | Default member size.             | Always; a member's own `size` wins.       | members' `md`     | `family:buttons`              | Stable                        | TypeScript rejects other values.                                         |
-| Disabled    | off, on                  | Every member is disabled.        | Always.                                   | off               | `component:ToggleButtonGroup` | Stable                        | Not applicable.                                                          |
+| Concept     | Closed values or states      | Meaning                          | Availability by variant/orientation/state | Default       | Owner                         | Stability | Invalid-value behavior                                                   |
+| ----------- | ---------------------------- | -------------------------------- | ----------------------------------------- | ------------- | ----------------------------- | --------- | ------------------------------------------------------------------------ |
+| Type        | `single`, `multiple`         | How many members may be pressed. | Always; fixes the `value` shape.          | `single`      | `component:ToggleButtonGroup` | Stable    | TypeScript rejects a `value` or `onChange` that does not match the type. |
+| Value       | `string \| null`, `string[]` | The selected member values.      | Always; required.                         | required      | `component:ToggleButtonGroup` | Stable    | A value no member carries selects nothing visible.                       |
+| Orientation | `horizontal`, `vertical`     | Row or column layout.            | Always.                                   | `horizontal`  | `component:ToggleButtonGroup` | Stable    | TypeScript rejects other values.                                         |
+| Size        | `sm`, `md`, `lg`             | Default member size.             | Always; a member's own `size` wins.       | members' `md` | `family:buttons`              | Stable    | TypeScript rejects other values.                                         |
+| Disabled    | off, on                      | Every member is disabled.        | Always.                                   | off           | `component:ToggleButtonGroup` | Stable    | Not applicable.                                                          |
 
 ## Behavioral and layout contract
 
