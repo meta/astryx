@@ -4069,6 +4069,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-activation-master-detail-rows",
+      "path": "examples/use-table-activation/master-detail-rows",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-column-resize-draggable-columns",
       "path": "examples/use-table-column-resize/draggable-columns",
       "aliases": []
@@ -4531,6 +4536,11 @@
     {
       "name": "hook-use-syntax-theme",
       "path": "hooks/use-syntax-theme",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-activation",
+      "path": "hooks/use-table-activation",
       "aliases": []
     },
     {

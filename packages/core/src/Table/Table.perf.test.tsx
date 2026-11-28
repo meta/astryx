@@ -27,6 +27,7 @@ import {Table} from './Table';
 import {useBaseTablePlugins} from './useBaseTablePlugins';
 import {useTableRowStatus} from './plugins/rowStatus';
 import {useTableRowIndex} from './plugins/rowIndex';
+import {useTableActivation} from './plugins/activation';
 import type {UseTableRowStatusConfig} from './index';
 import type {TableColumn, TablePlugin} from './types';
 
@@ -939,5 +940,80 @@ describe('re-sort', () => {
     const [, first, , last] = screen.getAllByRole('row');
     expect(first).toHaveTextContent(/^1row-2/);
     expect(last).toHaveTextContent(/^3row-0/);
+  });
+});
+
+describe('activation key-only updates', () => {
+  it('reaches only the old and new active rows at any table size', async () => {
+    for (const count of [10, 50]) {
+      const getIsItemActivatable = vi.fn(() => true);
+      const onActivate = vi.fn();
+      const data = createTestData(count);
+      function Harness({activeKey}: {activeKey: string}) {
+        const plugin = useTableActivation<TestRow>({
+          activeKey,
+          onActivate,
+          getIsItemActivatable,
+        });
+        const plugins = useMemo(() => ({activation: plugin}), [plugin]);
+        return (
+          <Table
+            data={data}
+            columns={testColumns}
+            idKey="id"
+            plugins={plugins}
+          />
+        );
+      }
+      const view = render(<Harness activeKey="row-0" />);
+      const mountedCalls = getIsItemActivatable.mock.calls.length;
+      await act(async () => {
+        view.rerender(<Harness activeKey="row-1" />);
+      });
+      // A key-only flip notifies the old and new buckets only, however many
+      // rows mount: two predicate re-evaluations, not one per row.
+      expect(getIsItemActivatable.mock.calls.length - mountedCalls).toBe(2);
+      const rows = screen.getAllByRole('row').slice(1);
+      expect(rows[0].hasAttribute('data-active')).toBe(false);
+      expect(rows[1].getAttribute('data-active')).toBe('true');
+      view.unmount();
+    }
+  });
+
+  it('re-resolves each row once per render with inline callbacks', async () => {
+    const count = 20;
+    const data = createTestData(count);
+    const predicateCalls: Array<string> = [];
+    function Harness({activeKey}: {activeKey: string}) {
+      // New identities every render, as the documented inline usage does.
+      const plugin = useTableActivation<TestRow>({
+        activeKey,
+        onActivate: () => {},
+        getIsItemActivatable: item => {
+          predicateCalls.push(item.id as string);
+          return true;
+        },
+      });
+      return (
+        <Table
+          data={data}
+          columns={testColumns}
+          idKey="id"
+          plugins={{plugin}}
+        />
+      );
+    }
+    const view = render(<Harness activeKey="row-0" />);
+    const mountedCalls = predicateCalls.length;
+    await act(async () => {
+      // Same key, fresh inline identities: the predicate identity change
+      // re-resolves every row exactly once, with no row re-render, so the
+      // cost stays one evaluation per row, not per row per render path.
+      view.rerender(<Harness activeKey="row-0" />);
+    });
+    expect(predicateCalls.length - mountedCalls).toBe(count);
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows[0].getAttribute('data-active')).toBe('true');
+    view.unmount();
   });
 });

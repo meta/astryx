@@ -314,6 +314,7 @@ export const docs = {
     {name: 'TableHeaderCell'},
     {name: 'useTableSelection'},
     {name: 'useTableSelectionState'},
+    {name: 'useTableActivation'},
     {name: 'TableSelectionToolbar'},
     {name: 'useTableSortable'},
     {name: 'useTableTreeData'},
@@ -341,6 +342,11 @@ export const docs = {
         guidance: false,
         description:
           'Do not put a control (a button, link, or input) in the header of a sortable column. The Sort control wraps the whole header, so the control nests inside it and assistive technology cannot operate it. Keep header controls on columns that are not sortable.',
+      },
+      {
+        guidance: true,
+        description:
+          'Drive adjacent detail content from useTableActivation rather than hand-rolled row click handlers: the active row stays visibly anchored, keyboard users get Enter/Space parity, and nested cell controls keep working without activating the row.',
       },
       {
         guidance: true,
