@@ -322,17 +322,16 @@ export const inputStatusFocusStyles = stylex.create({
 });
 
 // The Selector and MultiSelector trigger's line box and block padding, by
-// size. The line box is `--spacing-5`, floored at the 20px clear control and
-// 1rem icons. When that row would not fit inside the size token's borders, it
-// is capped at what the token holds, but never below 1.5em of the trigger's
-// own font, so label text too large for the token keeps room rather than
-// being clipped. The padding is what is left of the token, so a one-line
-// trigger is the token and its line box is centred. Nothing changes wherever
-// the row already fit.
-// Keep these calculations inline: a consumer's Babel preset can lower a
+// size. The line box is `--spacing-5`, with a floor of 20px for the clear
+// control and 1rem for icons. A line box that does not fit inside the size
+// token's borders is capped at what the token holds. The cap never goes below
+// 1.5em of the trigger's own font, so large label text keeps room. The padding
+// is what is left of the token, so a one-line trigger is the token and its
+// line box is centred.
+// Keep these calculations inline. A consumer's Babel preset can lower a
 // module-scope helper to a function expression before StyleX evaluates this
-// object, and StyleX cannot constant-evaluate that transformed helper.
-// Not re-exported from the Field index, which is a public entry point.
+// object, and StyleX cannot evaluate that helper as a constant.
+// The Field index is a public entry point, so it does not re-export these.
 export const selectorTriggerLineBoxStyles = stylex.create({
   sm: {
     lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
@@ -348,20 +347,19 @@ export const selectorTriggerLineBoxStyles = stylex.create({
   },
 });
 
-// The line box of a trigger with no border of its own (ghost, secondary) or
-// inside an InputGroup, whose row is the group's: one line box, not capped by
-// the trigger's size token.
+// The line box of a trigger with no border (ghost, secondary) or inside an
+// InputGroup, where the group sets the row. The size token does not cap it.
 export const selectorTriggerUncappedLineBoxStyles = stylex.create({
   base: {
     lineHeight: `max(${spacingVars['--spacing-5']}, 20px, 1rem)`,
   },
 });
 
-// The MultiSelector trigger's height: the size token, or the line box above
-// and the borders when a larger text size makes that taller. Its content never
-// sets it. A text field's row (`inputRowSizeStyles`) is not used: it measures
-// the body text, which a mobile type scale makes taller than this line box,
-// so the trigger would grow past its token at the theme's text size.
+// The MultiSelector trigger's height is the size token. When one line box and
+// the borders are taller, for example at a larger text size, the height is
+// that sum. Content never sets it. The text field row (`inputRowSizeStyles`)
+// measures the body text, which is taller on a mobile type scale. With it, the
+// trigger would grow past its token at the theme's text size.
 export const selectorTriggerRowStyles = stylex.create({
   sm: {
     height: `max(${sizeVars['--size-element-sm']}, max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) + 2 * ${borderVars['--border-width']})`,

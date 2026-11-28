@@ -586,10 +586,10 @@ const styles = stylex.create({
 // one line, 48/52/56 for two with the default tokens, where the token and a
 // text line are both multiples of 4 and the trigger lines up with the Buttons
 // and inputs beside it. No prop picks the height — the content does. The line
-// box and padding are `selectorTriggerLineBoxStyles` (Field/inputStyles),
-// which MultiSelector shares. `renderValue` content inherits this row like the
-// built-in label; content that sets a larger font should set its own line
-// height, as it must at any spacing scale.
+// box and padding are `selectorTriggerLineBoxStyles` in Field/inputStyles,
+// shared with MultiSelector. `renderValue` content inherits this row like the
+// built-in label. Content that sets a larger font must set its own line
+// height, at any spacing scale.
 
 const sizeStyles = stylex.create({
   sm: {
