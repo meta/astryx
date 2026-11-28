@@ -183,6 +183,27 @@ describe('reset.css pseudo-element rules', () => {
     );
   });
 
+  it('reaches the parts that size a date or time field', () => {
+    const bodiesEndingWith = (pseudoElement: string) =>
+      ruleBlocks
+        .filter(({selector}) =>
+          topLevelSelectors(selector).some(entry =>
+            entry.endsWith(pseudoElement),
+          ),
+        )
+        .map(({body}) => body)
+        .join('\n');
+    // iOS Safari: the value keeps one line when the field is empty and
+    // follows the field's text-align instead of centring.
+    const value = bodiesEndingWith('::-webkit-date-and-time-value');
+    expect(value).toMatch(/min-height:\s*1lh;/);
+    expect(value).toMatch(/text-align:\s*inherit;/);
+    // Chromium: the row of editable fields loses its block padding.
+    expect(bodiesEndingWith('::-webkit-datetime-edit-fields-wrapper')).toMatch(
+      /padding-block:\s*0;/,
+    );
+  });
+
   it('falls back to the --color-text-secondary default for placeholders', () => {
     // A page that loads only the reset never defines the token. The fallback
     // repeats the token's own default, so that page shows the placeholder an
