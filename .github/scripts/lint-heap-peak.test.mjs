@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Contract: the Lint job records the heap each type-aware lint process
- *   peaked at, shows it, and warns before it runs out.
+ * @file Contract: the Lint job records the heap each ESLint process peaked at,
+ *   shows it, and warns before it runs out.
  *
  * The full ESLint pass and the comment-provenance check load core's
  * TypeScript program, which grows with core. A preload records each Node
@@ -257,12 +257,13 @@ describe('a preload that fails', () => {
 });
 
 describe('the Lint job', () => {
-  it('preloads the recorder into both type-aware steps, and reports after ESLint without failing', () => {
+  it('preloads the recorder into every step that runs ESLint, and reports after them without failing', () => {
     const preload =
       '--import=${{ github.workspace }}/.github/scripts/lint-heap-peak.mjs';
     for (const name of [
       'Check the comment-provenance baseline',
       'Run ESLint',
+      'Run ESLint on changed docsite files',
     ]) {
       expect(step(name).env.NODE_OPTIONS, name).toBe(
         `--max-old-space-size=6144 ${preload}`,
@@ -272,10 +273,12 @@ describe('the Lint job', () => {
       );
     }
     const report = step('Report the lint heap peak');
-    expect(steps.indexOf(report)).toBe(steps.indexOf(step('Run ESLint')) + 1);
+    const docsite = step('Run ESLint on changed docsite files');
+    expect(steps.indexOf(docsite)).toBe(steps.indexOf(step('Run ESLint')) + 1);
+    expect(steps.indexOf(report)).toBe(steps.indexOf(docsite) + 1);
     // It runs after a failed lint, but only where setup ran: a fork without
-    // its ci:run label has no checkout, and the docs and spec lanes skip
-    // setup and both type-aware steps.
+    // its ci:run label has no checkout, and the spec lane skips setup. The
+    // docs lane runs setup and its own ESLint step.
     const setup = steps.find(each => each.uses === './.github/actions/setup');
     expect(setup.id).toBe('setup');
     expect(report.if).toBe(

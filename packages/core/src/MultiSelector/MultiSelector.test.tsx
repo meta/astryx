@@ -34,7 +34,14 @@ import {
   type MultiSelectorHandle,
   type MultiSelectorChange,
 } from './MultiSelector';
-import {Suspense, startTransition, use, useRef, useState} from 'react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  useRef,
+  useState,
+  type ComponentProps,
+} from 'react';
 import {createPortal} from 'react-dom';
 import {Dialog} from '../Dialog/Dialog';
 import {Icon} from '../Icon';
@@ -49,6 +56,17 @@ import {InputGroup, InputGroupText} from '../InputGroup';
 import {colorVars, focusVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {getTooltip} from '../__tests__/tooltipDescription';
+
+/** The popup the combobox names in `aria-controls`. */
+function popupOf(combobox: HTMLElement): HTMLElement {
+  const popup = document.getElementById(
+    combobox.getAttribute('aria-controls') ?? '',
+  );
+  if (popup == null) {
+    throw new Error('aria-controls names no element in the document');
+  }
+  return popup;
+}
 
 /**
  * Enters a search query as one change. Typing it key by key can land several
@@ -842,6 +860,37 @@ describe('MultiSelector', () => {
     expect(changeAction).toHaveBeenCalledExactlyOnceWith(['Apple', 'Banana']);
   });
 
+  it('calls onChange, then changeAction with the same value, for a toggle, select-all, and clear (ORD1)', async () => {
+    const user = userEvent.setup();
+    const calls: [string, string[]][] = [];
+    render(
+      <MultiSelector
+        label="Fruit"
+        options={['Apple', 'Banana']}
+        value={['Apple']}
+        onChange={next => calls.push(['onChange', next])}
+        changeAction={next => {
+          calls.push(['changeAction', next]);
+        }}
+        hasSelectAll
+        hasClear
+      />,
+    );
+    await user.click(screen.getByRole('combobox', {name: 'Fruit'}));
+    await user.click(screen.getByRole('option', {name: 'Banana', ...h}));
+    await user.click(screen.getByRole('option', {name: /^Select all/, ...h}));
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', {name: /clear/i}));
+    expect(calls).toEqual([
+      ['onChange', ['Apple', 'Banana']],
+      ['changeAction', ['Apple', 'Banana']],
+      ['onChange', ['Apple', 'Banana']],
+      ['changeAction', ['Apple', 'Banana']],
+      ['onChange', []],
+      ['changeAction', []],
+    ]);
+  });
+
   it('renders disabled state', () => {
     render(
       <MultiSelector
@@ -1549,11 +1598,13 @@ describe('MultiSelector', () => {
     await user.type(searchInput, 'xyz');
 
     expect(
-      within(screen.getByRole('listbox', h)).getByText('No results found'),
+      within(popupOf(screen.getByRole('combobox', h))).getByText(
+        'No results found',
+      ),
     ).toBeInTheDocument();
   });
 
-  it('empty-state message is not exposed as a listbox child', async () => {
+  it('with no matching options, the popup is a named group, not a listbox, and the input still controls it', async () => {
     const user = userEvent.setup();
     render(
       <MultiSelector
@@ -1568,12 +1619,20 @@ describe('MultiSelector', () => {
     await user.click(screen.getByRole('button', {name: 'Fruit'}));
     await user.type(screen.getByRole('combobox', h), 'xyz');
 
-    // role="listbox" only permits option/group children — the visual
-    // empty-state message must be presentational (it is announced through
-    // the result-count live region instead).
-    const listbox = screen.getByRole('listbox', h);
-    const empty = within(listbox).getByText('No results found');
-    expect(empty).toHaveAttribute('role', 'presentation');
+    // An empty listbox is invalid (AST-020 1.3.1, 4.1.2): with no options the
+    // popup is a group named by the label, and the message is its content.
+    // The result-count live region also announces it.
+    const combobox = screen.getByRole('combobox', h);
+    expect(screen.queryByRole('listbox', h)).toBeNull();
+    expect(combobox).toHaveAttribute('aria-expanded', 'true');
+    const popup = popupOf(combobox);
+    expect(popup).toBe(screen.getByRole('group', {name: 'Fruit', ...h}));
+    expect(popup).not.toHaveAttribute('aria-multiselectable');
+    expect(within(popup).getByText('No results found')).toBeInTheDocument();
+
+    // Matching options bring the listbox back.
+    await user.clear(combobox);
+    expect(screen.getByRole('listbox', h)).toBe(popupOf(combobox));
   });
 
   it('renders emptySearchText in place of the default message', async () => {
@@ -1592,7 +1651,7 @@ describe('MultiSelector', () => {
     await user.click(screen.getByRole('button', {name: 'Fruit'}));
     await user.type(screen.getByRole('combobox', h), 'xyz');
 
-    const listbox = screen.getByRole('listbox', h);
+    const listbox = popupOf(screen.getByRole('combobox', h));
     expect(
       within(listbox).getByText('Nothing like that here'),
     ).toBeInTheDocument();
@@ -1616,7 +1675,7 @@ describe('MultiSelector', () => {
 
     await user.click(screen.getByRole('button', {name: 'Fruit'}));
 
-    const listbox = screen.getByRole('listbox', h);
+    const listbox = popupOf(screen.getByRole('combobox', h));
     expect(within(listbox).getByText('No options')).toBeInTheDocument();
     expect(
       within(listbox).queryByText('Nothing like that here'),
@@ -1639,8 +1698,8 @@ describe('MultiSelector', () => {
     await user.click(screen.getByRole('button', {name: 'Fruit'}));
     await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
 
-    // The panel message is role="presentation", so the live region is the
-    // only thing a screen reader gets — it has to say the same words.
+    // The live region announces the panel message, so it has to say the
+    // same words.
     await waitFor(() =>
       expect(politeRegion()?.textContent).toBe('Nothing like that here'),
     );
@@ -1834,7 +1893,7 @@ describe('MultiSelector', () => {
     // Without hasSearch the trigger itself is the combobox.
     await user.click(screen.getByRole('combobox', {name: 'Fruit'}));
 
-    const listbox = screen.getByRole('listbox', h);
+    const listbox = popupOf(screen.getByRole('combobox', {name: 'Fruit'}));
     expect(within(listbox).getByText('Add a fruit first')).toBeInTheDocument();
   });
 
@@ -2087,6 +2146,24 @@ describe('MultiSelector', () => {
     );
     expect(screen.getByRole('combobox')).toHaveAttribute('aria-busy', 'true');
     expectSilentBusySpinner();
+  });
+
+  it('keeps the ordinary paint while busy: only isDisabled reflects the disabled state (FR11)', () => {
+    const {container} = render(
+      <MultiSelector
+        label="Fruit"
+        options={defaultOptions}
+        value={[]}
+        onChange={() => {}}
+        isLoading
+      />,
+    );
+    const trigger = screen.getByRole('combobox');
+    expect(trigger).toHaveAttribute('aria-busy', 'true');
+    expect(trigger).not.toHaveAttribute('aria-disabled');
+    expect(
+      container.querySelector('.astryx-multi-selector'),
+    ).not.toHaveAttribute('data-disabled');
   });
 
   it('renders with custom selectAllLabel', async () => {
@@ -5099,8 +5176,8 @@ describe('MultiSelector hasCreate', () => {
     );
     await user.click(screen.getByRole('button', {name: 'Labels'}));
     await enterQuery(user, screen.getByRole('combobox', h), 'Urgent');
-    // The empty-state message is role="presentation", so the live region is
-    // what a screen reader gets — it must say what is on screen: a row.
+    // The live region announces the panel's outcome, so it must say what is
+    // on screen: a row.
     await waitFor(() => {
       expect(politeRegion()?.textContent).toBe('Create "Urgent"');
     });
@@ -5286,6 +5363,30 @@ describe('MultiSelector option actions (grid)', () => {
       />,
     );
     expect(screen.getByRole('grid', h)).toBeInTheDocument();
+  });
+
+  it('is a named group while a query matches nothing, and the grid again when it matches', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Labels"
+        options={OPTIONS}
+        value={[]}
+        onChange={() => {}}
+        hasSearch
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Labels'}));
+    const combobox = screen.getByRole('combobox', h);
+    await user.type(combobox, 'zzz');
+    // An empty grid is invalid like an empty listbox; it is never a listbox.
+    expect(screen.queryByRole('grid', h)).toBeNull();
+    expect(screen.queryByRole('listbox', h)).toBeNull();
+    expect(popupOf(combobox)).toBe(
+      screen.getByRole('group', {name: 'Labels', ...h}),
+    );
+    await user.clear(combobox);
+    expect(screen.getByRole('grid', h)).toBe(popupOf(combobox));
   });
 
   it('becomes a grid when options arrive after loading, inside a section too', async () => {
@@ -5854,6 +5955,33 @@ describe('MultiSelector in an InputGroup', () => {
     },
   );
 
+  it('renders no Field of its own inside an InputGroup (FR1)', () => {
+    const selector = (
+      <MultiSelector
+        label="Fruit"
+        description="Pick any"
+        options={['Apple', 'Banana', 'Cherry']}
+        value={EMPTY_VALUE}
+        onChange={() => {}}
+      />
+    );
+    const standalone = render(selector);
+    expect(standalone.container.querySelectorAll('.astryx-field')).toHaveLength(
+      1,
+    );
+    standalone.unmount();
+
+    const grouped = render(
+      <InputGroup label="Order">
+        {selector}
+        <InputGroupText>kg</InputGroupText>
+      </InputGroup>,
+    );
+    // The one Field is the InputGroup's.
+    expect(grouped.container.querySelectorAll('.astryx-field')).toHaveLength(1);
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+  });
+
   it('keeps a standalone secondary trigger out of the group geometry', () => {
     render(
       <MultiSelector
@@ -5963,5 +6091,175 @@ describe('MultiSelector caller aria-labelledby', () => {
     );
     const opener = screen.getByRole('button', {name: 'Lunch fruits'});
     expect(opener).toHaveAttribute('aria-labelledby', 'row-title');
+  });
+});
+
+/** An icon component, which MultiSelector renders through Icon. */
+function StartGlyph(props: ComponentProps<'svg'>) {
+  return <svg data-testid="start-glyph" {...props} />;
+}
+
+describe('MultiSelector delegated theming owners (FR4)', () => {
+  const options = ['Apple', {type: 'divider' as const}, 'Banana'];
+
+  it('keeps the Field, clear, start icon, checkbox and divider parts on their own owners in the popover', async () => {
+    const user = userEvent.setup();
+    const {container} = render(
+      <MultiSelector
+        label="Fruit"
+        options={options}
+        value={['Apple']}
+        onChange={vi.fn()}
+        hasClear
+        startIcon={StartGlyph}
+      />,
+    );
+    const combobox = screen.getByRole('combobox');
+    expect(combobox.closest('.astryx-field')).not.toBeNull();
+    expect(container.querySelector('.astryx-input-clear-icon')).not.toBeNull();
+    // An icon component renders through Icon, so it carries the icon target.
+    expect(
+      screen.getByTestId('start-glyph').closest('.astryx-icon'),
+    ).not.toBeNull();
+
+    await user.click(combobox);
+    const popup = popupOf(combobox);
+    const rows = within(popup).getAllByRole('option', h);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.querySelector('.astryx-checkbox-input')).not.toBeNull();
+    }
+    expect(popup.querySelector('.astryx-divider')).not.toBeNull();
+  });
+
+  it('keeps the sheet and its heading on their own owners in the bottom sheet', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Fruit"
+        options={options}
+        value={[]}
+        onChange={vi.fn()}
+        presentation="bottom-sheet"
+      />,
+    );
+    await user.click(screen.getByRole('combobox'));
+    const dialog = await screen.findByRole('dialog', {name: 'Fruit'});
+    expect(dialog.querySelector('.astryx-bottom-sheet')).not.toBeNull();
+    const heading = within(dialog).getByRole('heading', {name: 'Fruit'});
+    expect(heading).toHaveClass('astryx-heading');
+    for (const row of within(dialog).getAllByRole('option')) {
+      expect(row.querySelector('.astryx-checkbox-input')).not.toBeNull();
+    }
+    expect(dialog.querySelector('.astryx-divider')).not.toBeNull();
+  });
+});
+
+describe('MultiSelector one panel tree (FR5)', () => {
+  const options: ComponentProps<typeof MultiSelector>['options'] = [
+    {
+      type: 'section',
+      title: 'Fruit',
+      options: [
+        {value: 'Apple', label: 'Apple'},
+        {value: 'Banana', label: 'Banana'},
+      ],
+    },
+    {type: 'divider'},
+    {
+      type: 'section',
+      title: 'Vegetables',
+      options: [{value: 'Carrot', label: 'Carrot'}],
+    },
+  ];
+
+  /** The panel's content model: each row's role and name, in order. */
+  function panelModel(root: HTMLElement): string[] {
+    return [
+      ...root.querySelectorAll<HTMLElement>(
+        '[role="option"], [role="group"], [role="separator"], .astryx-divider, input[type="search"], input[role="combobox"]',
+      ),
+    ].map(node => {
+      const role =
+        node.getAttribute('role') ??
+        (node.matches('.astryx-divider') ? 'divider' : node.tagName);
+      const name =
+        node.getAttribute('aria-label') ??
+        (node.getAttribute('aria-labelledby') != null
+          ? (document.getElementById(node.getAttribute('aria-labelledby') ?? '')
+              ?.textContent ?? '')
+          : role === 'option'
+            ? (node.textContent ?? '')
+            : '');
+      return `${role}:${name.trim()}`;
+    });
+  }
+
+  async function openPanel(presentation: 'popover' | 'bottom-sheet') {
+    const user = userEvent.setup();
+    const view = render(
+      <MultiSelector
+        label="Produce"
+        options={options}
+        value={['Banana']}
+        onChange={vi.fn()}
+        hasSearch
+        presentation={presentation}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Produce'}));
+    if (presentation === 'bottom-sheet') {
+      await screen.findByRole('dialog', {name: 'Produce'});
+    }
+    // The panel content is the smallest box holding both the search input
+    // and the listbox; the sheet's own Heading sits outside it.
+    const listbox = screen.getByRole('listbox', h);
+    const search = screen.getByRole('combobox', h);
+    let panel: HTMLElement = listbox;
+    while (!panel.contains(search) && panel.parentElement != null) {
+      panel = panel.parentElement;
+    }
+    const model = panelModel(panel);
+    view.unmount();
+    return model;
+  }
+
+  it('renders the same search, section, divider and option content in the popover and the sheet', async () => {
+    const popover = await openPanel('popover');
+    const sheet = await openPanel('bottom-sheet');
+    // The selected option leads; every provided option is present once.
+    expect(
+      [...popover.filter(row => row.startsWith('option:'))].sort(),
+    ).toEqual(['option:Apple', 'option:Banana', 'option:Carrot']);
+    expect(popover.length).toBeGreaterThan(3);
+    expect(sheet).toEqual(popover);
+  });
+
+  it('renders the same empty state in the popover and the sheet', async () => {
+    const user = userEvent.setup();
+    for (const presentation of ['popover', 'bottom-sheet'] as const) {
+      const view = render(
+        <MultiSelector
+          label="Produce"
+          options={options}
+          value={EMPTY_VALUE}
+          onChange={vi.fn()}
+          hasSearch
+          emptySearchText="Nothing matches"
+          presentation={presentation}
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Produce'}));
+      if (presentation === 'bottom-sheet') {
+        await screen.findByRole('dialog', {name: 'Produce'});
+      }
+      const search = screen.getAllByRole('combobox', h).at(-1) as HTMLElement;
+      await enterQuery(user, search, 'zzz');
+      expect(
+        await screen.findByText('Nothing matches', undefined, {timeout: 2000}),
+      ).toBeInTheDocument();
+      expect(screen.queryAllByRole('option', h)).toHaveLength(0);
+      view.unmount();
+    }
   });
 });

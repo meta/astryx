@@ -25,6 +25,7 @@ const style = vi.hoisted(() => ({
 }));
 vi.mock('@stylexjs/stylex', () => ({
   create: <T,>(styles: T) => styles,
+  defineVars: <T,>(vars: T) => vars,
   props: style.attribute,
 }));
 // Card renders through its own compiled styles, which the stub above does not
@@ -34,27 +35,50 @@ vi.mock('@astryxdesign/core/Card', () => ({
     xstyle,
     children,
     role,
+    ref,
     'aria-label': ariaLabel,
   }: {
     xstyle?: unknown;
     children: ReactNode;
     role?: string;
+    ref?: unknown;
     'aria-label'?: string;
   }) =>
     createElement(
       'div',
-      {role, 'aria-label': ariaLabel, ...style.attribute(xstyle)},
+      {role, ref, 'aria-label': ariaLabel, ...style.attribute(xstyle)},
       children,
     ),
+}));
+
+// The node project loads Core's built bundle, which the StyleX stub does not
+// reach either. A plain stand-in for VStack shows the surface's style list on
+// `data-style`, so a case reads that the surface does not scroll.
+vi.mock('@astryxdesign/core/Layout', async importOriginal => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  VStack: ({
+    xstyle,
+    children,
+    gap: _gap,
+    ...rest
+  }: {
+    xstyle?: unknown;
+    children?: ReactNode;
+    gap?: number;
+    [prop: string]: unknown;
+  }) => createElement('div', {...rest, ...style.attribute(xstyle)}, children),
 }));
 
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean}).IS_REACT_ACT_ENVIRONMENT =
   true;
 
 function panelPosition(menu: HTMLElement | null): {
-  left?: string;
+  left?: string | null;
   top?: string;
   transform?: string;
+  insetInlineStart?: string;
+  overflowY?: string;
+  maxHeight?: string;
 } {
   return JSON.parse(menu?.getAttribute('data-style') ?? '{}');
 }
@@ -106,6 +130,8 @@ afterEach(() => {
   act(() => {
     root?.unmount();
   });
+  // Cases mock geometry on element prototypes; none may leak into the next.
+  vi.restoreAllMocks();
   root = null;
   container?.remove();
   vi.useRealTimers();
@@ -293,12 +319,15 @@ describe('useLongPressHookUsage example', () => {
     if (!actionsButton) {
       throw new Error('Expected the Actions button');
     }
+    // The surface's style while the panel is open.
+    let openSurfaceStyle: ReturnType<typeof panelPosition> = {};
     const openFrom = (rect: DOMRect) => {
       vi.spyOn(actionsButton, 'getBoundingClientRect').mockReturnValue(rect);
       act(() => {
         actionsButton.click();
       });
       const menu = container.querySelector<HTMLElement>('[role="group"]');
+      openSurfaceStyle = panelPosition(surface);
       act(() => {
         surface.dispatchEvent(
           new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}),
@@ -321,6 +350,123 @@ describe('useLongPressHookUsage example', () => {
       DOMRect.fromRect({x: 16, y: 64, width: 88, height: 40}),
     );
     expect(after?.textContent).toContain('Opened by button at (112, 64)');
+    expect(openSurfaceStyle).not.toHaveProperty('overflowY');
+
+    // A narrow card has no room on either side of the button, so the panel
+    // opens below it in both left-to-right and right-to-left layouts. It does
+    // not move up over the button. It keeps to the room below the button and
+    // scrolls its own actions, so the surface neither grows nor scrolls, and a
+    // centered preview around the example does not shift.
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 0, y: 0, width: 260, height: 216}),
+    );
+
+    const belowLtr = openFrom(
+      DOMRect.fromRect({x: 16, y: 64, width: 88, height: 40}),
+    );
+    expect(belowLtr?.textContent).toContain('Opened by button at (16, 112)');
+    expect(panelPosition(belowLtr)).toMatchObject({
+      left: null,
+      insetInlineStart: '16px',
+      top: '112px',
+      transform: 'none',
+      overflowY: 'auto',
+      maxHeight: '104px',
+    });
+    expect(openSurfaceStyle).not.toHaveProperty('overflowY');
+
+    // A button too near the end edge: the panel's end edge meets the button's.
+    const belowEnd = openFrom(
+      DOMRect.fromRect({x: 156, y: 64, width: 88, height: 40}),
+    );
+    expect(belowEnd?.textContent).toContain('Opened by button at (64, 112)');
+    expect(panelPosition(belowEnd)).toMatchObject({
+      left: null,
+      insetInlineStart: '64px',
+      top: '112px',
+      transform: 'none',
+      overflowY: 'auto',
+      maxHeight: '104px',
+    });
+    expect(openSurfaceStyle).not.toHaveProperty('overflowY');
+
+    // Right to left: the button starts the row at the right edge, and the
+    // panel's start edge meets the button's start edge, measured from the
+    // right, so a scrollbar on the left cannot move it.
+    surface.style.direction = 'rtl';
+    const belowRtl = openFrom(
+      DOMRect.fromRect({x: 156, y: 64, width: 88, height: 40}),
+    );
+    expect(belowRtl?.textContent).toContain('Opened by button at (64, 112)');
+    expect(panelPosition(belowRtl)).toMatchObject({
+      left: null,
+      insetInlineStart: '16px',
+      top: '112px',
+      transform: 'none',
+      overflowY: 'auto',
+      maxHeight: '104px',
+    });
+    expect(openSurfaceStyle).not.toHaveProperty('overflowY');
+  });
+
+  it('cuts the last visible action of a below-button panel through its middle', () => {
+    // Rows of the panel, from its top: three 40px actions after a 38px note.
+    const rowTops: Record<string, number> = {
+      'Copy link': 38,
+      'Pin draft': 78,
+      Dismiss: 118,
+    };
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(
+      function (this: HTMLElement) {
+        return this.getAttribute('role') === 'group' ? 166 : 0;
+      },
+    );
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        const label = this.textContent ?? '';
+        if (this.tagName === 'BUTTON' && label in rowTops) {
+          return DOMRect.fromRect({
+            x: 16,
+            y: 112 + rowTops[label],
+            width: 160,
+            height: 40,
+          });
+        }
+        // One spy answers for every element: a spy on one element would
+        // replace this prototype spy for all of them.
+        if (this.dataset.testid === 'long-press-surface') {
+          return DOMRect.fromRect({x: 0, y: 0, width: 260, height: 216});
+        }
+        if (this.hasAttribute('aria-expanded')) {
+          return DOMRect.fromRect({x: 16, y: 64, width: 88, height: 40});
+        }
+        return DOMRect.fromRect({
+          x: 0,
+          y: this.getAttribute('role') === 'group' ? 112 : 0,
+          width: 0,
+          height: 0,
+        });
+      },
+    );
+    renderExample();
+    const actionsButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-expanded]',
+    );
+    if (!actionsButton) {
+      throw new Error('Expected the Actions button');
+    }
+    act(() => {
+      actionsButton.click();
+    });
+    const menu = container.querySelector<HTMLElement>('[role="group"]');
+    // The room below the button is 104px. "Pin draft" shows 60% at 102px;
+    // "Dismiss" would need 142px. So the panel stops at 102px, through the
+    // middle of "Pin draft", and the cut row shows that the list scrolls.
+    expect(panelPosition(menu)).toMatchObject({
+      top: '112px',
+      overflowY: 'auto',
+      maxHeight: '102px',
+    });
   });
 
   it('provides an explicit Actions button fallback and returns focus when closed', () => {
