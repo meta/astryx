@@ -59,7 +59,7 @@ import {
   typographyVars,
 } from './tokens.stylex';
 import {isDefinedTheme, type DefinedTheme} from './defineTheme';
-import {generateThemeCSS} from './generateThemeRules';
+import {generateThemeCSS, resolvedAdaptationRules} from './generateThemeRules';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {syncReaderTextSize} from './dynamicType';
@@ -112,27 +112,23 @@ function isCoreColor(name: string): boolean {
 
 // A theme that sets no Core color token keeps the colors around it, so only a
 // theme that sets one declares the defaults again. A theme can also write
-// colors only in its adaptation rules; a built theme may keep those rules
-// unresolved.
+// colors only in its adaptation rules. A theme object does not change, so the
+// answer is kept per theme.
+const setsCoreColorsCache = new WeakMap<DefinedTheme, boolean>();
 function setsCoreColors(theme: DefinedTheme | null): boolean {
   if (theme == null) {
     return false;
   }
-  if (Object.keys(theme.tokens).some(isCoreColor)) {
-    return true;
+  let sets = setsCoreColorsCache.get(theme);
+  if (sets === undefined) {
+    sets =
+      Object.keys(theme.tokens).some(isCoreColor) ||
+      resolvedAdaptationRules(theme).some(rule =>
+        Object.keys(rule.tokens).some(isCoreColor),
+      );
+    setsCoreColorsCache.set(theme, sets);
   }
-  if (theme.__adaptationRules != null) {
-    return theme.__adaptationRules.some(rule =>
-      Object.keys(rule.tokens).some(isCoreColor),
-    );
-  }
-  return (
-    theme.__adaptations?.rules.some(
-      ({value}) =>
-        value.color != null ||
-        Object.keys(value.tokens ?? {}).some(isCoreColor),
-    ) ?? false
-  );
+  return sets;
 }
 
 /**

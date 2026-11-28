@@ -198,6 +198,25 @@ describe('Theme', () => {
       name: 'parts-only',
       components: {card: {base: {padding: '4px'}}},
     });
+    const {container} = render(
+      <Theme theme={testTheme}>
+        <Theme theme={partsOnly}>
+          <span>parts</span>
+        </Theme>
+      </Theme>,
+    );
+    const parts = container.querySelector('[data-astryx-theme="parts-only"]')!;
+    expect(
+      Object.keys(colorDefaults).filter(
+        name => declaredByClass(parts, name) != null,
+      ),
+    ).toEqual([]);
+    expect(declaredValue(parts, '--focus-outline-color')).toMatch(
+      /var\(--color-accent\)/,
+    );
+  });
+
+  it("declares Core's color defaults again for a theme that sets Core color tokens through extends or an adaptation rule", () => {
     const extendsColors = defineTheme({
       name: 'extends-colors',
       extends: testTheme,
@@ -213,38 +232,34 @@ describe('Theme', () => {
         ],
       },
     });
-    // A built theme module can carry its adaptation rules unresolved.
+    // A built theme module can carry its adaptation rules unresolved, or only
+    // resolved.
     const builtAdapts = {
       ...adaptsColors,
       name: 'built-adapts',
       __adaptationRules: undefined,
     };
+    const resolvedOnly = {
+      ...adaptsColors,
+      name: 'resolved-only',
+      __adaptations: undefined,
+    };
+    const names = [
+      'extends-colors',
+      'adapts-colors',
+      'built-adapts',
+      'resolved-only',
+    ];
     const {container} = render(
       <Theme theme={testTheme}>
-        <Theme theme={partsOnly}>
-          <span>parts</span>
-        </Theme>
-        <Theme theme={extendsColors}>
-          <span>extends</span>
-        </Theme>
-        <Theme theme={adaptsColors}>
-          <span>adapts</span>
-        </Theme>
-        <Theme theme={builtAdapts}>
-          <span>built</span>
-        </Theme>
+        {[extendsColors, adaptsColors, builtAdapts, resolvedOnly].map(theme => (
+          <Theme key={theme.name} theme={theme}>
+            <span>{theme.name}</span>
+          </Theme>
+        ))}
       </Theme>,
     );
-    const parts = container.querySelector('[data-astryx-theme="parts-only"]')!;
-    expect(
-      Object.keys(colorDefaults).filter(
-        name => declaredByClass(parts, name) != null,
-      ),
-    ).toEqual([]);
-    expect(declaredValue(parts, '--focus-outline-color')).toMatch(
-      /var\(--color-accent\)/,
-    );
-    for (const name of ['extends-colors', 'adapts-colors', 'built-adapts']) {
+    for (const name of names) {
       const wrapper = container.querySelector(`[data-astryx-theme="${name}"]`)!;
       expect(
         Object.keys(colorDefaults).filter(
