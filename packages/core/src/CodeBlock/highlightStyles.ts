@@ -15,8 +15,9 @@ import {syntaxFallbackRule} from '../theme/syntax/tokens';
 
 /**
  * These provide colors when no theme explicitly sets --color-syntax-* tokens.
- * They sit in the astryx-base layer, so a theme's astryx-theme layer and
- * unlayered app CSS override them in any load order.
+ * They sit in the astryx-base layer. A theme's own syntax tokens and app CSS
+ * on the same element override them. A page-root value does not reach inside
+ * a Theme that sets Core color tokens.
  */
 const FALLBACK_TOKENS = syntaxFallbackRule();
 
