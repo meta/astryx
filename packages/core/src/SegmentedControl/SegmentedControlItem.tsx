@@ -13,6 +13,7 @@
  * - /packages/core/src/SegmentedControl/SegmentedControl.doc.mjs
  * - /packages/core/src/SegmentedControl/index.ts
  * - /packages/core/src/SegmentedControl/SegmentedControl.test.tsx
+ * - /packages/core/src/SegmentedControl/SegmentedControlItem.test.tsx
  * - /packages/cli/assets/templates/blocks/components/SegmentedControl/ (showcase blocks)
  */
 
@@ -192,7 +193,7 @@ const iconSizeStyles = stylex.create({
 });
 
 /**
- * Individual segment item within an SegmentedControl.
+ * Individual segment item within a SegmentedControl.
  * Renders as a radio button with visual segment styling.
  *
  * @example

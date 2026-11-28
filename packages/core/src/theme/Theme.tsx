@@ -52,13 +52,14 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import type {ThemeMode} from './types';
 import {
+  colorDefaults,
   colorVars,
   focusVars,
   typeScaleVars,
   typographyVars,
 } from './tokens.stylex';
 import {isDefinedTheme, type DefinedTheme} from './defineTheme';
-import {generateThemeCSS} from './generateThemeRules';
+import {generateThemeCSS, resolvedAdaptationRules} from './generateThemeRules';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {syncReaderTextSize} from './dynamicType';
@@ -95,6 +96,52 @@ interface ThemeProps {
   children: React.ReactNode;
 }
 
+// Core's own color values, declared again on a wrapper whose theme sets a
+// Core color token. A StyleX theme gives its element the variable group's own
+// class. The group's rule (`:root, .<group>`) declares every default, so an
+// empty theme applies that rule and nothing else. A build that lowers
+// `light-dark()` resolves a custom property where it is declared. A `var()`
+// default resolves there too. So each default follows this wrapper's mode and
+// tokens. The rule is in Core's base layer, so the theme's own rules still
+// win.
+const coreColorDefaults = stylex.createTheme(colorVars, {});
+
+function isCoreColor(name: string): boolean {
+  return Object.hasOwn(colorDefaults, name);
+}
+
+// A theme that sets no Core color token keeps the colors around it, so only a
+// theme that sets one declares the defaults again. A theme can also write
+// colors only in its adaptation rules. A runtime theme's rules go through the
+// same reader as its CSS. A built theme compiled its CSS ahead of time and can
+// carry partial metadata that the runtime reads leniently, so its rule writes
+// are read without validation.
+function setsCoreColors(theme: DefinedTheme | null): boolean {
+  if (theme == null) {
+    return false;
+  }
+  if (Object.keys(theme.tokens).some(isCoreColor)) {
+    return true;
+  }
+  if (!theme.__built) {
+    return resolvedAdaptationRules(theme).some(rule =>
+      Object.keys(rule.tokens).some(isCoreColor),
+    );
+  }
+  if (theme.__adaptationRules != null) {
+    return theme.__adaptationRules.some(rule =>
+      Object.keys(rule.tokens).some(isCoreColor),
+    );
+  }
+  return (
+    theme.__adaptations?.rules.some(
+      ({value}) =>
+        value.color != null ||
+        Object.keys(value.tokens ?? {}).some(isCoreColor),
+    ) ?? false
+  );
+}
+
 /**
  * Styles for the theme wrapper
  */
@@ -117,10 +164,9 @@ const wrapperStyles = stylex.create({
   system: {
     colorScheme: 'light dark',
   },
-  // Core declares the focus color at the root, so a wrapper that applies a
-  // theme declares it again. Then a nested Theme's ring takes its own theme's
-  // accent. A build that lowers `light-dark()` resolves a custom property in
-  // the mode of the element that declares it.
+  // The focus color is a focus token, not a color default, so a wrapper that
+  // applies a theme declares it again here. Then a nested Theme's ring takes
+  // its own theme's accent.
   themedFocus: {
     [focusVars['--focus-outline-color']]: colorVars['--color-accent'],
   },
@@ -491,6 +537,8 @@ export function Theme({
           ? wrapperStyles.system
           : null;
 
+  const declaresCoreColors = useMemo(() => setsCoreColors(applied), [applied]);
+
   // Memoize the context value to prevent unnecessary re-renders
   const ctxValue = useMemo(
     () => (applied == null ? null : {theme: applied, mode}),
@@ -513,6 +561,7 @@ export function Theme({
         {...stylex.props(
           wrapperStyles.base,
           colorSchemeStyle,
+          declaresCoreColors && coreColorDefaults,
           applied != null && wrapperStyles.themedFocus,
           reducesMotion && wrapperStyles.reducedMotion,
         )}

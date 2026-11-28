@@ -1815,7 +1815,11 @@ export function generateThemeRulesSplit(
   return {component, prose};
 }
 
-function resolvedAdaptationRules(
+/**
+ * A theme's adaptation rules as concrete writes, for a runtime or a built
+ * theme. Internal; Theme.tsx reads it too.
+ */
+export function resolvedAdaptationRules(
   theme: DefinedTheme,
 ): ResolvedThemeAdaptationRule[] {
   // Retained metadata is part of the built-theme contract. Validate it even
