@@ -35,13 +35,13 @@ function HintToolbar({label, orientation, items}: HintToolbarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hint = useKeyboardHint({orientation});
 
-  const nextKey = orientation === 'vertical' ? 'ArrowDown' : 'ArrowRight';
-  const prevKey = orientation === 'vertical' ? 'ArrowUp' : 'ArrowLeft';
-
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const container = containerRef.current;
-      if (!container) {
+      const downOrRight =
+        orientation === 'vertical' ? 'ArrowDown' : 'ArrowRight';
+      const upOrLeft = orientation === 'vertical' ? 'ArrowUp' : 'ArrowLeft';
+      if (!container || (e.key !== downOrRight && e.key !== upOrLeft)) {
         return;
       }
       const buttons = Array.from(
@@ -51,20 +51,18 @@ function HintToolbar({label, orientation, items}: HintToolbarProps) {
       if (current === -1) {
         return;
       }
-      let next: number;
-      if (e.key === nextKey) {
-        next = (current + 1) % buttons.length;
-      } else if (e.key === prevKey) {
-        next = (current - 1 + buttons.length) % buttons.length;
-      } else {
-        return;
-      }
+      const rtl =
+        orientation === 'horizontal' &&
+        getComputedStyle(container).direction === 'rtl';
+      const nextKey = rtl ? upOrLeft : downOrRight;
+      const step = e.key === nextKey ? 1 : -1;
+      const next = (current + step + buttons.length) % buttons.length;
       e.preventDefault();
       buttons[current].tabIndex = -1;
       buttons[next].tabIndex = 0;
       buttons[next].focus();
     },
-    [nextKey, prevKey],
+    [orientation],
   );
 
   return (
