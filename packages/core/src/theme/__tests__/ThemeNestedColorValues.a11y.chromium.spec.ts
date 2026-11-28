@@ -2,7 +2,7 @@
 // @pr-a11y scope ^packages/core/src/theme/(Theme|tokens)|^apps/storybook/stories/(ListInput|CodeTheme|Selector)\.stories
 
 /**
- * @file ThemeNestedColorDefaults.a11y.chromium.spec.ts
+ * @file ThemeNestedColorValues.a11y.chromium.spec.ts
  * @input The ListInput theme matrix story (a light Theme, a dark Theme, and a
  *   light Theme nested in the dark one) and the CodeTheme story whose theme
  *   sets no accent, in a built Storybook, in Chromium, with stylesheets served
