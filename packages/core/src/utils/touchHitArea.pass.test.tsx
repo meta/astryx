@@ -3,9 +3,10 @@
 /**
  * @file touchHitArea.pass.test.tsx
  * @input Vitest, jsdom with stubbed matchMedia, requestAnimationFrame,
- *   element rects, and a counted getAnimations on each list
+ *   performance.now, element rects, and a counted getAnimations on each list
  * @output Checks that one pass reads a list's animations once for all the
- *   rows it writes. Each row still waits out its own list's motion
+ *   rows it writes, and that rows past the frame budget are written over the
+ *   next frames. Each row still waits out its own list's motion
  * @position Test for utils/touchHitArea.ts with the real shared pass of
  *   utils/hitArea.ts
  */
@@ -21,6 +22,12 @@ const ROW_SIZE = 24;
 const ROW_STEP = 40;
 
 let frames: (() => void)[] = [];
+
+// The pass's frame budget reads `performance.now()`. The tests hold this
+// clock still, so a slow runner does not move rows to a later frame.
+let clock = 0;
+// Runs when a row's rect is read, with the row's index.
+let onRowRead: (index: number) => void = () => {};
 
 /** Runs the frames requested so far: the shared pass. */
 function flush(): void {
@@ -47,17 +54,20 @@ function Row({index}: {index: number}) {
       ref={node => {
         if (node != null) {
           const top = index * ROW_STEP;
-          node.getBoundingClientRect = () => ({
-            left: 0,
-            top,
-            right: ROW_SIZE,
-            bottom: top + ROW_SIZE,
-            x: 0,
-            y: top,
-            width: ROW_SIZE,
-            height: ROW_SIZE,
-            toJSON: () => ({}),
-          });
+          node.getBoundingClientRect = () => {
+            onRowRead(index);
+            return {
+              left: 0,
+              top,
+              right: ROW_SIZE,
+              bottom: top + ROW_SIZE,
+              x: 0,
+              y: top,
+              width: ROW_SIZE,
+              height: ROW_SIZE,
+              toJSON: () => ({}),
+            };
+          };
         }
         return hitAreaRef(node);
       }}
@@ -102,6 +112,9 @@ function writtenLefts(container: HTMLElement): string[] {
 describe('the shared pass with touch hit areas', () => {
   beforeEach(() => {
     frames = [];
+    clock = 0;
+    onRowRead = () => {};
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
     vi.stubGlobal('matchMedia', (media: string) => ({
       media,
       matches: media === '(pointer: coarse)',
@@ -121,6 +134,7 @@ describe('the shared pass with touch hit areas', () => {
   afterEach(() => {
     resetHitAreaForTests();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   /** Renders the lists and counts each list's `getAnimations` calls. */
@@ -145,6 +159,29 @@ describe('the shared pass with touch hit areas', () => {
     expect(writtenLefts(view.container)).toEqual(Array(15).fill('10px'));
     expect(reads.map(read => read.mock.calls.length)).toEqual([1, 1]);
     expect(reads[0]).toHaveBeenCalledWith({subtree: true});
+  });
+
+  it('writes the rows past the frame budget over the next frames', () => {
+    // Reading row 5 takes the pass past its 4 ms budget.
+    onRowRead = index => {
+      if (index === 5) {
+        clock += 5;
+      }
+    };
+    const {view, reads} = renderLists([12, 3]);
+    flush();
+    expect(writtenLefts(view.container)).toEqual([
+      ...Array(5).fill('10px'),
+      ...Array(10).fill(''),
+    ]);
+    expect(reads.map(read => read.mock.calls.length)).toEqual([1, 0]);
+    // The rows that waited are written in the next frame, and each list's
+    // animations are read once for that pass.
+    expect(frames).toHaveLength(1);
+    flush();
+    expect(writtenLefts(view.container)).toEqual(Array(15).fill('10px'));
+    expect(reads.map(read => read.mock.calls.length)).toEqual([2, 1]);
+    expect(frames).toHaveLength(0);
   });
 
   it('still holds each row whose own list moves, and writes it once that motion ends', async () => {
