@@ -740,8 +740,11 @@ jobs:
               // synchronize) adds the label as before: a commit status belongs
               // to the commit, so a head another pull request already gated
               // would read as arriving before an owner's removal made here at
-              // the old head. Its add is a later label event, which ends that
-              // removal for the later events at this head.
+              // the old head. When this run reaches the add, the add is a later
+              // label event, which ends that removal for later events at the
+              // head. When a later event cancels this run (the per-pull-request
+              // cancel group) or the run fails first, that removal still holds
+              // the label off at this head until the next push.
               const bringsHead =
                 context.eventName === 'pull_request_target' &&
                 ['opened', 'synchronize'].includes(context.payload.action);
