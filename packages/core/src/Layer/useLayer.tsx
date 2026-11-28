@@ -2381,6 +2381,7 @@ function useLayerImplementation(
         }, 0);
       }
     };
+    let stopPressEnd = () => {};
     const onPressEnd = (event: PointerEvent) => {
       stopPressEnd();
       if (event.type === 'pointercancel') {
@@ -2388,10 +2389,6 @@ function useLayerImplementation(
       } else {
         forgetAfterRelease();
       }
-    };
-    const stopPressEnd = () => {
-      view?.removeEventListener('pointerup', onPressEnd, true);
-      view?.removeEventListener('pointercancel', onPressEnd, true);
     };
     const forget = () => {
       dismissedByGestureRef.current = null;
@@ -2427,9 +2424,16 @@ function useLayerImplementation(
     doc.addEventListener('click', scheduleForget, true);
     // A dismissal after the press ended, with its click not yet come (the
     // engines that close before the click), stays until that click.
-    if (isPressInFlight()) {
-      view?.addEventListener('pointerup', onPressEnd, true);
-      view?.addEventListener('pointercancel', onPressEnd, true);
+    if (isPressInFlight() && view) {
+      const stops = [
+        subscribeInput(view, 'pointerup', onPressEnd),
+        subscribeInput(view, 'pointercancel', onPressEnd),
+      ];
+      stopPressEnd = () => {
+        for (const stop of stops) {
+          stop();
+        }
+      };
     } else if (isReleaseInFlight()) {
       forgetAfterRelease();
     }
