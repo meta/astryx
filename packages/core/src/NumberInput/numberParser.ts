@@ -3,7 +3,9 @@
 /**
  * @file numberParser.ts
  * @input Text a person typed or pasted, plus the resolved BCP 47 locale
- * @output Exports parseLocaleNumber, formatEditableNumber and formatPercent
+ * @output Exports parseLocaleNumber, formatEditableNumber and formatPercent,
+ *   and the locale symbols and minus signs numberGrouping.ts regroups a
+ *   draft with
  * @position Internal number reading and writing for NumberInput, and the
  *   percentage ProgressBar writes; not part of the public surface
  *
@@ -35,6 +37,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/NumberInput/NumberInput.tsx
+ * - /packages/core/src/NumberInput/numberGrouping.ts
  * - /packages/core/src/NumberInput/numberParser.test.ts
  * - /packages/core/src/NumberInput/numberParser.docblock.test.ts
  * - /packages/core/src/ProgressBar/ProgressBar.tsx
@@ -50,11 +53,17 @@ interface LocaleNumberSymbols {
   primaryGroupSize: number;
   /** Digits in every group left of it — 2 in en-IN's lakh grouping. */
   secondaryGroupSize: number;
+  /**
+   * Digits the integer needs past the primary group before it is grouped at
+   * all: 1 nearly everywhere, 2 in es-ES, pl-PL and pt-PT (`1500`, `15.000`).
+   */
+  minimumGroupingDigits: number;
+  hasGrouping: boolean;
 }
 
 const symbolsByLocale = new Map<string, LocaleNumberSymbols>();
 
-function getLocaleNumberSymbols(locale: Locale | undefined) {
+export function getLocaleNumberSymbols(locale: Locale | undefined) {
   const key = locale ?? '';
   let symbols = symbolsByLocale.get(key);
   if (symbols === undefined) {
@@ -71,6 +80,9 @@ function getLocaleNumberSymbols(locale: Locale | undefined) {
       .filter(part => part.type === 'integer')
       .map(part => part.value.length);
     const hasGrouping = groupSizes.length > 1;
+    const groupsFourDigits =
+      format.formatToParts(1000).filter(part => part.type === 'integer')
+        .length > 1;
     symbols = {
       // Normalized so the space-family separators compare equal to the plain
       // space that input text is normalized to.
@@ -80,6 +92,8 @@ function getLocaleNumberSymbols(locale: Locale | undefined) {
       decimal: parts.find(p => p.type === 'decimal')?.value ?? '.',
       primaryGroupSize: hasGrouping ? groupSizes[groupSizes.length - 1] : 3,
       secondaryGroupSize: hasGrouping ? groupSizes[groupSizes.length - 2] : 3,
+      minimumGroupingDigits: hasGrouping && !groupsFourDigits ? 2 : 1,
+      hasGrouping,
     };
     symbolsByLocale.set(key, symbols);
   }
@@ -91,7 +105,7 @@ function getLocaleNumberSymbols(locale: Locale | undefined) {
 const CURRENCY = new RegExp('\\p{Sc}', 'u');
 // Hyphen last: inside the character class this builds, a leading one would
 // open a range.
-const MINUS_SIGNS = '\u2212\u2012\u2013-';
+export const MINUS_SIGNS = '\u2212\u2012\u2013-';
 
 /**
  * Every character a locale writes between digits. Sweeping every language ICU

@@ -10,6 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/NumberInput/numberParser.ts (locale-aware parsing)
+ * - /packages/core/src/NumberInput/groupedEditing.ts (grouping while editing, loaded by useNumberGrouping.ts)
  * - /packages/core/src/NumberInput/numberInputCommit.ts (draft commit policy)
  * - /packages/core/src/Field/useEntryErrorReport.ts (rejection status, alert, and report)
  * - /packages/core/src/Field/useValueReplacesEntry.ts (when a new value replaces a kept draft)
@@ -235,6 +236,7 @@ import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n';
 import {formatEditableNumber} from './numberParser';
+import {useNumberGrouping} from './useNumberGrouping';
 import {
   getNumberInputRejection,
   type NumberInputRejection,
@@ -489,10 +491,21 @@ interface NumberInputPropsBase extends Omit<
   step?: number | null;
   /**
    * Formats the committed value while the input is not being edited.
-   * The plain number, with the locale's decimal separator, is shown on focus
-   * so it remains editable.
+   * Focus shows the plain number, with the locale's decimal separator, or
+   * grouped digits when `isGroupedWhileEditing` is set.
    */
   formatValue?: (value: number) => string;
+  /**
+   * Keeps locale digit grouping while the field is focused. Off by default:
+   * focus shows the ungrouped number. When on, each edit regroups the integer
+   * digits, the caret stays before the same digits, and Backspace or Delete
+   * next to a separator deletes the digit beyond it. A draft that holds a
+   * group character the person typed or pasted stays as typed instead, and
+   * Backspace or Delete there removes just the character. Composition is left
+   * alone until it ends. A sign, a letter, or a decimal mark stays as typed.
+   * @default false
+   */
+  isGroupedWhileEditing?: boolean;
   /**
    * Whether scrolling the wheel over a focused input steps the value.
    * @default true
@@ -709,6 +722,7 @@ export function NumberInput({
   max,
   step,
   formatValue,
+  isGroupedWhileEditing = false,
   isWheelEnabled = true,
   hasNumberSteppers = false,
   units,
@@ -885,6 +899,10 @@ export function NumberInput({
     [isIntegerOnly, locale, max, min],
   );
 
+  const grouping = useNumberGrouping(isGroupedWhileEditing);
+
+  const formatFocusedNumber = grouping?.format ?? formatEditableNumber;
+
   const formattedValue = useMemo(() => {
     if (value == null) {
       return '';
@@ -893,11 +911,11 @@ export function NumberInput({
   }, [formatValue, value]);
 
   // Preserve pending text while editing. Otherwise show the formatted value
-  // at rest and, while focused, the plain number with the locale's decimal
-  // separator so it remains editable.
+  // at rest and, while focused, the editable number with the locale's decimal
+  // separator.
   const displayValue = useMemo(() => {
     if (holdDraft !== null) {
-      return formatEditableNumber(holdDraft, locale);
+      return formatFocusedNumber(holdDraft, locale);
     }
     if (pendingInput !== null) {
       return pendingInput;
@@ -905,8 +923,16 @@ export function NumberInput({
     if (value == null) {
       return '';
     }
-    return isFocused ? formatEditableNumber(value, locale) : formattedValue;
-  }, [formattedValue, holdDraft, isFocused, locale, pendingInput, value]);
+    return isFocused ? formatFocusedNumber(value, locale) : formattedValue;
+  }, [
+    formatFocusedNumber,
+    formattedValue,
+    holdDraft,
+    isFocused,
+    locale,
+    pendingInput,
+    value,
+  ]);
 
   // The form value is the committed number as the field shows it with no
   // draft: raw with `formatValue`, otherwise the plain number at rest and the
@@ -918,16 +944,8 @@ export function NumberInput({
         ? formatEditableNumber(value, locale)
         : String(value);
 
-  // Keep the whole text edit as a draft until an explicit commit boundary.
-  const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      // Value can't change while showing a disabled message (the field is
-      // read-only and non-native-disabled), but guard the handler too so the
-      // pending value never changes.
-      if (isDisabled || isReadOnly) {
-        return;
-      }
-      const text = e.target.value;
+  const commitDraftText = useCallback(
+    (text: string) => {
       setPendingInput(text);
       setIsDraftKeptAtBlur(false);
       // A shown rejection stays while the draft stays wrong, and ends once
@@ -940,7 +958,21 @@ export function NumberInput({
         reportEntryError(null);
       }
     },
-    [isDisabled, isReadOnly, rejectionRules, reportEntryError, shownRejection],
+    [rejectionRules, reportEntryError, shownRejection],
+  );
+
+  // Keep the whole text edit as a draft until an explicit commit boundary.
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      // Value can't change while showing a disabled message (the field is
+      // read-only and non-native-disabled), but guard the handler too so the
+      // pending value never changes.
+      if (isDisabled || isReadOnly) {
+        return;
+      }
+      commitDraftText(e.target.value);
+    },
+    [commitDraftText, isDisabled, isReadOnly],
   );
 
   // Handle focus
@@ -956,7 +988,7 @@ export function NumberInput({
       const input = e.currentTarget;
       const editableText =
         pendingInput ??
-        (value == null ? '' : formatEditableNumber(value, locale));
+        (value == null ? '' : formatFocusedNumber(value, locale));
       const shouldReselect =
         input.value.length > 0 &&
         input.value !== editableText &&
@@ -971,7 +1003,7 @@ export function NumberInput({
         input.setSelectionRange(0, input.value.length);
       }
     },
-    [onFocus, pendingInput, value, locale],
+    [formatFocusedNumber, locale, onFocus, pendingInput, value],
   );
 
   const commitPendingInput = useCallback(
@@ -1420,6 +1452,17 @@ export function NumberInput({
         onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
+        // With `isGroupedWhileEditing`, the grouped-editing module's change,
+        // keydown and composition handlers wrap the field's and the caller's.
+        {...grouping?.inputProps(
+          locale,
+          holdDraft === null ? pendingInput : null,
+          displayValue,
+          commitDraftText,
+          handleKeyDown,
+          onKeyDown,
+          fieldProps,
+        )}
         placeholder={placeholder}
         // A disabled input keeps its place in the tab order (spec:AST-085):
         // aria-disabled instead of the native attribute, with readOnly + the
