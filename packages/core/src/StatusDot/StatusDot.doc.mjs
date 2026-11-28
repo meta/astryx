@@ -58,7 +58,8 @@ export const docs = {
     {
       name: 'tooltip',
       type: 'string',
-      description: 'Tooltip text shown on hover to explain the status meaning.',
+      description:
+        'Tooltip text shown on hover. Inside a button, link, menu item, or option, the text also joins the host accessible name.',
     },
     {
       name: 'icon',
@@ -275,7 +276,8 @@ export const docsDense = {
     variant: 'Semantic color variant.',
     label: 'Accessible label via aria-label.',
     isPulsing: 'Pulse animation; respects prefers-reduced-motion: reduce.',
-    tooltip: 'Tooltip text on hover to explain status meaning.',
+    tooltip:
+      'Tooltip text on hover; inside a control, the text also joins its accessible name.',
     icon: 'Optional ReactNode rendered centered in the dot (currentColor ink); a non-color mark for the status, use a different icon per status. Booleans/empty strings ignored (safe for cond && <Icon/>). Same contract as AvatarStatusDot.',
     xstyle: 'StyleX layout styles; must be stylex.create() value.',
   },

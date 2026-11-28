@@ -16,11 +16,12 @@
  * - /packages/cli/assets/templates/blocks/components/StatusDot/ (showcase blocks)
  */
 
-import type {ReactNode} from 'react';
+import {useCallback, type ReactNode} from 'react';
 
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Tooltip} from '../Tooltip/Tooltip';
 import {isRenderable, mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
@@ -161,6 +162,7 @@ export interface StatusDotProps extends BaseProps<HTMLSpanElement> {
   isPulsing?: boolean;
   /**
    * Tooltip text shown on hover to explain the status meaning.
+   * Inside a control, its text also joins the host's accessible name.
    * When omitted, no tooltip is rendered.
    */
   tooltip?: string;
@@ -218,12 +220,30 @@ export function StatusDot({
   ref,
   ...props
 }: StatusDotProps) {
+  // A description on the dot does not contribute to its host's name.
+  const detectControl = useCallback(
+    (node: HTMLSpanElement | null) => {
+      if (
+        node &&
+        tooltip &&
+        tooltip !== label &&
+        node.parentElement?.closest(
+          'button, a[href], [role="button"], [role="link"], [role="menuitem"], [role="option"]',
+        )
+      ) {
+        node.setAttribute('aria-label', `${label} ${tooltip}`);
+      }
+    },
+    [label, tooltip],
+  );
+  const dotRef = useMergedRefs(ref, detectControl);
+
   // Booleans and empty renders don't count (safe for `cond && <Icon />`) —
   // same contract as AvatarStatusDot.
   const showsIcon = isRenderable(icon);
   const dot = (
     <span
-      ref={ref}
+      ref={dotRef}
       role="img"
       aria-label={label}
       {...mergeProps(
