@@ -1603,11 +1603,19 @@ describe('watchHitArea', () => {
 });
 
 describe('the package surface', () => {
+  const utilsEntry = path.join(import.meta.dirname, 'index.ts');
+
   it('keeps hitArea out of the public utils entry', () => {
-    const entry = fs.readFileSync(
-      path.join(path.dirname(new URL(import.meta.url).pathname), 'index.ts'),
-      'utf8',
-    );
+    const entry = fs.readFileSync(utilsEntry, 'utf8');
     expect(entry).not.toMatch(/hitArea/);
+  });
+
+  it('reads that entry from the module directory, not its URI path', () => {
+    // A URI pathname percent-encodes the characters a checkout path may hold
+    // ("GitHub Projects/", a non-ASCII home directory) and keeps a Windows
+    // drive as `\C:\...`, so a directory derived from it points at nothing.
+    // `import.meta.dirname` is the decoded path, as the repo rule in
+    // internal/vibe-tests/src/module-paths.test.mjs requires.
+    expect(path.dirname(utilsEntry)).toBe(import.meta.dirname);
   });
 });
