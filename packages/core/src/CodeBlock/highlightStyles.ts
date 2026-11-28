@@ -11,7 +11,7 @@
  * - /packages/core/src/theme/domainTokens/syntaxTokens.ts (syntax color token names/defaults)
  */
 
-import {syntaxFallbackRule} from '../theme/syntax/syntaxFallbackRule';
+import {syntaxFallbackRule} from '../theme/syntax/tokens';
 
 /**
  * These provide colors when no theme explicitly sets --color-syntax-* tokens.

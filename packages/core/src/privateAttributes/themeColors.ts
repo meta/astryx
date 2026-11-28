@@ -6,7 +6,7 @@
  * @output The attribute Theme writes on such a wrapper, and the selector text
  *   the theme engine scopes the built-in syntax token rule to.
  * @position Owner module of the private theme-colors attribute.
- *   theme/Theme.tsx writes it; theme/syntax/syntaxFallbackRule.ts reads it.
+ *   theme/Theme.tsx writes it; theme/syntax/tokens.ts reads it.
  *   No package entry exports it.
  */
 

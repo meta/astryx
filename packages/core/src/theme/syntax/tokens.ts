@@ -2,8 +2,9 @@
 
 /**
  * @file tokens.ts
- * @input None (pure token definitions)
- * @output syntaxTokenDefaults, SyntaxTokenName
+ * @input The theme-colors and syntax-theme selectors, for syntaxFallbackRule
+ * @output syntaxTokenDefaults, SyntaxTokenName, syntaxFallbackRule (the CSS rule
+ *   that declares the built-in syntax tokens; internal, not re-exported)
  * @position Domain token sub-module; re-exported from domainTokens/index.ts
  *
  * Code syntax highlighting tokens. Used by the CodeBlock component and any
@@ -21,6 +22,9 @@
  *
  * @see https://github.com/meta/astryx/issues/1148
  */
+
+import {syntaxThemeSelector} from '../../privateAttributes/syntaxTheme';
+import {themeColorsSelector} from '../../privateAttributes/themeColors';
 
 export const syntaxTokenDefaults = {
   // keyword -> accent text (control flow: if, return, const)
@@ -84,3 +88,19 @@ export const DIFF_SYNTAX_TOKEN_NAMES = [
   '--color-syntax-added-marker',
   '--color-syntax-removed-marker',
 ] as const satisfies ReadonlyArray<SyntaxTokenName>;
+
+/**
+ * The rule that declares the built-in syntax tokens. Each one refers to a Core
+ * color token, and a custom property resolves where it is declared. So the
+ * rule declares them at the page root and again on each Theme wrapper whose
+ * theme sets Core color tokens: code there takes that theme's colors. A
+ * wrapper inside a SyntaxTheme does not match, so the SyntaxTheme's tokens
+ * still reach the code in it. A theme's own syntax tokens are in a later
+ * layer, so they still win.
+ */
+export function syntaxFallbackRule(): string {
+  const declarations = Object.entries(syntaxTokenDefaults)
+    .map(([name, value]) => `  ${name}: ${value};`)
+    .join('\n');
+  return `:root, ${themeColorsSelector()}:not(${syntaxThemeSelector()} *) {\n${declarations}\n}`;
+}

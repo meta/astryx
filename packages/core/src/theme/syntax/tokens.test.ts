@@ -1,8 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {syntaxFallbackRule} from './syntaxFallbackRule';
-import {syntaxTokenDefaults} from './tokens';
+import {syntaxFallbackRule, syntaxTokenDefaults} from './tokens';
 
 describe('syntaxFallbackRule', () => {
   it('declares every built-in syntax token at the root and on a color-setting Theme wrapper outside a SyntaxTheme', () => {

@@ -7,7 +7,7 @@
  *   text the theme engine uses to keep the built-in syntax token rule out of
  *   a SyntaxTheme.
  * @position Owner module of the private syntax-theme attribute.
- *   theme/syntax/SyntaxTheme.tsx writes it; theme/syntax/syntaxFallbackRule.ts
+ *   theme/syntax/SyntaxTheme.tsx writes it; theme/syntax/tokens.ts
  *   reads it. No package entry exports it.
  */
 
