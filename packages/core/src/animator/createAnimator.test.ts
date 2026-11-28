@@ -8,8 +8,8 @@
  * @output Checks `spec:AST-107` FR3 and FR6 for the factory, over every
  *   method and channel. `animate` plays the `springs.stateChange` role from a
  *   given or on-screen velocity. `decay` coasts on the normal deceleration.
- *   It also covers `set`, `get`, `getVelocity`, `stop`, `destroy` and the
- *   promises. Reduce Motion is checked on a coarse and a fine pointer, and the
+ *   `shift` moves a channel by an amount and keeps its motion. It also covers
+ *   `set`, `get`, `getVelocity`, `stop`, `destroy` and the promises. Reduce Motion is checked on a coarse and a fine pointer, and the
  *   handle exposes nothing internal.
  * @position Testing; the compositor run is proven in
  *   __tests__/createAnimator.interaction.browser.spec.ts
@@ -137,7 +137,7 @@ function element(): HTMLElement {
 }
 
 describe('createAnimator', () => {
-  it('hands out the six methods and destroy, and nothing of the motion module beneath', () => {
+  it('hands out the seven methods and destroy, and nothing of the motion module beneath', () => {
     const animator = createAnimator(element());
     expect(Object.keys(animator).sort()).toEqual(
       [
@@ -147,6 +147,7 @@ describe('createAnimator', () => {
         'get',
         'getVelocity',
         'set',
+        'shift',
         'stop',
       ].sort(),
     );
@@ -372,6 +373,115 @@ describe('createAnimator', () => {
     expect(box.style.scale).toBe('0.5 0.5');
     expect(box.style.rotate).toBe('90deg');
     expect(box.style.opacity).toBe('0.3');
+  });
+
+  describe('shift', () => {
+    it('moves a springing channel by the amount, and its spring goes on with its velocity and target', async () => {
+      const animator = createAnimator(element());
+      let done = false;
+      void animator.animate({y: 100}).then(() => {
+        done = true;
+      });
+      await started();
+      await advance(100);
+      const before = animator.get().y;
+      const velocity = animator.getVelocity().y;
+      expect(velocity).not.toBe(0);
+
+      animator.shift({y: -600});
+      // The layout moved the element by +600: the channel shows the same
+      // place on screen, at the same speed.
+      expect(animator.get().y).toBeCloseTo(before - 600, 6);
+      expect(animator.getVelocity().y).toBeCloseTo(velocity, 4);
+      await advance(0);
+      expect(done).toBe(false);
+
+      const shiftedAt = performance.now();
+      await advance(100);
+      // One spring from the shifted value, with the velocity it had: not a
+      // new motion from rest.
+      const curve = solveSpring(STATE_CHANGE, {
+        from: before - 600,
+        to: 100,
+        velocity,
+      });
+      expect(animator.get().y).toBeCloseTo(
+        curve.value((performance.now() - shiftedAt) / 1000),
+        3,
+      );
+
+      await advance(4000);
+      expect(done).toBe(true);
+      expect(animator.get().y).toBeCloseTo(100, 3);
+    });
+
+    it('a channel at rest takes the amount and stays there: nothing glides', async () => {
+      const box = element();
+      const animator = createAnimator(box);
+      const animations = recorded.length;
+      animator.shift({y: -600, opacity: -0.5});
+      expect(animator.get()).toMatchObject({y: -600, opacity: 0.5});
+      expect(animator.getVelocity()).toMatchObject({y: 0, opacity: 0});
+      await advance(500);
+      expect(animator.get()).toMatchObject({y: -600, opacity: 0.5});
+      expect(
+        recorded
+          .slice(animations)
+          .some(
+            animation =>
+              new Set(animation.keyframes.map(frame => JSON.stringify(frame)))
+                .size > 1,
+          ),
+      ).toBe(false);
+    });
+
+    it('shifts a coasting channel whole, its end included', async () => {
+      const animator = createAnimator(element());
+      void animator.decay({x: 1200});
+      const start = await started();
+      await advance(80);
+      animator.shift({x: 250});
+      const t = (performance.now() - start) / 1000;
+      const glide = solveDecay({from: 0, velocity: 1200});
+      expect(animator.get().x).toBeCloseTo(glide.value(t) + 250, 3);
+      await advance(5000);
+      expect(animator.get().x).toBeCloseTo(glide.rest + 250, 1);
+    });
+
+    it('several animators shifted by different amounts in one task each show their own shift', async () => {
+      const first = createAnimator(element());
+      const second = createAnimator(element());
+      // Two springs alike, called in one task, shifted while they wait for
+      // their frame.
+      void first.animate({y: 200});
+      void second.animate({y: 200});
+      first.shift({y: -100});
+      second.shift({y: -300});
+      expect(first.get().y).toBeCloseTo(-100, 6);
+      expect(second.get().y).toBeCloseTo(-300, 6);
+      await started();
+      await advance(50);
+      // Each is one spring from its own shifted value to 200, at the same
+      // point of the same curve.
+      const progress = (y: number, from: number) => (y - from) / (200 - from);
+      expect(progress(first.get().y, -100)).toBeGreaterThan(0.01);
+      expect(progress(second.get().y, -300)).toBeCloseTo(
+        progress(first.get().y, -100),
+        3,
+      );
+    });
+
+    it('leaves channels it is not given, ignores unknown ones, and does nothing unattached or after destroy', async () => {
+      const animator = createAnimator(element());
+      animator.set({x: 10, y: 20});
+      animator.shift({x: 5, nope: 3} as AnimatorValues);
+      expect(animator.get()).toMatchObject({x: 15, y: 20});
+      animator.shift({});
+      expect(animator.get()).toMatchObject({x: 15, y: 20});
+      animator.destroy();
+      animator.shift({x: 100});
+      expect(animator.get().x).toBe(15);
+    });
   });
 
   it('a call leaves the channels it is not given where they are', async () => {

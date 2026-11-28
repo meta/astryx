@@ -81,12 +81,12 @@ describe('useAnimator', () => {
     expect(animators.size).toBe(1);
   });
 
-  it('returns the handle\u2019s six methods, and nothing else: no ref and no destroy of its own', () => {
+  it('returns the handle\u2019s seven methods, and nothing else: no ref and no destroy of its own', () => {
     const box: {current: AnimatorHandle | null} = {current: null};
     render(<Probe box={box} />);
     const animator = box.current!;
     expect(Object.keys(animator).sort()).toEqual(
-      ['animate', 'decay', 'get', 'getVelocity', 'set', 'stop'].sort(),
+      ['animate', 'decay', 'get', 'getVelocity', 'set', 'shift', 'stop'].sort(),
     );
     for (const method of Object.keys(animator)) {
       expect(

@@ -142,6 +142,12 @@ export const categories: SandboxCategory[] = [
           'A mail List whose rows swipe to reveal and fire actions, on a page that scrolls with the document, to check on a phone',
       },
       {
+        name: 'Motion Hand-off',
+        href: '/pages/motion-handoff/',
+        description:
+          'A try-it for filming a motion hand-off on a phone: ?mode= fold (a tap folds the rows above a card), release (a drag lifts into a spring) or nowork, and ?arm= main, workaround, retarget or option2. It comes out before the decision',
+      },
+      {
         name: 'TextArea Counter',
         href: '/pages/textarea-counter/',
         description:

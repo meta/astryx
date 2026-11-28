@@ -9,7 +9,9 @@
  * @output Proof of the public animator in a real engine. `animate` plays the
  *   `springs.stateChange` curve on screen, seeked frame by frame. It rests on
  *   its target when its promise resolves. `decay` coasts to the analytic rest
- *   of the normal deceleration. `stop` holds the box where it is. Under
+ *   of the normal deceleration. `stop` holds the box where it is. `shift`
+ *   keeps a gliding box where it is drawn when the layout moves it, and the
+ *   glide goes on from there. Under
  *   Reduce Motion, a move cross-fades on a touch screen, and the box jumps
  *   only while transparent. With a mouse, it lands at once.
  * @position Browser proof for animator/createAnimator.ts, run by
@@ -132,6 +134,63 @@ test('decay coasts to the rest of the normal deceleration', async ({page}) => {
     return window.PublicAnimator.solveDecay({from: 0, velocity: 900}).rest;
   });
   expect(Math.abs((await left(page)) - rest)).toBeLessThan(1);
+});
+
+test('shift keeps a gliding card where it is drawn when the layout moves it, and the glide goes on', async ({
+  page,
+}) => {
+  await open(page);
+  const result = await page.evaluate(async () => {
+    const element = document.getElementById('card') as HTMLElement;
+    const top = () => element.getBoundingClientRect().top;
+    const frame = async () =>
+      new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    // A fold's glide: the card comes down 300 px to its place.
+    window.card.set({y: -300});
+    void window.card.animate({y: 0});
+    for (let i = 0; i < 6; i += 1) {
+      await frame();
+    }
+    const stepBefore = top();
+    await frame();
+    const before = top();
+    // Another fold mid-glide: the layout moves the card down 200 px, and the
+    // shift puts it back where it is drawn, in the same task.
+    const speed = window.card.getVelocity().y / 1000;
+    element.style.top = '240px';
+    window.card.shift({y: -200});
+    // The shift reads the motion at the call's time, which is later than the
+    // frame this task draws by the time the task has run so far.
+    const lag = performance.now() - Number(document.timeline.currentTime);
+    const after = top();
+    const frames: number[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      await frame();
+      frames.push(top());
+    }
+    return {
+      step: before - stepBefore,
+      before,
+      after,
+      frames,
+      drift: speed * lag,
+    };
+  });
+  expect(result.step).toBeGreaterThan(0);
+  // Drawn where it was, in the shift's own task: at most the travel of the
+  // time the task ran before the call.
+  expect(Math.abs(result.after - result.before)).toBeLessThan(
+    result.drift + 0.5,
+  );
+  // The glide goes on toward the card's new place: down, frame by frame, at
+  // about the speed it had, not from rest.
+  let last = result.after;
+  for (const at of result.frames) {
+    expect(at).toBeGreaterThan(last);
+    expect(at).toBeLessThanOrEqual(240 + 0.5);
+    last = at;
+  }
+  expect(result.frames[0] - result.after).toBeGreaterThan(result.step * 0.3);
 });
 
 test('stop holds the card where it is on screen', async ({page}) => {
