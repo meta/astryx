@@ -2,12 +2,13 @@
 
 /**
  * @file main.test.ts
- * @input Storybook config, workspace alias table, and app package dependencies.
- * @output Regression coverage for source aliases, cold-clone config loading
- *   and the preview head's icon link.
+ * @input Storybook config, workspace alias table, app package dependencies,
+ *   and the app's tsconfig.json.
+ * @output Regression coverage for source aliases, source paths, cold-clone
+ *   config loading and the preview head's icon link.
  * @position Node tests beside the Storybook configuration.
- * @description Guards two things that both keep `storybook dev` working from
- *   a cold clone, at two different resolution stages.
+ * @description Guards three things that keep the Storybook app working from
+ *   a cold clone, at three different resolution stages.
  *
  *   1. Vite's module graph: every runtime `@astryxdesign/*` dependency
  *      must be aliased to package source in `.storybook/main.ts`. Without an
@@ -20,12 +21,16 @@
  *      resolver before any alias from it is in play, so the specifiers
  *      `main.ts` itself imports must also resolve unbuilt (#5128:
  *      `@astryxdesign/build/vite` → `dist/vite.mjs`).
+ *   3. TypeScript: `tsconfig.json` maps every runtime `@astryxdesign/*`
+ *      dependency to the source entry its Vite alias uses, so `tsc` does not
+ *      read missing `dist/` types. Every path it maps must exist.
  */
 
 import {afterAll, beforeAll, describe, it, expect, vi} from 'vitest';
+import ts from 'typescript';
 import * as build from '../../../packages/build/src/vite.ts';
 import config, {workspaceAliases} from './main.ts';
-import {existsSync, readFileSync} from 'node:fs';
+import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -180,6 +185,98 @@ describe('storybook main.ts config-loader imports (#5128)', () => {
     expect(viteConfig.resolve.alias['@astryxdesign/core']).toMatch(
       /packages[\\/]core[\\/]src$/,
     );
+  });
+});
+
+describe('storybook tsconfig.json source paths', () => {
+  const appDir = path.join(__dirname, '..');
+  const tsconfig = ts.readConfigFile(
+    path.join(appDir, 'tsconfig.json'),
+    ts.sys.readFile,
+  );
+  const paths = (tsconfig.config?.compilerOptions?.paths ?? {}) as Record<
+    string,
+    string[]
+  >;
+  /** The path from the app to `file`, with `/` on every platform. */
+  const fromApp = (file: string) =>
+    path.relative(appDir, file).split(path.sep).join('/');
+
+  /**
+   * Workspace dependencies that the app's own files import by subpath, as
+   * stories import `@astryxdesign/core/Text`. A stylesheet or other asset is
+   * not a module that tsc resolves, so it does not count.
+   */
+  const subpathDeps = [
+    ...new Set(
+      ['.storybook', 'stories']
+        .flatMap(dir =>
+          readdirSync(path.join(appDir, dir), {recursive: true})
+            .map(String)
+            .filter(file => /\.(ts|tsx|mts)$/.test(file))
+            .map(file => path.join(appDir, dir, file)),
+        )
+        .flatMap(file =>
+          [
+            ...readFileSync(file, 'utf8').matchAll(
+              /['"](@astryxdesign\/[^/'"]+)\/([^'"]+)['"]/g,
+            ),
+          ]
+            .filter(
+              ([, , subpath]) =>
+                !/\.(css|svg|png|jpe?g|gif|woff2?|json)$/.test(subpath),
+            )
+            .map(([, dep]) => dep),
+        ),
+    ),
+  ]
+    .filter(dep => workspaceDeps.includes(dep))
+    .sort();
+
+  it('reads its paths', () => {
+    expect(tsconfig.error).toBeUndefined();
+    expect(Object.keys(paths)).not.toHaveLength(0);
+  });
+
+  it.each(workspaceDeps)(
+    'maps %s to the source entry its Vite alias uses',
+    dep => {
+      const alias = workspaceAliases.find(entry => entry.pkg === dep);
+      expect(alias, `${dep} needs a workspace alias`).toBeDefined();
+      const entry = alias!.vite ?? `${alias!.src}/index.ts`;
+      expect(paths[dep]).toEqual([fromApp(path.join(rootDir, entry))]);
+    },
+  );
+
+  it('finds the subpath imports', () => {
+    expect(subpathDeps).not.toHaveLength(0);
+  });
+
+  it.each(subpathDeps)("maps %s/* into that package's source", dep => {
+    const alias = workspaceAliases.find(entry => entry.pkg === dep);
+    expect(alias, `${dep} needs a workspace alias`).toBeDefined();
+    const source = fromApp(path.join(rootDir, alias!.src));
+    const targets = paths[`${dep}/*`] ?? [];
+    expect(targets, `${dep}/* needs a paths entry`).not.toHaveLength(0);
+    for (const target of targets) {
+      expect(target.startsWith(`${source}/`), `${dep}/* -> ${target}`).toBe(
+        true,
+      );
+    }
+  });
+
+  it('maps only to files and folders that exist', () => {
+    const missing = Object.entries(paths).flatMap(([key, targets]) =>
+      targets
+        .filter(target => {
+          // A wildcard target exists when the folder before its `*` does.
+          const star = target.indexOf('*');
+          const prefix = star === -1 ? target : target.slice(0, star);
+          return !existsSync(path.resolve(appDir, prefix));
+        })
+        .map(target => `${key} -> ${target}`),
+    );
+    expect(missing).toEqual([]);
   });
 });
 
