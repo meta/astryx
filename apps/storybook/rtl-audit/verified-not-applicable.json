@@ -416,8 +416,8 @@
     "reason": "DropdownMenuGroup owns a block-axis set of menu rows and an optional heading with symmetric logical inline padding. It renders no directional glyph, physical inline placement, reordered content, horizontal scrolling or dragging, side-placed overlay, or horizontal keyboard behavior of its own; DropdownMenu owns menu placement and row navigation. The exact-head audit still renders RTL frames to confirm inherited direction without adding a component-owned RTL dimension.",
     "evidence": {
       "apps/storybook/stories/DropdownMenuGroup.stories.tsx": "sha256:57927e1c41ededf5b0105c2eefab5bf79fc21ceca084f47251aac0057781aec5",
-      "packages/core/src/DropdownMenu/DropdownMenuGroup.tsx": "sha256:b0baa04f2440927fc38b3c73bab9c0c0a210341a60cc6b59e5450148736b3d20",
-      "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
+      "packages/core/src/DropdownMenu/DropdownMenuGroup.tsx": "sha256:b2bfd929c4baf857939de1e5d4245189c90b4d0a471ae84be832dddeccf6e2f6",
+      "packages/core/src/DropdownMenu/index.ts": "sha256:c589f2c4c5d60e70f8846d21406ca063d804fc950edec1789a61d46d438e1f6f"
     }
   },
   {
@@ -426,8 +426,8 @@
     "evidence": {
       "apps/storybook/stories/DropdownMenuDivider.stories.tsx": "sha256:d734898c48c73a887e6bdd6485e8539600354c720ee292c326a93c760f470311",
       "packages/core/src/DropdownMenu/DropdownMenuDivider.tsx": "sha256:c172c36b3900ac83c76c8472a92bd5618184b3ff4fbfdc71ca89e6d3ca7cfdc7",
-      "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa",
-      "packages/core/src/Divider/Divider.tsx": "sha256:37bfa57103fdc546226fe751844bb193490439bd990b6bc9bced8f6ced99618d"
+      "packages/core/src/DropdownMenu/index.ts": "sha256:c589f2c4c5d60e70f8846d21406ca063d804fc950edec1789a61d46d438e1f6f",
+      "packages/core/src/Divider/Divider.tsx": "sha256:4c4146f543601bef5f628b545b98c3bdd1ba92aa0c144f3288c46c5aa0ea547d"
     }
   },
   {
@@ -436,7 +436,7 @@
     "evidence": {
       "apps/storybook/stories/DropdownMenuRadioGroup.stories.tsx": "sha256:7548ad7bf7c06f438e243774a8f41d4043defc1a122467747c5ff955f202aee1",
       "packages/core/src/DropdownMenu/DropdownMenuRadioGroup.tsx": "sha256:3be897ab21dcc6a37fb7ab8a1b6d48254e406c544d95a3b939dfc6593ea99cf1",
-      "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
+      "packages/core/src/DropdownMenu/index.ts": "sha256:c589f2c4c5d60e70f8846d21406ca063d804fc950edec1789a61d46d438e1f6f"
     }
   },
   {

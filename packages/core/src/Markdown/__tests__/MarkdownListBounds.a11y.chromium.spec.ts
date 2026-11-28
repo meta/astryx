@@ -148,7 +148,9 @@ for (const dir of ['ltr', 'rtl'] as const) {
         el = el.parentElement
       ) {
         const overflowX = getComputedStyle(el).overflowX;
-        if (overflowX === 'visible') continue;
+        if (overflowX === 'visible') {
+          continue;
+        }
         const clip = el.getBoundingClientRect();
         if (ring.left < clip.left - 0.5 || ring.right > clip.right + 0.5) {
           cuts.push(`${el.tagName.toLowerCase()} (${overflowX})`);

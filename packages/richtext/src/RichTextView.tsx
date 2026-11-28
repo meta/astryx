@@ -185,10 +185,10 @@ export interface RichTextViewProps extends BaseProps {
  */
 function SyncValuePlugin({value}: {value: string}): null {
   const [editor] = useLexicalComposerContext();
-  const isFirstRun = useRef(true);
+  const isFirstRunRef = useRef(true);
   useEffect(() => {
-    if (isFirstRun.current) {
-      isFirstRun.current = false;
+    if (isFirstRunRef.current) {
+      isFirstRunRef.current = false;
       return;
     }
     editor.setEditorState(editor.parseEditorState(value));

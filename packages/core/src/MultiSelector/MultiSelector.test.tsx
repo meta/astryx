@@ -853,6 +853,37 @@ describe('MultiSelector', () => {
     expect(changeAction).toHaveBeenCalledExactlyOnceWith(['Apple', 'Banana']);
   });
 
+  it('calls onChange, then changeAction with the same value, for a toggle, select-all, and clear (ORD1)', async () => {
+    const user = userEvent.setup();
+    const calls: [string, string[]][] = [];
+    render(
+      <MultiSelector
+        label="Fruit"
+        options={['Apple', 'Banana']}
+        value={['Apple']}
+        onChange={next => calls.push(['onChange', next])}
+        changeAction={next => {
+          calls.push(['changeAction', next]);
+        }}
+        hasSelectAll
+        hasClear
+      />,
+    );
+    await user.click(screen.getByRole('combobox', {name: 'Fruit'}));
+    await user.click(screen.getByRole('option', {name: 'Banana', ...h}));
+    await user.click(screen.getByRole('option', {name: /^Select all/, ...h}));
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', {name: /clear/i}));
+    expect(calls).toEqual([
+      ['onChange', ['Apple', 'Banana']],
+      ['changeAction', ['Apple', 'Banana']],
+      ['onChange', ['Apple', 'Banana']],
+      ['changeAction', ['Apple', 'Banana']],
+      ['onChange', []],
+      ['changeAction', []],
+    ]);
+  });
+
   it('renders disabled state', () => {
     render(
       <MultiSelector
@@ -2108,6 +2139,24 @@ describe('MultiSelector', () => {
     );
     expect(screen.getByRole('combobox')).toHaveAttribute('aria-busy', 'true');
     expectSilentBusySpinner();
+  });
+
+  it('keeps the ordinary paint while busy: only isDisabled reflects the disabled state (FR11)', () => {
+    const {container} = render(
+      <MultiSelector
+        label="Fruit"
+        options={defaultOptions}
+        value={[]}
+        onChange={() => {}}
+        isLoading
+      />,
+    );
+    const trigger = screen.getByRole('combobox');
+    expect(trigger).toHaveAttribute('aria-busy', 'true');
+    expect(trigger).not.toHaveAttribute('aria-disabled');
+    expect(
+      container.querySelector('.astryx-multi-selector'),
+    ).not.toHaveAttribute('data-disabled');
   });
 
   it('renders with custom selectAllLabel', async () => {
@@ -5898,6 +5947,33 @@ describe('MultiSelector in an InputGroup', () => {
       }
     },
   );
+
+  it('renders no Field of its own inside an InputGroup (FR1)', () => {
+    const selector = (
+      <MultiSelector
+        label="Fruit"
+        description="Pick any"
+        options={['Apple', 'Banana', 'Cherry']}
+        value={EMPTY_VALUE}
+        onChange={() => {}}
+      />
+    );
+    const standalone = render(selector);
+    expect(standalone.container.querySelectorAll('.astryx-field')).toHaveLength(
+      1,
+    );
+    standalone.unmount();
+
+    const grouped = render(
+      <InputGroup label="Order">
+        {selector}
+        <InputGroupText>kg</InputGroupText>
+      </InputGroup>,
+    );
+    // The one Field is the InputGroup's.
+    expect(grouped.container.querySelectorAll('.astryx-field')).toHaveLength(1);
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+  });
 
   it('keeps a standalone secondary trigger out of the group geometry', () => {
     render(
