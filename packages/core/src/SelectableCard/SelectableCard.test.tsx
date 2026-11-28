@@ -248,7 +248,7 @@ describe('SelectableCard target, handler order and passthrough (FR1, FR2, FR5, F
       </SelectableCard>,
     );
     expect(card(container)).toHaveAttribute('data-selected', 'true');
-    expect(card(container)).toHaveAttribute('data-disabled');
+    expect(card(container)).toHaveAttribute('data-disabled', 'disabled');
   });
 
   it('toggles once for a surface click and then runs the caller onClick', () => {

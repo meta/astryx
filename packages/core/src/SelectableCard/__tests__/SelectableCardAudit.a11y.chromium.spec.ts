@@ -181,7 +181,7 @@ async function readCards(page: Page) {
         tabIndex: card.getAttribute('tabindex'),
         dataSelected: card.getAttribute('data-selected'),
         dataVariant: card.getAttribute('data-variant'),
-        dataDisabled: card.hasAttribute('data-disabled'),
+        dataDisabled: card.getAttribute('data-disabled') === 'disabled',
         opacity: style.opacity,
         shadow: style.boxShadow,
         borderColor: style.borderTopColor,
@@ -338,9 +338,14 @@ for (const mode of ['light', 'dark'] as const) {
           card(entered, 'Vue')?.checked === false,
           'Enter did not deselect',
         );
+        const others = (state: Cards) =>
+          state.cards
+            .filter(item => item.label !== 'Vue')
+            .map(item => `${item.label}:${item.checked}`)
+            .join(' ');
         check(
-          card(entered, 'React')?.checked === true,
-          'Enter changed another card',
+          others(spaced) === others(rest) && others(entered) === others(rest),
+          `Space or Enter changed another card: ${others(rest)} -> ${others(spaced)} -> ${others(entered)}`,
         );
       },
     });
