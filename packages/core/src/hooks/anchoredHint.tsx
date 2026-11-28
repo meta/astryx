@@ -32,7 +32,7 @@ import type {ContextLayerReturn} from '../Layer/useLayer';
 
 const styles = stylex.create({
   hint: {
-    // Top layer + anchor positioned. The layer runtime owns the insets.
+    // Top layer + anchor positioned. The layer runtime supplies the anchored edge.
     position: 'fixed',
     margin: 0,
     borderWidth: 0,
@@ -66,6 +66,9 @@ const styles = stylex.create({
   // pointer events.
   passive: {
     pointerEvents: 'none',
+    // With both inline insets set, Firefox puts the hint at the viewport
+    // gutter when the region and viewport have opposite directions.
+    insetInlineEnd: 'auto',
   },
   keys: {
     display: 'inline-flex',
