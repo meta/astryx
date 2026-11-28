@@ -60,19 +60,10 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {SelectableCardInputContext} from './selectableCardInput';
+import {containerPressOverlayStyles} from '../privateAttributes/press.stylex';
 // =============================================================================
 // Styles — selection + interaction; Card handles the rest
 // =============================================================================
-
-// The touch press's paint, declared by the shared overlay styles on the
-// element the controller writes to (`pressedAlpha`) at the press's strength,
-// 1 while on and 1 → 0 over the release, and inherited resolved by the
-// `::after` that paints it. See interactionOverlay.stylex.ts.
-const pressedOverlayImage = 'var(--_press-paint-image)';
-/** Written by the press controller while it paints a press. */
-const PRESSED_ON = '[data-astryx-press="on"]';
-/** Written by the press controller for the press's release. */
-const PRESSED_FADING = '[data-astryx-press="fading"]';
 
 const styles = stylex.create({
   interactive: {
@@ -104,106 +95,6 @@ const styles = stylex.create({
       default: easeVars['--ease-standard'],
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
         easeVars['--ease-exit'],
-    },
-  },
-  // Hover and pressed overlay. Hover is guarded by @media (hover: hover) so
-  // touch devices don't show a stuck hover state; the press has two arms,
-  // `:active` for a mouse and `data-astryx-press` for the press controller.
-  overlay: {
-    // The `::after` layer paints the hover and mouse states as its colour,
-    // `--_press-overlay`, which their arms set on the element itself (same
-    // enabled guard as the shared overlay utility). The press the controller
-    // paints (a finger's, and on a touch-first device a mouse's or a key's)
-    // is the same layer's image, keyed on the `data-astryx-press` attribute
-    // the controller writes. Every arm of that press is a plain property of
-    // the `::after`, which outranks the layer's own defaults in a layered
-    // stylesheet and a flat one alike. A custom property's attribute arm
-    // does not: a layered build emits the property's default outside the
-    // priority layers its attribute arms land in, and the default wins.
-    // A press that starts on a control inside the card sets
-    // `--_nested-press-paint` on the card (useClickableContainer). The card
-    // then paints its rest overlay, not a mouse press. A card inside resets it.
-    '--_nested-press-paint': 'initial',
-    '--_nested-press-rest': {
-      default: 'transparent',
-      ':where(:not(:disabled,[aria-disabled="true"]))': {
-        default: null,
-        '@media (hover: hover)': {
-          default: null,
-          ':hover:where(:not(:disabled,[aria-disabled="true"]))':
-            colorVars['--color-overlay-hover'],
-        },
-      },
-    },
-    '--_press-overlay': {
-      default: 'transparent',
-      ':where(:not(:disabled,[aria-disabled="true"]))': {
-        default: null,
-        ':active': {
-          default: `var(--_nested-press-paint, ${colorVars['--color-overlay-pressed']})`,
-          '@media (pointer: coarse)': 'transparent',
-        },
-        '@media (hover: hover)': {
-          default: null,
-          ':hover:where(:not(:disabled,[aria-disabled="true"]))':
-            colorVars['--color-overlay-hover'],
-          ':active': `var(--_nested-press-paint, ${colorVars['--color-overlay-pressed']})`,
-        },
-      },
-    },
-    '::after': {
-      content: '""',
-      position: 'absolute',
-      inset: 0,
-      borderRadius: 'inherit',
-      pointerEvents: 'none',
-      // A press the controller paints shows on its first frame and fades on
-      // its strength's own animation, so the colour it replaces drops out at
-      // once rather than crossfading: no transition while it paints. The
-      // mouse states keep the fast fade.
-      transitionProperty: {
-        default: 'background-color',
-        [PRESSED_ON]: 'none',
-        [PRESSED_FADING]: 'none',
-        // Under reduced motion a colour changes at once. Only opacity may
-        // still fade on a touch screen.
-        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
-          'opacity',
-      },
-      transitionDuration: {
-        default: durationVars['--duration-fast'],
-        // Under reduced motion a fine pointer gets no transition. A touch
-        // screen's fade keeps the exit tokens, within 200 ms.
-        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
-          '0s',
-        // The 200 ms bound copies reducedMotionFadeConsts.duration. That
-        // module is internal, and a swizzled component imports only exported
-        // paths. reducedMotionValues.test.ts keeps the copies equal.
-        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': `min(${durationVars['--duration-exit']}, 200ms)`,
-      },
-      transitionTimingFunction: {
-        default: easeVars['--ease-standard'],
-        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
-          easeVars['--ease-exit'],
-      },
-      // While the controller paints, the colour yields to the image: a
-      // touchscreen beside a fine pointer still matches `:active` under a
-      // finger, and the press would otherwise paint twice.
-      backgroundColor: {
-        default: 'var(--_press-overlay)',
-        [PRESSED_ON]: 'transparent',
-        [PRESSED_FADING]: 'transparent',
-      },
-      // The press at its strength, which the card's `pressedAlpha` arms own:
-      // 1 on the first frame of a believed press, then 1 → 0 over the
-      // release. The `::after` inherits the resolved paint and repaints with
-      // it on every frame of the fade. Read only inside this element's own
-      // arms, so a pressed ancestor's strength never paints here.
-      backgroundImage: {
-        default: null,
-        [PRESSED_ON]: pressedOverlayImage,
-        [PRESSED_FADING]: pressedOverlayImage,
-      },
     },
   },
   disabled: {
@@ -577,7 +468,8 @@ export function SelectableCard({
         [
           styles.interactive,
           isSelected && selectedStyleForVariant(variant),
-          !isDisabled && styles.overlay,
+          !isDisabled && containerPressOverlayStyles.overlay,
+          !isDisabled && containerPressOverlayStyles.rounded,
           // The touch press's strength and release, on the element the
           // controller writes to; the `::after` above paints off it.
           !isDisabled && interactionOverlayStyles.pressedAlpha,

@@ -3,7 +3,7 @@
 /**
  * @file nestedControlPress.test.tsx
  * @input vitest (jsdom), React Testing Library, ClickableCard,
- *   SelectableCard, Item, TreeList and Token
+ *   SelectableCard, Item, TreeList, Token and Thumbnail
  * @output Checks the press rule of every container, for a finger, a pen and
  *   a mouse: a finger's press that starts on a nested control paints no press
  *   on the container, and a mouse's or a pen's turns off the container's
@@ -25,6 +25,7 @@ import {SelectableCard} from '../SelectableCard/SelectableCard';
 import {Item} from '../Item/Item';
 import {TreeList} from '../TreeList/TreeList';
 import {Token} from '../Token/Token';
+import {Thumbnail} from '../Thumbnail/Thumbnail';
 
 const PAINT = '--_nested-press-paint';
 
@@ -115,10 +116,27 @@ const CASES: Case[] = [
     container: nested => closestOrThrow(nested, '.astryx-token'),
     surface: () => screen.getByText('Surface'),
   },
+  {
+    name: 'Thumbnail with a remove button',
+    render: () => (
+      <Thumbnail
+        src="/photo.jpg"
+        alt="Surface"
+        onClick={() => {}}
+        onRemove={() => {}}
+        showRemoveOn="always"
+      />
+    ),
+    // The remove button presses on its own, so the container is the
+    // pressable element around its slot.
+    container: nested =>
+      closestOrThrow(nested.parentElement ?? nested, '[data-astryx-pressable]'),
+    surface: () => screen.getByRole('img', {name: 'Surface'}),
+  },
 ];
 
 function nestedOf(name: string): HTMLElement {
-  return name.startsWith('Token')
+  return name.startsWith('Token') || name.startsWith('Thumbnail')
     ? screen.getByRole('button', {name: /remove/i})
     : screen.getByRole('button', {name: 'Nested'});
 }
