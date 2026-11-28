@@ -57,7 +57,6 @@ import {
   typeScaleVars,
   typographyVars,
 } from './tokens.stylex';
-import {coreColorDefaults} from './themeColorDefaults.stylex';
 import {isDefinedTheme, type DefinedTheme} from './defineTheme';
 import {generateThemeCSS} from './generateThemeRules';
 import {registerTheme} from './themeRegistry';
@@ -95,6 +94,16 @@ interface ThemeProps {
   /** Children to render */
   children: React.ReactNode;
 }
+
+// Core's color defaults, declared again on a wrapper that applies a theme. A
+// StyleX theme gives its element the variable group's own class, and the
+// group's rule (`:root, .<group>`) declares every default. An empty theme
+// applies that rule and nothing else. A build that lowers `light-dark()`
+// resolves a custom property in the mode of the element that declares it,
+// and a `var()` default resolves where it is declared, so each default then
+// follows this wrapper's mode and tokens. The rule is in Core's base layer, so
+// the theme's own rules still win.
+const coreColorDefaults = stylex.createTheme(colorVars, {});
 
 /**
  * Styles for the theme wrapper
@@ -513,8 +522,6 @@ export function Theme({
         {...stylex.props(
           wrapperStyles.base,
           colorSchemeStyle,
-          // Core's color defaults again, so each resolves in this wrapper's
-          // mode and from its tokens; the theme's own rules still win.
           applied != null && coreColorDefaults,
           applied != null && wrapperStyles.themedFocus,
           reducesMotion && wrapperStyles.reducedMotion,

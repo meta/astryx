@@ -6,7 +6,7 @@ import {renderToString} from 'react-dom/server';
 import {act, render, cleanup} from '@testing-library/react';
 import React from 'react';
 import {declaredValue} from '../__tests__/stylexDeclarations';
-import {coreColorDefaultValues} from './themeColorDefaults.stylex';
+import {colorDefaults} from './tokens.stylex';
 import {Theme} from './Theme';
 import {useTheme} from './useTheme';
 import {defineTheme} from './defineTheme';
@@ -37,6 +37,28 @@ const altTheme = defineTheme({
     '--color-accent': ['#00AA00', '#55FF55'],
   },
 });
+
+/**
+ * The value a rule for one of the element's classes declares for `property`,
+ * including a rule that lists the class beside other selectors
+ * (`:root, .x`), as a StyleX variable group's rule does.
+ */
+function declaredByClass(el: Element, property: string): string | null {
+  const classes = new Set(Array.from(el.classList, name => `.${name}`));
+  let value: string | null = null;
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      if (
+        rule instanceof CSSStyleRule &&
+        rule.selectorText.split(',').some(part => classes.has(part.trim())) &&
+        rule.style.getPropertyValue(property) !== ''
+      ) {
+        value = rule.style.getPropertyValue(property);
+      }
+    }
+  }
+  return value;
+}
 
 describe('Theme', () => {
   beforeEach(() => {
@@ -147,7 +169,7 @@ describe('Theme', () => {
     }
   });
 
-  it('declares again the Core color defaults that differ by color mode on a wrapper that applies a theme', () => {
+  it("declares Core's color defaults again on a wrapper that applies a theme", () => {
     const {container} = render(
       <Theme theme={testTheme}>
         <Theme theme={testTheme} mode="dark">
@@ -158,12 +180,14 @@ describe('Theme', () => {
     const wrappers = container.querySelectorAll('[data-astryx-theme="test"]');
     expect(wrappers).toHaveLength(2);
     for (const wrapper of wrappers) {
-      const missing = Object.keys(coreColorDefaultValues).filter(
-        name => declaredValue(wrapper, name) == null,
+      const missing = Object.keys(colorDefaults).filter(
+        name => declaredByClass(wrapper, name) == null,
       );
       expect(missing).toEqual([]);
-      expect(declaredValue(wrapper, '--color-accent')).toMatch(/light-dark\(/);
-      expect(declaredValue(wrapper, '--color-text-info')).toMatch(
+      expect(declaredByClass(wrapper, '--color-accent')).toMatch(
+        /light-dark\(/,
+      );
+      expect(declaredByClass(wrapper, '--color-text-info')).toMatch(
         /var\(--color-text-blue\)/,
       );
     }
@@ -181,8 +205,8 @@ describe('Theme', () => {
       expect(wrapper.hasAttribute('data-astryx-theme')).toBe(false);
       expect(declaredValue(wrapper, '--focus-outline-color')).toBeNull();
       expect(
-        Object.keys(coreColorDefaultValues).filter(
-          name => declaredValue(wrapper, name) != null,
+        Object.keys(colorDefaults).filter(
+          name => declaredByClass(wrapper, name) != null,
         ),
       ).toEqual([]);
     } finally {

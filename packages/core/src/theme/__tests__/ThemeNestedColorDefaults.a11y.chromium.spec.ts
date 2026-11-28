@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/theme/(Theme|tokens|themeColorDefaults)|^apps/storybook/stories/(ListInput|CodeTheme)\.stories
+// @pr-a11y scope ^packages/core/src/theme/(Theme|tokens)|^apps/storybook/stories/(ListInput|CodeTheme)\.stories
 
 /**
  * @file ThemeNestedColorDefaults.a11y.chromium.spec.ts
@@ -90,7 +90,11 @@ test.afterAll(async () => {
 async function openStory(
   page: Page,
   storyId: string,
-  {lowered, themeText = false}: {lowered: boolean; themeText?: boolean},
+  {
+    lowered,
+    themeText = false,
+    pageMode = 'light',
+  }: {lowered: boolean; themeText?: boolean; pageMode?: 'light' | 'dark'},
 ): Promise<void> {
   if (lowered) {
     await page.route('**/*.css', async route => {
@@ -99,7 +103,7 @@ async function openStory(
     });
   }
   await page.goto(
-    `${storybook.origin}/iframe.html?id=${storyId}&viewMode=story&globals=colorMode:light;astryxTheme:neutral`,
+    `${storybook.origin}/iframe.html?id=${storyId}&viewMode=story&globals=colorMode:${pageMode};astryxTheme:neutral`,
   );
   await page.locator('#storybook-root button:visible').first().waitFor();
   if (lowered) {
@@ -119,7 +123,9 @@ async function openStory(
       },
       styles.map(text => (text.includes('light-dark(') ? lower(text) : text)),
     );
-    await page.addStyleTag({content: lower(':root { color-scheme: light; }')});
+    await page.addStyleTag({
+      content: lower(`:root { color-scheme: ${pageMode}; }`),
+    });
   }
   if (themeText) {
     // A theme that sets the primary text color, as theme rules declare it.
@@ -214,10 +220,10 @@ for (const lowered of [false, true]) {
   test(`in ${build}, a Theme whose theme sets no accent pairs Core's accent with Core's on-accent color`, async ({
     page,
   }) => {
-    // The page theme, neutral, sets its own on-accent color. The nested
-    // theme sets neither, so both must come from Core, as a primary Button's
-    // fill and label do.
-    await openStory(page, stories.codeTheme, {lowered});
+    // The page theme, neutral in dark mode, sets its own accent and
+    // on-accent color. The nested theme sets neither, so both must come from
+    // Core, as a primary Button's fill and label do.
+    await openStory(page, stories.codeTheme, {lowered, pageMode: 'dark'});
     const pair = await page.evaluate(() => {
       const pane = document.querySelector(
         '[data-astryx-theme="dark-dev"]',
