@@ -43,6 +43,8 @@ const HEAD = '3'.repeat(40);
 
 async function runSignal({
   eventName = 'workflow_dispatch',
+  // A pull_request_target event's action (opened, synchronize, …).
+  action,
   baseSha = OLD_BASE,
   backfill = false,
   helperMissing = false,
@@ -55,6 +57,8 @@ async function runSignal({
   commenter = 'engineer',
   engOwners = '@engineer',
   commentBody = `/approve-spec ${HEAD}`,
+  // The pull request's timeline, oldest first; an Error makes the read fail.
+  timeline = [],
   author = {login: 'contributor', type: 'User'},
   // More files than a compare names, and the head the pull request points at
   // when its live file list has been read.
@@ -148,6 +152,10 @@ async function runSignal({
       issues: {
         addLabels: mutations.addLabels,
         removeLabel: mutations.removeLabel,
+        listEventsForTimeline: vi.fn(async () => {
+          if (timeline instanceof Error) throw timeline;
+          return {data: timeline};
+        }),
       },
       rateLimit: {
         get: vi.fn(async () => ({
@@ -190,7 +198,7 @@ async function runSignal({
                 issue: {number: 42, pull_request: {}},
                 comment: {user: {login: commenter}, body: commentBody},
               }
-            : {pull_request: pr},
+            : {action, pull_request: pr},
     },
     core,
     {
@@ -812,6 +820,127 @@ describe("a fork's held review run blocks nothing the owner command and a dispat
       'Only the review-clear reconcile waits on the held review run',
     );
     expect(gate).toContain('run the "Review signal" workflow by hand');
+  });
+});
+
+describe('the advisory design label at a head an owner already cleared', () => {
+  const THEME = [
+    {filename: 'packages/themes/acme/src/tokens.ts', status: 'modified'},
+  ];
+  const at = minute => `2026-11-14T17:${String(minute).padStart(2, '0')}:00Z`;
+  const arrived = minute => [
+    {
+      context: 'review-required',
+      state: 'pending',
+      description: 'Waiting on code review',
+      creator: {login: 'github-actions[bot]'},
+      created_at: at(minute),
+    },
+    {
+      context: 'spec-owner-approval',
+      state: 'success',
+      description: 'Mirrors review-required · spec ok',
+      creator: {login: 'github-actions[bot]'},
+      created_at: at(minute),
+    },
+  ];
+  const removed = (login, minute) => ({
+    event: 'unlabeled',
+    actor: {login},
+    label: {name: 'needs:design-review'},
+    created_at: at(minute),
+  });
+  const designAdded = mutations =>
+    mutations.addLabels.mock.calls.some(([input]) =>
+      input.labels.includes('needs:design-review'),
+    );
+
+  it('adds the label to a design-affecting change as before', async () => {
+    const {mutations} = await runSignal({files: THEME});
+    expect(designAdded(mutations)).toBe(true);
+  });
+
+  it('does not add it back when a design owner removed it at this head, and says so', async () => {
+    const {mutations, core} = await runSignal({
+      files: THEME,
+      specStatuses: arrived(20),
+      timeline: [removed('designer', 30)],
+    });
+    expect(designAdded(mutations)).toBe(false);
+    expect(core.info).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'needs:design-review not added back: @designer removed it at this head',
+      ),
+    );
+  });
+
+  it('adds it again on a head that arrived after the removal', async () => {
+    const {mutations} = await runSignal({
+      files: THEME,
+      specStatuses: arrived(19),
+      timeline: [
+        {event: 'committed', committer: {date: at(5)}},
+        removed('designer', 14),
+      ],
+    });
+    expect(designAdded(mutations)).toBe(true);
+  });
+
+  it('adds it on the run that brings a head another pull request already gated', async () => {
+    // The head commit was gated at 17:10 on another pull request; an owner
+    // removed the label here at 17:30, at the old head; this branch was then
+    // fast-forwarded to that commit.
+    const {mutations} = await runSignal({
+      eventName: 'pull_request_target',
+      action: 'synchronize',
+      files: THEME,
+      specStatuses: arrived(10),
+      timeline: [removed('designer', 30)],
+    });
+    expect(designAdded(mutations)).toBe(true);
+  });
+
+  it('keeps it after that run: a later event at that head reads its add', async () => {
+    const {mutations} = await runSignal({
+      eventName: 'pull_request_target',
+      action: 'ready_for_review',
+      files: THEME,
+      specStatuses: arrived(10),
+      timeline: [
+        removed('designer', 30),
+        {
+          event: 'labeled',
+          actor: {login: 'github-actions[bot]'},
+          label: {name: 'needs:design-review'},
+          created_at: at(40),
+        },
+        removed('contributor', 45),
+      ],
+    });
+    expect(designAdded(mutations)).toBe(true);
+  });
+
+  it('adds it when someone who is not an owner removed it', async () => {
+    const {mutations} = await runSignal({
+      files: THEME,
+      specStatuses: arrived(20),
+      timeline: [removed('contributor', 30)],
+    });
+    expect(designAdded(mutations)).toBe(true);
+  });
+
+  it('adds it, with a warning, when the timeline cannot be read', async () => {
+    const {mutations, core} = await runSignal({
+      files: THEME,
+      specStatuses: arrived(20),
+      timeline: new Error('HTTP 502'),
+    });
+    expect(designAdded(mutations)).toBe(true);
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Could not read the timeline or the head's statuses; needs:design-review is added: HTTP 502",
+      ),
+    );
   });
 });
 

@@ -168,6 +168,85 @@ function resolveReviewApprovals({
   };
 }
 
+/**
+ * Whether an owner removed an advisory label at the current head: since the
+ * head reached the pull request, the last add or removal of `label` is a
+ * removal by an engineering or design owner. A pushed commit carries its
+ * committer date, not its push time, so the head's arrival is the earliest
+ * trusted `review-required` status on it, which review-signal writes for every
+ * new head, or a later force push that names it. With no such status the
+ * head's arrival is unknown, and the removal does not count. Then the owner
+ * has seen this head, and the label is not added back to it. A later head is
+ * judged again from its own arrival. A head another pull request already gated
+ * has an earlier status than its arrival here, so it relies on the run that
+ * brings it adding the label (see the label step in review-signal.yml).
+ * @param {object} options
+ * @param {Array<{event?: string, actor?: {login?: string}, label?: {name?: string}, created_at?: string}>} options.events
+ *   the pull request's timeline
+ * @param {Array<{context?: string, creator?: {login?: string}, created_at?: string}>} options.headStatuses
+ *   the commit statuses on the current head
+ * @param {string} options.label
+ * @param {string[]} options.owners lowercase logins
+ * @param {string} options.headSha the current head commit
+ * @returns {{removedAtHead: boolean, by: string | null}}
+ */
+function ownerRemovedLabelAtHead({
+  events,
+  headStatuses,
+  label,
+  owners,
+  headSha,
+}) {
+  const arrivals = trustedStatuses(headStatuses, REVIEW_GATE_CONTEXT)
+    .map(status => Date.parse(status.created_at ?? ''))
+    .filter(Number.isFinite);
+  if (arrivals.length === 0) return {removedAtHead: false, by: null};
+  // A head that left and came back (A, then B, then A again) arrived again
+  // when it came back; its first status is from its first time. A force push
+  // to this head says when. When the newest force push since that status
+  // names another commit, the head came back by a plain push, which leaves no
+  // event, so its arrival is unknown and the removal does not count.
+  const firstArrival = Math.min(...arrivals);
+  const forcePushes = events
+    .filter(event => event.event === 'head_ref_force_pushed')
+    .map(event => ({
+      at: Date.parse(event.created_at ?? ''),
+      sha: event.commit_id,
+    }))
+    .filter(({at}) => Number.isFinite(at) && at > firstArrival)
+    .sort((a, b) => a.at - b.at);
+  const lastForcePush = forcePushes.at(-1);
+  if (lastForcePush && lastForcePush.sha !== headSha) {
+    return {removedAtHead: false, by: null};
+  }
+  const arrived = lastForcePush?.at ?? firstArrival;
+  // The last add or removal of the label since the head arrived decides: an
+  // owner's removal holds it off; any later add, an owner's included, ends
+  // that, so a later removal by someone who is not an owner adds it again.
+  const changes = events
+    .filter(
+      event =>
+        (event.event === 'labeled' || event.event === 'unlabeled') &&
+        event.label?.name === label,
+    )
+    .map(event => ({event, at: Date.parse(event.created_at ?? '')}))
+    .filter(({at}) => Number.isFinite(at) && at > arrived)
+    .sort((a, b) => a.at - b.at);
+  let removedAtHead = false;
+  let by = null;
+  for (const {event} of changes) {
+    const login = event.actor?.login?.toLowerCase();
+    if (event.event === 'labeled') {
+      removedAtHead = false;
+      by = null;
+    } else if (login && owners.includes(login)) {
+      removedAtHead = true;
+      by = login;
+    }
+  }
+  return {removedAtHead, by};
+}
+
 // A pull request the review app opens is the app's own work, which it cannot
 // approve: its code review is a trainer pass, an engineering owner's approval
 // of its exact head. Other bots stay exempt.
@@ -417,6 +496,7 @@ module.exports = {
   isSafeSpace,
   needsTrainerPass,
   normalizeReviewApp,
+  ownerRemovedLabelAtHead,
   readHeadPushedAt,
   resolveReviewApprovals,
   trainerPassed,
