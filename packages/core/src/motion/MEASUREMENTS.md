@@ -276,7 +276,12 @@ table only names them, and their values belong to the wheel's own table.
 
 Done (UIKit lab, iOS 26.2 simulator, Oct 23 2026; in the date picker's table):
 the month/year wheels changing the date, the AM/PM column following the hour,
-the turn back onto a bound, and the day clamped to the month.
+the turn back onto a bound, the day clamped to the month, the title following
+the drag, and the chevron's retarget and its state at a bound. The sheet split
+(M-DP01: 100 pt drags from the grid at 45° to 55°, slow and fast, logged per
+touch sample) followed on Oct 25 2026. A drag is decided on the first sample
+where either axis reaches the pan's hysteresis: the grid's when the horizontal
+travel has.
 
 ## Context menu (UIContextMenuInteraction)
 
