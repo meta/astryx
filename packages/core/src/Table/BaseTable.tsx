@@ -680,13 +680,14 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // independent of any visible index column: when the consumer opts in (by
   // passing rowIndexStart or rowCount), body rows carry `aria-rowindex`
   // reflecting their position in the full dataset, and the <table> carries
-  // `aria-rowcount`. `aria-rowindex` is 1-based and counts data rows from
-  // `rowIndexStart` (default 1); a windowed/paginated view passes the offset
-  // of its first visible row. `aria-rowcount` is `rowCount` when known, or
-  // `-1` (ARIA's "unknown count") for a windowed view with an unknown total.
+  // `aria-rowcount`. `rowIndexStart` (default 1) and `rowCount` are in
+  // body-row units; a windowed/paginated view passes the offset of its first
+  // visible row. WAI-ARIA counts the header row, so the header row gets
+  // `aria-rowindex` 1, body rows follow it, and `aria-rowcount` is `rowCount`
+  // plus the header row. It is `-1` (ARIA's "unknown count") for a windowed
+  // view with an unknown total.
   const ariaRowIndexingEnabled = rowIndexStart != null || rowCount != null;
   const firstRowAriaIndex = rowIndexStart ?? 1;
-  const ariaRowCount = ariaRowIndexingEnabled ? (rowCount ?? -1) : undefined;
 
   const RowComponent = TableRow as React.ComponentType<TableRowComponentProps>;
   const CellComponent =
@@ -715,6 +716,11 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // discards cannot leave another. No state or ref is written during render.
   const resolvedColumns = internByIdentity(transformedColumns);
   const headerRowCount = mode === 'data' && resolvedColumns.length > 0 ? 1 : 0;
+  const ariaRowCount = ariaRowIndexingEnabled
+    ? rowCount != null
+      ? rowCount + headerRowCount
+      : -1
+    : undefined;
   const {
     rows: rowsCapability,
     columns: columnsConfig,
@@ -1153,7 +1159,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
                 <RowComponent
                   {...headerRowRenderProps.htmlProps}
                   aria-rowindex={
-                    windowPlan.isWindowed
+                    windowPlan.isWindowed || ariaRowIndexingEnabled
                       ? 1
                       : headerRowRenderProps.htmlProps['aria-rowindex']
                   }
@@ -1226,7 +1232,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
                               windowPlan.isWindowed
                                 ? headerRowCount + rowIndex + 1
                                 : ariaRowIndexingEnabled
-                                  ? firstRowAriaIndex + rowIndex
+                                  ? firstRowAriaIndex +
+                                    headerRowCount +
+                                    rowIndex
                                   : undefined
                             }
                           />

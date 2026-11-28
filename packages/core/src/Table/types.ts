@@ -657,7 +657,8 @@ export interface BaseTableProps<
   plugins?: TablePlugin<T>[];
 
   /**
-   * ARIA row index (1-based) assigned to the **first** rendered body row.
+   * Position of the **first** rendered body row among the body rows, counted
+   * from 1.
    *
    * The row ordinal is an accessibility concern independent of any visible
    * index column: `aria-rowindex` on each `<tr>` should reflect the row's
@@ -667,9 +668,9 @@ export interface BaseTableProps<
    *
    * Setting this (or {@link rowCount}) opts the table into emitting
    * `aria-rowindex` on body rows and `aria-rowcount` on the `<table>`. Data
-   * rows are numbered from this value; the header row keeps native table
-   * semantics and is not assigned an ARIA row index (so the visible
-   * `useTableRowIndex` numbering and `aria-rowindex` stay in agreement).
+   * rows are numbered from this value. The header row is ARIA row 1, so the
+   * first body row gets `aria-rowindex` equal to this value plus 1. Pass this
+   * value in body-row units.
    *
    * Applies to data-driven mode only (ignored in children mode).
    *
@@ -679,7 +680,9 @@ export interface BaseTableProps<
   /**
    * Total number of body rows across **all** pages/windows, used for
    * `aria-rowcount` on the `<table>`. Provide this for paginated data so
-   * assistive tech can announce "row X of Y" against the full dataset.
+   * assistive tech can announce "row X of Y" against the full dataset. This
+   * value excludes the header row. The table adds the header row to
+   * `aria-rowcount`.
    *
    * When omitted but {@link rowIndexStart} is set (a windowed view with an
    * unknown total, e.g. cursor pagination), `aria-rowcount` is set to `-1`
