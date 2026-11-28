@@ -740,6 +740,202 @@ describe('generateThemeRules', () => {
   });
 });
 
+describe("Text size overrides and a theme's own size rule", () => {
+  // The font size of the last rule on `selector` that sets one: within one
+  // layer and specificity, the last such rule is the one that applies.
+  const lastFontSize = (css: string, selector: string) =>
+    [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(
+        ([, sel, body]) =>
+          (sel.trim().endsWith(selector) ||
+            sel.trim().endsWith(`:is(${selector})`)) &&
+          body.includes('font-size:'),
+      )
+      .at(-1)?.[2]
+      .match(/font-size:\s*([^;]+);/)?.[1]
+      .trim();
+  const XSM = '.astryx-text[data-size="xsm"]';
+  const SM = '.astryx-text[data-size="sm"]';
+
+  it("keeps a theme's own size rule over Core's size token", () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'size-own',
+        components: {
+          text: {
+            'type:supporting': {fontSize: '20px'},
+            'size:xsm': {fontSize: '9px'},
+          },
+        },
+      }),
+    ).join('\n');
+    expect(lastFontSize(css, XSM)).toBe('9px');
+    // A size the theme does not style keeps Core's token.
+    expect(lastFontSize(css, SM)).toBe('var(--font-size-sm)');
+  });
+
+  it('lets a size rule win over a type rule in whatever order the theme writes them', () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'size-first',
+        components: {
+          text: {
+            'size:xsm': {fontSize: '9px'},
+            'type:supporting': {fontSize: '20px'},
+          },
+        },
+      }),
+    ).join('\n');
+    expect(css.lastIndexOf(XSM)).toBeGreaterThan(
+      css.indexOf('.astryx-text[data-type="supporting"]'),
+    );
+    expect(lastFontSize(css, XSM)).toBe('9px');
+  });
+
+  it("falls back to Core's token for a size font size the boundary check refuses", () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'size-refused',
+        components: {
+          text: {
+            'type:supporting': {fontSize: '20px'},
+            'size:xsm': {fontSize: '9px; color: red'},
+          },
+        },
+      }),
+      [],
+    ).join('\n');
+    expect(lastFontSize(css, XSM)).toBe('var(--font-size-xs)');
+  });
+
+  it("keeps Core's token under a size font size the browser drops", () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'size-not-css',
+        components: {
+          text: {
+            'type:supporting': {fontSize: '20px'},
+            'size:xsm': {fontSize: '9xp'},
+          },
+        },
+      }),
+    ).join('\n');
+    const typeAt = css.indexOf('.astryx-text[data-type="supporting"]');
+    // The token rule follows the type rule, so when the browser drops the
+    // authored value, the size still beats the type.
+    expect(
+      css.lastIndexOf(`${XSM} { font-size: var(--font-size-xs); }`),
+    ).toBeGreaterThan(typeAt);
+    expect(lastFontSize(css, XSM)).toBe('9xp');
+  });
+
+  it("re-emits only a size rule's font size, so the type keeps its line height", () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'size-shorthand',
+        components: {
+          text: {
+            'type:supporting': {fontSize: '20px', lineHeight: '30px'},
+            'size:xsm': {font: '9px serif'},
+          },
+        },
+      }),
+    ).join('\n');
+    // The last xsm rule, the override, sets only a font size: no shorthand
+    // that would reset the type's line height after the type rule.
+    const lastXsm = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(([, sel]) => sel.trim().endsWith(XSM))
+      .at(-1)?.[2];
+    expect(lastXsm).not.toMatch(/\bfont:/);
+    expect(lastFontSize(css, XSM)).toBe('var(--font-size-xs)');
+  });
+
+  it("keeps a size rule's color-mode font size after the type rule", () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'size-modes',
+        components: {
+          // Size rules first: only the override can place them after the type.
+          text: {
+            'size:xsm': {fontSize: '9px', '@dark': {fontSize: '11px'}},
+            'size:sm': {'@dark': {fontSize: '13px'}},
+            'type:supporting': {fontSize: '20px'},
+          },
+        },
+      }),
+    ).join('\n');
+    const typeAt = css.indexOf('.astryx-text[data-type="supporting"]');
+    expect(css.lastIndexOf('font-size: 11px')).toBeGreaterThan(typeAt);
+    expect(css.lastIndexOf('font-size: 13px')).toBeGreaterThan(typeAt);
+    // A size whose rule sets a font size only in dark keeps Core's token in
+    // light, after the type rule.
+    expect(lastFontSize(css, SM)).toBe('var(--font-size-sm)');
+    expect(css.lastIndexOf(SM)).toBeGreaterThan(typeAt);
+  });
+
+  it("keeps the theme's size rule on a media surface that restyles the type", () => {
+    const css = generateOnMediaCSS(
+      defineTheme({
+        name: 'size-surface',
+        components: {text: {'size:xsm': {fontSize: '9px'}}},
+        onDark: {
+          components: {text: {'type:supporting': {fontSize: '22px'}}},
+        },
+      }),
+    );
+    expect(lastFontSize(css, XSM)).toBe('9px');
+    expect(lastFontSize(css, SM)).toBe('var(--font-size-sm)');
+  });
+
+  it("keeps the root theme's size font size in the other mode when an adaptation sets one only in dark", () => {
+    const css = generateAdaptationCSS(
+      defineTheme({
+        name: 'size-adapt-mode',
+        components: {text: {'size:xsm': {fontSize: '9px'}}},
+        adaptations: {
+          rules: [
+            {
+              when: {motion: 'reduce'},
+              value: {
+                components: {
+                  text: {'size:xsm': {'@dark': {fontSize: '11px'}}},
+                },
+              },
+            },
+          ],
+        },
+      }),
+    ).component;
+    // The adaptation's base is the root theme's 9px, which follows Core's
+    // token, not the token alone.
+    expect(css.lastIndexOf('font-size: 9px')).toBeGreaterThan(
+      css.lastIndexOf('var(--font-size-xs)'),
+    );
+    expect(css).toContain('font-size: 11px');
+  });
+
+  it("keeps the theme's size rule in an adaptation that restyles the type", () => {
+    const css = generateAdaptationCSS(
+      defineTheme({
+        name: 'size-adapt',
+        components: {text: {'size:xsm': {fontSize: '9px'}}},
+        adaptations: {
+          rules: [
+            {
+              when: {motion: 'reduce'},
+              value: {
+                components: {text: {'type:supporting': {fontSize: '22px'}}},
+              },
+            },
+          ],
+        },
+      }),
+    ).component;
+    expect(lastFontSize(css, XSM)).toBe('9px');
+    expect(lastFontSize(css, SM)).toBe('var(--font-size-sm)');
+  });
+});
+
 describe('generateThemeRules with weight overrides', () => {
   const theme = defineTheme({
     name: 'custom-weights',

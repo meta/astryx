@@ -1076,12 +1076,13 @@ export function generateThemeRules(
   // source passed in directly can still hold undefined. Read it as every
   // layer does: an undefined value is not set.
   const components = withoutUnsetComponents(theme.components);
+  const rootDarkPageSides = darkPageSides(
+    resolveModes({...theme.localTokens, ...theme.tokens}),
+  );
   if (components) {
     generateComponentRules(components, parts, {
       sink,
-      darkPageSides: darkPageSides(
-        resolveModes({...theme.localTokens, ...theme.tokens}),
-      ),
+      darkPageSides: rootDarkPageSides,
     });
   }
 
@@ -1093,7 +1094,9 @@ export function generateThemeRules(
 
   // 5. Text `size`-prop font-size overrides (so an explicit size beats a
   //    themed type's font-size across the astryx-base → astryx-theme layers)
-  generateSizeOverrides(components || {}, parts);
+  generateSizeOverrides(components || {}, parts, {
+    rules: {darkPageSides: rootDarkPageSides},
+  });
 
   // 6. Heading `weight`-prop overrides. These are emitted after authored type
   //    rules in the same layer so an explicit prop remains an override even
@@ -1752,6 +1755,52 @@ const TEXT_SIZE_TOKEN_MAP: Record<string, string> = {
 };
 
 /**
+ * The font sizes of a theme's own Text rule for a `size`: its `fontSize`, and
+ * the `fontSize` of its `@light` and `@dark` blocks. It is null when the rule
+ * sets none that can stay one declaration. Only the font size is taken. A
+ * `font` shorthand or another declaration would reset the type's line height,
+ * family and weight, which `size` keeps. A refused value counts as not
+ * authored, so the inherited rule or Core's token applies; the refusal is
+ * reported where the rule itself is emitted.
+ */
+function authoredSizeFont(
+  components: Record<string, unknown> | undefined,
+  sizeName: string,
+): Record<string, unknown> | null {
+  const text = components?.text as Record<string, unknown> | undefined;
+  const rule = text?.[`size:${sizeName}`];
+  const sizeOf = (block: unknown): string | undefined => {
+    if (block == null || typeof block !== 'object' || Array.isArray(block)) {
+      return undefined;
+    }
+    const value = (block as Record<string, unknown>).fontSize;
+    if (value == null) {
+      return undefined;
+    }
+    const written = stringifyTokenValue(value);
+    return checkDeclarationValue(written) === null ? written : undefined;
+  };
+  if (rule == null || typeof rule !== 'object' || Array.isArray(rule)) {
+    return null;
+  }
+  const font: Record<string, unknown> = {};
+  const size = sizeOf(rule);
+  if (size !== undefined) {
+    font.fontSize = size;
+  }
+  for (const mode of ['@light', '@dark']) {
+    const modeSize = sizeOf((rule as Record<string, unknown>)[mode]);
+    if (modeSize !== undefined) {
+      font[mode] = {fontSize: modeSize};
+    }
+  }
+  return Object.keys(font).length > 0 ? font : null;
+}
+
+/** A sink for a re-emitted declaration: its first emission already reported it. */
+const SILENT_SINK: DiagnosticSink = () => {};
+
+/**
  * Generate `size`-prop font-size overrides for the Text component.
  *
  * The `size` prop is documented as a font-size override that wins over the
@@ -1761,6 +1810,14 @@ const TEXT_SIZE_TOKEN_MAP: Record<string, string> = {
  * `size` for any `type` the theme styled. Re-emitting the size classes here —
  * same layer as the type rules, same `.astryx-text.<x>` specificity, later in
  * source — restores `size` as a real override.
+ *
+ * A size the theme styles keeps the theme's font size. Core's token rule comes
+ * first, and the size rule's font sizes follow it, after the type rules. So
+ * they win in any authored order, and a value the browser drops falls back to
+ * the token. At the theme root, a size whose rule sets a font size only in a
+ * color mode keeps Core's token as its base. On a media surface or in an
+ * adaptation, what the layer's own rule leaves unset comes from the root
+ * theme's size rule (`inherited`), then Core's token.
  *
  * Only `font-size` is overridden; line-height and other type properties are
  * intentionally preserved, matching the prop's documented contract.
@@ -1772,7 +1829,15 @@ const TEXT_SIZE_TOKEN_MAP: Record<string, string> = {
 function generateSizeOverrides(
   components: Record<string, unknown>,
   parts: string[],
-  surface?: MediaSurface,
+  {
+    surface,
+    inherited,
+    rules = {},
+  }: {
+    surface?: MediaSurface;
+    inherited?: Record<string, unknown>;
+    rules?: ComponentRuleOptions;
+  } = {},
 ): void {
   if (!('text' in components)) {
     return;
@@ -1781,6 +1846,37 @@ function generateSizeOverrides(
     const suffix = parseStyleKey(`size:${sizeName}`);
     parts.push(
       `  ${componentSelector('text', suffix, surface)} { font-size: ${sizeValue}; }`,
+    );
+    const own = authoredSizeFont(components, sizeName);
+    const root = authoredSizeFont(inherited, sizeName);
+    if (!(own ?? root)) {
+      continue;
+    }
+    // What this layer's rule leaves unset comes from the root theme's size
+    // rule, then the token above. A base font size of this layer's own covers
+    // both modes, as its rule does in the cascade, so the root's mode sizes
+    // fill in only without it.
+    const ownBase = own?.fontSize;
+    const block: Record<string, unknown> = {};
+    const base = ownBase ?? root?.fontSize;
+    if (base !== undefined) {
+      block.fontSize = base;
+    }
+    for (const mode of ['@light', '@dark']) {
+      const modeSize =
+        own?.[mode] ?? (ownBase === undefined ? root?.[mode] : undefined);
+      if (modeSize !== undefined) {
+        block[mode] = modeSize;
+      }
+    }
+    generateComponentRules(
+      {text: {[`size:${sizeName}`]: block as StyleOverrides}},
+      parts,
+      {
+        ...rules,
+        surface,
+        sink: SILENT_SINK,
+      },
     );
   }
 }
@@ -1917,7 +2013,11 @@ export function generateOnMediaCSS(
         location,
       });
       generateColorOverrides(onMedia.components, out, surface);
-      generateSizeOverrides(onMedia.components, out, surface);
+      generateSizeOverrides(onMedia.components, out, {
+        surface,
+        inherited: theme.components,
+        rules: {resetInheritedPaddingSpecificity: true, location},
+      });
 
       // Apply the effective explicit Heading weight after media-specific type
       // rules. A surface-authored target wins, followed by the inherited main
@@ -2045,6 +2145,7 @@ function generateAdaptationRuleRules(
   sink: DiagnosticSink,
   statusRoleDefaults: [string, string][],
   themeDarkPageSides: ReadonlySet<MediaSide>,
+  themeComponents?: Record<string, unknown>,
 ): string[] {
   const parts: string[] = [];
   const tokens = tokenBlock(
@@ -2068,7 +2169,14 @@ function generateAdaptationRuleRules(
       darkPageSides: themeDarkPageSides,
     });
     generateColorOverrides(rule.components, parts);
-    generateSizeOverrides(rule.components, parts);
+    generateSizeOverrides(rule.components, parts, {
+      inherited: themeComponents,
+      rules: {
+        resetInheritedPaddingSpecificity: true,
+        location,
+        darkPageSides: themeDarkPageSides,
+      },
+    });
   }
   return parts;
 }
@@ -2140,6 +2248,7 @@ export function generateAdaptationCSS(
       sink,
       statusRoleDefaults[index],
       themeDarkPageSides,
+      theme.components,
     );
     if (parts.length === 0) {
       continue;
