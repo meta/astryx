@@ -48,8 +48,9 @@ function projectOf(dir) {
 }
 
 /**
- * The import specifiers of a module file, read from its syntax tree, or null
- * when the file is missing or does not parse.
+ * The modules a module file imports or re-exports from (`import … from`,
+ * `export … from`), read from its syntax tree, or null when the file is
+ * missing or does not parse.
  * @param {string} file
  * @returns {string[] | null}
  */
@@ -62,7 +63,13 @@ function moduleImports(file) {
   }
   try {
     return parseAppModule(source)
-      .program.body.filter(node => node.type === 'ImportDeclaration')
+      .program.body.filter(
+        node =>
+          node.type === 'ImportDeclaration' ||
+          ((node.type === 'ExportNamedDeclaration' ||
+            node.type === 'ExportAllDeclaration') &&
+            node.source != null),
+      )
       .map(node => node.source.value);
   } catch {
     return null;
@@ -86,8 +93,8 @@ function resolveAppImport(specifier, fromFile) {
 
 /**
  * Whether a module loads next/font itself, or through a module of the app's
- * own that it imports (one level, as a layout imports its fonts from
- * `./fonts` or `@/app/fonts`).
+ * own that it imports and that itself imports or re-exports next/font (one
+ * level, as a layout imports its fonts from `./fonts` or `@/app/fonts`).
  * @param {string} file
  * @param {string[]} imports
  */
@@ -104,8 +111,9 @@ function loadsNextFont(file, imports) {
  * Whether the project loads its fonts with next/font: its App Router root
  * layout or its Pages Router custom App imports `next/font/google`,
  * `next/font/local` or a `geist/font` entry, itself or through a module of
- * the app's own it imports (such as `./fonts`, or `@/app/fonts` through the
- * app's tsconfig paths). next/font loads each family under a name of its own
+ * the app's own it imports that itself imports or re-exports one (such as
+ * `./fonts`, or `@/app/fonts` through the app's tsconfig paths); a font
+ * loaded two modules away is not followed. next/font loads each family under a name of its own
  * and exposes a CSS variable, so a theme that names the family itself does
  * not use the loaded font. Imports are read from the syntax tree, so a
  * mention in a comment or a string does not count. A file that does not
