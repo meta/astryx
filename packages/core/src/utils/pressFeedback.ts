@@ -311,6 +311,7 @@ function paintElement(element: HTMLElement, paint: PressPaint): void {
     element.removeAttribute(PRESSED_ATTRIBUTE);
     return;
   }
+  paintRowTint(element, paint);
   // A step that keeps the paint writes nothing, so the element sees one
   // change per paint.
   if (element.getAttribute(PRESSED_ATTRIBUTE) !== paint) {
@@ -351,6 +352,7 @@ function apply(slot: Slot, step: PressStep, sinceEventMs = 0): void {
   live.gesture = step.gesture;
   paintElement(live.element, step.paint);
   if (step.gesture.phase === 'idle') {
+    unplacePress(live.element);
     slot.live = null;
     return;
   }
@@ -442,6 +444,7 @@ function scrollerIsBraking(element: HTMLElement): boolean {
 function releaseIfDead(slot: Slot): void {
   if (slot.live?.gesture.phase === 'dead') {
     clearTimer(slot);
+    unplacePress(slot.live.element);
     slot.live = null;
   }
 }
@@ -454,6 +457,7 @@ function finish(slot: Slot): void {
   }
   clearTimer(slot);
   live.element.removeAttribute(PRESSED_ATTRIBUTE);
+  unplacePress(live.element);
   slot.live = null;
   if (slot === button) {
     holdKey(false);
@@ -538,10 +542,14 @@ function buttonSurfaceAt(
   return element;
 }
 
-/** Start a mouse button's or the Space key's press on the surface, if there is one. */
+/**
+ * Start a mouse button's or the Space key's press on the surface, if there is
+ * one. A key's press is on the surface's own box.
+ */
 function pressButton(
   target: EventTarget | null,
   pointerId: number | null,
+  at: {x: number; y: number} | null = null,
 ): void {
   // A press still fading elsewhere goes now: the new one owns the slot.
   finish(button);
@@ -551,6 +559,7 @@ function pressButton(
   }
   takeOver(finger, element);
   button.live = {element, gesture: idlePressGesture(), pointerId, timer: null};
+  placePress(element, at);
   holdKey(pointerId == null);
   apply(button, pressGestureStep(button.live.gesture, {kind: 'buttonDown'}));
 }
@@ -604,7 +613,12 @@ function onPointerDown(event: PointerEvent): void {
         ? event.button === 0
         : isPrimaryClick(event) && paintsFinePress(event.target)
     ) {
-      pressButton(event.target, event.pointerId);
+      pressButton(event.target, event.pointerId, {
+        x: event.clientX,
+        y: event.clientY,
+      });
+    } else if (isPrimaryClick(event)) {
+      holdMousePlace(event);
     }
     return;
   }
@@ -659,6 +673,9 @@ function onPointerDown(event: PointerEvent): void {
   if (element == null || isTrackedByGroup(element, event.pointerType)) {
     return;
   }
+  // Read whether the press waits out a scroll before anything below writes,
+  // so the press's start forces one layout at most (the placement's).
+  const delayed = !braking && !presentsAtOnce && isInsideScrollView(element);
   // A braking finger presses nothing, but a box hold still follows it.
   const end = boxHold?.start(element, event.target) ?? null;
   const live: LiveGesture | null = braking
@@ -677,13 +694,14 @@ function onPointerDown(event: PointerEvent): void {
   }
   takeOver(button, element);
   finger.live = live;
+  placePress(element, {x: event.clientX, y: event.clientY});
   apply(
     finger,
     pressGestureStep(live.gesture, {
       kind: 'down',
       x: event.clientX,
       y: event.clientY,
-      delayed: !presentsAtOnce && isInsideScrollView(element),
+      delayed,
     }),
     msSinceInput(event.timeStamp, event),
   );
@@ -718,6 +736,7 @@ function onPointerUp(event: PointerEvent): void {
   // press landing inside the brake window. A coarse pointer and a mouse can
   // both be present on one device.
   if (event.pointerType === 'mouse') {
+    releaseMousePlace(event.pointerId);
     if (button.live != null && button.live.pointerId === event.pointerId) {
       releaseButton();
     }
@@ -764,6 +783,7 @@ function onCancel(event?: Event): void {
   // A cancelled mouse pointer ends the mouse's press, not a finger's.
   const pointer = event as Partial<PointerEvent> | undefined;
   if (pointer?.pointerType === 'mouse') {
+    releaseMousePlace(pointer.pointerId ?? null);
     if (button.live != null && button.live.pointerId === pointer.pointerId) {
       cancelButton();
     }
@@ -793,6 +813,7 @@ function onCancel(event?: Event): void {
 function onDragStart(): void {
   onCancel();
   cancelButton();
+  releaseMousePlace(null);
 }
 
 /** A scroll anywhere above the pressed element, caught in the capture phase. */
@@ -891,6 +912,7 @@ function onVisibilityChange(): void {
     endContact(false);
     finish(finger);
     finish(button);
+    releaseMousePlace(null);
   }
 }
 
@@ -1031,4 +1053,169 @@ export function installPressFeedback(): () => void {
     lastTouchAt = 0;
     lastTouchTarget = null;
   };
+}
+
+/** A control's press styles ask for placement (controlPressLayerStyles). */
+const PLACE_OPT_IN = '--_press-place';
+
+/**
+ * The custom properties that place a press on a static surface. The press
+ * styles (privateAttributes/press.stylex.ts) read them only while a press is
+ * on or fading, or while a mouse button holds `:active`.
+ */
+const PLACE = {
+  /** The surface's own box, as its press layer's `inset`. */
+  inset: '--_press-layer-inset',
+  /** Under any pointer but a coarse primary one: the row's tint and its fade. */
+  rowTint: '--_press-row-tint',
+  rowOpacity: '--_press-row-opacity',
+  /** The surface's own tint, which a press on the row turns off. */
+  ownTint: '--_press-own-tint',
+} as const;
+
+/**
+ * A caller can make a control static, with no transform, so that its
+ * `::after` covers a row as its tap target. Its press layers then have the
+ * row as their containing block too: the row is their nearest containing
+ * block. A press that starts on the row presses the row, so the row tints as
+ * one surface. The control then shows no tint of its own. A press that starts
+ * on the control's own box presses the control, so only that box tints. The
+ * box is measured once, at the press's start, against the containing block's
+ * padding box. Script places the layer because CSS anchor positioning ran
+ * Layout during the release. A positioned surface, or one that holds its own
+ * layers, is its own layers' containing block, so it is not placed. A key's
+ * press (`at` null) is on the control's own box. Returns whether the press is
+ * on the row.
+ */
+function placePress(
+  element: HTMLElement,
+  at: {x: number; y: number} | null,
+): boolean {
+  unplacePress(element);
+  const style = getComputedStyle(element);
+  if (
+    style.getPropertyValue(PLACE_OPT_IN).trim() !== 'control' ||
+    style.position !== 'static'
+  ) {
+    return false;
+  }
+  const block = layerBlock(element);
+  if (block == null) {
+    return false;
+  }
+  const {box, rect, width, height} = block;
+  if (
+    at != null &&
+    (at.x < box.left || at.x > box.right || at.y < box.top || at.y > box.bottom)
+  ) {
+    element.style.setProperty(PLACE.ownTint, 'none');
+    return true;
+  }
+  // The rects are in the viewport. A scale on an ancestor scales them, so
+  // each difference is turned back into the block's own CSS pixels.
+  const scaleX = rect.width > 0 ? width / rect.width : 1;
+  const scaleY = rect.height > 0 ? height / rect.height : 1;
+  const top = (box.top - rect.top) * scaleY;
+  const left = (box.left - rect.left) * scaleX;
+  const bottom = (rect.bottom - box.bottom) * scaleY;
+  const right = (rect.right - box.right) * scaleX;
+  element.style.setProperty(
+    PLACE.inset,
+    `${top}px ${right}px ${bottom}px ${left}px`,
+  );
+  return false;
+}
+
+/**
+ * The padding box of the containing block that a static control's press
+ * layers have, and the control's own box, or null when the control holds its
+ * own layers, as a transform, a filter or layout containment makes it. The
+ * engine answers: a hidden, absolutely placed probe in the control has that
+ * containing block as its offset parent, and the probe's box is its padding
+ * box. The control's own offset parent can stop short, at a table cell or a
+ * table that holds no layers. The probe is out of flow and hidden, also from
+ * assistive technology, so it moves no other box and takes no hit. It exists
+ * only inside this call, at a press's start, so the control's DOM at rest and
+ * during the press does not change.
+ * For that one layout, the probe can change what `:empty` or `:last-child`
+ * matches in the control, and a mutation observer records it twice.
+ * Every read happens while the probe is in place, so they share one layout.
+ */
+function layerBlock(
+  element: HTMLElement,
+): {box: DOMRect; rect: DOMRect; width: number; height: number} | null {
+  const probe = element.ownerDocument.createElement('span');
+  probe.setAttribute('aria-hidden', 'true');
+  probe.style.cssText =
+    'position:absolute;inset:0;visibility:hidden;pointer-events:none';
+  element.append(probe);
+  const block = probe.offsetParent;
+  const result =
+    block == null || block === element
+      ? null
+      : {
+          box: element.getBoundingClientRect(),
+          rect: probe.getBoundingClientRect(),
+          width: probe.offsetWidth,
+          height: probe.offsetHeight,
+        };
+  probe.remove();
+  return result;
+}
+
+/**
+ * Clears the press's place. The press's end calls it, and so does the next
+ * press.
+ */
+function unplacePress(element: HTMLElement): void {
+  for (const name of Object.values(PLACE)) {
+    if (element.style.getPropertyValue(name) !== '') {
+      element.style.removeProperty(name);
+    }
+  }
+}
+
+/**
+ * Under a fine primary pointer, `:active` paints a mouse's press and the
+ * controller does not follow it. Where that press starts still decides what
+ * tints, so its place holds until the button comes up.
+ */
+let mousePlace: {surface: HTMLElement; pointerId: number} | null = null;
+
+function holdMousePlace(event: PointerEvent): void {
+  releaseMousePlace(null);
+  const surface = surfaceAt(event.target);
+  if (surface == null) {
+    return;
+  }
+  if (placePress(surface, {x: event.clientX, y: event.clientY})) {
+    surface.style.setProperty(PLACE.rowTint, '""');
+  }
+  mousePlace = {surface, pointerId: event.pointerId};
+}
+
+/** Ends the mouse's place: `pointerId` names its pointer, or `null` any. */
+function releaseMousePlace(pointerId: number | null): void {
+  if (
+    mousePlace == null ||
+    (pointerId != null && mousePlace.pointerId !== pointerId)
+  ) {
+    return;
+  }
+  unplacePress(mousePlace.surface);
+  mousePlace = null;
+}
+
+/**
+ * A press on the row tints the row while the press paints, and fades it with
+ * the release, on the same clock. The place holds from the press's start to
+ * its end: a press in a scroll view starts before it paints.
+ */
+function paintRowTint(element: HTMLElement, paint: PressPaint): void {
+  if (element.style.getPropertyValue(PLACE.ownTint) !== '') {
+    element.style.setProperty(PLACE.rowTint, '""');
+    if (paint === 'fading') {
+      element.style.setProperty(PLACE.rowOpacity, '0');
+    }
+  }
 }

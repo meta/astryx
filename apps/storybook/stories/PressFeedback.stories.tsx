@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {useState} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Button} from '@astryxdesign/core/Button';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
@@ -184,4 +185,57 @@ export const ButtonsInScroller: Story = {
       </VStack>
     </div>
   ),
+};
+
+/**
+ * A row whose whole box is one Button's tap target. The Button stays static
+ * and has no transform, so the row is the containing block of the Button's
+ * absolutely placed `::after`, which covers the row.
+ */
+const rowTargetStyles = stylex.create({
+  row: {
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 4,
+    padding: 12,
+    borderRadius: 12,
+    outline: '1px solid color-mix(in srgb, currentColor 20%, transparent)',
+  },
+  button: {
+    position: 'static',
+    transform: 'none',
+    '::after': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+    },
+  },
+});
+
+export const ButtonCoveringItsRow: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "A row whose whole box is a Button's tap target: the Button stays static with no transform, so its `::after` covers the row. Under a finger, a tap anywhere on the row, the line under the Button included, activates the Button once, through its press and its release. A press on the Button tints the Button, and a press elsewhere on the row tints the row.",
+      },
+    },
+  },
+  render: () => {
+    const [opened, setOpened] = useState(0);
+    return (
+      <div {...stylex.props(rowTargetStyles.row)}>
+        <Button
+          label="Open the conversation"
+          variant="ghost"
+          xstyle={rowTargetStyles.button}
+          onClick={() => setOpened(count => count + 1)}
+        />
+        <Text>Last message a minute ago</Text>
+        <Text>Opened: {opened}</Text>
+      </div>
+    );
+  },
 };
