@@ -753,6 +753,7 @@ jobs:
                     headStatuses,
                     label: DESIGN,
                     owners: [...engOwners, ...designOwners],
+                    headSha: pr.head.sha,
                   }));
               } catch (e) {
                 core.warning(`Could not read the timeline or the head's statuses; ${DESIGN} is added: ${e.message}`);

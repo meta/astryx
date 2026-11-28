@@ -639,8 +639,9 @@ describe('ownerRemovedLabelAtHead', () => {
     label: {name},
     created_at: at(minute),
   });
-  const forcePushed = minute => ({
+  const forcePushed = (minute, sha = head2) => ({
     event: 'head_ref_force_pushed',
+    commit_id: sha,
     created_at: at(minute),
   });
   const committed = (minute, sha) => ({
@@ -735,6 +736,18 @@ describe('ownerRemovedLabelAtHead', () => {
         [arrived(10)],
       ).removedAtHead,
     ).toBe(true);
+  });
+
+  it('does not count a removal made at the parent when the head came back by a plain push', () => {
+    // The head arrived at 17:10; a force push to its parent at 17:15; an owner
+    // removed the label at 17:20 while the parent was the head; the head came
+    // back by a fast-forward, which leaves no event.
+    expect(
+      decide(
+        [forcePushed(15, 'p'.repeat(40)), removed('designer', 20)],
+        [arrived(10)],
+      ),
+    ).toEqual({removedAtHead: false, by: null});
   });
 
   it("honours an owner's re-add: a later removal by someone else adds it again", () => {

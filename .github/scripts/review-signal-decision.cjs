@@ -185,21 +185,39 @@ function resolveReviewApprovals({
  *   the commit statuses on the current head
  * @param {string} options.label
  * @param {string[]} options.owners lowercase logins
+ * @param {string} options.headSha the current head commit
  * @returns {{removedAtHead: boolean, by: string | null}}
  */
-function ownerRemovedLabelAtHead({events, headStatuses, label, owners}) {
+function ownerRemovedLabelAtHead({
+  events,
+  headStatuses,
+  label,
+  owners,
+  headSha,
+}) {
   const arrivals = trustedStatuses(headStatuses, REVIEW_GATE_CONTEXT)
     .map(status => Date.parse(status.created_at ?? ''))
     .filter(Number.isFinite);
   if (arrivals.length === 0) return {removedAtHead: false, by: null};
-  // A force push that brings an earlier head back (A, then B, then A again)
-  // is when it arrived this time: its first status is from its first time.
-  // Any force push after that status is such a return, as the head is current.
+  // A head that left and came back (A, then B, then A again) arrived again
+  // when it came back; its first status is from its first time. A force push
+  // to this head says when. When the newest force push since that status
+  // names another commit, the head came back by a plain push, which leaves no
+  // event, so its arrival is unknown and the removal does not count.
+  const firstArrival = Math.min(...arrivals);
   const forcePushes = events
     .filter(event => event.event === 'head_ref_force_pushed')
-    .map(event => Date.parse(event.created_at ?? ''))
-    .filter(Number.isFinite);
-  const arrived = Math.max(Math.min(...arrivals), ...forcePushes);
+    .map(event => ({
+      at: Date.parse(event.created_at ?? ''),
+      sha: event.commit_id,
+    }))
+    .filter(({at}) => Number.isFinite(at) && at > firstArrival)
+    .sort((a, b) => a.at - b.at);
+  const lastForcePush = forcePushes.at(-1);
+  if (lastForcePush && lastForcePush.sha !== headSha) {
+    return {removedAtHead: false, by: null};
+  }
+  const arrived = lastForcePush?.at ?? firstArrival;
   // The last add or removal of the label since the head arrived decides: an
   // owner's removal holds it off; any later add, an owner's included, ends
   // that, so a later removal by someone who is not an owner adds it again.
