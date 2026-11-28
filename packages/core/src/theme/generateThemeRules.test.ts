@@ -866,6 +866,31 @@ describe("Text size overrides and a theme's own size rule", () => {
     expect(lastFontSize(css, SM)).toBe('var(--font-size-sm)');
   });
 
+  it("keeps the root theme's size font size in the other mode when an adaptation sets one only in dark", () => {
+    const css = generateAdaptationCSS(
+      defineTheme({
+        name: 'size-adapt-mode',
+        components: {text: {'size:xsm': {fontSize: '9px'}}},
+        adaptations: {
+          rules: [
+            {
+              when: {motion: 'reduce'},
+              value: {
+                components: {
+                  text: {'size:xsm': {'@dark': {fontSize: '11px'}}},
+                },
+              },
+            },
+          ],
+        },
+      }),
+    ).component;
+    // The adaptation's base is the root theme's 9px, not Core's token.
+    expect(css).not.toContain('var(--font-size-xs)');
+    expect(css).toContain('font-size: 9px');
+    expect(css).toContain('font-size: 11px');
+  });
+
   it("keeps the theme's size rule in an adaptation that restyles the type", () => {
     const css = generateAdaptationCSS(
       defineTheme({
