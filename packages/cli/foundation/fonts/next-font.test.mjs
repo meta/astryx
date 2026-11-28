@@ -81,6 +81,36 @@ describe('rootLayoutImportsNextFont', () => {
     expect(rootLayoutImportsNextFont(dir)).toBe(true);
   });
 
+  it("is true when the root layout imports its font module through the app's tsconfig paths alias", () => {
+    write(
+      'tsconfig.json',
+      JSON.stringify({
+        compilerOptions: {baseUrl: '.', paths: {'@/*': ['./*']}},
+      }),
+    );
+    write(
+      'app/fonts.ts',
+      "import {Geist} from 'next/font/google';\nexport const geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\n",
+    );
+    write(
+      'app/layout.tsx',
+      "import {geist} from '@/app/fonts';\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
+  it('is true for a font module imported as ./fonts.js that is written as fonts.ts', () => {
+    write(
+      'app/fonts.ts',
+      "import {Geist} from 'next/font/google';\nexport const geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\n",
+    );
+    write(
+      'app/layout.tsx',
+      "import {geist} from './fonts.js';\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n",
+    );
+    expect(rootLayoutImportsNextFont(dir)).toBe(true);
+  });
+
   it('is false when a module the layout imports does not load next/font', () => {
     write('app/fonts.ts', "export const fontClass = 'font-sans';\n");
     write(

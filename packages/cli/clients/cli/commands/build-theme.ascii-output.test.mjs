@@ -168,6 +168,39 @@ describe('theme command human output is plain ASCII', () => {
     expect(nonAscii(checked)).toEqual([]);
   });
 
+  it('a family build in a next/font app prints the next/font fix once', async () => {
+    fs.mkdirSync(path.join(dir, 'app'), {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'app/layout.tsx'),
+      "import {Geist} from 'next/font/google';\nconst geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});\nexport default function RootLayout({children}) {\n  return <html className={geist.variable}><body>{children}</body></html>;\n}\n",
+    );
+    fs.writeFileSync(
+      path.join(dir, 'ocean.mjs'),
+      OCEAN.replace(
+        "typography: {body: {family: 'Inter'}},",
+        "typography: {body: {family: 'Inter'}, code: {family: 'Fira Code'}},",
+      ),
+    );
+    const built = await run([
+      'build',
+      '--family',
+      'ocean.mjs',
+      'ocean-calm.mjs',
+      '--family-key',
+      'ocean-family',
+    ]);
+    expect(built.code).toBe(0);
+    expect(built.stdout).toContain(
+      'Font "Inter" is named by this theme family but not loaded.',
+    );
+    expect(built.stdout).toContain(
+      'Font "Fira Code" is named by this theme family but not loaded.',
+    );
+    expect(
+      built.stdout.split('This app loads fonts with next/font').length - 1,
+    ).toBe(1);
+  });
+
   it('a family refusal names the member that sets a private var', async () => {
     const r = await run([
       'build',
