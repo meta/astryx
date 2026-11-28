@@ -5,7 +5,7 @@ import SwiftUI
 import Testing
 @testable import Astryx
 
-// The Astryx tooltip (library/tooltip.spec.md), one cell at a time.
+// The Astryx tooltip (specs/swift/tooltip.spec.md), one cell at a time.
 
 @Test func tooltipsWaitCoresDelayAndBridge() {
   #expect(TooltipPresenter.delay == .milliseconds(200))
@@ -134,7 +134,7 @@ import Testing
 
 @Test func noSwiftViewUsesHelpForTooltips() throws {
   // `.help` is also the VoiceOver hint and never shows on focus or a tap, so
-  // every tooltip goes through `astryxTooltip` (library/tooltip.spec.md).
+  // every tooltip goes through `astryxTooltip` (specs/swift/tooltip.spec.md).
   let sources = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     .appendingPathComponent("Sources")

@@ -71,7 +71,7 @@ public struct Thumbnail: View {
       .frame(width: Thumbnail.side, height: Thumbnail.side)
       .opacity(isDisabled ? 0.5 : 1)
       .onHover { isHovering = $0 }
-      // The Astryx tooltip (library/tooltip.spec.md), as core's Thumbnail wraps
+      // The Astryx tooltip (specs/swift/tooltip.spec.md), as core's Thumbnail wraps
       // itself in core's tooltip: not a tab stop, and core's `auto` touch opens
       // it on a tap, since the wrapper is not a control, while an open action
       // still runs. The label is already in the name, so no hint.

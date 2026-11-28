@@ -220,7 +220,7 @@ private func onWhite(_ color: Color) -> [Int] {
 }
 
 // FR8: Avatar's words, focus, touch, and hint for the shared tooltip
-// (library/tooltip.spec.md), whose inputs `TooltipPresenterTests.swift` covers.
+// (specs/swift/tooltip.spec.md), whose inputs `TooltipPresenterTests.swift` covers.
 
 @Test func aStaticAvatarIsATabStopAndOpensOnATapAndAControlKeepsBoth() {
   // Core's `auto` touch resolves from focus: a static avatar opens on a tap,

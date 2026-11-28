@@ -2,7 +2,7 @@
 schema_version: 1
 template_version: 3
 kind: architecture
-id: architecture:native-swift-library-tooltip
+id: architecture:native-swift-tooltip
 authority: draft
 archive_reason: null
 superseded_by: null
