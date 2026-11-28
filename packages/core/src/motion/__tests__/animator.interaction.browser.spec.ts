@@ -11,7 +11,9 @@
  *   main-thread block, on its analytic curve; a spring that ends inside the
  *   block keeps its end state; no Layout or Paint runs while it animates
  *   (Chromium trace); the engine plays the analytic curve when seeked; a
- *   finished animation leaves within a frame or two of the curve's end; a
+ *   finished animation leaves within a frame or two of the curve's end; an
+ *   element keeps its layer until its animation retires, with the page's
+ *   animation clock slowed (Chromium); a
  *   fade-in on an element its stylesheet hides stays visible once it retires;
  *   a dialog's ::backdrop follows the curve and holds its end state; a frame
  *   painted before the compositor has a curve shows the element where it is;
@@ -386,6 +388,55 @@ test('a spring that ends inside the block keeps showing its end state', async ({
   for (const x of xs.slice(landed)) {
     expect(x).toBeGreaterThanOrEqual(TRAVEL - 1);
   }
+});
+
+test('with the page\u2019s animation clock slowed, the element keeps its layer until its animation retires', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'the animation clock\u2019s speed is a Chromium protocol',
+  );
+  await open(page);
+  // DevTools' animation speed: the animations' own clock runs at a quarter of
+  // the page clock, as a timeline that keeps a late frame's time runs behind
+  // it.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Animation.enable');
+  await cdp.send('Animation.setPlaybackRate', {playbackRate: 0.25});
+  const samples = await page.evaluate(
+    async ({spring, travel}) =>
+      new Promise<{t: number; running: boolean; layer: boolean}[]>(resolve => {
+        const box = document.getElementById('box') as HTMLElement;
+        const seen: {t: number; running: boolean; layer: boolean}[] = [];
+        window.animator.animate({x: travel}, {spring});
+        const sample = (t: number) => {
+          const animations = box.getAnimations();
+          seen.push({
+            t,
+            running: animations.some(a => a.playState === 'running'),
+            layer: getComputedStyle(box).willChange.includes('translate'),
+          });
+          // Until the animation retires: the engine cancels it then.
+          if (animations.length > 0 || seen.length < 3) {
+            requestAnimationFrame(sample);
+          } else {
+            resolve(seen);
+          }
+        };
+        requestAnimationFrame(sample);
+      }),
+    {spring: FAST, travel: TRAVEL},
+  );
+  const running = requireFrames(samples, {
+    min: 10,
+    during: 'the slowed spring',
+    where: sample => sample.running,
+  });
+  expect(
+    running.filter(sample => !sample.layer).map(sample => Math.round(sample.t)),
+  ).toEqual([]);
 });
 
 test('a frame painted before the compositor has the curve shows the element where it is', async ({

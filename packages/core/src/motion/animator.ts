@@ -2639,7 +2639,11 @@ export function createMotionEngine(
     scheduleDemote();
   };
 
-  /** Ends promotion PROMOTION_LINGER_MS after the last motion ends. */
+  /**
+   * Ends promotion PROMOTION_LINGER_MS after the last motion ends. It never
+   * ends before the animations retire. An animation retires on its own clock,
+   * which can run behind the page clock.
+   */
   const scheduleDemote = () => {
     if (demoteTimer != null) {
       clearTimeout(demoteTimer);
@@ -2655,7 +2659,7 @@ export function createMotionEngine(
         const moving = [...segments.values()].some(
           segment => time < segment.start + segment.duration,
         );
-        if (moving || pendingGroups.size > 0) {
+        if (moving || pendingGroups.size > 0 || retireTimers.size > 0) {
           scheduleDemote();
           return;
         }
@@ -3799,6 +3803,7 @@ export function createMotionEngine(
       ? segment
       : {
           ...segment,
+          source: undefined,
           target: segment.target + offset,
           at: t => segment.at(t) + offset,
         };

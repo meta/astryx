@@ -2327,6 +2327,52 @@ describe('promotion: a compositing layer while it moves', () => {
     expect(element.style.willChange).toBe('');
   });
 
+  it('keeps the layer while the animation plays its curve on a clock behind the page clock, and ends it after the animation retires', async () => {
+    const {animator, element} = setup();
+    animator.animate({x: 120}, {spring: springs.settle});
+    const [animation] = live('translate');
+    await commitFrame(clock);
+    const start = animation.startTime as number;
+    const curve = Number(animation.options.duration) - END_HOLD_MS;
+    // The animation's own clock runs at a quarter of the page clock's speed,
+    // as a timeline that keeps a late frame's time runs behind it.
+    Object.defineProperty(animation, 'currentTime', {
+      configurable: true,
+      get: () => (clock - start) / 4,
+    });
+    Object.defineProperty(animation, 'effect', {
+      configurable: true,
+      value: {getTiming: () => ({duration: animation.options.duration})},
+    });
+    // The page clock is past the curve's end and the linger, and the
+    // animation still plays its curve.
+    await advance(curve + PROMOTION_LINGER_MS + 10);
+    expect(live('translate')).toContain(animation);
+    expect(element.style.willChange).toBe('translate');
+    // Its own clock reaches the curve's end: it retires, and the layer ends
+    // after the linger.
+    await advance(3 * curve + 2 * PROMOTION_LINGER_MS);
+    expect(live('translate')).not.toContain(animation);
+    expect(element.style.willChange).toBe('');
+  });
+
+  it('keeps the layer while a sampler holds the animation paused, and ends it after the animation stops', async () => {
+    const {animator, element} = setup();
+    animator.animate({x: 120}, {spring: springs.quickChange});
+    const [animation] = live('translate');
+    await commitFrame(clock);
+    const curve = Number(animation.options.duration) - END_HOLD_MS;
+    // A paused animation never reaches its curve's end, so it never retires.
+    animation.paused = true;
+    await advance(curve + PROMOTION_LINGER_MS + 10);
+    expect(animation.cancelled).toBe(false);
+    expect(element.style.willChange).toBe('translate');
+    // Stopped, nothing waits to retire, and the layer ends after the linger.
+    animator.stop();
+    await advance(PROMOTION_LINGER_MS + 10);
+    expect(element.style.willChange).toBe('');
+  });
+
   it('keeps the element’s own will-change', async () => {
     const {animator, element} = setup();
     element.style.willChange = 'contents';
@@ -4923,6 +4969,42 @@ describe('play: any closed-form curve', () => {
     const xs = animation.keyframes.map(frame => parse(frame.translate)[0]);
     expect(xs[0]).toBeCloseTo(-16, 6);
     expect(xs.at(-1)).toBeCloseTo(32, 6);
+  });
+
+  it('engines rebased by different amounts in one task, while they wait for a frame, each show their own shift', async () => {
+    stubMedia(false, false);
+    const curve = {
+      duration: 0.4,
+      at: (t: number) => 300 * t,
+      velocity: () => 300,
+    };
+    const next = {
+      duration: 0.4,
+      at: (t: number) => 100 + 300 * t,
+      velocity: () => 300,
+    };
+    const elements = [0, 1].map(() => document.createElement('div'));
+    const [first, second] = elements.map(element =>
+      createMotionEngine(element, {now: () => clock, requestFrame}),
+    );
+    first.play({x: curve});
+    second.play({x: curve});
+    await advance(50);
+    // These calls continue motion, so each waits for the frame that commits
+    // it. Until then each element shows its old curve, moved by its rebase.
+    first.play({x: next});
+    second.play({x: next});
+    first.rebase({x: -16});
+    second.rebase({x: -32});
+    const [firstShown, secondShown] = elements.map(element =>
+      live('translate')
+        .filter(a => a.element === element)
+        .at(-1)!,
+    );
+    // The old curve is at 15 after 50 ms.
+    expect(parse(firstShown.keyframes[0].translate)[0]).toBeCloseTo(-1, 6);
+    expect(parse(secondShown.keyframes[0].translate)[0]).toBeCloseTo(-17, 6);
+    expect(secondShown.keyframes).not.toBe(firstShown.keyframes);
   });
 
   it('finishes true at its end, false when interrupted', async () => {
