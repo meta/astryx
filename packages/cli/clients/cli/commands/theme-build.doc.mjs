@@ -18,7 +18,14 @@ export const doc = {
   description:
     'Compiles defineTheme() sources through the same theme pipeline into scoped CSS, ' +
     'standard ESM, and type declarations. Ordinary mode writes one complete set per ' +
-    'theme. --family combines one selected extension tree into the three files named by ' +
+    'theme, named for the theme, beside its source unless --out names the CSS path ' +
+    '(the .js and .d.ts go beside it, still named for the theme). When a theme ' +
+    'is named for its source file ' +
+    '(ocean.ts holding the theme ocean), the built ocean.js lands beside ocean.ts; ' +
+    'in an app whose bundler resolves a .js import to a .ts source first (webpack ' +
+    "or Next.js extensionAlias with '.ts' before '.js'), an import of ocean.js " +
+    'then loads the source, so build that theme into another folder with --out. ' +
+    '--family combines one selected extension tree into the three files named by ' +
     'the required --family-key, ready for one CSS load and identity-only switching. ' +
     'A local module the built module imports (an icon registry, a slot value, ' +
     'the helpers they import) that is TypeScript or JSX is compiled to JavaScript ' +
