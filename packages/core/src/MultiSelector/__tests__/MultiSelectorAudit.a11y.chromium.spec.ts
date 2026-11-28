@@ -869,20 +869,27 @@ cases.push({
   viewport: NARROW,
   run: async (page, check, frame) => {
     const combobox = page.getByRole('combobox', {name: 'Columns'});
-    // The story decorator fixes a 300 px column inside Storybook's centered
-    // padding. Remove both, so the field takes the whole 320 px viewport and
-    // the case measures the control's own reflow.
+    // The story decorator fixes a 300 px column inside Storybook's padding
+    // and the theme decorator's gutter. Remove them from the column up to the
+    // page, so the field takes the whole 320 px viewport and the case
+    // measures the control's own reflow. The walk starts at the column, so the
+    // control's own padding stays part of what is measured.
     await combobox.evaluate(el => {
-      document.body.style.padding = '0';
-      document.body.style.margin = '0';
-      const root = document.getElementById('storybook-root');
-      if (root != null) {
-        root.style.padding = '0';
-        root.style.width = '100vw';
-      }
       const column = el.closest<HTMLElement>('[style*="width: 300px"]');
-      if (column != null) {
-        column.style.width = '100vw';
+      if (column == null) {
+        throw new Error('no story column');
+      }
+      column.style.width = '100vw';
+      for (
+        let node: HTMLElement | null = column;
+        node != null;
+        node = node.parentElement
+      ) {
+        node.style.padding = '0';
+        node.style.margin = '0';
+        if (node !== column) {
+          node.style.width = '100vw';
+        }
       }
     });
     await settle(page);
