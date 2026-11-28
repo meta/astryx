@@ -2454,12 +2454,6 @@
     "spec quote",
     "spec:AST-061/DEC-8"
   ],
-  "packages/richtext/src/RichTextView.tsx": [
-    "FR2",
-    "spec:AST-061",
-    "spec:AST-061",
-    "spec:AST-064"
-  ],
   "packages/richtext/src/codeLanguages.ts": ["FR30", "component:Markdown"],
   "packages/richtext/src/editorNodes.ts": ["spec:AST-064"],
   "packages/richtext/src/editorTheme.ts": [

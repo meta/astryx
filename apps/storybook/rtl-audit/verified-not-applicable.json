@@ -90,10 +90,6 @@
     "reason": "RichTextEditorAutoLinkPlugin renders no visual or interactive DOM of its own. It transforms typed URL and email text into native-direction links inside the editor and owns no directional glyph, layout, placement, order, scrolling, dragging, overlay, or keyboard behavior."
   },
   {
-    "component": "richtext/RichTextView",
-    "reason": "RichTextView renders serialized content in normal browser text flow. Content and nested bidi runs retain their authored direction through Lexical and the platform; the wrapper owns no directional glyph, physical inline placement, reordering, horizontal scroll action, drag, overlay, or keyboard behavior."
-  },
-  {
     "component": "vega/VegaChart",
     "reason": "VegaChart renders a caller-owned Vega or Vega-Lite data-space specification. Axes, marks, scales, pointer signals, and physical chart coordinates intentionally remain defined by that specification rather than document direction; the React wrapper owns no directional glyph, logical control order, overlay placement, or horizontal keyboard behavior."
   },

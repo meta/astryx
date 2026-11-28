@@ -135,6 +135,19 @@ function makeParagraphState(text: string): string {
   });
 }
 
+// A serialized state whose only block uses a node type that no editor or view
+// registers, as content written with a custom node and read without it.
+const UNREGISTERED_NODE_STATE = JSON.stringify({
+  root: {
+    children: [{type: 'not-registered', version: 1, children: []}],
+    direction: 'ltr',
+    format: '',
+    indent: 0,
+    type: 'root',
+    version: 1,
+  },
+});
+
 // Builds a serialized Lexical state containing a list. `listType` is
 // 'bullet' (renders <ul>) or 'number' (renders <ol>). Used to verify that the
 // editor theme applies visible list markers rather than bare indentation.
@@ -1297,6 +1310,49 @@ describe('RichTextView', () => {
       expect(screen.getByText('recovered')).toBeInTheDocument(),
     );
     expect(screen.queryByTestId('view-fallback')).not.toBeInTheDocument();
+  });
+
+  it('renders the fallback for a first value that names an unregistered node', () => {
+    const onParseError = vi.fn();
+    expect(() =>
+      render(
+        <RichTextView
+          value={UNREGISTERED_NODE_STATE}
+          onParseError={onParseError}
+          errorFallback={<div data-testid="view-fallback">Unavailable</div>}
+        />,
+      ),
+    ).not.toThrow();
+    expect(screen.getByTestId('view-fallback')).toBeInTheDocument();
+    expect(onParseError).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the fallback for a later value that names an unregistered node', async () => {
+    const onParseError = vi.fn();
+    const {rerender} = render(
+      <RichTextView
+        value={makeParagraphState('first version')}
+        onParseError={onParseError}
+        errorFallback={<div data-testid="view-fallback">Unavailable</div>}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText('first version')).toBeInTheDocument(),
+    );
+
+    rerender(
+      <RichTextView
+        value={UNREGISTERED_NODE_STATE}
+        onParseError={onParseError}
+        errorFallback={<div data-testid="view-fallback">Unavailable</div>}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('view-fallback')).toBeInTheDocument(),
+    );
+    expect(onParseError).toHaveBeenCalledTimes(1);
+    expect(onParseError.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect(screen.queryByText('first version')).not.toBeInTheDocument();
   });
 });
 

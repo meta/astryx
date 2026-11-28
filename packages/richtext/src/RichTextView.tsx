@@ -65,9 +65,9 @@ const styles = stylex.create({
     // Holds the code block headers and task checkboxes drawn over the
     // content.
     position: 'relative',
-    // The document's body text, as core Markdown and the editor set it
-    // (spec:AST-061 FR2). Without it, blocks the theme leaves unsized —
-    // list items, quotes, table cells — take the host page's font.
+    // The document's body text, as core Markdown and the editor set it.
+    // Without it, blocks the theme leaves unsized — list items, quotes,
+    // table cells — take the host page's font.
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-body-size'],
     lineHeight: typeScaleVars['--text-body-leading'],
@@ -90,8 +90,9 @@ const styles = stylex.create({
  *
  * `role` must be `null`, not `undefined`: Lexical substitutes its `textbox`
  * default for `undefined`. The ARIA keys reach the element through Lexical's
- * trailing prop spread, which is why `undefined` clears them. A proposed
- * upstream fix (facebook/lexical#9270) would make these overrides no-ops.
+ * trailing prop spread, which is why `undefined` clears them. If Lexical
+ * stops writing these attributes on a read-only editor, the overrides do
+ * nothing.
  *
  * A caller who wants read-only form-field semantics instead wants
  * `<RichTextEditor isReadOnly />`, which is a labelled field by construction.
@@ -118,7 +119,7 @@ export interface RichTextViewProps extends BaseProps {
   nodes?: ReadonlyArray<Klass<LexicalNode>>;
   /**
    * Markdown plugins whose nodes this surface draws, each adopted with
-   * `createRichTextExtension` (spec:AST-064). A plugin node renders exactly as
+   * `createRichTextExtension`. A plugin node renders exactly as
    * core `Markdown` renders it, and one whose plugin is not given here shows
    * its source. Pass the extensions the content was converted with. Create
    * them in a client module: they hold the plugins' functions, so they are not
@@ -130,7 +131,7 @@ export interface RichTextViewProps extends BaseProps {
    * such as `graphql` from `@astryxdesign/core/CodeBlock/languages/graphql`,
    * or made with `createCodeLanguage`. Pass the same list as `Markdown`'s
    * `codeLanguages`, so reading and editing paint and label the same
-   * languages (spec:AST-061).
+   * languages.
    */
   codeLanguages?: ReadonlyArray<CodeLanguage>;
   /**
@@ -173,12 +174,9 @@ export interface RichTextViewProps extends BaseProps {
  * This mirrors the canonical Lexical pattern for applying externally-sourced
  * serialized state after mount: the Lexical Playground's ActionsPlugin does the
  * same `editor.setEditorState(editor.parseEditorState(...))` from inside a
- * plugin (see facebook/lexical
- * packages/lexical-playground/src/plugins/ActionsPlugin/index.tsx). It is
- * necessary because the composer builds the editor once and reads the initial
- * state exactly once at that point, so a changed prop cannot re-seed the editor
- * on its own. A read-only view has no history, so we skip the Playground's
- * accompanying CLEAR_HISTORY_COMMAND.
+ * plugin. The composer reads the initial state once, when it builds the
+ * editor. A changed `value` cannot re-seed it, so this plugin applies the new
+ * state. The view keeps no history, so it sends no `CLEAR_HISTORY_COMMAND`.
  *
  * `parseEditorState` / `setEditorState` are methods on the editor instance, so
  * this plugin needs no module-level Lexical imports of its own.
@@ -203,7 +201,7 @@ function SyncValuePlugin({value}: {value: string}): null {
  * The output is document content, not a form field: headings, lists and links
  * keep their own roles for assistive technology, and the view takes no label.
  * For a labelled, read-only field, use `<RichTextEditor isReadOnly />`. A
- * table wider than the view scrolls inside a region named "Table" that takes a
+ * table wider than the view scrolls inside a group named "Table" that takes a
  * tab stop while it overflows, as core `Table` does.
  *
  * @example

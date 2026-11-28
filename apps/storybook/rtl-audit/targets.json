@@ -738,6 +738,15 @@
     "dims": []
   },
   {
+    "component": "richtext/RichTextView",
+    "storyId": "richtext-richtexteditor--view-digit-tasks",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": "[data-richtext-task-checkbox]",
+      "overlayRoot": "[data-lexical-editor] li"
+    }
+  },
+  {
     "component": "ScrollableArea",
     "storyId": "core-scrollablearea--rtl-behavior-probe",
     "dims": ["D3"],
