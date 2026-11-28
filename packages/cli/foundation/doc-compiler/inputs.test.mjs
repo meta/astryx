@@ -124,6 +124,7 @@ describe('collectDocInputs over what this repo ships', () => {
       'Resizable',
       'SyntaxTheme',
       'createAnimator',
+      'createContextMenu',
       'createDragToSnapPoints',
       'createPanGesture',
     ]);

@@ -351,6 +351,9 @@ const GESTURE_USERS = new Set([
   'hooks: usePanGesture',
   // The snap-point drag, which moves an element on that pan.
   'hooks: useDragToSnapPoints',
+  // The headless context menu: its element opens on a held finger's long
+  // press.
+  'hooks: useContextMenu',
   // Snap paging: the pager, under a finger and on a trackpad swipe. Carousel
   // imports none of it.
   'SnapPaging',

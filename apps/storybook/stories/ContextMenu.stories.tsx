@@ -1,14 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 import type {Meta, StoryObj} from '@storybook/react';
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {
   ContextMenu,
   ContextMenuItem,
   ContextMenuCheckboxItem,
   ContextMenuRadioGroup,
   ContextMenuRadioItem,
+  createContextMenu,
+  useContextMenu,
 } from '@astryxdesign/core/ContextMenu';
 import {Divider} from '@astryxdesign/core/Divider';
+import {List, ListItem} from '@astryxdesign/core/List';
 import {
   PencilIcon,
   TrashIcon,
@@ -646,4 +649,140 @@ export const BottomSheetSubmenu: Story = {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
   },
+};
+
+const headlessStyles = stylex.create({
+  list: {
+    listStyle: 'none',
+    margin: 0,
+    padding: 0,
+    maxWidth: '320px',
+  },
+  row: {
+    padding: '12px 16px',
+    borderBottomWidth: '1px',
+    borderBottomStyle: 'solid',
+    borderBottomColor: '#e5e7eb',
+    userSelect: 'none',
+  },
+  listItems: {
+    maxWidth: '320px',
+  },
+});
+
+/**
+ * Four rows of a list: the second carries a menu from the framework-agnostic
+ * createContextMenu, the third and fourth from useContextMenu. The list keeps
+ * only `li` children; the menus render outside it. The log below the list
+ * records what the page saw, for the interaction tests.
+ */
+function HeadlessRows() {
+  const plainRowRef = useRef<HTMLLIElement>(null);
+  const hookRowRef = useRef<HTMLLIElement>(null);
+  const contentRowRef = useRef<HTMLLIElement>(null);
+  const [log, setLog] = useState<ReadonlyArray<string>>([]);
+  const record = (entry: string) => setLog(entries => [...entries, entry]);
+  useEffect(() => {
+    const row = plainRowRef.current;
+    if (row == null) {
+      return;
+    }
+    const menu = createContextMenu(row, {
+      label: 'Inbox actions',
+      onOpenChange: isOpen => record(isOpen ? 'open' : 'close'),
+      items: [
+        {label: 'Archive', onClick: () => record('archive')},
+        {label: 'Delete', variant: 'destructive', onClick: () => {}},
+      ],
+    });
+    return () => menu.destroy();
+  }, []);
+  useContextMenu(hookRowRef, {
+    label: 'Sent actions',
+    items: [{label: 'Forward', onClick: () => record('forward')}],
+  });
+  useContextMenu(contentRowRef, {
+    label: 'Archive actions',
+    menuContent: (
+      <ContextMenuItem label="Restore" onClick={() => record('restore')} />
+    ),
+  });
+  return (
+    <div>
+      <ul {...stylex.props(headlessStyles.list)} data-testid="headless-list">
+        <li tabIndex={0} {...stylex.props(headlessStyles.row)}>
+          Drafts
+        </li>
+        <li
+          ref={plainRowRef}
+          tabIndex={0}
+          data-testid="headless-row"
+          onClick={() => record('row-click')}
+          {...stylex.props(headlessStyles.row)}>
+          Inbox
+        </li>
+        <li
+          ref={hookRowRef}
+          tabIndex={0}
+          data-testid="hook-row"
+          {...stylex.props(headlessStyles.row)}>
+          Sent
+        </li>
+        <li
+          ref={contentRowRef}
+          tabIndex={0}
+          data-testid="hook-content-row"
+          {...stylex.props(headlessStyles.row)}>
+          Archive
+        </li>
+      </ul>
+      <output data-testid="headless-log">{log.join(',')}</output>
+    </div>
+  );
+}
+
+export const HeadlessOnAListRow: Story = {
+  name: 'Headless / createContextMenu on a list row',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'createContextMenu attaches ContextMenu to an element that is already on the page, here a list row, without React; useContextMenu does the same from a component. A held finger, a right click, Shift+F10 or the context-menu key opens it.',
+      },
+    },
+  },
+  render: () => <HeadlessRows />,
+};
+
+/** A ListItem whose row menu attaches to its own `li`. */
+function RowWithMenu({label}: {label: string}) {
+  const rowRef = useRef<HTMLLIElement>(null);
+  useContextMenu(rowRef, {
+    label: `Actions for ${label}`,
+    items: [
+      {label: 'Archive', onClick: () => {}},
+      {label: 'Delete', variant: 'destructive', onClick: () => {}},
+    ],
+  });
+  return <ListItem ref={rowRef} label={label} />;
+}
+
+export const HeadlessOnListItems: Story = {
+  name: 'Headless / useContextMenu on ListItem rows',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Each ListItem passes its ref to useContextMenu, so the menu attaches to the row itself: the list keeps `ul > li`, with no wrapper element, and its dividers. A ContextMenu around a ListItem would put a wrapper between the list and its row.',
+      },
+    },
+  },
+  render: () => (
+    <List hasDividers xstyle={headlessStyles.listItems} data-testid="menu-list">
+      <RowWithMenu label="Inbox" />
+      <RowWithMenu label="Sent" />
+      <RowWithMenu label="Drafts" />
+      <RowWithMenu label="Archive" />
+    </List>
+  ),
 };

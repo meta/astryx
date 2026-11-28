@@ -143,6 +143,14 @@ export type {
 export {useLongPress} from './useLongPress';
 export type {UseLongPressOptions, UseLongPressHandlers} from './useLongPress';
 
+// Lives beside ContextMenu, which shares its menu, and is exported here with
+// the other public gesture hooks.
+export {useContextMenu} from '../ContextMenu/useContextMenu';
+export type {
+  UseContextMenuOptions,
+  UseContextMenuResult,
+} from '../ContextMenu/useContextMenu';
+
 export {usePressFeedback} from './usePressFeedback';
 
 export {useDevWarning} from './useDevWarning';

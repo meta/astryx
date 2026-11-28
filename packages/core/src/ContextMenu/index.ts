@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 /**
  * @file index.ts
- * @output Exports ContextMenu, ContextMenuItem and related types
+ * @output Exports ContextMenu, ContextMenuItem and related types, and the
+ *   headless createContextMenu and useContextMenu
  * @position Public API entry point
  */
 
@@ -13,6 +14,18 @@ export {
   type ContextMenuSection,
   type ContextMenuOption,
 } from './ContextMenu';
+export {
+  createContextMenu,
+  type ContextMenuContentRenderer,
+  type ContextMenuController,
+  type ContextMenuPoint,
+  type CreateContextMenuOptions,
+} from './createContextMenu';
+export {
+  useContextMenu,
+  type UseContextMenuOptions,
+  type UseContextMenuResult,
+} from './useContextMenu';
 export type {AdaptivePresentation as MenuPresentation} from '../hooks/useAdaptivePresentation';
 
 export {
