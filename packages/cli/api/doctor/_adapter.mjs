@@ -188,6 +188,14 @@ export {
 } from '../../foundation/discovery/template-needs.mjs';
 export {addMatchingCore} from '../../foundation/release/notices.mjs';
 export {fontServiceFamilies} from '../../foundation/fonts/font-stylesheet.mjs';
+export {
+  nextFontFix,
+  rootLayoutImportsNextFont,
+} from '../../foundation/fonts/next-font.mjs';
+export {
+  APP_ROOT_LAYOUT_FILES,
+  parseAppModule,
+} from '../../foundation/discovery/app-layout.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
 export {themeIdentifier} from '../theme/_fork.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';

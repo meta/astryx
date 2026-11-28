@@ -43,7 +43,9 @@ async function rest(page: Page): Promise<Rest> {
       '#storybook-root .astryx-switch',
     );
     const thumb = track?.querySelector<HTMLElement>('.astryx-switch-thumb');
-    if (track == null || thumb == null) throw new Error('no switch');
+    if (track == null || thumb == null) {
+      throw new Error('no switch');
+    }
     const t = track.getBoundingClientRect();
     const h = thumb.getBoundingClientRect();
     const rtl = getComputedStyle(track).direction === 'rtl';
@@ -51,7 +53,9 @@ async function rest(page: Page): Promise<Rest> {
     const input = track.parentElement
       ?.querySelector<HTMLElement>('[role="switch"]')
       ?.getBoundingClientRect();
-    if (box == null || input == null) throw new Error('no control box');
+    if (box == null || input == null) {
+      throw new Error('no control box');
+    }
     const covered =
       input.left <= box.left + 0.5 &&
       input.right >= box.right - 0.5 &&
@@ -88,11 +92,13 @@ async function open(
       ],
     });
   }
-  if (dir === 'rtl')
+  if (dir === 'rtl') {
     await page.goto(
       `${storybook()}/iframe.html?id=${story}&viewMode=story&globals=direction:rtl`,
     );
-  else await openStory(page, storybook(), story);
+  } else {
+    await openStory(page, storybook(), story);
+  }
   await page.locator('#storybook-root .astryx-switch').waitFor();
   // Under a finger the touch presentation measures and places the thumb.
   await page.waitForTimeout(200);

@@ -86,6 +86,36 @@ export const docs = {
         },
         {
           type: 'prose',
+          text: "In a Next.js app, `next/font` (`next/font/google` or `next/font/local`) loads the font files itself, but under a family name of its own (such as `GeistSans`, or a generated `__Geist_…`), so a theme that names the family (`'Geist'`) never gets the loaded font. Give the font a `variable`, put its class on `<html>`, and set the theme's family to that variable. A `var()` the theme does not set itself, such as next/font's variable, names no font, so `{@command theme build}` has nothing to report for it.",
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'Next.js: next/font in app/layout.tsx',
+          code: `import {Geist} from 'next/font/google';
+
+const geist = Geist({subsets: ['latin'], variable: '--font-geist-sans'});
+
+export default function RootLayout({children}) {
+  return (
+    <html lang="en" className={geist.variable}>
+      <body>{children}</body>
+    </html>
+  );
+}`,
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: "Next.js: the theme names the font's variable",
+          code: `defineTheme({
+  typography: {
+    body: {family: 'var(--font-geist-sans)', fallbacks: 'system-ui, sans-serif'},
+  },
+});`,
+        },
+        {
+          type: 'prose',
           text: "Always pair a webfont with a real fallback stack (metric-similar system fonts plus a generic) so text stays readable before the font loads and wherever it never does: defineTheme({typography: {heading: {family: 'Fraunces', fallbacks: 'Georgia, serif'}}}).",
         },
       ],

@@ -2566,10 +2566,11 @@ describe('a media surface that flips with the page', () => {
     );
     expect(fill.length).toBeGreaterThan(0);
     // Each dark-side fill rule leaves out a surface a dark page flips light.
-    for (const rule of fill)
+    for (const rule of fill) {
       expect(rule).toContain(
         ':where(:not(:scope[data-theme="dark"] [data-astryx-media-dark-page="light"]',
       );
+    }
   });
 
   it('writes no dark-page rules when every inverted surface keeps its side', () => {
