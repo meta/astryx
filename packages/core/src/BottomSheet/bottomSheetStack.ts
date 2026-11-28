@@ -1081,6 +1081,113 @@ export function showSheetHostNonModal(
   }
 }
 
+/** Where the focusing steps of this engine's `showModal()` land, once seen. */
+let modalLanding: 'container' | 'control' | 'elsewhere' | null = null;
+
+/**
+ * Present a modal sheet's dialog. The focusing steps of `showModal()` scroll
+ * their target into view, and the panel enters from below the viewport.
+ * Where the visual viewport can scroll (the keyboard is up, or the page is
+ * zoomed), revealing the panel pans the page. It pans to the visual
+ * viewport's far end. So the dialog's content is inert for the call, and the
+ * steps find nothing in it to focus. Chromium ignores `autofocus` on the
+ * dialog itself, so that attribute cannot stop the scroll. On the first call,
+ * the steps land on a probe in view instead, so they scroll nothing: a
+ * container with `tabindex="-1"` that holds a control. Chromium and WebKit
+ * land on the container, Firefox on the control. Focus then goes, with no
+ * scroll, where those steps land in the sheet.
+ */
+export function showSheetHostModal(
+  dialog: HTMLDialogElement,
+  panel: HTMLElement | null,
+): void {
+  const doc = dialog.ownerDocument;
+  const content = [...dialog.children].filter(
+    child => !child.hasAttribute('inert'),
+  );
+  for (const child of content) {
+    child.setAttribute('inert', '');
+  }
+  const probe = modalLanding == null ? createLandingProbe(doc) : null;
+  if (probe != null) {
+    dialog.prepend(probe.root);
+  }
+  try {
+    dialog.showModal();
+    if (probe != null) {
+      const active = doc.activeElement;
+      modalLanding =
+        active === probe.container
+          ? 'container'
+          : active === probe.control
+            ? 'control'
+            : 'elsewhere';
+    }
+  } finally {
+    probe?.root.remove();
+    for (const child of content) {
+      child.removeAttribute('inert');
+    }
+  }
+  focusModalLanding(dialog, panel);
+}
+
+/**
+ * A hidden container that takes focus and holds a control. It sits at the
+ * visual viewport's top left, so focus on it scrolls nothing.
+ */
+function createLandingProbe(doc: Document): {
+  root: HTMLElement;
+  container: HTMLElement;
+  control: HTMLElement;
+} {
+  const viewport = doc.defaultView?.visualViewport;
+  const root = doc.createElement('div');
+  root.setAttribute('aria-hidden', 'true');
+  Object.assign(root.style, {
+    position: 'fixed',
+    inset: `${viewport?.offsetTop ?? 0}px auto auto ${viewport?.offsetLeft ?? 0}px`,
+    opacity: '0',
+    pointerEvents: 'none',
+  });
+  const container = doc.createElement('div');
+  container.tabIndex = -1;
+  const control = doc.createElement('button');
+  control.type = 'button';
+  container.appendChild(control);
+  root.appendChild(container);
+  return {root, container, control};
+}
+
+/**
+ * Focus, with no scroll, where the modal focusing steps land in a sheet. The
+ * first `autofocus` element comes first. Where the steps skip a focusable
+ * container, the panel's first control is next. Else the panel takes focus.
+ */
+function focusModalLanding(
+  dialog: HTMLDialogElement,
+  panel: HTMLElement | null,
+): void {
+  const doc = dialog.ownerDocument;
+  for (const candidate of dialog.querySelectorAll<HTMLElement>('[autofocus]')) {
+    if (candidate.closest('dialog') !== dialog) {
+      continue;
+    }
+    candidate.focus({preventScroll: true});
+    if (doc.activeElement === candidate) {
+      return;
+    }
+  }
+  if (panel == null) {
+    return;
+  }
+  const target =
+    panel.tabIndex < 0 && modalLanding === 'control'
+      ? (firstSequentiallyFocusable(panel) ?? panel)
+      : panel;
+  target.focus({preventScroll: true});
+}
+
 /**
  * The first element inside `root`, in tree order, that sequential focus
  * navigation reaches: focusable, with a tab index of zero or more, not
@@ -1974,6 +2081,7 @@ export function getBottomSheetStackForTests(
 /** Test-only: forget every sheet and start the batch counter over. */
 export function resetBottomSheetStackForTests(): void {
   showFocusesContainer = null;
+  modalLanding = null;
   // The press listeners go with the entries they served.
   for (const entry of state.entries) {
     const remove = state.listenedDocuments.get(entry.doc);
