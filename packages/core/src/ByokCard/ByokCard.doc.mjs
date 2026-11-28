@@ -5,7 +5,7 @@
 export const docs = {
   name: 'ByokCard',
   displayName: 'ByokCard',
-  category: 'Integration',
+  category: 'Container',
   keywords: [
     'byok',
     'api key',
@@ -18,6 +18,14 @@ export const docs = {
     'anthropic',
     'gemini',
   ],
+  theming: {
+    targets: [
+      {
+        className: 'astryx-byok-card',
+        visualProps: ['status'],
+      },
+    ],
+  },
   props: [
     {
       name: 'provider',

@@ -76,6 +76,27 @@ describe('ByokCard', () => {
     });
   });
 
+  it('toggles password masking when Show key / Hide key is clicked', () => {
+    const {getByText, getByPlaceholderText} = render(
+      <ByokCard provider={mockProvider} status="disconnected" />,
+    );
+
+    fireEvent.click(getByText('Connect'));
+    const input = getByPlaceholderText('sk-...');
+    expect(input).toHaveAttribute('type', 'password');
+
+    // Toggle to show plain text key
+    const toggleBtn = getByText('Show key');
+    fireEvent.click(toggleBtn);
+    expect(input).toHaveAttribute('type', 'text');
+    expect(getByText('Hide key')).toBeInTheDocument();
+
+    // Toggle back to mask key
+    fireEvent.click(getByText('Hide key'));
+    expect(input).toHaveAttribute('type', 'password');
+    expect(getByText('Show key')).toBeInTheDocument();
+  });
+
   it('opens rotate dialog and calls onRotate with new key', async () => {
     const handleRotate = vi.fn();
     const {getByText, getByPlaceholderText} = render(
@@ -121,5 +142,38 @@ describe('ByokCard', () => {
     await waitFor(() => {
       expect(handleDelete).toHaveBeenCalled();
     });
+  });
+
+  it('shows error message when onDelete promise rejects', async () => {
+    const handleDelete = vi
+      .fn()
+      .mockRejectedValue(new Error('Deletion failed on server'));
+    const {getByText, findByText} = render(
+      <ByokCard
+        provider={mockProvider}
+        status="connected"
+        onDelete={handleDelete}
+      />,
+    );
+
+    fireEvent.click(getByText('Delete'));
+    fireEvent.click(getByText('Remove'));
+
+    const errorMsg = await findByText('Deletion failed on server');
+    expect(errorMsg).toBeInTheDocument();
+  });
+
+  it('forwards custom className and data attributes to root element', () => {
+    const {container} = render(
+      <ByokCard
+        provider={mockProvider}
+        className="custom-byok-class"
+        data-testid="byok-root"
+      />,
+    );
+
+    const root = container.querySelector('.custom-byok-class');
+    expect(root).toBeInTheDocument();
+    expect(root).toHaveAttribute('data-testid', 'byok-root');
   });
 });

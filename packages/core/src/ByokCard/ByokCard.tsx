@@ -4,7 +4,7 @@
 
 /**
  * @file ByokCard.tsx
- * @input Uses React, StyleX, Button, Dialog, TextInput, StatusDot, Text, Heading, VStack, HStack
+ * @input Uses React, StyleX, Button, Dialog, AlertDialog, TextInput, StatusDot, Text, Heading, VStack, HStack
  * @output Exports ByokCard component, ByokCardProps, ByokProvider types
  * @position Core BYOK provider connection card with integrated API key management
  *
@@ -25,8 +25,10 @@ import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
+import {isRenderable} from '../utils/isRenderable';
 import {Button} from '../Button/Button';
 import {Dialog} from '../Dialog/Dialog';
+import {AlertDialog} from '../AlertDialog/AlertDialog';
 import {TextInput} from '../TextInput/TextInput';
 import {StatusDot} from '../StatusDot/StatusDot';
 import {Text} from '../Text/Text';
@@ -81,6 +83,9 @@ export function ByokCard({
   onRotate,
   onDelete,
   isDisabled = false,
+  className,
+  style,
+  xstyle,
   ...rest
 }: ByokCardProps) {
   const t = useComponentTranslator();
@@ -94,6 +99,9 @@ export function ByokCard({
   const [showPlainKey, setShowPlainKey] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(
+    null,
+  );
 
   const openConnectDialog = useCallback(() => {
     setIsRotateMode(false);
@@ -110,6 +118,7 @@ export function ByokCard({
   }, []);
 
   const openDeleteDialog = useCallback(() => {
+    setDeleteErrorMessage(null);
     setIsDeleteDialogOpen(true);
   }, []);
 
@@ -119,7 +128,7 @@ export function ByokCard({
     }
     const trimmed = apiKeyInput.trim();
     if (!trimmed) {
-      setErrorMessage('API key is required');
+      setErrorMessage(t('@astryx.byokCard.error.keyRequired'));
       return;
     }
 
@@ -134,7 +143,9 @@ export function ByokCard({
       setIsKeyDialogOpen(false);
     } catch (err) {
       setErrorMessage(
-        err instanceof Error ? err.message : 'Failed to save API key',
+        err instanceof Error
+          ? err.message
+          : t('@astryx.byokCard.error.saveFailed'),
       );
     } finally {
       setIsSubmitting(false);
@@ -144,8 +155,15 @@ export function ByokCard({
   const handleDeleteConfirm = async () => {
     try {
       setIsSubmitting(true);
+      setDeleteErrorMessage(null);
       await onDelete?.();
       setIsDeleteDialogOpen(false);
+    } catch (err) {
+      setDeleteErrorMessage(
+        err instanceof Error
+          ? err.message
+          : t('@astryx.byokCard.error.deleteFailed'),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -156,15 +174,15 @@ export function ByokCard({
       <div
         ref={ref}
         {...mergeProps(
-          themeProps('byokCard', {status}),
-          stylex.props(styles.card),
+          themeProps('byok-card', {status}),
+          stylex.props(styles.card, xstyle),
+          className,
+          style,
         )}
-        data-component="byok-card"
-        data-provider-id={provider.id}
-        data-status={status}>
+        {...rest}>
         <div {...stylex.props(styles.header)}>
           <div {...stylex.props(styles.providerInfo)}>
-            {provider.logo ? (
+            {isRenderable(provider.logo) ? (
               <div {...stylex.props(styles.logoSlot)} aria-hidden="true">
                 {provider.logo}
               </div>
@@ -243,8 +261,8 @@ export function ByokCard({
           width={420}
           aria-label={
             isRotateMode
-              ? `${t('@astryx.byokCard.rotate')} ${provider.name}`
-              : `${t('@astryx.byokCard.connect')} ${provider.name}`
+              ? t('@astryx.byokCard.rotateTitle', {provider: provider.name})
+              : t('@astryx.byokCard.connectTitle', {provider: provider.name})
           }>
           <form
             onSubmit={e => {
@@ -252,15 +270,19 @@ export function ByokCard({
             }}>
             <VStack gap={4}>
               <HStack gap={2} align="center">
-                {provider.logo ? (
+                {isRenderable(provider.logo) ? (
                   <div {...stylex.props(styles.logoSlot)} aria-hidden="true">
                     {provider.logo}
                   </div>
                 ) : null}
                 <Heading level={4}>
                   {isRotateMode
-                    ? `${t('@astryx.byokCard.rotate')} ${provider.name}`
-                    : `${t('@astryx.byokCard.connect')} ${provider.name}`}
+                    ? t('@astryx.byokCard.rotateTitle', {
+                        provider: provider.name,
+                      })
+                    : t('@astryx.byokCard.connectTitle', {
+                        provider: provider.name,
+                      })}
                 </Heading>
               </HStack>
 
@@ -339,43 +361,29 @@ export function ByokCard({
         </Dialog>
       ) : null}
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation Alert Dialog */}
       {isDeleteDialogOpen ? (
-        <Dialog
+        <AlertDialog
           isOpen={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}
-          width={380}
-          aria-label={`${t('@astryx.byokCard.remove')} ${provider.name}`}>
-          <VStack gap={4}>
-            <Heading level={4}>
-              {`${t('@astryx.byokCard.remove')} ${provider.name}`}
-            </Heading>
-            <Text type="body" color="secondary">
-              {t('@astryx.byokCard.dialog.deleteDescription', {
-                provider: provider.name,
-              })}
-            </Text>
-            <HStack gap={2} justify="end" width="100%">
-              <Button
-                variant="ghost"
-                size="sm"
-                label={t('@astryx.byokCard.cancel')}
-                isDisabled={isSubmitting}
-                onClick={() => setIsDeleteDialogOpen(false)}
-              />
-              <Button
-                variant="destructive"
-                size="sm"
-                label={t('@astryx.byokCard.remove')}
-                isLoading={isSubmitting}
-                onClick={() => {
-                  void handleDeleteConfirm();
-                }}
-              />
-            </HStack>
-          </VStack>
-        </Dialog>
+          title={t('@astryx.byokCard.deleteTitle', {provider: provider.name})}
+          description={
+            deleteErrorMessage ||
+            t('@astryx.byokCard.dialog.deleteDescription', {
+              provider: provider.name,
+            })
+          }
+          actionLabel={t('@astryx.byokCard.remove')}
+          cancelLabel={t('@astryx.byokCard.cancel')}
+          actionVariant="destructive"
+          isActionLoading={isSubmitting}
+          onAction={() => {
+            void handleDeleteConfirm();
+          }}
+        />
       ) : null}
     </>
   );
 }
+
+ByokCard.displayName = 'ByokCard';

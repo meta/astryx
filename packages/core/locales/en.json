@@ -2862,5 +2862,29 @@
   "@astryx.byokCard.dialog.apiKeyPlaceholder": {
     "defaultMessage": "sk-...",
     "description": "Placeholder for the API key text input."
+  },
+  "@astryx.byokCard.connectTitle": {
+    "defaultMessage": "Connect {provider}",
+    "description": "Dialog title to connect a provider API key."
+  },
+  "@astryx.byokCard.rotateTitle": {
+    "defaultMessage": "Rotate {provider} API key",
+    "description": "Dialog title to rotate a provider API key."
+  },
+  "@astryx.byokCard.deleteTitle": {
+    "defaultMessage": "Remove {provider}",
+    "description": "Dialog title to remove a provider API key."
+  },
+  "@astryx.byokCard.error.keyRequired": {
+    "defaultMessage": "API key is required",
+    "description": "Validation error when submitted API key is blank."
+  },
+  "@astryx.byokCard.error.saveFailed": {
+    "defaultMessage": "Failed to save API key",
+    "description": "Error message when saving the API key fails."
+  },
+  "@astryx.byokCard.error.deleteFailed": {
+    "defaultMessage": "Failed to remove API key",
+    "description": "Error message when removing the API key fails."
   }
 }

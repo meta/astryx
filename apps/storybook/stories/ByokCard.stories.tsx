@@ -6,9 +6,10 @@ import {ByokCard} from '@astryxdesign/core/ByokCard';
 import {Grid} from '@astryxdesign/core/Grid';
 import {VStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
+import {Heading} from '@astryxdesign/core/Heading';
 
 const meta: Meta<typeof ByokCard> = {
-  title: 'Integration/ByokCard',
+  title: 'Container/ByokCard',
   component: ByokCard,
   tags: ['autodocs'],
   argTypes: {
@@ -108,14 +109,12 @@ export const ProviderGrid: Story = {
     return (
       <VStack gap={4}>
         <div>
-          <Text type="heading" size="medium" weight="bold">
-            Bring Your Own Key (BYOK)
-          </Text>
-          <Text type="body" color="muted">
+          <Heading level={3}>Bring Your Own Key (BYOK)</Heading>
+          <Text type="body" color="secondary">
             Connect and manage API keys for direct model provider access.
           </Text>
         </div>
-        <Grid columns={{small: 1, medium: 2, large: 3}} gap={3}>
+        <Grid columns={{minWidth: 280, max: 3}} gap={3}>
           {providers.map(p => (
             <ByokCard
               key={p.id}
