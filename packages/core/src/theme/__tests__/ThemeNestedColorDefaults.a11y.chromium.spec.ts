@@ -10,8 +10,9 @@
  * @output Real-engine proof that Core's color defaults inside a nested Theme
  *   follow that Theme's color mode where the build lowers `light-dark()`: a
  *   Tooltip in the dark pane keeps 4.5:1 text, and a theme with no accent of
- *   its own draws a focus ring that contrasts with its surface; and that a
- *   theme's own token value still applies over the defaults
+ *   its own draws a focus ring that contrasts with its surface and pairs
+ *   Core's accent with Core's on-accent color; and that a theme's own token
+ *   value still applies over the defaults
  * @position Run with `pnpm test:a11y-contract`. Which color mode a custom
  *   property resolves in needs a real engine.
  */
@@ -208,6 +209,29 @@ for (const lowered of [false, true]) {
     });
     expect(ring.visible).toBe(true);
     expect(contrast(ring.outline, ring.surface)).toBeGreaterThanOrEqual(3);
+  });
+
+  test(`in ${build}, a Theme whose theme sets no accent pairs Core's accent with Core's on-accent color`, async ({
+    page,
+  }) => {
+    // The page theme, neutral, sets its own on-accent color. The nested
+    // theme sets neither, so both must come from Core, as a primary Button's
+    // fill and label do.
+    await openStory(page, stories.codeTheme, {lowered});
+    const pair = await page.evaluate(() => {
+      const pane = document.querySelector(
+        '[data-astryx-theme="dark-dev"]',
+      ) as HTMLElement;
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--color-on-accent)';
+      probe.style.backgroundColor = 'var(--color-accent)';
+      pane.append(probe);
+      const style = getComputedStyle(probe);
+      const result = {label: style.color, fill: style.backgroundColor};
+      probe.remove();
+      return result;
+    });
+    expect(contrast(pair.label, pair.fill)).toBeGreaterThanOrEqual(4.5);
   });
 
   test(`in ${build}, a theme's own token value still applies over the defaults`, async ({
