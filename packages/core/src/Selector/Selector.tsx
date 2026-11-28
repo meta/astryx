@@ -48,6 +48,10 @@ import {
   inputStatusHoverShadowStyles,
   inputWrapperStyles,
 } from '../Field';
+import {
+  selectorTriggerLineBoxStyles,
+  selectorTriggerUncappedLineBoxStyles,
+} from '../Field/inputStyles.stylex';
 import {Divider} from '../Divider';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {
@@ -223,12 +227,12 @@ const styles = stylex.create({
   // above its group (`<InputGroup size="md"><Selector size="lg">`) grows the
   // row it was supposed to sit in. The padding goes with it: the row is
   // already the size token, and the value box is centred in it. The line box
-  // likewise stops reading the control's own size token (sizeStyles caps it
-  // there), so grouped triggers keep one line box whatever their `size`.
+  // likewise stops reading the control's own size token (the shared line box
+  // caps it there), so grouped triggers keep one uncapped line box whatever
+  // their `size`.
   triggerInGroup: {
     minHeight: 0,
     paddingBlock: 0,
-    lineHeight: `max(${spacingVars['--spacing-5']}, 20px, 1rem)`,
   },
   // Wrapper for `renderValue` output. Takes the free width and clips
   // horizontally so a long value ellipsizes rather than widening the trigger;
@@ -282,11 +286,10 @@ const styles = stylex.create({
     transform: 'rotate(180deg)',
   },
   // Ghost has no borders, so its spacing row never overshoots the token; it
-  // keeps the uncapped line box from before the sizeStyles cap.
+  // keeps the uncapped line box.
   triggerGhost: {
     width: 'auto',
     borderWidth: 0,
-    lineHeight: `max(${spacingVars['--spacing-5']}, 20px, 1rem)`,
     backgroundColor: 'transparent',
     boxShadow: {
       default: 'none',
@@ -327,7 +330,6 @@ const styles = stylex.create({
   triggerSecondary: {
     width: 'auto',
     borderWidth: 0,
-    lineHeight: `max(${spacingVars['--spacing-5']}, 20px, 1rem)`,
     backgroundColor: colorVars['--color-neutral'],
     boxShadow: {
       default: 'none',
@@ -583,38 +585,21 @@ const styles = stylex.create({
 // token plus one text line for each extra line the value uses: 28/32/36 for
 // one line, 48/52/56 for two with the default tokens, where the token and a
 // text line are both multiples of 4 and the trigger lines up with the Buttons
-// and inputs beside it. No prop picks the height — the content does.
-//
-// The line box is `--spacing-5`, floored at the 20px clear control and 1rem
-// icons. When that row would not fit inside the size token's borders, it is
-// capped at what the token holds, so a spacing scale taller than the token
-// cannot push a one-line trigger past it. The cap never goes below 1.5em of
-// the trigger's own font — the type scale's loosest target leading, a
-// conservative bound above a label's glyph extent — so label text too large
-// for the token keeps room rather than being clipped. Line box and padding
-// read the same value; nothing changes wherever the row already fit. Ghost and
-// grouped triggers keep the uncapped line box. `renderValue` content inherits
-// this row like the built-in label; content that sets a larger font should set
-// its own line height, as it must at any spacing scale.
-// Keep these calculations inline: a consumer's Babel preset can lower a
-// module-scope helper to a function expression before StyleX evaluates this
-// object, and StyleX cannot constant-evaluate that transformed helper.
+// and inputs beside it. No prop picks the height — the content does. The line
+// box and padding are `selectorTriggerLineBoxStyles` in Field/inputStyles,
+// shared with MultiSelector. `renderValue` content inherits this row like the
+// built-in label. Content that sets a larger font must set its own line
+// height, at any spacing scale.
 
 const sizeStyles = stylex.create({
   sm: {
     minHeight: sizeVars['--size-element-sm'],
-    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
-    paddingBlock: `calc((${sizeVars['--size-element-sm']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-sm']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
   },
   md: {
     minHeight: sizeVars['--size-element-md'],
-    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
-    paddingBlock: `calc((${sizeVars['--size-element-md']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-md']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
   },
   lg: {
     minHeight: sizeVars['--size-element-lg'],
-    lineHeight: `max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem)`,
-    paddingBlock: `calc((${sizeVars['--size-element-lg']} - max(min(${spacingVars['--spacing-5']}, max(${sizeVars['--size-element-lg']} - 2 * ${borderVars['--border-width']}, 1.5em)), 20px, 1rem) - 2 * ${borderVars['--border-width']}) / 2)`,
   },
 });
 
@@ -2368,8 +2353,11 @@ export function Selector<T extends SelectorOptionType>(
             inputWrapperStyles.base,
             styles.triggerContainer,
             sizeStyles[size],
+            selectorTriggerLineBoxStyles[size],
             variant === 'ghost' && styles.triggerGhost,
             variant === 'secondary' && styles.triggerSecondary,
+            (variant === 'ghost' || variant === 'secondary') &&
+              selectorTriggerUncappedLineBoxStyles.base,
             variant !== 'input' && interactionOverlayStyles.backgroundImage,
             // Rings for the trigger button only. The clear and status
             // buttons ring themselves.
@@ -2400,6 +2388,7 @@ export function Selector<T extends SelectorOptionType>(
             // group's row height, connected edge radii, and focus stacking.
             variant !== 'ghost' && inputGroup && groupStyles.inGroup,
             inputGroup && styles.triggerInGroup,
+            inputGroup && selectorTriggerUncappedLineBoxStyles.base,
             controlXstyle,
           ),
           controlClassName,

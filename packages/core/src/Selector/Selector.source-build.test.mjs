@@ -3,7 +3,8 @@
 /**
  * @file Selector.source-build.test.mjs
  * @input Uses Babel, an arrow-lowering plugin, the StyleX compiler, and Selector source
- * @output Verifies raw Selector source survives a consumer's Babel pipeline
+ * @output Verifies raw Selector source, and the trigger line box it shares
+ *   with MultiSelector, survive a consumer's Babel pipeline
  * @position Regression test for Selector source-build compatibility
  */
 
@@ -18,6 +19,7 @@ import {describe, expect, it} from 'vitest';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../../..');
 const SELECTOR_SOURCE = path.join(__dirname, 'Selector.tsx');
+const LINE_BOX_SOURCE = path.join(__dirname, '../Field/inputStyles.stylex.ts');
 // Babel looks bare preset names up from the cwd, the repo root, which does
 // not declare them. Resolve them from this package, which does.
 const require = createRequire(import.meta.url);
@@ -38,41 +40,52 @@ const EXPECTED_PADDING_DECLARATIONS = [
   'padding-block:calc((var(--size-element-lg) - max(min(var(--spacing-5),max(var(--size-element-lg) - 2 * var(--border-width),1.5em)),20px,1rem) - 2 * var(--border-width)) / 2)',
 ];
 
+/** Compiles one source file the way a consumer's pipeline would. */
+async function compile(filename) {
+  const source = await fs.readFile(filename, 'utf8');
+  return transformAsync(source, {
+    babelrc: false,
+    configFile: false,
+    filename,
+    presets: [
+      [
+        require.resolve('@babel/preset-typescript'),
+        {isTSX: true, allExtensions: true},
+      ],
+      [require.resolve('@babel/preset-react'), {runtime: 'automatic'}],
+    ],
+    plugins: [
+      [
+        stylexBabelPlugin,
+        {
+          dev: false,
+          runtimeInjection: false,
+          genConditionalClasses: true,
+          treeshakeCompensation: true,
+          unstable_moduleResolution: {
+            type: 'commonJS',
+            rootDir: ROOT,
+          },
+        },
+      ],
+      lowerArrows,
+    ],
+  });
+}
+
 describe('Selector source-build compatibility (#5464)', () => {
   it('compiles after a consumer preset lowers module-scope arrows', async () => {
-    const source = await fs.readFile(SELECTOR_SOURCE, 'utf8');
-    const result = await transformAsync(source, {
-      babelrc: false,
-      configFile: false,
-      filename: SELECTOR_SOURCE,
-      presets: [
-        [
-          require.resolve('@babel/preset-typescript'),
-          {isTSX: true, allExtensions: true},
-        ],
-        [require.resolve('@babel/preset-react'), {runtime: 'automatic'}],
-      ],
-      plugins: [
-        [
-          stylexBabelPlugin,
-          {
-            dev: false,
-            runtimeInjection: false,
-            genConditionalClasses: true,
-            treeshakeCompensation: true,
-            unstable_moduleResolution: {
-              type: 'commonJS',
-              rootDir: ROOT,
-            },
-          },
-        ],
-        lowerArrows,
-      ],
-    });
+    const selector = await compile(SELECTOR_SOURCE);
+    expect(selector?.code).toBeTruthy();
 
+    const result = await compile(LINE_BOX_SOURCE);
     const declarations = (result?.metadata?.stylex ?? [])
       .map(([, rule]) => rule.ltr.match(/^\.[^{]+\{(.+)\}$/)?.[1])
-      .filter(declaration => declaration?.startsWith('padding-block:calc'));
+      .filter(
+        declaration =>
+          declaration?.startsWith('padding-block:calc') &&
+          declaration.includes('--spacing-5'),
+      );
 
     expect(declarations).toEqual(EXPECTED_PADDING_DECLARATIONS);
   });

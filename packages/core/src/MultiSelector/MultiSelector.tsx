@@ -42,6 +42,11 @@ import {
   inputStatusHoverShadowStyles,
   inputWrapperStyles,
 } from '../Field';
+import {
+  selectorTriggerLineBoxStyles,
+  selectorTriggerRowStyles,
+  selectorTriggerUncappedLineBoxStyles,
+} from '../Field/inputStyles.stylex';
 import {useKeepLayerOpenProps} from '../Layer/useLayer';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
@@ -54,7 +59,6 @@ import {Badge} from '../Badge';
 import {
   colorVars,
   focusVars,
-  sizeVars,
   spacingVars,
   radiusVars,
   durationVars,
@@ -203,6 +207,11 @@ const styles = stylex.create({
   },
   triggerPlaceholder: {
     color: colorVars['--color-text-secondary'],
+  },
+  // Inside an InputGroup the group's row is the height (`groupStyles.inGroup`),
+  // so the trigger drops its padding.
+  triggerInGroup: {
+    paddingBlock: 0,
   },
   triggerContent: {
     display: 'flex',
@@ -535,18 +544,6 @@ const styles = stylex.create({
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
     lineHeight: typeScaleVars['--text-label-leading'],
-  },
-});
-
-const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
   },
 });
 
@@ -2771,9 +2768,14 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           stylex.props(
             inputWrapperStyles.base,
             styles.triggerContainer,
-            sizeStyles[size],
+            // The height follows the size token and the text size only, and
+            // the value sits where a Selector's does.
+            selectorTriggerRowStyles[size],
+            selectorTriggerLineBoxStyles[size],
             variant === 'secondary' && styles.triggerSecondary,
             variant === 'ghost' && styles.triggerGhost,
+            (variant === 'ghost' || variant === 'secondary') &&
+              selectorTriggerUncappedLineBoxStyles.base,
             variant !== 'input' && interactionOverlayStyles.backgroundImage,
             variant !== 'input' && focusOutlineStyles.focusWithin,
             surface.isTriggerFocusRingSuppressed &&
@@ -2799,6 +2801,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             // Grouped secondary triggers keep their neutral fill but take the
             // group's row height, connected edge radii, and focus stacking.
             variant !== 'ghost' && inputGroup && groupStyles.inGroup,
+            inputGroup && styles.triggerInGroup,
+            inputGroup && selectorTriggerUncappedLineBoxStyles.base,
             controlXstyle,
           ),
           controlClassName,
