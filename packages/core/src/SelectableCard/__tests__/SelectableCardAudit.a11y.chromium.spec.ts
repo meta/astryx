@@ -500,7 +500,9 @@ for (const mode of ['light', 'dark'] as const) {
         `disabled card painted on hover: ${hovered?.overlay}`,
       );
       await target.click();
-      await page.keyboard.press('Tab');
+      // A click moves the browser's Tab starting point, so Tab counts from
+      // the first card's own checkbox instead.
+      await page.getByRole('checkbox', {name: 'Enabled', exact: true}).focus();
       await page.keyboard.press('Tab');
       await page.keyboard.press('Tab');
       await settle(page);
@@ -508,7 +510,7 @@ for (const mode of ['light', 'dark'] as const) {
       const focused = tabbed.cards.find(item => item.inputFocused);
       check(
         focused?.label === 'Disabled unselected',
-        `third Tab focused ${focused?.label}: a disabled card left the tab order`,
+        `two Tabs from the first card focused ${focused?.label}: a disabled card left the tab order`,
       );
       await page.keyboard.press('Space');
       await page.keyboard.press('Enter');
