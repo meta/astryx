@@ -3,7 +3,7 @@
 
 /**
  * @description Generates the PR comment from the run's analysis results
- * @input --analysis <file> --base-stats <file> --package-size <file> --api-changes <file> --a11y <file> --visual <file> --visual-frames <file> --preview <file> --jobs <file> --touched <file> --ci-impact <file> --source-conclusion <conclusion> --run-url <url>
+ * @input --analysis <file> --base-stats <file> --package-size <file> --api-changes <file> --a11y <file> --a11y-baseline <file> --visual <file> --visual-frames <file> --preview <file> --jobs <file> --touched <file> --ci-impact <file> --source-conclusion <conclusion> --run-url <url>
  * @output Formatted markdown comment body to stdout, compact by design: this
  *   head's preview first, the modified components (preview links, size, lines
  *   of code, a mark per browser suite that ran; three rows visible, the rest
@@ -75,6 +75,9 @@ const apiChanges = readOptionalJson('api-changes');
 // A CI change's impact on runner usage and time to green (ci-impact.js).
 const ciImpact = readOptionalJson('ci-impact');
 const visualVerdict = readOptionalJson('visual');
+// The head's .github/a11y-baseline.json, which the accessibility gate reads:
+// a row fails only on a violation it does not list.
+const a11yBaseline = readOptionalJson('a11y-baseline');
 let a11yReport = null;
 try {
   a11yReport = JSON.parse(fs.readFileSync(a11yFile, 'utf8'));
@@ -132,6 +135,7 @@ const report = buildCompactReport({
   jobs,
   touched,
   a11yReport,
+  a11yBaseline,
   visualVerdict,
   packageSize,
   visualFrames,
