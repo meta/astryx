@@ -10,6 +10,7 @@
  */
 
 import {readFileSync} from 'node:fs';
+import {createRef, type ComponentPropsWithRef} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {
   render,
@@ -37,6 +38,7 @@ import {InputGroup} from '../InputGroup';
 import {TextInput} from '../TextInput';
 import {IconButton} from '../IconButton';
 import {InternationalizationProvider} from '../i18n';
+import {LinkProvider} from '../Link/LinkProvider';
 
 const narrowRowProbe = stylex.create({
   rigid: {flexShrink: 0, minWidth: 'auto'},
@@ -835,7 +837,15 @@ describe('Button', () => {
   it('suppresses activation keys but passes other keys while aria-disabled via isLoading', async () => {
     const user = userEvent.setup();
     const handleKeyDown = vi.fn();
-    render(<Button label="Save" isLoading onKeyDown={handleKeyDown} />);
+    const handleKeyUpCapture = vi.fn();
+    render(
+      <Button
+        label="Save"
+        isLoading
+        onKeyDown={handleKeyDown}
+        onKeyUpCapture={handleKeyUpCapture}
+      />,
+    );
     const button = screen.getByRole('button');
     button.focus();
     await user.keyboard('{Enter}');
@@ -843,6 +853,9 @@ describe('Button', () => {
 
     await user.keyboard('{Escape}');
     expect(handleKeyDown).toHaveBeenCalledTimes(1);
+    expect(handleKeyUpCapture).toHaveBeenCalledWith(
+      expect.objectContaining({key: 'Escape'}),
+    );
   });
 
   it('suppresses activation keys but passes other keys on a busy-only anchor Button', async () => {
@@ -1134,12 +1147,153 @@ describe('Button', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it('falls back to <button> with aria-disabled for a disabled href Button', () => {
-    render(<Button label="Docs" href="https://example.com" isDisabled />);
+  it('keeps focus and explicit tab order when a disabled href Button falls back to a button', async () => {
+    const user = userEvent.setup();
+    const ref = createRef<HTMLButtonElement>();
+    const view = (isDisabled: boolean) => (
+      <>
+        <Button
+          ref={ref}
+          label="Docs"
+          href="#docs"
+          isDisabled={isDisabled}
+          tabIndex={-1}
+        />
+        <button type="button">After</button>
+      </>
+    );
+    const {rerender} = render(view(false));
+    act(() => screen.getByRole('link').focus());
+    rerender(view(true));
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     const button = screen.getByRole('button', {name: 'Docs'});
     expect(button).not.toHaveAttribute('disabled');
     expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAttribute('tabindex', '-1');
+    expect(button).toHaveFocus();
+    expect(ref.current).toBe(button);
+    await user.tab();
+    const after = screen.getByRole('button', {name: 'After'});
+    expect(after).toHaveFocus();
+    rerender(view(false));
+    expect(after).toHaveFocus();
+    expect(screen.getByRole('link')).toHaveAttribute('href', '#docs');
+  });
+
+  it('keeps focus across disablement without a provider router forwarding its ref', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const clickAction = vi.fn();
+    const router = vi.fn(
+      ({
+        ref: _ref,
+        href,
+        to,
+        ...props
+      }: ComponentPropsWithRef<'a'> & {to?: string}) => {
+        if (href == null) {
+          throw new Error('Router requires an href');
+        }
+        return <a {...props} href={href} data-destination={to} />;
+      },
+    );
+    const view = (isDisabled: boolean) => (
+      <LinkProvider component={router}>
+        <Button
+          label="Docs"
+          href="#docs"
+          isDisabled={isDisabled}
+          onClick={onClick}
+          clickAction={clickAction}
+        />
+      </LinkProvider>
+    );
+    const {rerender} = render(view(false));
+    await user.tab();
+    router.mockClear();
+    rerender(view(true));
+    const disabled = screen.getByRole('button', {name: 'Docs'});
+    expect(disabled).toHaveFocus();
+    expect(router).not.toHaveBeenCalled();
+    expect(disabled).not.toHaveAttribute('href');
+    await user.keyboard('{Enter} ');
+    await user.click(disabled);
+    expect(onClick).not.toHaveBeenCalled();
+    expect(clickAction).not.toHaveBeenCalled();
+    rerender(view(false));
+    const enabled = screen.getByRole('link');
+    expect(enabled).toHaveFocus();
+    expect(enabled).toHaveAttribute('data-destination', '#docs');
+    await user.click(enabled);
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(clickAction).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the focused router link and its destination while busy', () => {
+    const Router = ({
+      to,
+      ...props
+    }: ComponentPropsWithRef<'a'> & {to?: string}) => (
+      <a {...props} data-destination={to} />
+    );
+    const view = (isLoading: boolean) => (
+      <Button
+        label="Docs"
+        href="#docs"
+        as={Router}
+        target="_blank"
+        rel="external"
+        isLoading={isLoading}
+      />
+    );
+    const {rerender} = render(view(false));
+    const link = screen.getByRole('link', {name: 'Docs'});
+    act(() => link.focus());
+    rerender(view(true));
+    expect(link).toHaveFocus();
+    expect(link).toHaveAttribute('data-destination', '#docs');
+    expect(link).toHaveAttribute('href', '#docs');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'external');
+  });
+
+  it('withholds disabled activation callbacks but preserves focus and non-activation key handling', () => {
+    const activate = vi.fn();
+    const inspect = vi.fn();
+    render(
+      <Button
+        label="Save"
+        isDisabled
+        onClickCapture={activate}
+        onDoubleClick={activate}
+        onAuxClick={activate}
+        onPointerDown={activate}
+        onKeyDown={activate}
+        onKeyDownCapture={activate}
+        onKeyUp={activate}
+        onKeyUpCapture={activate}
+        onFocus={inspect}
+        onBlur={inspect}
+      />,
+    );
+    const button = screen.getByRole('button');
+    fireEvent.click(button);
+    fireEvent.doubleClick(button);
+    fireEvent.pointerDown(button);
+    fireEvent(
+      button,
+      new MouseEvent('auxclick', {bubbles: true, cancelable: true, button: 1}),
+    );
+    expect(fireEvent.keyDown(button, {key: 'Enter'})).toBe(false);
+    fireEvent.keyUp(button, {key: 'Enter'});
+    expect(fireEvent.keyDown(button, {key: ' '})).toBe(false);
+    fireEvent.keyUp(button, {key: ' '});
+    expect(activate).not.toHaveBeenCalled();
+    act(() => button.focus());
+    act(() => button.blur());
+    expect(inspect).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(button, {key: 'Escape'});
+    expect(activate).toHaveBeenCalledOnce();
   });
 });
 
