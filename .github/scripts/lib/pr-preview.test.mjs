@@ -1138,6 +1138,58 @@ describe('PR comment preview reconciliation', () => {
     expect(withPrior.state.updated).toHaveLength(1);
   });
 
+  it("passes this head's accessibility baseline, read at the head, with the report", async () => {
+    const baseline = {
+      version: 1,
+      entries: [{key: 'A::Disabled::color-contrast'}],
+    };
+    const getContent = vi.fn(async () => ({
+      data: {content: Buffer.from(JSON.stringify(baseline)).toString('base64')},
+    }));
+    // The generator's input files live only while the report renders, so the
+    // file is read there.
+    let passed = null;
+    await reconcile({
+      extendGithub: github => {
+        github.rest.repos = {...github.rest.repos, getContent};
+      },
+      execute: (_node, args) => {
+        const at = args.indexOf('--a11y-baseline');
+        passed =
+          at === -1 ? null : JSON.parse(fs.readFileSync(args[at + 1], 'utf8'));
+        return '## PR Analysis Report\n';
+      },
+    });
+    expect(getContent).toHaveBeenCalledWith(
+      expect.objectContaining({path: '.github/a11y-baseline.json', ref: HEAD}),
+    );
+    expect(passed).toEqual(baseline);
+  });
+
+  it('passes no baseline, and warns, when the head has none it can read', async () => {
+    const seen = [];
+    const {core} = await reconcile({
+      extendGithub: github => {
+        github.rest.repos = {
+          ...github.rest.repos,
+          getContent: vi.fn(async () => {
+            throw Object.assign(new Error('Not Found'), {status: 404});
+          }),
+        };
+      },
+      execute: (_node, args) => {
+        seen.push(args);
+        return '## PR Analysis Report\n';
+      },
+    });
+    expect(seen[0].includes('--a11y-baseline')).toBe(false);
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Could not read this head's accessibility baseline",
+      ),
+    );
+  });
+
   it.each([
     ['the exact head', HEAD, true],
     ['another head', 'b'.repeat(40), false],

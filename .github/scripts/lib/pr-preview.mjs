@@ -779,6 +779,33 @@ function trustedHeadReport({reportPath, label, identity, core}) {
   }
 }
 
+/**
+ * This head's accessibility baseline (.github/a11y-baseline.json), the list
+ * the accessibility gate tolerates, written to `inputs` for the generator; it
+ * is read as data at the head the CI run checked. Null, with a warning, when
+ * it cannot be read: the report then marks every violation as failing.
+ */
+async function headA11yBaseline({github, owner, repo, identity, inputs, core}) {
+  try {
+    const {data} = await github.rest.repos.getContent({
+      owner,
+      repo,
+      path: '.github/a11y-baseline.json',
+      ref: identity.headSha,
+    });
+    const text = Buffer.from(data.content, 'base64').toString('utf8');
+    JSON.parse(text);
+    const file = path.join(inputs, 'a11y-baseline.json');
+    fs.writeFileSync(file, text);
+    return file;
+  } catch (error) {
+    core.warning(
+      `Could not read this head's accessibility baseline; the report marks every violation as failing: ${error.message}`,
+    );
+    return null;
+  }
+}
+
 async function allComments(github, owner, repo, prNumber) {
   return github.paginate(github.rest.issues.listComments, {
     owner,
@@ -884,6 +911,9 @@ export async function reconcilePrComment({
         identity,
         inputs,
       });
+      const baselinePath = fs.existsSync(a11yPath)
+        ? await headA11yBaseline({github, owner, repo, identity, inputs, core})
+        : null;
       const previewPath = path.join(inputs, 'preview.json');
       const jobsPath = path.join(inputs, 'jobs.json');
       if (preview) fs.writeFileSync(previewPath, JSON.stringify(preview));
@@ -915,6 +945,7 @@ export async function reconcilePrComment({
         // No report means the audit did not run (it runs on main and release
         // checks, or with the ci:run-a11y label); the comment says so.
         ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
+        ...(baselinePath ? ['--a11y-baseline', baselinePath] : []),
         ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
         ...(framesPath ? ['--visual-frames', framesPath] : []),
         ...(trustedHeadReport({

@@ -19,6 +19,7 @@
 
 const {inline, num, sizeText} = require('./report-text');
 const {SUITE_LABELS} = require('../run-labels.cjs');
+const {diffAgainstBaseline} = require('./a11y-baseline.js');
 
 /**
  * The heavy suites a pull request runs only with its `ci:run-<suite>` label,
@@ -146,13 +147,19 @@ function locCell(head, base, baseMeasured = true) {
 /**
  * One mark per browser suite, always in the order Visual · A11y · RTL: ✓
  * passed, ✗ failed or changed (its shots are in the visual section), — did
- * not run for this component.
+ * not run for this component. A passing accessibility result whose only
+ * violations are in the baseline says how many: `✓ (2 baselined)`.
  */
 const CHECK_SUITES = ['visual', 'a11y', 'rtl'];
 const MARK = {pass: '✓', fail: '✗', changed: '✗'};
 
-function checksCell(results) {
-  return CHECK_SUITES.map(id => MARK[results[id]] ?? '—').join(' · ');
+function checksCell(results, {a11yBaselined = 0} = {}) {
+  return CHECK_SUITES.map(id => {
+    const mark = MARK[results[id]] ?? '—';
+    return id === 'a11y' && results[id] === 'pass' && a11yBaselined > 0
+      ? `${mark} (${a11yBaselined} baselined)`
+      : mark;
+  }).join(' · ');
 }
 
 /** A Storybook docs link from a story title (`Core/Button` → `core-button`). */
@@ -173,7 +180,13 @@ function storybookLink(origin, storyTitle) {
  * when the run wrote one, otherwise from the accessibility report and the
  * visual verdict.
  */
-function componentRows({analysis, touched, a11yReport, visualVerdict}) {
+function componentRows({
+  analysis,
+  touched,
+  a11yReport,
+  a11yBaseline = null,
+  visualVerdict,
+}) {
   const head = analysis.componentSizes || {};
   const base = analysis.baseComponentSizes || {};
   const stats = analysis.componentStats || {};
@@ -209,15 +222,24 @@ function componentRows({analysis, touched, a11yReport, visualVerdict}) {
     const reported = byKey.get(key)?.results || {};
     const own = suite =>
       reported[suite] && reported[suite] !== 'not-run' ? reported[suite] : null;
-    // A component the audit did not cover has no accessibility result.
+    // A component the audit did not cover has no accessibility result. With
+    // the head's baseline, only a violation the gate's own match
+    // (a11y-baseline.js) finds new fails the row, as it fails the gate.
     const audited = a11yReport?.components?.[name];
+    const a11yDiff =
+      audited && a11yBaseline
+        ? diffAgainstBaseline(
+            {...a11yReport, components: {[name]: audited}},
+            a11yBaseline,
+          )
+        : null;
+    const failing = a11yDiff
+      ? a11yDiff.newViolations.length
+      : (audited?.violations?.length ?? 0);
     const a11y =
-      own('a11y') ??
-      (audited
-        ? (audited.violations?.length ?? 0) > 0
-          ? 'fail'
-          : 'pass'
-        : null);
+      own('a11y') ?? (audited ? (failing > 0 ? 'fail' : 'pass') : null);
+    const a11yBaselined =
+      own('a11y') == null && a11y === 'pass' && a11yDiff ? a11yDiff.matched : 0;
     // A verdict scoped to the touched components (#9178's run) compared only
     // what the touched report lists; it is no result for any other row.
     const verdictCovers =
@@ -241,6 +263,7 @@ function componentRows({analysis, touched, a11yReport, visualVerdict}) {
       growth: sizeChange(head[key], base[key]),
       loc: [stats[name]?.linesOfCode, baseStats[name]?.linesOfCode],
       results: {visual, a11y, rtl: own('rtl')},
+      a11yBaselined,
       baseMeasured,
     };
   });
@@ -269,12 +292,14 @@ function buildComponentTable({
   origin,
   touched,
   a11yReport,
+  a11yBaseline = null,
   visualVerdict,
 }) {
   const rows = componentRows({
     analysis,
     touched,
     a11yReport,
+    a11yBaseline,
     visualVerdict,
   }).sort(compareRows);
   if (rows.length === 0) return '';
@@ -303,7 +328,7 @@ function buildComponentTable({
       stories ? `${name} · [Storybook](${stories})` : name,
       sizeCell(row.head, row.base, row.baseMeasured),
       locCell(...row.loc, row.baseMeasured),
-      ...(checks ? [checksCell(row.results)] : []),
+      ...(checks ? [checksCell(row.results, row)] : []),
     ];
     return `| ${cells.join(' | ')} |`;
   };
@@ -548,6 +573,7 @@ function buildCompactReport({
   jobs = null,
   touched = null,
   a11yReport = null,
+  a11yBaseline = null,
   visualVerdict = null,
   packageSize = null,
   apiChanges = null,
@@ -562,6 +588,7 @@ function buildCompactReport({
     origin,
     touched,
     a11yReport,
+    a11yBaseline,
     visualVerdict,
   })}${buildVisualDeltas({verdict: visualVerdict, frames: visualFrames})}${packagesLine(packageSize)}${apiChangesLine(apiChanges)}${withNotRun ? notRunLine({jobs, a11yReport, visualVerdict, touched}) : ''}`;
 }

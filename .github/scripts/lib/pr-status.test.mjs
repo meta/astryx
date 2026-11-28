@@ -13,6 +13,7 @@
 
 import {describe, expect, it} from 'vitest';
 import status from './pr-status.js';
+import a11yBaselineLib from './a11y-baseline.js';
 
 const {
   baseJobName,
@@ -95,6 +96,54 @@ describe('checksCell', () => {
       '✓ · — · ✗',
     );
     expect(checksCell({visual: 'changed'})).toBe('✗ · — · —');
+  });
+});
+
+describe('the A11y mark against the accessibility baseline', () => {
+  const {buildBaseline} = a11yBaselineLib;
+  // A component whose Disabled story keeps a known contrast finding.
+  const known = {
+    id: 'color-contrast',
+    impact: 'serious',
+    stories: ['Disabled'],
+  };
+  const fresh = {id: 'button-name', impact: 'critical', stories: ['Default']};
+  const report = violations => ({components: {A: {violations}}});
+  const baseline = buildBaseline(report([known]));
+  const analysis = {
+    componentSizes: {'core/A': size(1000)},
+    baseComponentSizes: {'core/A': size(1000)},
+  };
+
+  it('marks a row whose only violations are baselined as passing, and says how many', () => {
+    const table = buildComponentTable({
+      analysis,
+      a11yReport: report([known]),
+      a11yBaseline: baseline,
+    });
+    expect(table).toContain('| — · ✓ (1 baselined) · — |');
+  });
+
+  it('still fails a row with one new violation beside a baselined one', () => {
+    const table = buildComponentTable({
+      analysis,
+      a11yReport: report([known, fresh]),
+      a11yBaseline: baseline,
+    });
+    expect(table).toContain('| — · ✗ · — |');
+  });
+
+  it('fails any violation when no baseline is given, as before', () => {
+    const table = buildComponentTable({analysis, a11yReport: report([known])});
+    expect(table).toContain('| — · ✗ · — |');
+  });
+
+  it('names the baselined count only beside a passing mark', () => {
+    expect(checksCell({a11y: 'pass'}, {a11yBaselined: 2})).toBe(
+      '— · ✓ (2 baselined) · —',
+    );
+    expect(checksCell({a11y: 'fail'}, {a11yBaselined: 2})).toBe('— · ✗ · —');
+    expect(checksCell({a11y: 'pass'})).toBe('— · ✓ · —');
   });
 });
 
