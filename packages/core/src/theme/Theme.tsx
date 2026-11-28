@@ -96,13 +96,12 @@ interface ThemeProps {
 }
 
 // Core's color defaults, declared again on a wrapper that applies a theme. A
-// StyleX theme gives its element the variable group's own class, and the
-// group's rule (`:root, .<group>`) declares every default. An empty theme
-// applies that rule and nothing else. A build that lowers `light-dark()`
-// resolves a custom property in the mode of the element that declares it,
-// and a `var()` default resolves where it is declared, so each default then
-// follows this wrapper's mode and tokens. The rule is in Core's base layer, so
-// the theme's own rules still win.
+// StyleX theme gives its element the variable group's own class. The group's
+// rule (`:root, .<group>`) declares every default, so an empty theme applies
+// that rule and nothing else. A build that lowers `light-dark()` resolves a
+// custom property where it is declared. A `var()` default resolves there too.
+// So each default follows this wrapper's mode and tokens. The rule is in
+// Core's base layer, so the theme's own rules still win.
 const coreColorDefaults = stylex.createTheme(colorVars, {});
 
 /**
