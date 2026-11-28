@@ -46,7 +46,7 @@ system_specs: [spec:AST-020]
 | Behavior                | A Section-wrapped `role="toolbar"` row with start, optional center, and end lanes. The row is one tab stop; arrow keys, Home, and End move focus among its controls along its orientation.                                          |
 | End-user impact         | Keyboard users Tab into the toolbar once and move between its controls with arrows, without losing text-caret keys inside an input or arrow keys inside an open menu; screen-reader users hear a named toolbar and its orientation. |
 | Builder impact          | None.                                                                                                                                                                                                                               |
-| Compatibility/readiness | Lane layout change: a two-lane or three-lane row wraps when its lanes do not fit (FR2); no public API change. Six current-state items (see Current-state impact).                                                                   |
+| Compatibility/readiness | Lane layout change: a two-lane or three-lane row wraps when its lanes do not fit (FR2); no public API change. Five current-state items (see Current-state impact).                                                                  |
 | Review checks           | Reject more than one tab stop, arrows that steal caret keys from a text input mid-line, caller props that replace `role`, `aria-label`, or `aria-orientation`, or moving outer chrome into Toolbar.                                 |
 | Governing rules         | `family:layout-regions`; `spec:AST-020` (toolbar pattern binding); `architecture:container-padding`.                                                                                                                                |
 
@@ -73,10 +73,6 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- **The keyboard hint fades under reduced motion.** The arrow-key hint (FR6)
-  fades out over 150 ms (it appears at once) even when reduced motion is
-  requested;
-  `design:reduced-motion` DR3 allows no animated property for a fine pointer.
 - **A vertical toolbar with center content stays side by side.** With
   `orientation="vertical"` and `centerContent`, the three lanes stay in one row
   while `aria-orientation` is vertical and ArrowDown and ArrowUp move between
