@@ -169,7 +169,7 @@ describe('Theme', () => {
     }
   });
 
-  it("declares Core's color defaults again on a wrapper that applies a theme", () => {
+  it("declares Core's color defaults again on a wrapper whose theme sets Core color tokens", () => {
     const {container} = render(
       <Theme theme={testTheme}>
         <Theme theme={testTheme} mode="dark">
@@ -202,6 +202,17 @@ describe('Theme', () => {
       name: 'extends-colors',
       extends: testTheme,
     });
+    const adaptsColors = defineTheme({
+      name: 'adapts-colors',
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-background-surface': '#ffffff'}},
+          },
+        ],
+      },
+    });
     const {container} = render(
       <Theme theme={testTheme}>
         <Theme theme={partsOnly}>
@@ -209,6 +220,9 @@ describe('Theme', () => {
         </Theme>
         <Theme theme={extendsColors}>
           <span>extends</span>
+        </Theme>
+        <Theme theme={adaptsColors}>
+          <span>adapts</span>
         </Theme>
       </Theme>,
     );
@@ -221,14 +235,15 @@ describe('Theme', () => {
     expect(declaredValue(parts, '--focus-outline-color')).toMatch(
       /var\(--color-accent\)/,
     );
-    const inherited = container.querySelector(
-      '[data-astryx-theme="extends-colors"]',
-    )!;
-    expect(
-      Object.keys(colorDefaults).filter(
-        name => declaredByClass(inherited, name) == null,
-      ),
-    ).toEqual([]);
+    for (const name of ['extends-colors', 'adapts-colors']) {
+      const wrapper = container.querySelector(`[data-astryx-theme="${name}"]`)!;
+      expect(
+        Object.keys(colorDefaults).filter(
+          token => declaredByClass(wrapper, token) == null,
+        ),
+        name,
+      ).toEqual([]);
+    }
   });
 
   it('declares no focus color and no color default on a wrapper that applies no theme', () => {

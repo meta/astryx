@@ -96,21 +96,42 @@ interface ThemeProps {
   children: React.ReactNode;
 }
 
-// Core's color defaults, declared again on a wrapper that applies a theme. A
-// StyleX theme gives its element the variable group's own class. The group's
-// rule (`:root, .<group>`) declares every default, so an empty theme applies
-// that rule and nothing else. A build that lowers `light-dark()` resolves a
-// custom property where it is declared. A `var()` default resolves there too.
-// So each default follows this wrapper's mode and tokens. The rule is in
-// Core's base layer, so the theme's own rules still win.
+// Core's color defaults, declared again on a wrapper whose theme sets a Core
+// color token. A StyleX theme gives its element the variable group's own
+// class. The group's rule (`:root, .<group>`) declares every default, so an
+// empty theme applies that rule and nothing else. A build that lowers
+// `light-dark()` resolves a custom property where it is declared. A `var()`
+// default resolves there too. So each default follows this wrapper's mode and
+// tokens. The rule is in Core's base layer, so the theme's own rules still
+// win.
 const coreColorDefaults = stylex.createTheme(colorVars, {});
 
+function isCoreColor(name: string): boolean {
+  return Object.hasOwn(colorDefaults, name);
+}
+
 // A theme that sets no Core color token keeps the colors around it, so only a
-// theme that sets one declares the defaults again.
+// theme that sets one declares the defaults again. A theme can also write
+// colors only in its adaptation rules; a built theme may keep those rules
+// unresolved.
 function setsCoreColors(theme: DefinedTheme | null): boolean {
+  if (theme == null) {
+    return false;
+  }
+  if (Object.keys(theme.tokens).some(isCoreColor)) {
+    return true;
+  }
+  if (theme.__adaptationRules != null) {
+    return theme.__adaptationRules.some(rule =>
+      Object.keys(rule.tokens).some(isCoreColor),
+    );
+  }
   return (
-    theme != null &&
-    Object.keys(theme.tokens).some(name => Object.hasOwn(colorDefaults, name))
+    theme.__adaptations?.rules.some(
+      ({value}) =>
+        value.color != null ||
+        Object.keys(value.tokens ?? {}).some(isCoreColor),
+    ) ?? false
   );
 }
 
