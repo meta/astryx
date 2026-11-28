@@ -524,6 +524,79 @@ describe('effectFindings', () => {
       ),
     ).toEqual([[1, 'A DOM node is kept in React state']]);
   });
+
+  it('ignores braces inside strings, template literals, and comments when scanning Effect bodies', () => {
+    expect(
+      findingsFor(
+        [
+          '// Syncs brace delimiters to the external listener.',
+          'useEffect(() => {',
+          "  onPanRef.current = '}';",
+          '  // Closing brace } inside a comment',
+          '  const tag = `${ok ? "{a}" : "{b}"}`;',
+          '  const s = `}`;',
+          "  node.addEventListener('input', onInput);",
+          '}, [onPan, ok]);',
+        ].join('\n'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('reads a closing brace inside a template literal as text', () => {
+    expect(
+      findingsFor(
+        [
+          '// Keeps the committed label, then syncs the listener.',
+          'useEffect(() => {',
+          '  labelRef.current = `}`;',
+          '  sync();',
+          '});',
+        ].join('\n'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('ends a template interpolation at its own closing brace', () => {
+    expect(
+      findingsFor(
+        [
+          '// Keeps the committed label for the key handlers.',
+          'useEffect(() => {',
+          '  labelRef.current = `${prefix}-${name}`;',
+          '});',
+          'export function Label({prefix, name}) {',
+          '  const id = `${prefix}-${name}`;',
+          '  labelRef.current = id;',
+          '  return null;',
+          '}',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      [2, 'The Effect only copies a value into a ref'],
+      [7, '`labelRef.current` is written during render'],
+    ]);
+  });
+
+  it('reports every non-exempt ref write or committed-ref read on the same line', () => {
+    expect(
+      findingsFor(
+        [
+          'export function Markdown({children}: Props) {',
+          '  badRef.current = 1; boundariesRef.current = next;',
+          '  const aRef = useCommittedRef(children);',
+          '  const bRef = useCommittedRef(children);',
+          '  const pair = [aRef.current, bRef.current];',
+          '  return null;',
+          '}',
+        ].join('\n'),
+        'packages/core/src/Markdown/Markdown.tsx',
+      ),
+    ).toEqual([
+      [2, '`badRef.current` is written during render'],
+      [5, '`aRef.current` is read during render'],
+      [5, '`bRef.current` is read during render'],
+    ]);
+  });
 });
 
 describe('changesetFindings', () => {
@@ -580,6 +653,34 @@ describe('changesetFindings', () => {
     expect(
       findingsFor({shipped: [], changesets: [changeset('chore')]}),
     ).toEqual([]);
+  });
+
+  it('advises removing only the non-shipping package when a Changeset also covers a shipping package', () => {
+    const cli = '@astryxdesign/cli';
+    const findings = changesetFindings({
+      coverage: {
+        required: new Map([
+          [
+            core,
+            new Map([['source', ['packages/core/src/Button/Button.tsx']]]),
+          ],
+        ]),
+        covered: new Set([core]),
+      },
+      changesets: [
+        {
+          file: '.changeset/multi.md',
+          text: `---\n'${core}': patch\n'${cli}': patch\n---\n\n[fix] Update button.\n\n@someone\n`,
+        },
+      ],
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].rule).toBe(
+      `\`[fix]\` names ${cli}, but nothing ${cli} ships changes`,
+    );
+    expect(findings[0].fix).toBe(
+      `Remove \`${cli}\` from the Changeset frontmatter. Tests, stories, fixtures, and tooling need none.`,
+    );
   });
 });
 

@@ -163,8 +163,77 @@ const DOM_STATE =
   /\buseState\s*<[^>]*(?<![\w$.])(?:(?:HTML|SVG)\w*Element|Element|Node|NodeList|HTMLCollection)\b/;
 
 /**
+ * Yield each non-comment, non-string code index in `source` from `start`,
+ * tracking template-literal `${...}` nesting. Recognizes strings, comments,
+ * and template literals, and no other syntax (such as regex literals).
+ *
+ * @param {string} source
+ * @param {number} [start]
+ * @returns {Generator<{index: number, char: string, templateOpened: boolean}>}
+ */
+function* scanCode(source, start = 0) {
+  const modes = ['code'];
+  // One brace depth for each open `${…}`, so its own `}` ends it.
+  const interpolationDepths = [];
+  for (let i = start; i < source.length; i += 1) {
+    const char = source[i];
+    const next = source[i + 1];
+    const mode = modes.at(-1);
+    if (mode === 'line-comment') {
+      if (char === '\n') modes.pop();
+      continue;
+    }
+    if (mode === 'block-comment') {
+      if (char === '*' && next === '/') {
+        modes.pop();
+        i += 1;
+      }
+      continue;
+    }
+    if (mode === "'" || mode === '"') {
+      if (char === '\\') i += 1;
+      else if (char === mode || char === '\n') modes.pop();
+      continue;
+    }
+    if (mode === '`') {
+      if (char === '\\') i += 1;
+      else if (char === '`') modes.pop();
+      else if (char === '$' && next === '{') {
+        modes.push('code');
+        interpolationDepths.push(0);
+        yield {index: i + 1, char: '{', templateOpened: true};
+        i += 1;
+      }
+      continue;
+    }
+    if (char === '/' && next === '/') {
+      modes.push('line-comment');
+      i += 1;
+    } else if (char === '/' && next === '*') {
+      modes.push('block-comment');
+      i += 1;
+    } else if (char === "'" || char === '"' || char === '`') {
+      modes.push(char);
+    } else {
+      const top = interpolationDepths.length - 1;
+      if (modes.length > 1 && char === '{') interpolationDepths[top] += 1;
+      else if (modes.length > 1 && char === '}') {
+        if (interpolationDepths[top] > 0) interpolationDepths[top] -= 1;
+        else {
+          interpolationDepths.pop();
+          modes.pop();
+        }
+      }
+      yield {index: i, char, templateOpened: false};
+    }
+  }
+}
+
+/**
  * The body of the arrow function an Effect starts on line `index`, or null
- * when the Effect takes a named function or an expression body.
+ * when the Effect takes a named function or an expression body. The scan
+ * reads text; it recognizes strings, comments, and template literals, and no
+ * other syntax.
  */
 export function effectBody(lines, index) {
   const source = lines.slice(index, index + 400).join('\n');
@@ -176,10 +245,12 @@ export function effectBody(lines, index) {
     return null;
   }
   let depth = 0;
-  for (let i = open; i < source.length; i += 1) {
-    if (source[i] === '{') depth += 1;
-    if (source[i] === '}') depth -= 1;
-    if (depth === 0) return source.slice(open + 1, i);
+  for (const {index: i, char} of scanCode(source, open)) {
+    if (char === '{') depth += 1;
+    else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(open + 1, i);
+    }
   }
   return null;
 }
@@ -308,47 +379,11 @@ function guardsLazyInit(text, ref) {
 function renderUses(source, uses, {lazyCounts}) {
   const found = [];
   const blocks = [];
-  const modes = ['code'];
   let statementStart = 0;
-  for (let i = 0; i < source.length; i += 1) {
-    const char = source[i];
-    const next = source[i + 1];
-    const mode = modes.at(-1);
-    if (mode === 'line-comment') {
-      if (char === '\n') modes.pop();
-      continue;
-    }
-    if (mode === 'block-comment') {
-      if (char === '*' && next === '/') {
-        modes.pop();
-        i += 1;
-      }
-      continue;
-    }
-    if (mode === "'" || mode === '"') {
-      if (char === '\\') i += 1;
-      else if (char === mode || char === '\n') modes.pop();
-      continue;
-    }
-    if (mode === '`') {
-      if (char === '\\') i += 1;
-      else if (char === '`') modes.pop();
-      else if (char === '$' && next === '{') {
-        modes.push('code');
-        blocks.push({kind: 'template', statementStart, inParentheses: true});
-        i += 1;
-        statementStart = i + 1;
-      }
-      continue;
-    }
-    if (char === '/' && next === '/') {
-      modes.push('line-comment');
-      i += 1;
-    } else if (char === '/' && next === '*') {
-      modes.push('block-comment');
-      i += 1;
-    } else if (char === "'" || char === '"' || char === '`') {
-      modes.push(char);
+  for (const {index: i, char, templateOpened} of scanCode(source)) {
+    if (templateOpened) {
+      blocks.push({kind: 'template', statementStart, inParentheses: true});
+      statementStart = i + 1;
     } else if (char === '{') {
       const header = source.slice(statementStart, i);
       blocks.push({
@@ -359,7 +394,6 @@ function renderUses(source, uses, {lazyCounts}) {
       statementStart = i + 1;
     } else if (char === '}') {
       const block = blocks.pop();
-      if (block?.kind === 'template') modes.pop();
       statementStart = block?.inParentheses ? block.statementStart : i + 1;
     } else if (char === ';') {
       statementStart = i + 1;
@@ -445,7 +479,15 @@ export function effectFindings(addedLines, readHead) {
     if (!sources.has(file)) sources.set(file, readHead(file));
     return sources.get(file)?.split('\n') ?? null;
   };
-  const byLine = uses => new Map(uses.map(use => [use.line, use.ref]));
+  const byLine = uses => {
+    const grouped = new Map();
+    for (const {line: useLine, ref} of uses) {
+      const refs = grouped.get(useLine);
+      if (refs == null) grouped.set(useLine, [ref]);
+      else if (!refs.includes(ref)) refs.push(ref);
+    }
+    return grouped;
+  };
   const renderUsesOf = file => {
     if (!renderUsesByFile.has(file)) {
       const source = sources.get(file) ?? readHead(file);
@@ -469,19 +511,20 @@ export function effectFindings(addedLines, readHead) {
     }
     if (/\.current\b/.test(text)) {
       const {writes, reads} = renderUsesOf(file);
-      if (writes.has(line) && !isRenderWriteException(file, writes.get(line))) {
+      for (const ref of writes.get(line) ?? []) {
+        if (isRenderWriteException(file, ref)) continue;
         add(
           file,
           line,
-          `\`${writes.get(line)}.current\` is written during render`,
+          `\`${ref}.current\` is written during render`,
           `React can discard a render, and the ref then keeps a value that never committed. Write the ref in the handler that changes it, or keep the latest prop or callback with ${COMMITTED_REF_HOOKS}. Only lazy initialization (\`if (ref.current == null) ref.current = …\`) stays in render (${RUNTIME} INV17).`,
         );
       }
-      if (reads.has(line)) {
+      for (const ref of reads.get(line) ?? []) {
         add(
           file,
           line,
-          `\`${reads.get(line)}.current\` is read during render`,
+          `\`${ref}.current\` is read during render`,
           `A committed ref holds the last committed value, one render behind. Read the value itself during render and in \`useMemo\`; read the ref only in event and gesture callbacks (${RUNTIME} INV3).`,
         );
       }
@@ -550,7 +593,11 @@ export function changesetFindings({coverage, changesets}) {
     const line =
       text.split('\n').findIndex(row => row.includes(`[${category}]`)) + 1 ||
       null;
-    for (const [pkg, bump] of Object.entries(frontmatter.releases)) {
+    const entries = Object.entries(frontmatter.releases ?? {});
+    const hasShippingPackage = entries.some(
+      ([name, bump]) => bump !== 'none' && shippedFiles(name).length > 0,
+    );
+    for (const [pkg, bump] of entries) {
       if (bump === 'none') continue;
       if (shippedFiles(pkg).length > 0) continue;
       findings.push({
@@ -558,7 +605,9 @@ export function changesetFindings({coverage, changesets}) {
         file,
         line,
         rule: `\`[${category}]\` names ${pkg}, but nothing ${pkg} ships changes`,
-        fix: 'Remove the Changeset. Tests, stories, fixtures, and tooling need none.',
+        fix: hasShippingPackage
+          ? `Remove \`${pkg}\` from the Changeset frontmatter. Tests, stories, fixtures, and tooling need none.`
+          : 'Remove the Changeset. Tests, stories, fixtures, and tooling need none.',
       });
     }
   }
