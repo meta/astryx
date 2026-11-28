@@ -244,15 +244,36 @@ describe('Theme', () => {
       name: 'resolved-only',
       __adaptations: undefined,
     };
+    // A built theme (its CSS compiled ahead of time) is read without
+    // validation, from its resolved rules or its authored ones.
+    const builtResolved = {
+      ...resolvedOnly,
+      name: 'built-resolved',
+      __built: true as const,
+    };
+    const builtAuthored = {
+      ...builtAdapts,
+      name: 'built-authored',
+      __built: true as const,
+    };
     const names = [
       'extends-colors',
       'adapts-colors',
       'built-adapts',
       'resolved-only',
+      'built-resolved',
+      'built-authored',
     ];
     const {container} = render(
       <Theme theme={testTheme}>
-        {[extendsColors, adaptsColors, builtAdapts, resolvedOnly].map(theme => (
+        {[
+          extendsColors,
+          adaptsColors,
+          builtAdapts,
+          resolvedOnly,
+          builtResolved,
+          builtAuthored,
+        ].map(theme => (
           <Theme key={theme.name} theme={theme}>
             <span>{theme.name}</span>
           </Theme>

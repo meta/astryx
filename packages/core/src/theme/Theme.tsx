@@ -112,23 +112,34 @@ function isCoreColor(name: string): boolean {
 
 // A theme that sets no Core color token keeps the colors around it, so only a
 // theme that sets one declares the defaults again. A theme can also write
-// colors only in its adaptation rules. A theme object does not change, so the
-// answer is kept per theme.
-const setsCoreColorsCache = new WeakMap<DefinedTheme, boolean>();
+// colors only in its adaptation rules. A runtime theme's rules go through the
+// same reader as its CSS. A built theme compiled its CSS ahead of time and can
+// carry partial metadata that the runtime reads leniently, so its rule writes
+// are read without validation.
 function setsCoreColors(theme: DefinedTheme | null): boolean {
   if (theme == null) {
     return false;
   }
-  let sets = setsCoreColorsCache.get(theme);
-  if (sets === undefined) {
-    sets =
-      Object.keys(theme.tokens).some(isCoreColor) ||
-      resolvedAdaptationRules(theme).some(rule =>
-        Object.keys(rule.tokens).some(isCoreColor),
-      );
-    setsCoreColorsCache.set(theme, sets);
+  if (Object.keys(theme.tokens).some(isCoreColor)) {
+    return true;
   }
-  return sets;
+  if (!theme.__built) {
+    return resolvedAdaptationRules(theme).some(rule =>
+      Object.keys(rule.tokens).some(isCoreColor),
+    );
+  }
+  if (theme.__adaptationRules != null) {
+    return theme.__adaptationRules.some(rule =>
+      Object.keys(rule.tokens).some(isCoreColor),
+    );
+  }
+  return (
+    theme.__adaptations?.rules.some(
+      ({value}) =>
+        value.color != null ||
+        Object.keys(value.tokens ?? {}).some(isCoreColor),
+    ) ?? false
+  );
 }
 
 /**
@@ -526,6 +537,8 @@ export function Theme({
           ? wrapperStyles.system
           : null;
 
+  const declaresCoreColors = useMemo(() => setsCoreColors(applied), [applied]);
+
   // Memoize the context value to prevent unnecessary re-renders
   const ctxValue = useMemo(
     () => (applied == null ? null : {theme: applied, mode}),
@@ -548,7 +561,7 @@ export function Theme({
         {...stylex.props(
           wrapperStyles.base,
           colorSchemeStyle,
-          setsCoreColors(applied) && coreColorDefaults,
+          declaresCoreColors && coreColorDefaults,
           applied != null && wrapperStyles.themedFocus,
           reducesMotion && wrapperStyles.reducedMotion,
         )}
