@@ -194,8 +194,8 @@ async function codeTextContrast(page: Page, title: string): Promise<number> {
 }
 
 const KEYWORD = '--color-syntax-keyword';
-const DRACULA_KEYWORD = 'rgb(255, 121, 198)';
-const NORD_KEYWORD = 'rgb(129, 161, 193)';
+const PALETTE_KEYWORD = 'rgb(255, 123, 114)';
+const SYNTAX_THEME_KEYWORD = 'rgb(207, 34, 46)';
 
 for (const lowered of [false, true]) {
   const build = lowered
@@ -230,7 +230,7 @@ for (const lowered of [false, true]) {
     await openStory(page, lowered);
     expect(
       await colorIn(page, 'Nested theme with its own syntax palette', KEYWORD),
-    ).toBe(DRACULA_KEYWORD);
+    ).toBe(PALETTE_KEYWORD);
   });
 
   test(`in ${build}, a color-setting theme inside a theme with a syntax palette takes its own colors`, async ({
@@ -238,7 +238,11 @@ for (const lowered of [false, true]) {
   }) => {
     await openStory(page, lowered);
     expect(
-      await colorIn(page, 'Color-setting theme inside dark-dev', KEYWORD),
+      await colorIn(
+        page,
+        'Color-setting theme inside a syntax-palette theme',
+        KEYWORD,
+      ),
     ).toBe('rgb(200, 0, 100)');
   });
 
@@ -259,8 +263,12 @@ for (const lowered of [false, true]) {
   }) => {
     await openStory(page, lowered);
     expect(
-      await colorIn(page, 'Components-only theme inside dark-dev', KEYWORD),
-    ).toBe(DRACULA_KEYWORD);
+      await colorIn(
+        page,
+        'Components-only theme inside a syntax-palette theme',
+        KEYWORD,
+      ),
+    ).toBe(PALETTE_KEYWORD);
   });
 
   test(`in ${build}, a SyntaxTheme inside a theme and a SyntaxTheme around one keep their colors`, async ({
@@ -268,10 +276,10 @@ for (const lowered of [false, true]) {
   }) => {
     await openStory(page, lowered);
     expect(await colorIn(page, 'SyntaxTheme inside a theme', KEYWORD)).toBe(
-      NORD_KEYWORD,
+      SYNTAX_THEME_KEYWORD,
     );
     expect(await colorIn(page, 'Theme inside a SyntaxTheme', KEYWORD)).toBe(
-      NORD_KEYWORD,
+      SYNTAX_THEME_KEYWORD,
     );
   });
 }

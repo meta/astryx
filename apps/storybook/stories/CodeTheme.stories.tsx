@@ -375,6 +375,16 @@ const accentPairTheme = defineTheme({
   tokens: {'--color-text-accent': ['rgb(10, 10, 10)', 'rgb(250, 200, 0)']},
 });
 
+// The GitHub presets: their code block titles meet 4.5:1.
+const paletteTheme = defineTheme({
+  name: 'own-palette',
+  syntax: githubDark,
+  tokens: {
+    '--color-background-surface': '#0d1117',
+    '--color-text-primary': '#e6edf3',
+  },
+});
+
 const componentsOnlyTheme = defineTheme({
   name: 'components-only',
   components: {card: {base: {padding: '4px'}}},
@@ -421,7 +431,7 @@ export const NestedThemes: StoryObj = {
           />
         </Pane>
       </Theme>
-      <Theme theme={darkDevTheme} mode="dark">
+      <Theme theme={paletteTheme} mode="dark">
         <Pane>
           <CodeBlock
             code={nestedCode}
@@ -430,30 +440,30 @@ export const NestedThemes: StoryObj = {
           />
         </Pane>
       </Theme>
-      <Theme theme={darkDevTheme} mode="dark">
+      <Theme theme={paletteTheme} mode="dark">
         <Theme theme={accentTheme}>
           <Pane>
             <CodeBlock
               code={nestedCode}
               language="typescript"
-              title="Color-setting theme inside dark-dev"
+              title="Color-setting theme inside a syntax-palette theme"
             />
           </Pane>
         </Theme>
       </Theme>
-      <Theme theme={darkDevTheme} mode="dark">
+      <Theme theme={paletteTheme} mode="dark">
         <Theme theme={componentsOnlyTheme}>
           <Pane>
             <CodeBlock
               code={nestedCode}
               language="typescript"
-              title="Components-only theme inside dark-dev"
+              title="Components-only theme inside a syntax-palette theme"
             />
           </Pane>
         </Theme>
       </Theme>
       <Theme theme={accentTheme}>
-        <SyntaxThemeProvider theme={nord}>
+        <SyntaxThemeProvider theme={githubLight}>
           <Pane>
             <CodeBlock
               code={nestedCode}
@@ -463,7 +473,7 @@ export const NestedThemes: StoryObj = {
           </Pane>
         </SyntaxThemeProvider>
       </Theme>
-      <SyntaxThemeProvider theme={nord}>
+      <SyntaxThemeProvider theme={githubLight}>
         <Theme theme={accentTheme}>
           <Pane>
             <CodeBlock
